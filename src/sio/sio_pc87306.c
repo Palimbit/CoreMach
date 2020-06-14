@@ -226,42 +226,40 @@ pc87306_write(uint16_t port, uint8_t val, void *priv)
 	case 0:
 		if (valxor & 1) {
 			lpt1_remove();
-			if (val & 1)
+			if ((val & 1) && !(dev->regs[2] & 1))
 				lpt1_handler(dev);
 		}
 		if (valxor & 2) {
 			serial_remove(dev->uart[0]);
-			if (val & 2)
+			if ((val & 2) && !(dev->regs[2] & 1))
 				serial_handler(dev, 0);
 		}
 		if (valxor & 4) {
 			serial_remove(dev->uart[1]);
-			if (val & 4)
+			if ((val & 4) && !(dev->regs[2] & 1))
 				serial_handler(dev, 1);
 		}
 		if (valxor & 0x28) {
 			fdc_remove(dev->fdc);
-			if (val & 8)
+			if ((val & 8) && !(dev->regs[2] & 1))
 				fdc_set_base(dev->fdc, (val & 0x20) ? 0x370 : 0x3f0);
 		}
 		break;
 	case 1:
 		if (valxor & 3) {
 			lpt1_remove();
-			if (dev->regs[0] & 1)
+			if ((dev->regs[0] & 1) && !(dev->regs[2] & 1))
 				lpt1_handler(dev);
 		}
 		if (valxor & 0xcc) {
-			if (dev->regs[0] & 2)
+			serial_remove(dev->uart[0]);
+			if ((dev->regs[0] & 2) && !(dev->regs[2] & 1))
 				serial_handler(dev, 0);
-			else
-				serial_remove(dev->uart[0]);
 		}
 		if (valxor & 0xf0) {
-			if (dev->regs[0] & 4)
+			serial_remove(dev->uart[1]);
+			if ((dev->regs[0] & 4) && !(dev->regs[2] & 1))
 				serial_handler(dev, 1);
-			else
-				serial_remove(dev->uart[1]);
 		}
 		break;
 	case 2:
@@ -282,6 +280,11 @@ pc87306_write(uint16_t port, uint8_t val, void *priv)
 					fdc_set_base(dev->fdc, (dev->regs[0] & 0x20) ? 0x370 : 0x3f0);
 			}
 		}
+		if (valxor & 8) {
+			lpt1_remove();
+			if ((dev->regs[0] & 1) && !(dev->regs[2] & 1))
+				lpt1_handler(dev);
+		}
 		break;
 	case 9:
 		if (valxor & 0x44) {
@@ -300,7 +303,7 @@ pc87306_write(uint16_t port, uint8_t val, void *priv)
 	case 0x19:
 		if (valxor) {
 			lpt1_remove();
-			if (dev->regs[0] & 1)
+			if ((dev->regs[0] & 1) && !(dev->regs[2] & 1))
 				lpt1_handler(dev);
 		}
 		break;
@@ -309,15 +312,18 @@ pc87306_write(uint16_t port, uint8_t val, void *priv)
 			lpt1_remove();
 			if (!(val & 0x40))
 				dev->regs[0x19] = 0xEF;
-			if (dev->regs[0] & 1)
+			if ((dev->regs[0] & 1) && !(dev->regs[2] & 1))
 				lpt1_handler(dev);
 		}
 		break;
 	case 0x1C:
 		if (valxor) {
-			if (dev->regs[0] & 2)
+			serial_remove(dev->uart[0]);
+			serial_remove(dev->uart[1]);
+
+			if ((dev->regs[0] & 2) && !(dev->regs[2] & 1))
 				serial_handler(dev, 0);
-			if (dev->regs[0] & 4)
+			if ((dev->regs[0] & 4) && !(dev->regs[2] & 1))
 				serial_handler(dev, 1);
 		}
 		break;
