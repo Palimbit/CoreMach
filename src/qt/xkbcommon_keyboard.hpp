@@ -16,4 +16,5 @@
  */
 extern void *xkbcommon_keymap;
 void xkbcommon_init(struct xkb_keymap *keymap);
+void xkbcommon_close();
 uint16_t xkbcommon_translate(uint32_t keycode);
