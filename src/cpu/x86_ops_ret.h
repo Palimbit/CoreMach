@@ -135,7 +135,6 @@ opIRET_186(uint32_t fetchdat)
     }
     flags_extract();
     nmi_enable = 1;
-    rf_flag_no_clear = 1;
     CPU_BLOCK_END();
 
     PREFETCH_RUN(cycles_old - cycles, 1, -1, 2, 0, 0, 0, 0);
@@ -176,7 +175,6 @@ opIRET_286(uint32_t fetchdat)
     }
     flags_extract();
     nmi_enable = 1;
-    rf_flag_no_clear = 1;
     CPU_BLOCK_END();
 
     PREFETCH_RUN(cycles_old - cycles, 1, -1, 2, 0, 0, 0, 0);
@@ -245,7 +243,6 @@ opIRET(uint32_t fetchdat)
     }
     flags_extract();
     nmi_enable = 1;
-    rf_flag_no_clear = 1;
     CPU_BLOCK_END();
 
     PREFETCH_RUN(cycles_old - cycles, 1, -1, 2, 0, 0, 0, 0);
@@ -288,7 +285,6 @@ opIRETD(uint32_t fetchdat)
     }
     flags_extract();
     nmi_enable = 1;
-    rf_flag_no_clear = 1;
     CPU_BLOCK_END();
 
     PREFETCH_RUN(cycles_old - cycles, 1, -1, 0, 2, 0, 0, 1);
