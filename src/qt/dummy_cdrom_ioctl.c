@@ -17,7 +17,6 @@
  *          Copyright 2023 Miran Grca.
  */
 #include <inttypes.h>
-#include <io.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
