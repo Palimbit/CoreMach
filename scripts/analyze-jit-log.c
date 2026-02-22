@@ -2402,7 +2402,7 @@ static void analyze(const char *path) {
     }
     bounds[thread_count] = file_size;
 
-    printf("\n%sVoodoo ARM64 JIT Log Analyzer%s\n", BOLD, NC);
+    printf("\n%sVoodoo JIT Log Analyzer%s\n", BOLD, NC);
     for (i = 0; i < 60; ++i) {
         fputs("─", stdout);
     }
@@ -2503,7 +2503,7 @@ static void analyze(const char *path) {
 int main(int argc, char **argv) {
     if (argc != 2) {
         printf("Usage: %s <logfile>\n", argv[0]);
-        printf("  Analyzes a Voodoo ARM64 JIT debug log and produces a health report.\n");
+        printf("  Analyzes a Voodoo JIT debug log and produces a health report.\n");
         return 1;
     }
 
