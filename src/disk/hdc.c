@@ -90,12 +90,11 @@ static const struct {
     /* VLB */
     { &ide_ali5213_device                   },
     { &ide_cmd640_vlb_device                },
-    { &ide_opti611_vlb_device               },
     { &ide_vlb_device                       },
     { &ide_vlb_2ch_device                   },
+    { &ide_opti611_vlb_device               },
     /* PCI */
     { &ide_cmd640_pci_device                },
-    { &ide_cmd640_pci_single_channel_device },
     { &ide_cmd646_ter_qua_device            },
     { &ide_cmd648_ter_qua_device            },
     { &ide_cmd649_ter_qua_device            },
