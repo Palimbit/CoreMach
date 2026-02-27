@@ -102,7 +102,6 @@ static const struct {
     { &ide_cmd649_ter_qua_device            },
     { &ide_pci_device                       },
     { &ide_pci_2ch_device                   },
-    { &ide_um8673f_device                   },
     { NULL                                  }
     // clang-format on
 };
