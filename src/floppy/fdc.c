@@ -113,6 +113,7 @@ static fdc_cards_t fdc_cards[] = {
     { &fdc_at_nsc_dp8473_device  },
     { &fdc_at_nsc_device         }, /* TODO: PC87311 SIO & floppy controller */
     { &fdc_at_smc_device         },
+    { &fdc_at_winbond_device     },
     { &fdc_b215_device           },
     { &fdc_pii151b_device        },
     { &fdc_pii158b_device        },
