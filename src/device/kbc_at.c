@@ -1718,8 +1718,9 @@ write_cmd_chips(void *priv, uint8_t val)
 
         case 0xa1: /* CHIPS extensions */
             kbc_at_log("ATkbc: C&T - CHIPS extensions\n");
-            dev->wantdata  = 1;
-            dev->state     = STATE_KBC_PARAM;
+            dev->wantdata      = 1;
+            dev->state         = STATE_KBC_PARAM;
+            dev->command_phase = 1;
             ret = 0;
             break;
 
