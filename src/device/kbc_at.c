@@ -1652,7 +1652,7 @@ write_cmd_data_chips(void *priv, uint8_t val)
     atkbc_t *dev = (atkbc_t *) priv;
     uint8_t  ret = 1;
 
-    switch (val) {
+    switch (dev->command) {
         default:
             break;
 
