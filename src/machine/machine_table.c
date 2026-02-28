@@ -17478,9 +17478,8 @@ const machine_t machines[] = {
         .default_jumpered_ecp_dma = -1,
         .kbc_device               = NULL,
         .kbc_params               = 0x00000000,
-        /* TODO: PC87307 NVR. */
-        .nvr_device               = &nvr_at_device,
-        .nvr_params               = NVR_AT,
+        .nvr_device               = NULL,
+        .nvr_params               = 0x00000000,
         .sio_device               = NULL,
         .sio_params               = 0x00000000,
         .kbc_p1                   = 0x000044f0,
