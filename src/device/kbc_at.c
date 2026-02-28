@@ -1681,7 +1681,7 @@ write_cmd_data_chips(void *priv, uint8_t val)
                         dev->command_phase = 2;
                         break;
                     case 0x05: /* select turbo LED output */
-                        kbc_at_log("ATkbc: Cselect turbo LED output\n");
+                        kbc_at_log("ATkbc: C&T - select turbo LED output\n");
                         dev->mem_addr      = val;
                         dev->wantdata      = 1;
                         dev->state         = STATE_KBC_PARAM;
