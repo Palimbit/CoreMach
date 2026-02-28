@@ -6184,7 +6184,7 @@ const machine_t machines[] = {
             .max_multi   = 0
         },
         .bus_flags = MACHINE_AT,
-        .flags     = 0,
+        .flags     = MACHINE_IDE,
         .ram       = {
             .min  = 2048,
             .max  = 8192,
