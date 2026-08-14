@@ -309,6 +309,7 @@ enum {
     MACHINE_CHIPSET_VLSI_VL82C486,
     MACHINE_CHIPSET_VLSI_SUPERCORE,
     MACHINE_CHIPSET_VLSI_WILDCAT,
+    MACHINE_CHIPSET_VLSI_TOPCAT,
     MACHINE_CHIPSET_WD76C10,
     MACHINE_CHIPSET_ZYMOS_POACH,
     MACHINE_CHIPSET_MAX
@@ -398,6 +399,9 @@ typedef struct _machine_ {
 extern const machine_filter_t machine_types[];
 extern const machine_filter_t machine_chipsets[];
 extern const machine_t        machines[];
+#ifdef EMU_DEVICE_H
+extern const device_t         olivetti_pcs86_device;
+#endif
 extern int                    bios_only;
 extern int                    machine;
 extern void *                 machine_snd;
@@ -498,6 +502,7 @@ extern int             machine_pc2086_init(const machine_t *);
 extern const device_t  vid_pc3086_device;
 #endif
 extern int             machine_pc3086_init(const machine_t *);
+extern int             machine_xt_olivetti_pcs86_init(const machine_t *);
 
 /* m_at_286.c */
 /* ISA */
@@ -529,6 +534,23 @@ extern int             machine_at_ax286_init(const machine_t *);
 /* Siemens PCD-2L. N82330 discrete machine. It segfaults in some places */
 extern int             machine_at_siemens_init(const machine_t *);
 extern int             machine_at_tbunk286_init(const machine_t *);
+
+/* Headland GC103 (PCS 286 variant) */
+extern int             machine_at_olivetti_pcs286_init(const machine_t *);
+
+/* Headland HT18 (PCS 386SX variant) */
+extern int             machine_at_olivetti_pcs386sx_init(const machine_t *);
+
+/* OPTi 82C283 (Olivetti M300-08/15 variants) */
+extern int             machine_at_olivetti_m30008_init(const machine_t *);
+extern int             machine_at_olivetti_m30015_init(const machine_t *);
+extern int             machine_at_olivetti_m30002f_init(const machine_t *);
+
+/* Olivetti M250 (8 MHz) and M250 E (12 MHz). Custom GA98/GA99/GA80
+   memory controller (olivetti_m250_gate_device) + Phoenix v1.42
+   quirks (BDA force, RAM-REMAPPING alias, NVR factory defaults). */
+extern int             machine_at_olivetti_m250_init(const machine_t *);
+extern int             machine_at_olivetti_m250e_init(const machine_t *);
 
 /* C&T PC/AT */
 extern int             machine_at_dells200_init(const machine_t *);
@@ -595,6 +617,7 @@ extern int             machine_at_ama932j_init(const machine_t *);
 extern int             machine_at_tandy1000rsx_init(const machine_t *);
 
 /* Intel 82335 */
+extern int             machine_at_olivetti_m300_if378_init(const machine_t *);
 extern int             machine_at_adi386sx_init(const machine_t *);
 extern int             machine_at_shuttle386sx_init(const machine_t *);
 

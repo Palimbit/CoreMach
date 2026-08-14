@@ -127,6 +127,9 @@ extern const device_t lxt3_device;
 /* Olivetti */
 extern const device_t olivetti_eva_device;
 
+/* VLSI */
+extern const device_t vlsi_topcat_device;
+
 /* OPTi */
 extern const device_t opti283_device;
 extern const device_t opti291_device;
@@ -249,4 +252,23 @@ extern const device_t ast_nvr_device;
 extern const device_t radisys_config_device;
 
 extern const device_t zenith_scratchpad_device;
+extern const device_t olivetti_ioc02_device;
+
+/* Per-machine toggle for the IOC02 first-read hack. The legacy
+   "return 0x04 on first read of 0x6A" trick is needed for Phoenix
+   v1.42 (Olivetti PCS 286) to skip POST test 2 sub-tests. Phoenix
+   v1.14 (Olivetti PCS 386SX) does write-then-read verification
+   and aborts with "I/O CONTROLLER ERROR 2" if the read returns
+   0x04. The PCS 386SX init must call this with on=0; the PCS 286
+   keeps the default (on=1). */
+extern void olivetti_ioc02_set_first_read_hack(int on);
+
+extern const device_t olivetti_m250_gate_device;
+
+/* Per-machine toggle for the M250 E gate array. The stock M250
+   (GA98 + GA99) does not decode port 0x6B; the M250 E (GA80 +
+   GA99) does. The M250 E init must call this with on=1 AFTER
+   device_add() and BEFORE the first POST access to 0x6B. The
+   stock M250 leaves it at the default (on=0). */
+extern void olivetti_m250_gate_set_e_variant(int on);
 #endif /*EMU_CHIPSET_H*/

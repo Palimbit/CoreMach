@@ -1221,6 +1221,144 @@ nvr_at_init(const device_t *info)
     if (nvr->is_new && (local->flags & FLAG_BX6_HACK))
         nvr->regs[0x39] = 0x09;
 
+    /* Olivetti PCS 286 — factory defaults for the original battery-
+     * backed Dallas DS12887 NVR. Without these, 86Box's volatile NVR
+     * leaves bits 0, 2, 6 of CMOS 0x0E set on every boot and Phoenix
+     * v1.42's diagnostic compare (NVR vs BDA) finds a mismatch, which
+     * triggers "CMOS RAM Error: 2" + "Press F1 to continue". We only
+     * set the defaults when the NVR file is being created (nvr->is_new)
+     * so the user can still change values via Phoenix SETUP and have
+     * them persist across reboots.
+     *
+     * Equipment 0x14 = 0x21: bit 0 (IPL), bit 5 (80x25 color). Real
+     * Olivetti had no 80287 (user confirmed) and shipped with one
+     * 5.25" 360KB drive.
+     *
+     * The checksum is the Phoenix sum of 0x10..0x2D, stored
+     * BIG-ENDIAN in 0x2E/0x2F with the high bit
+     * of the LOW byte cleared (& 0x7F). */
+    if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs286_init)) {
+        nvr->regs[0x0E] = 0x00;  /* clean diagnostic byte */
+        nvr->regs[0x14] = 0x21;  /* IPL + 80x25 + 1 FDD, no FPU */
+        nvr->regs[0x15] = 0x80;  /* base mem low  = 128 */
+        nvr->regs[0x16] = 0x02;  /* base mem high = 512  -> 640K */
+        nvr->regs[0x17] = 0x80;  /* ext mem low   = 128 */
+        nvr->regs[0x18] = 0x01;  /* ext mem high  = 256  -> 384K */
+        uint16_t sum = 0;
+        for (int i = 0x10; i <= 0x2D; i++)
+            sum += nvr->regs[i];
+        nvr->regs[0x2E] = (sum >> 8) & 0xFF;  /* HIGH byte (BE) */
+        nvr->regs[0x2F] = sum & 0x7F;          /* LOW byte, high bit clear */
+    }
+
+    /* Olivetti PCS 386SX — same pattern as the PCS 286. The Phoenix
+     * v1.14 POST compares BDA 0x410/0x411 with NVR 0x14 and on
+     * mismatch sets CMOS 0x0E bit 5 (Equipment Error) and writes
+     * POST error code to BDA 0x40:0x8B, triggering "CMOS RAM Error: N"
+     * + "Press F1 to continue" on every boot.
+     *
+     * The PCS 386SX shipped with one 3.5" 1.44MB drive and 80x25
+     * color video, so equipment 0x14 = 0x21 (IPL + 80x25 + 1 FDD).
+     * Memory: 1MB on the motherboard -> base 640K + ext 384K.
+     *
+     * Same Phoenix checksum as PCS 286. */
+    if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs386sx_init)) {
+        nvr->regs[0x0E] = 0x00;  /* clean diagnostic byte */
+        nvr->regs[0x14] = 0x21;  /* IPL + 80x25 + 1 FDD, no FPU */
+        nvr->regs[0x15] = 0x80;  /* base mem low  = 128 */
+        nvr->regs[0x16] = 0x02;  /* base mem high = 512  -> 640K */
+        nvr->regs[0x17] = 0x80;  /* ext mem low   = 128 */
+        nvr->regs[0x18] = 0x01;  /* ext mem high  = 256  -> 384K */
+        uint16_t sum = 0;
+        for (int i = 0x10; i <= 0x2D; i++)
+            sum += nvr->regs[i];
+        nvr->regs[0x2E] = (sum >> 8) & 0xFF;
+        nvr->regs[0x2F] = sum & 0x7F;
+    }
+
+    /* Olivetti M250 — same Phoenix v1.42 pattern as the PCS 286 /
+     * PCS 386SX. The custom GA98 + GA99 memory controller does
+     * not alter the BDA-vs-NVR diagnostic compare; the BIOS still
+     * reads BDA 0x410/0x411 and NVR 0x14 and complains on
+     * mismatch. The M250 shipped with one 5.25" 360KB drive and
+     * 80x25 color (no 80287 — the coprocessor socket was
+     * optional). 1MB on the motherboard -> base 640K + ext 384K.
+     * Same Phoenix checksum as the PCS 286 / PCS 386SX. */
+    if (nvr->is_new && (machines[machine].init == machine_at_olivetti_m250_init)) {
+        nvr->regs[0x0E] = 0x00;  /* clean diagnostic byte */
+        nvr->regs[0x14] = 0x21;  /* IPL + 80x25 + 1 FDD, no FPU */
+        nvr->regs[0x15] = 0x80;  /* base mem low  = 128 */
+        nvr->regs[0x16] = 0x02;  /* base mem high = 512  -> 640K */
+        nvr->regs[0x17] = 0x80;  /* ext mem low   = 128 */
+        nvr->regs[0x18] = 0x01;  /* ext mem high  = 256  -> 384K */
+        /* Seed the RTC so the Phoenix SETUP date/time fields are
+           pre-populated. Without this the M250 SETUP shows
+           "??-???-??" and "??-??-????" and refuses to exit without
+           the user entering values. We use 2026-08-14 12:00:00
+           Friday (BCD; Dallas DS1287 format). */
+        nvr->regs[0x00] = 0x00;  /* seconds = 00 (BCD) */
+        nvr->regs[0x01] = 0x00;  /* seconds alarm (unused) */
+        nvr->regs[0x02] = 0x00;  /* minutes = 00 (BCD) */
+        nvr->regs[0x03] = 0x00;  /* minutes alarm (unused) */
+        nvr->regs[0x04] = 0x12;  /* hours = 12 (BCD, 24h) */
+        nvr->regs[0x05] = 0x00;  /* hours alarm (unused) */
+        nvr->regs[0x06] = 0x05;  /* day of week = 5 (Friday; Phoenix ignores) */
+        nvr->regs[0x07] = 0x14;  /* day = 14 (BCD) */
+        nvr->regs[0x08] = 0x08;  /* month = 08 (BCD) */
+        nvr->regs[0x09] = 0x26;  /* year = 26 (BCD = 2026) */
+        /* Status register A: 0x26 = 32.768 kHz, no update in progress.
+           B: 0x02 = BCD mode (DM=0, bit 2 clear) + 24h format + no
+           daylight savings + no interrupts. The previous value 0x06
+           had DM=1 (binary mode), which made Phoenix v1.42 read the
+           date/time regs as binary, see "14" as "20" / "12" as "18",
+           and reject them — so the SETUP showed "??" placeholders
+           even though the BCD encoding was correct. */
+        nvr->regs[0x0A] = 0x26;
+        nvr->regs[0x0B] = 0x02;
+        uint16_t sum = 0;
+        for (int i = 0x10; i <= 0x2D; i++)
+            sum += nvr->regs[i];
+        nvr->regs[0x2E] = (sum >> 8) & 0xFF;  /* HIGH byte (BE) */
+        nvr->regs[0x2F] = sum & 0x7F;          /* LOW byte, high bit clear */
+        /* Force an immediate save so the 256-byte NVR is on disk with
+         * the correct Phoenix checksum. Without this the factory
+         * defaults above only live in RAM, and if 86Box is killed
+         * before something else marks nvr_dosave (rare on the M250
+         * because the Olivetti BIOS does not write most CMOS regs
+         * after POST) the next launch reads a stale shorter file and
+         * Phoenix sees a checksum mismatch. */
+        nvr_save();
+    }
+
+    /* Olivetti M250 E — same factory defaults as the stock M250.
+     * Identical peripheral set, identical BIOS, identical NVR
+     * layout. The 8 MHz / 12 MHz difference does not affect
+     * what the BIOS stores in CMOS. Same Phoenix checksum. */
+    if (nvr->is_new && (machines[machine].init == machine_at_olivetti_m250e_init)) {
+        nvr->regs[0x0E] = 0x00;  /* clean diagnostic byte */
+        nvr->regs[0x14] = 0x21;  /* IPL + 80x25 + 1 FDD, no FPU */
+        nvr->regs[0x15] = 0x80;  /* base mem low  = 128 */
+        nvr->regs[0x16] = 0x02;  /* base mem high = 512  -> 640K */
+        nvr->regs[0x17] = 0x80;  /* ext mem low   = 128 */
+        nvr->regs[0x18] = 0x01;  /* ext mem high  = 256  -> 384K */
+        nvr->regs[0x00] = 0x00;  /* seconds = 00 (BCD) */
+        nvr->regs[0x02] = 0x00;  /* minutes = 00 (BCD) */
+        nvr->regs[0x04] = 0x12;  /* hours = 12 (BCD, 24h) */
+        nvr->regs[0x06] = 0x05;  /* day of week = 5 (Friday) */
+        nvr->regs[0x07] = 0x14;  /* day = 14 (BCD) */
+        nvr->regs[0x08] = 0x08;  /* month = 08 (BCD) */
+        nvr->regs[0x09] = 0x26;  /* year = 26 (BCD = 2026) */
+        nvr->regs[0x0A] = 0x26;  /* status A: 32 kHz, no UIP */
+        nvr->regs[0x0B] = 0x02;  /* status B: 24h, BCD mode (DM=0), no DST, no IRQ */
+        uint16_t sum = 0;
+        for (int i = 0x10; i <= 0x2D; i++)
+            sum += nvr->regs[i];
+        nvr->regs[0x2E] = (sum >> 8) & 0xFF;  /* HIGH byte (BE) */
+        nvr->regs[0x2F] = sum & 0x7F;          /* LOW byte, high bit clear */
+        /* Same immediate save rationale as the M250 block above. */
+        nvr_save();
+    }
+
     return nvr;
 }
 
