@@ -106,6 +106,11 @@
     <qresource prefix="/misc">
         <file>qt/icons/warning.ico</file>
     </qresource>
+    <qresource prefix="/blumach/catalog">
+        <file alias="catalog.json">qt/catalog/catalog.json</file>
+        <file alias="locales/en.json">qt/catalog/locales/en.json</file>
+        <file alias="locales/es.json">qt/catalog/locales/es.json</file>
+    </qresource>
     <qresource prefix="/">
         <file alias="/texture_vert.spv">qt/texture_vert.spv</file>
         <file alias="/texture_frag.spv">qt/texture_frag.spv</file>

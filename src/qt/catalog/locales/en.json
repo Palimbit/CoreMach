@@ -1,0 +1,20 @@
+{
+  "manufacturer.olivetti.description": "Italian manufacturer whose personal computers combined original engineering, industrial design and several families of IBM-compatible systems.",
+  "family.olivetti-pcs.description": "The Olivetti PCS family covers compact late-1980s and early-1990s personal computers built around the V30, 80286 and 80386SX generations. BluMach keeps the commercial family together while preserving the distinct hardware of every model.",
+  "product.olivetti-pcs86.summary": "Compact V30 computer with integrated VGA and unusual PS/2-style peripherals.",
+  "product.olivetti-pcs86.history": "The PCS86 is a late XT-class design that combines a NEC V30 processor with integrated VGA, an XTA hard disk interface and two PS/2-style peripheral ports. Resident Diagnostics 1.09 and an MS-DOS floppy boot have been reproduced in the research build.",
+  "product.olivetti-pcs286.summary": "Twelve-megahertz 80286 model with integrated VGA and IDE storage.",
+  "product.olivetti-pcs286.history": "The PCS 286 was the middle member of the PCS line. Preserved firmware identifies BIOS and Resident Diagnostics revisions 1.37 and 1.42. The machine boots MS-DOS in the research build, while exact keyboard timing, onboard video and CMOS behavior still require refinement.",
+  "product.olivetti-pcs386sx.summary": "Sixteen-megahertz 80386SX model and the most advanced initial PCS machine.",
+  "product.olivetti-pcs386sx.history": "The PCS 386SX extends the family with a 16 MHz 80386SX, up to 8 MB of onboard memory and integrated Paradise VGA. Its recovered emulation remains experimental until the POST and chipset behavior are reproducible without provisional workarounds.",
+  "status.validated": "Validated",
+  "status.partial": "Partial",
+  "status.experimental": "Experimental",
+  "status.research": "In research",
+  "hardware.cpu": "Processor",
+  "hardware.memory": "Memory",
+  "hardware.video": "Video",
+  "hardware.floppy": "Floppy drive",
+  "hardware.rtc": "Clock and CMOS",
+  "hardware.coprocessor": "Math coprocessor"
+}

@@ -1,0 +1,130 @@
+{
+  "schema": "blumach-catalog-v1",
+  "manufacturers": [
+    {
+      "id": "olivetti",
+      "name": "Olivetti",
+      "description_key": "manufacturer.olivetti.description"
+    }
+  ],
+  "families": [
+    {
+      "id": "olivetti-pcs",
+      "manufacturer_id": "olivetti",
+      "parent_family_id": "",
+      "name": "PCS",
+      "description_key": "family.olivetti-pcs.description"
+    }
+  ],
+  "platforms": [
+    {
+      "id": "olivetti-pcs86-platform",
+      "emulator_machine_id": "olivetti_pcs86",
+      "architecture": "8086"
+    },
+    {
+      "id": "olivetti-pcs286-platform",
+      "emulator_machine_id": "olivetti_pcs286",
+      "architecture": "80286"
+    },
+    {
+      "id": "olivetti-pcs386sx-platform",
+      "emulator_machine_id": "olivetti_pcs386sx",
+      "architecture": "80386SX"
+    }
+  ],
+  "products": [
+    {
+      "id": "olivetti-pcs86",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs",
+      "platform_id": "olivetti-pcs86-platform",
+      "name": "Olivetti PCS86",
+      "summary_key": "product.olivetti-pcs86.summary",
+      "history_key": "product.olivetti-pcs86.history",
+      "status": "validated",
+      "period": "1989",
+      "aliases": ["PCS 86"],
+      "tags": ["V30", "8086", "XT", "VGA", "XTA", "desktop"],
+      "hardware": {
+        "cpu": "NEC V30 8 MHz",
+        "memory": "640 KB + 0/384/1920 KB EMS",
+        "video": "Paradise VGA integrated",
+        "floppy": "3.5 in, 1.44 MB",
+        "rtc": "MM58167",
+        "coprocessor": "Not documented"
+      },
+      "firmware": {
+        "known_sets": ["1.09"],
+        "required": true
+      },
+      "storage": {
+        "bus": "XTA",
+        "official_drives": ["Conner CP3026 20 MB"]
+      },
+      "relationships": {}
+    },
+    {
+      "id": "olivetti-pcs286",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs",
+      "platform_id": "olivetti-pcs286-platform",
+      "name": "Olivetti PCS 286",
+      "summary_key": "product.olivetti-pcs286.summary",
+      "history_key": "product.olivetti-pcs286.history",
+      "status": "partial",
+      "period": "1989–1990",
+      "aliases": ["PCS286", "PC S 286"],
+      "tags": ["80286", "AT", "VGA", "IDE", "desktop", "80287"],
+      "hardware": {
+        "cpu": "Intel 80286 12 MHz",
+        "memory": "1–4 MB",
+        "video": "Paradise/Olivetti VGA integrated",
+        "floppy": "3.5 in, 1.44 MB",
+        "rtc": "Dallas-compatible CMOS RTC",
+        "coprocessor": "Intel 80287 optional"
+      },
+      "firmware": {
+        "known_sets": ["1.37 (archive label 1.34)", "1.42"],
+        "required": true
+      },
+      "storage": {
+        "bus": "IDE/ATA",
+        "official_drives": ["Conner CP3022 20 MB", "Conner CP346 40 MB"]
+      },
+      "relationships": {
+        "distinct_from": ["olivetti-pcs286s"]
+      }
+    },
+    {
+      "id": "olivetti-pcs386sx",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs",
+      "platform_id": "olivetti-pcs386sx-platform",
+      "name": "Olivetti PCS 386SX",
+      "summary_key": "product.olivetti-pcs386sx.summary",
+      "history_key": "product.olivetti-pcs386sx.history",
+      "status": "experimental",
+      "period": "1991",
+      "aliases": ["PCS386SX", "PCS 386 SX"],
+      "tags": ["80386SX", "AT", "VGA", "IDE", "desktop", "80387SX"],
+      "hardware": {
+        "cpu": "Intel 80386SX 16 MHz",
+        "memory": "1–8 MB",
+        "video": "Paradise PVGA1A integrated, 256 KB",
+        "floppy": "3.5 in, 1.44 MB",
+        "rtc": "128-byte CMOS RTC",
+        "coprocessor": "Intel 80387SX optional (pending confirmation)"
+      },
+      "firmware": {
+        "known_sets": ["1.14 with embedded OVC 1.06"],
+        "required": true
+      },
+      "storage": {
+        "bus": "IDE/ATA",
+        "official_drives": ["20 MB", "40 MB", "100 MB"]
+      },
+      "relationships": {}
+    }
+  ]
+}

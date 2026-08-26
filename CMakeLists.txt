@@ -39,10 +39,10 @@ if(MUNT_EXTERNAL)
     list(APPEND VCPKG_MANIFEST_FEATURES "munt")
 endif()
 
-project(86Box
+project(BluMach
     VERSION 7.0
-    DESCRIPTION "Emulator of x86-based systems"
-    HOMEPAGE_URL "https://86box.net"
+    DESCRIPTION "Preservation-focused emulator of x86-based systems, derived from 86Box"
+    HOMEPAGE_URL "https://github.com/BluMachOrg/86Box"
     LANGUAGES C CXX)
 
 if (NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))

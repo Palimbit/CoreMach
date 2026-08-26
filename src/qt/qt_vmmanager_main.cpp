@@ -447,6 +447,12 @@ illegal_chars:
 #endif
 }
 
+const VMManagerSystem *
+VMManagerMain::getSelectedSystem() const
+{
+    return currentSelectionIsValid() ? selected_sysconfig : nullptr;
+}
+
 VMManagerMain::~VMManagerMain()
 {
     delete ui;

@@ -45,6 +45,7 @@ public:
     ~VMManagerMain() override;
     // Used to save the current selection
     [[nodiscard]] QString getCurrentSelection() const;
+    [[nodiscard]] const VMManagerSystem *getSelectedSystem() const;
 
     enum class ToolbarButton {
         Start,

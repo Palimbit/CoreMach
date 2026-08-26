@@ -52,6 +52,10 @@ add_executable(86Box
     machine_status.c
 )
 
+# Keep the internal target name for compatibility with the upstream build
+# scripts while publishing the fork under its own product name.
+set_target_properties(86Box PROPERTIES OUTPUT_NAME "BluMach")
+
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     add_compile_definitions(_FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE=1 _LARGEFILE64_SOURCE=1)
 endif()

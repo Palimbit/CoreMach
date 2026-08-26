@@ -1,0 +1,20 @@
+{
+  "manufacturer.olivetti.description": "Fabricante italiano cuyos ordenadores personales combinaron ingeniería propia, diseño industrial y varias familias de sistemas compatibles con IBM.",
+  "family.olivetti-pcs.description": "La familia Olivetti PCS reúne ordenadores personales compactos de finales de los años ochenta y comienzos de los noventa, pertenecientes a las generaciones V30, 80286 y 80386SX. BluMach conserva unida la familia comercial sin confundir el hardware particular de cada modelo.",
+  "product.olivetti-pcs86.summary": "Equipo compacto con V30, VGA integrada y periféricos de tipo PS/2 poco habituales.",
+  "product.olivetti-pcs86.history": "El PCS86 es un diseño tardío de clase XT que combina un procesador NEC V30 con VGA integrada, interfaz de disco XTA y dos puertos de periféricos de tipo PS/2. En la compilación de investigación se han reproducido los diagnósticos residentes 1.09 y el arranque desde un disquete de MS-DOS.",
+  "product.olivetti-pcs286.summary": "Modelo 80286 a 12 MHz con VGA integrada y almacenamiento IDE.",
+  "product.olivetti-pcs286.history": "El PCS 286 ocupó la posición intermedia de la línea PCS. El firmware conservado identifica las revisiones 1.37 y 1.42 de la BIOS y de sus diagnósticos residentes. La máquina arranca MS-DOS en la compilación de investigación, aunque todavía deben perfeccionarse los tiempos del teclado, el vídeo integrado y el comportamiento del CMOS.",
+  "product.olivetti-pcs386sx.summary": "Modelo 80386SX a 16 MHz y máquina inicial más avanzada de la familia PCS.",
+  "product.olivetti-pcs386sx.history": "El PCS 386SX amplía la familia con un 80386SX a 16 MHz, hasta 8 MB de memoria en placa y VGA Paradise integrada. Su emulación recuperada continúa siendo experimental hasta que el POST y el chipset funcionen de forma reproducible sin soluciones provisionales.",
+  "status.validated": "Validada",
+  "status.partial": "Parcial",
+  "status.experimental": "Experimental",
+  "status.research": "En investigación",
+  "hardware.cpu": "Procesador",
+  "hardware.memory": "Memoria",
+  "hardware.video": "Vídeo",
+  "hardware.floppy": "Disquetera",
+  "hardware.rtc": "Reloj y CMOS",
+  "hardware.coprocessor": "Coprocesador matemático"
+}
