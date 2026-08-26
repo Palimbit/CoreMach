@@ -27,13 +27,6 @@ add_library(mch OBJECT
     m_europc.c
     m_elt.c
     m_xt_olivetti.c
-    m_xt_olivetti_pcs86.c
-    m_at_olivetti_286.c
-    m_at_olivetti_386sx.c
-    m_at_olivetti_m300_if378.c
-    m_at_olivetti_m300.c
-    m_at_olivetti_m250.c
-    m_olivetti_pcs286_bda_hook.c
     m_xt_ibm5550.c
     m_tandy.c
     m_v86p.c
