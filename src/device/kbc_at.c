@@ -253,10 +253,15 @@ kbc_at_olivetti_pcs386sx_enable_reply(atkbc_t *dev)
 static int
 kbc_translate(atkbc_t *dev, uint8_t val)
 {
-    int      xt_mode   = (dev->mem[0x20] & 0x20) && !(dev->misc_flags & FLAG_PS2);
-    /* The IBM AT keyboard controller firmware does not apply translation in XT mode. */
-    int      translate = !xt_mode && ((dev->mem[0x20] & 0x40) || (dev->is_type2));
     uint8_t  kbc_ven   = dev->flags & KBC_VEN_MASK;
+    /* Olivetti firmware can leave PCMODE and XLAT set together. On these
+       controllers PCMODE does not mean that bytes are already scan set 1;
+       XLAT must still convert the keyboard's set 2 stream for the BIOS. */
+    int      xt_mode   = (dev->mem[0x20] & CCB_PCMODE) &&
+                         !(dev->misc_flags & FLAG_PS2) &&
+                         (kbc_ven != KBC_VEN_OLIVETTI);
+    /* The IBM AT keyboard controller firmware does not apply translation in XT mode. */
+    int      translate = !xt_mode && ((dev->mem[0x20] & CCB_TRANSLATE) || (dev->is_type2));
     int      ret       = - 1;
 
     /* Allow for scan code translation. */
