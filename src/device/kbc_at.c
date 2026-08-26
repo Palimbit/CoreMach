@@ -2515,7 +2515,21 @@ kbc_at_process_cmd(void *priv)
                 kbc_delay_to_ob(dev, 0x00, 0, 0x00);
                 break;
 
-            case 0xf0 ... 0xff: /* pulse P2 */
+            case 0xfe: /* CPU reset pulse. */
+                kbc_at_log("ATkbc: CPU reset pulse (cmd 0xFE)\n");
+                /* FE requests a pulse independently of the latched P2.0
+                   level. If P2.0 is already low, pulse_output() cannot
+                   produce the falling edge required to reset the CPU. */
+                if (!(dev->p2 & 0x01)) {
+                    softresetx86();
+                    cpu_set_edx();
+                    flushmmucache();
+                }
+                pulse_output(dev, 0x0e);
+                break;
+
+            case 0xf0 ... 0xfd: /* pulse P2; FE is handled above. */
+            case 0xff:
                 kbc_at_log("ATkbc: pulse %01X\n", dev->ib & 0x0f);
                 pulse_output(dev, dev->ib & 0x0f);
                 break;
