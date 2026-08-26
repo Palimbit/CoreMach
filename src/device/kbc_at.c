@@ -113,6 +113,7 @@ typedef struct atkbc_t {
     uint8_t ami_is_megakey;
     uint8_t award_revision;
     uint8_t chips_revision;
+    uint8_t olivetti_pcs386sx_enable_reply;
 
     uint8_t mem[0x100];
 
@@ -233,6 +234,20 @@ kbc_at_queue_add(atkbc_t *dev, uint8_t val)
     dev->key_ctrl_queue[dev->key_ctrl_queue_end] = val;
     dev->key_ctrl_queue_end                 = (dev->key_ctrl_queue_end + 1) & 0x3f;
     dev->state = STATE_KBC_OUT;
+}
+
+static void
+kbc_at_olivetti_pcs386sx_enable_reply(atkbc_t *dev)
+{
+    /* Phoenix 1.14 checks the PCS 386SX controller's enable-keyboard
+       handshake by polling port 60h for 3Bh immediately after AEh. */
+    if ((machines[machine].init == machine_at_olivetti_pcs386sx_init) &&
+        dev->olivetti_pcs386sx_enable_reply && !(dev->status & STAT_OFULL)) {
+        dev->olivetti_pcs386sx_enable_reply = 0;
+        dev->ob = 0x3b;
+        dev->status |= STAT_OFULL;
+        kbc_at_log("ATkbc: Olivetti PCS 386SX enable reply 3B\n");
+    }
 }
 
 static int
@@ -2445,6 +2460,7 @@ kbc_at_process_cmd(void *priv)
             case 0xae: /* enable keyboard */
                 kbc_at_log("ATkbc: enable keyboard\n");
                 set_enable_kbd(dev, 1);
+                kbc_at_olivetti_pcs386sx_enable_reply(dev);
                 break;
 
             case 0xc0: /* read P1 */
@@ -2517,6 +2533,8 @@ kbc_at_process_cmd(void *priv)
 
             case 0xfe: /* CPU reset pulse. */
                 kbc_at_log("ATkbc: CPU reset pulse (cmd 0xFE)\n");
+                if (machines[machine].init == machine_at_olivetti_pcs386sx_init)
+                    dev->olivetti_pcs386sx_enable_reply = 1;
                 /* FE requests a pulse independently of the latched P2.0
                    level. If P2.0 is already low, pulse_output() cannot
                    produce the falling edge required to reset the CPU. */
@@ -2721,6 +2739,7 @@ kbc_at_port_2_write(uint16_t port, uint8_t val, void *priv)
         /* Fast track it because of the LG MultiNet. */
         kbc_at_log("ATkbc: enable keyboard\n");
         set_enable_kbd(dev, 1);
+        kbc_at_olivetti_pcs386sx_enable_reply(dev);
 
         dev->state     = STATE_MAIN_IBF;
 
@@ -2786,6 +2805,8 @@ kbc_at_reset(void *priv)
     dev->mem[0x20]     = 0x01;
     dev->mem[0x20]    |= CCB_TRANSLATE;
     dev->command_phase = 0;
+    dev->olivetti_pcs386sx_enable_reply =
+        (machines[machine].init == machine_at_olivetti_pcs386sx_init);
 
     /* Video Type is now handled in the machine P1 handler. */
     dev->p1 = 0xff;
