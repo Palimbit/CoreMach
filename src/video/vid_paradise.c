@@ -873,6 +873,13 @@ paradise_pvga1a_pcs86_init(const device_t *info)
 }
 
 static void *
+paradise_pvga1a_pcs286_init(const device_t *info)
+{
+    /* Video firmware is embedded in the 128 KiB motherboard BIOS. */
+    return paradise_init(info, 256);
+}
+
+static void *
 paradise_pvga1a_standalone_init(const device_t *info)
 {
     paradise_t *paradise;
@@ -1011,6 +1018,21 @@ const device_t paradise_pvga1a_pcs86_device = {
     .speed_changed = paradise_speed_changed,
     .force_redraw  = paradise_force_redraw,
     .machine       = "Olivetti PCS86",
+    .config        = NULL
+};
+
+const device_t paradise_pvga1a_pcs286_device = {
+    .name          = "Paradise PVGA1A On-Board (Olivetti PCS 286)",
+    .internal_name = "pvga1a_pcs286",
+    .flags         = 0,
+    .local         = PVGA1A,
+    .init          = paradise_pvga1a_pcs286_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti PCS 286",
     .config        = NULL
 };
 

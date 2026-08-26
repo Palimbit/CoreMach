@@ -713,7 +713,7 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
     };
     static constexpr HistoricalDefaults defaults[] = {
         { "olivetti-pcs86", "Olivetti PCS86", "olivetti-pcs86", "necv30", 8000000, 640 },
-        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12500000, 1024 },
+        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12000000, 1024 },
         { "olivetti-pcs386sx", "Olivetti PCS 386SX", "olivetti-pcs386sx", "i386sx", 16000000, 4096 }
     };
 

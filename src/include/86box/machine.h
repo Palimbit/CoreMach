@@ -505,6 +505,12 @@ extern const device_t  olivetti_pcs86_device;
 #endif
 extern int             machine_xt_olivetti_pcs86_init(const machine_t *);
 
+/* m_at_olivetti_286.c */
+#ifdef EMU_DEVICE_H
+extern const device_t  olivetti_pcs286_device;
+#endif
+extern int             machine_at_olivetti_pcs286_init(const machine_t *);
+
 /* m_at_286.c */
 /* ISA */
 #ifdef EMU_DEVICE_H

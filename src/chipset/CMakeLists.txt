@@ -49,6 +49,7 @@ add_library(chipset OBJECT
     laserxt.c
     neat.c
     olivetti_eva.c
+    olivetti_ioc02.c
     opti283.c
     opti291.c
     opti391.c

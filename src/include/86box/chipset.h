@@ -69,6 +69,8 @@ extern const device_t grid1520_device;
 
 /* Headland */
 extern const device_t headland_gc10x_device;
+extern const device_t olivetti_ioc02_device;
+extern void           olivetti_ioc02_set_first_read_hack(int on);
 extern const device_t headland_gc113_device;
 extern const device_t headland_ht18a_device;
 extern const device_t headland_ht18b_device;

@@ -42,6 +42,7 @@
 #include <86box/port_92.h>
 #include <86box/chipset.h>
 #include <86box/log.h>
+#include <86box/machine.h>
 
 #ifdef ENABLE_HEADLAND_LOG
 int headland_do_log = ENABLE_HEADLAND_LOG;
@@ -650,7 +651,7 @@ headland_init(const device_t *info)
     if (dev->revision > 0)
         ht386 = 1;
 
-    dev->cr[0] = 0x04;
+    dev->cr[0] = (machines[machine].init == machine_at_olivetti_pcs286_init) ? 0x00 : 0x04;
     dev->cr[4] = dev->revision << 4;
 
     if (ht386)

@@ -1221,6 +1221,23 @@ nvr_at_init(const device_t *info)
     if (nvr->is_new && (local->flags & FLAG_BX6_HACK))
         nvr->regs[0x39] = 0x09;
 
+    /* Factory state expected by the PCS 286 Phoenix diagnostics. The setup
+     * utility may subsequently replace these values; they are only seeded
+     * when the 128-byte NVR file is first created. */
+    if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs286_init)) {
+        nvr->regs[0x0e] = 0x00;
+        nvr->regs[0x14] = 0x21; /* IPL, 80x25 colour, one floppy, no 80287. */
+        nvr->regs[0x15] = 0x80;
+        nvr->regs[0x16] = 0x02; /* 640 KiB base memory. */
+        nvr->regs[0x17] = 0x80;
+        nvr->regs[0x18] = 0x01; /* 384 KiB extended in the 1 MiB profile. */
+        uint16_t sum = 0;
+        for (int i = 0x10; i <= 0x2d; i++)
+            sum += nvr->regs[i];
+        nvr->regs[0x2e] = (sum >> 8) & 0xff;
+        nvr->regs[0x2f] = sum & 0x7f;
+    }
+
     return nvr;
 }
 

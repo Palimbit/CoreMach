@@ -4173,6 +4173,54 @@ const machine_t machines[] = {
         .net_device               = NULL,
         .aliases                  = { "AT&T 6286 WGS", "" }
     },
+    /* Olivetti PCS 286: Headland GC101A/GC102, IOC02 and onboard PVGA1A. */
+    {
+        .name              = "[GC103] Olivetti PCS 286",
+        .internal_name     = "olivetti_pcs286",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_GC103,
+        .init              = machine_at_olivetti_pcs286_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 12000000,
+            .max_bus     = 12000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_FLAGS_NONE,
+        .ram       = {
+            .min  = 1024,
+            .max  = 4096,
+            .step = 1024
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &olivetti_pcs286_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "PCS286", "" }
+    },
     /* Has IBM AT KBC firmware. */
     /* To configure the BIOS, use PB_2330a_diag.IMA from MS-DOS 3.30 Packard Bell OEM, GSETUP might work too*/
     {
