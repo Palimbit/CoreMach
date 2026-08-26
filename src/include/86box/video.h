@@ -523,6 +523,7 @@ extern const device_t oti077_device;
 extern const device_t paradise_pvga1a_ncr3302_device;
 extern const device_t paradise_pvga1a_pc2086_device;
 extern const device_t paradise_pvga1a_pc3086_device;
+extern const device_t paradise_pvga1a_pcs86_device;
 extern const device_t paradise_pvga1a_device;
 extern const device_t paradise_wd90c11_megapc_device;
 extern const device_t paradise_wd90c11_device;

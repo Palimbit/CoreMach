@@ -27,6 +27,7 @@ add_library(mch OBJECT
     m_europc.c
     m_elt.c
     m_xt_olivetti.c
+    m_xt_olivetti_pcs86.c
     m_xt_ibm5550.c
     m_tandy.c
     m_v86p.c

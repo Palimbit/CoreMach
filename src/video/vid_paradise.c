@@ -866,6 +866,13 @@ paradise_pvga1a_pc3086_init(const device_t *info)
 }
 
 static void *
+paradise_pvga1a_pcs86_init(const device_t *info)
+{
+    /* The PCS86 VGA firmware is embedded in the motherboard BIOS. */
+    return paradise_init(info, 256);
+}
+
+static void *
 paradise_pvga1a_standalone_init(const device_t *info)
 {
     paradise_t *paradise;
@@ -989,6 +996,21 @@ const device_t paradise_pvga1a_pc3086_device = {
     .speed_changed = paradise_speed_changed,
     .force_redraw  = paradise_force_redraw,
     .machine       = "Amstrad PC3086",
+    .config        = NULL
+};
+
+const device_t paradise_pvga1a_pcs86_device = {
+    .name          = "Paradise PVGA1A On-Board (Olivetti PCS86)",
+    .internal_name = "pvga1a_pcs86",
+    .flags         = 0,
+    .local         = PVGA1A,
+    .init          = paradise_pvga1a_pcs86_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti PCS86",
     .config        = NULL
 };
 
