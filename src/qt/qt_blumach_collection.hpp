@@ -26,7 +26,7 @@ public:
     void reloadLanguage();
 
 signals:
-    void createMachineRequested(const QString &productId);
+    void createMachineRequested(const QString &productId, const QString &emulatorMachineId);
     void showMachinesRequested();
 
 private:

@@ -64,9 +64,9 @@ VMManagerMainWindow::
     connect(collection, &BluMachCollectionWidget::showMachinesRequested, this, [this] {
         mainTabs->setCurrentWidget(vmm);
     });
-    connect(collection, &BluMachCollectionWidget::createMachineRequested, this, [this](const QString &) {
+    connect(collection, &BluMachCollectionWidget::createMachineRequested, this, [this](const QString &productId, const QString &machineId) {
         mainTabs->setCurrentWidget(vmm);
-        vmm->newMachineWizard();
+        vmm->newHistoricalMachine(productId, machineId);
     });
     connect(mainTabs, &QTabWidget::currentChanged, this, [this](int) {
         vmmStateChanged(mainTabs->currentWidget() == vmm ? vmm->getSelectedSystem() : nullptr);

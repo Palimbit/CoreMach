@@ -103,8 +103,10 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     connect(m_search, &QLineEdit::textChanged, this, [this] { applyFilter(); });
     connect(m_statusFilter, &QComboBox::currentIndexChanged, this, [this] { applyFilter(); });
     connect(m_createButton, &QPushButton::clicked, this, [this] {
-        if (!m_selectedProductId.isEmpty())
-            emit createMachineRequested(m_selectedProductId);
+        if (const auto *product = m_catalog.product(m_selectedProductId)) {
+            if (const auto *platform = m_catalog.platform(product->platformId))
+                emit createMachineRequested(product->id, platform->emulatorMachineId);
+        }
     });
     connect(m_machinesButton, &QPushButton::clicked, this, &BluMachCollectionWidget::showMachinesRequested);
     reloadLanguage();

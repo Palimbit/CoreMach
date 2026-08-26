@@ -14,12 +14,15 @@
  */
 #include <QDirIterator>
 #include <QLabel>
+#include <QLineEdit>
 #include <QAbstractListModel>
 #include <QCompleter>
+#include <QDateTime>
 #include <QDebug>
 #include <QDesktopServices>
 #include <QMenu>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QStringBuilder>
 #include <QStringListModel>
 #include <QTimer>
@@ -695,6 +698,61 @@ VMManagerMain::newMachineWizard()
         const auto displayName           = wizard->field("displayName").toString();
         addNewSystem(newName, systemDir, displayName, existingConfiguration);
     }
+}
+
+void
+VMManagerMain::newHistoricalMachine(const QString &productId, const QString &machineId)
+{
+    struct HistoricalDefaults {
+        const char *productId;
+        const char *displayName;
+        const char *directoryName;
+        const char *cpuFamily;
+        int         cpuSpeed;
+        int         memory;
+    };
+    static constexpr HistoricalDefaults defaults[] = {
+        { "olivetti-pcs86", "Olivetti PCS86", "olivetti-pcs86", "necv30", 8000000, 640 },
+        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12500000, 1024 },
+        { "olivetti-pcs386sx", "Olivetti PCS 386SX", "olivetti-pcs386sx", "i386sx", 16000000, 4096 }
+    };
+
+    const HistoricalDefaults *selected = nullptr;
+    for (const auto &candidate : defaults) {
+        if (productId == QLatin1String(candidate.productId)) {
+            selected = &candidate;
+            break;
+        }
+    }
+    if (!selected || machineId.isEmpty()) {
+        QMessageBox::warning(this, tr("Machine unavailable"),
+                             tr("This catalog entry does not yet have a usable emulator profile."));
+        return;
+    }
+
+    bool ok = false;
+    const QString displayName = QInputDialog::getText(this, tr("Create historical machine"),
+                                                       tr("Machine name:"), QLineEdit::Normal,
+                                                       tr(selected->displayName), &ok).trimmed();
+    if (!ok || displayName.isEmpty())
+        return;
+
+    QString directoryName = QString::fromLatin1(selected->directoryName);
+    directoryName += QStringLiteral("-%1").arg(QDateTime::currentSecsSinceEpoch());
+    const QString configuration = QStringLiteral(
+        "[General]\n"
+        "vid_renderer = qt_software\n\n"
+        "[Machine]\n"
+        "machine = %1\n"
+        "cpu_family = %2\n"
+        "cpu_speed = %3\n"
+        "cpu_multi = 1\n"
+        "cpu_use_dynarec = 0\n"
+        "mem_size = %4\n")
+                                      .arg(machineId, QString::fromLatin1(selected->cpuFamily))
+                                      .arg(selected->cpuSpeed)
+                                      .arg(selected->memory);
+    addNewSystem(directoryName, QDir(vmm_path).path(), displayName, configuration);
 }
 
 void
