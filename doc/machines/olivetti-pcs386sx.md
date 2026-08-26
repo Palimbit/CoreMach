@@ -1,0 +1,83 @@
+# Olivetti PCS 386SX
+
+Implementation status as of 2026-08-26: partial, reaches the Phoenix 1.14
+built-in Setup with a newly created CMOS image.
+
+## Firmware and machine definition
+
+The machine ID is `olivetti_pcs386sx`. Its two 64 KiB EPROM images are loaded
+byte-interleaved at `E0000-FFFFF`. The first 24 KiB of the resulting image are
+the embedded Olivetti OVC 1.06 video firmware; the onboard PVGA1A device must
+therefore not map an unrelated option ROM at `C0000`.
+
+The current model consists of:
+
+- Intel 80386SX at 16 MHz;
+- Headland HT18-B;
+- 1-8 MiB RAM;
+- Olivetti IOC02 and port 61h-63h glue;
+- PC87310 as a temporary Super I/O approximation;
+- onboard Paradise PVGA1A with 256 KiB;
+- Olivetti-flavoured AT 8042 and 128-byte AT CMOS.
+
+The driver installs a `60000-7FFFF` to `80000-9FFFF` RAM alias required by
+the Phoenix memory-controller test. Headland CR0 bit 2 starts clear on the PCS
+286 and PCS 386SX while retaining the existing default on other machines.
+
+## CMOS defaults
+
+A new CMOS image is seeded conservatively for the original 1 MiB
+configuration: 640 KiB base memory, 384 KiB extended memory, one 1.44 MB
+floppy, 80x25 colour video and no 80387. The Phoenix checksum covers registers
+10h-2Dh and is stored big-endian in 2Eh/2Fh.
+
+The Setup utility is expected after explicitly clearing CMOS. Persisted CMOS
+and all supported RAM sizes still require certification.
+
+## 8042 enable-keyboard handshake
+
+Without a machine-specific response, Phoenix reports:
+
+```text
+I/O Controller Error : 3
+Unrecoverable power-up error
+```
+
+Disassembly at `F000:37C6` shows the required transaction:
+
+```text
+mov al, AEh
+call send_8042_command
+wait_until_port_64_bit_0_is_set
+in  al, 60h
+cmp al, 3Bh
+jne wait
+```
+
+The generic AT 8042 enables the keyboard on command AEh but does not provide
+the byte expected by this Olivetti firmware. The PCS 386SX implementation
+therefore exposes one pending `3Bh` response in the controller output buffer
+on the first AEh of each POST. The response is model-scoped, requires an empty
+output buffer, sets OBF and is consumed once. It is rearmed by controller reset
+and at the FEh CPU-reset boundary. This is not a periodic key injector.
+
+Command FEh is also treated as a real reset pulse when P2.0 is already low;
+otherwise the generic edge-based path cannot observe another falling edge.
+
+## Relevant commits
+
+- `58cfdcb7d` — initial PCS 386SX port;
+- `ad8a8280e` — correct the 8042 FEh reset pulse;
+- `e68fc4d5e` — emulate the PCS 386SX AEh/3Bh handshake.
+
+## Remaining validation
+
+- complete Resident Diagnostics;
+- validate 1, 2, 4 and 8 MiB configurations;
+- validate date/time save and CMOS persistence;
+- validate interactive keyboard and warm reset;
+- boot the 1.44 MB floppy and Olivetti Customer Utility 1.51;
+- validate official 20, 40 and 100 MB hard-disk configurations;
+- validate optional 80387 detection;
+- replace PC87310, IOC02 and the static RAM alias where better hardware
+  evidence becomes available.
