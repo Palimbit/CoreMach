@@ -511,6 +511,9 @@ extern const device_t  olivetti_pcs286_device;
 #endif
 extern int             machine_at_olivetti_pcs286_init(const machine_t *);
 
+/* m_at_olivetti_386sx.c */
+extern int             machine_at_olivetti_pcs386sx_init(const machine_t *);
+
 /* m_at_286.c */
 /* ISA */
 #ifdef EMU_DEVICE_H

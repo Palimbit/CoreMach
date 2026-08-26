@@ -651,7 +651,8 @@ headland_init(const device_t *info)
     if (dev->revision > 0)
         ht386 = 1;
 
-    dev->cr[0] = (machines[machine].init == machine_at_olivetti_pcs286_init) ? 0x00 : 0x04;
+    dev->cr[0] = ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+                  (machines[machine].init == machine_at_olivetti_pcs386sx_init)) ? 0x00 : 0x04;
     dev->cr[4] = dev->revision << 4;
 
     if (ht386)
