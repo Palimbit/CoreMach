@@ -56,26 +56,47 @@ jne wait
 
 The generic AT 8042 enables the keyboard on command AEh but does not provide
 the byte expected by this Olivetti firmware. The PCS 386SX implementation
-therefore exposes one pending `3Bh` response in the controller output buffer
-on the first AEh of each POST. The response is model-scoped, requires an empty
-output buffer, sets OBF and is consumed once. It is rearmed by controller reset
-and at the FEh CPU-reset boundary. This is not a periodic key injector.
+therefore queues one pending `3Bh` response on the first AEh of each POST. A
+queue is required because Ctrl, Alt and Delete break codes may still occupy
+OBF during a warm reset. The response is model-scoped and consumed once. It is
+rearmed whenever the P2 reset output is asserted. This is not a periodic key
+injector.
 
 Command FEh is also treated as a real reset pulse when P2.0 is already low;
 otherwise the generic edge-based path cannot observe another falling edge.
+
+## Keyboard translation and warm reset
+
+Phoenix leaves PCMODE and XLAT set together. Unlike the generic IBM AT case,
+the Olivetti keyboard still supplies scan set 2 and expects the controller to
+translate it to set 1. PCMODE therefore no longer suppresses XLAT for
+`KBC_VEN_OLIVETTI`; F1 is converted from `05h` to `3Bh`, and F2 has been
+verified in the built-in Setup.
+
+IOC02 is a soft-reset device. Its reset callback originally restored the PCS
+286 first-read workaround unconditionally. On the PCS 386SX this changed the
+register 6Ah read-back protocol after Ctrl+Alt+Delete and caused
+`I/O Controller Error : 2`. IOC02 reset now selects that workaround from the
+active machine, preserving the PCS 386SX write/read semantics.
+
+An automated Ctrl+F12 test (BluMach's Send Control+Alt+Delete action) now
+completes the second POST: memory, parity, PIC, DMA, keyboard, clock/calendar,
+protected mode and CMOS pass, followed by another MS-DOS 3.30a boot.
 
 ## Relevant commits
 
 - `58cfdcb7d` — initial PCS 386SX port;
 - `ad8a8280e` — correct the 8042 FEh reset pulse;
 - `e68fc4d5e` — emulate the PCS 386SX AEh/3Bh handshake.
+- `776315855` — preserve XLAT for Olivetti PCMODE;
+- `c9e04540b` — preserve KBC and IOC02 state across warm reset.
 
 ## Remaining validation
 
 - complete Resident Diagnostics;
 - validate 1, 2, 4 and 8 MiB configurations;
 - validate date/time save and CMOS persistence;
-- validate interactive keyboard and warm reset;
+- validate the complete interactive keyboard matrix and repeated warm resets;
 - boot the 1.44 MB floppy and Olivetti Customer Utility 1.51;
 - validate official 20, 40 and 100 MB hard-disk configurations;
 - validate optional 80387 detection;
