@@ -21,6 +21,15 @@ BluMach is a low-level x86 emulator that runs older operating systems and
 software designed for IBM PC systems and compatibles from 1981 through fairly
 recent systems based on the PCI bus.
 
+Preserved machine families
+--------------------------
+
+The first documented BluMach collection is the
+[Olivetti PCS family](doc/machines/olivetti-pcs-family.md), with individual
+implementation and validation notes for the PCS 86, PCS 286 and PCS 386SX.
+These pages distinguish documented hardware, current emulation, verified
+behaviour and remaining approximations.
+
 Features
 --------
 

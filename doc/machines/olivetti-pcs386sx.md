@@ -1,126 +1,143 @@
 # Olivetti PCS 386SX
 
-Implementation status as of 2026-08-26: partial, reaches the Phoenix 1.14
-built-in Setup with a newly created CMOS image.
+Status as of 2026-08-27: firmware 1.14 completes POST, reaches its built-in
+Setup path and boots Olivetti MS-DOS. The optional 80387SX passes Resident
+Diagnostics. The model is usable for validation, while several chipset and I/O
+details remain explicit approximations.
 
-## Firmware and machine definition
+See also the [Olivetti PCS family overview](olivetti-pcs-family.md).
 
-The machine ID is `olivetti_pcs386sx`. Its two 64 KiB EPROM images are loaded
-byte-interleaved at `E0000-FFFFF`. The first 24 KiB of the resulting image are
-the embedded Olivetti OVC 1.06 video firmware; the onboard PVGA1A device must
-therefore not map an unrelated option ROM at `C0000`.
+## Recommended BluMach configuration
 
-The current model consists of:
+- machine: `[HT18] Olivetti PCS 386SX` (`olivetti_pcs386sx`);
+- CPU: Intel 80386SX at 16 MHz;
+- memory: 1-8 MiB in 1 MiB steps;
+- video: `Internal` Paradise PVGA1A, 256 KiB;
+- floppy: one internal 3.5-inch 1.44 MB drive;
+- documented fixed-disk capacities to validate: 20, 40 and 100 MB;
+- optional math processor: Intel 80387SX.
 
-- Intel 80386SX at 16 MHz;
-- Headland HT18-B;
-- 1-8 MiB RAM;
-- Olivetti IOC02 and port 61h-63h glue;
+Selecting video `None` gives a black 0 Hz display even though the guest CPU
+continues executing. A factory-style profile must retain `Internal` video.
+
+## Firmware
+
+BIOS and Resident Diagnostics identify as revision 1.14, dated 1991-10-30.
+Two 64 KiB EPROM captures are required:
+
+| Runtime file | Role |
+|---|---|
+| `roms/machines/olivetti_pcs386sx/olivetti_pcs386sx_v114_lo.bin` | low/even byte lane |
+| `roms/machines/olivetti_pcs386sx/olivetti_pcs386sx_v114_hi.bin` | high/odd byte lane |
+
+BluMach interleaves them over `E0000-FFFFF`. The first 24 KiB of the resulting
+image contain the valid Olivetti OVC 1.06 video firmware, so the onboard PVGA1A
+must not map an unrelated option ROM at `C0000`.
+
+The historical file ending `_deint.bin` is byte-identical to the low EPROM. It
+is not a complete deinterleaved BIOS and must not be offered as another revision.
+
+## Documented and represented hardware
+
+Board photographs identify the Headland GC102-PC/HT113/HT101SX family, an
+8042, TL16C451 serial/parallel logic, WD37C65C floppy control, Paradise PVGA1A
+and IMS G176P-40. The current model uses:
+
+- the available Headland HT18-B core;
+- Olivetti IOC02 and port `61h-63h` glue;
+- an Olivetti-flavoured AT 8042;
 - PC87310 as a temporary Super I/O approximation;
-- onboard Paradise PVGA1A with 256 KiB;
-- Olivetti-flavoured AT 8042 and 128-byte AT CMOS.
+- onboard PVGA1A initialised by the embedded OVC firmware;
+- 128-byte AT CMOS;
+- a fixed `60000-7FFFF` to `80000-9FFFF` RAM alias required by POST.
 
-The driver installs a `60000-7FFFF` to `80000-9FFFF` RAM alias required by
-the Phoenix memory-controller test. Headland CR0 bit 2 starts clear on the PCS
-286 and PCS 386SX while retaining the existing default on other machines.
+The PC87310 does not claim to be the photographed TL16C451/WD37C65C circuit.
+Likewise, the static memory alias represents an observed result while its exact
+Headland control mechanism remains to be modelled.
 
-## CMOS defaults
+## CMOS and 80387SX
 
-A new CMOS image is seeded conservatively for the original 1 MiB
-configuration: 640 KiB base memory, 384 KiB extended memory, one 1.44 MB
-floppy, 80x25 colour video and no 80387. The Phoenix checksum covers registers
-10h-2Dh and is stored big-endian in 2Eh/2Fh.
+A new CMOS image is seeded for one 1.44 MB floppy, 80x25 colour, 640 KiB base
+memory and the selected extended-memory size. The Phoenix checksum covers
+registers `10h-2Dh` and is stored in `2Eh/2Fh`.
 
-The Setup utility is expected after explicitly clearing CMOS. Persisted CMOS
-and all supported RAM sizes still require certification.
+The math-processor equipment bit follows the emulator's physical FPU choice.
+Existing PCS 386SX CMOS images are updated and checksummed when an 80387SX is
+added or removed. With `fpu_type = 387`, Resident Diagnostics reports
+`Math Processor (i80387SX) Pass` and MS-DOS 3.30a boots.
 
-## 8042 enable-keyboard handshake
+## Keyboard, reset and IOC02 behaviour
 
-Without a machine-specific response, Phoenix reports:
+Phoenix command `AEh` enables the keyboard and then expects one `3Bh` byte from
+the Olivetti controller. BluMach queues that response once per POST. Command
+`FEh` produces a reset pulse even when the generic P2.0 state was already low.
 
-```text
-I/O Controller Error : 3
-Unrecoverable power-up error
-```
+Phoenix leaves PCMODE and XLAT active together. For this Olivetti controller,
+scan set 2 must still be translated to the BIOS-visible set 1; F1 and F2 then
+reach their expected codes. Warm Ctrl+Alt+Delete completes a second POST and
+boots again.
 
-Disassembly at `F000:37C6` shows the required transaction:
+IOC02 register `68h` selects the function visible at `6Ah`. When selector bits
+0-4 are zero, a write to `6Ah` does not latch. Modelling that isolation changes
+the final diagnostic state from `AX=031Eh` (`I/O Controller Error : 2`) to
+`AX=001Eh` (pass). A read before any write exposes ready value `04h`; a normal
+write-first POST retains the transformed read-back protocol.
 
-```text
-mov al, AEh
-call send_8042_command
-wait_until_port_64_bit_0_is_set
-in  al, 60h
-cmp al, 3Bh
-jne wait
-```
+The service chord is Left Shift+Ctrl+Alt+Delete. Its error path is corrected,
+but final physical confirmation that holding Left Shift selects Setup remains
+pending because synthetic host key injection is not equivalent to the keyboard
+hook used by the emulator.
 
-The generic AT 8042 enables the keyboard on command AEh but does not provide
-the byte expected by this Olivetti firmware. The PCS 386SX implementation
-therefore queues one pending `3Bh` response on the first AEh of each POST. A
-queue is required because Ctrl, Alt and Delete break codes may still occupy
-OBF during a warm reset. The response is model-scoped and consumed once. It is
-rearmed whenever the P2 reset output is asserted. This is not a periodic key
-injector.
+## Preserved software
 
-Command FEh is also treated as a real reset pulse when P2.0 is already low;
-otherwise the generic edge-based path cannot observe another falling edge.
+- Customer Utility Disk Release 1.51 (`PCS386CU.IMD`): bootable 1.44 MB FAT12,
+  containing mainboard, CPU/80387, memory, keyboard, floppy, hard-disk, serial,
+  parallel, mouse and video diagnostics;
+- Tutorial PCS386 Release 2.2 (`PCS386TU.IMD`);
+- Olivetti MS-DOS 3.30a Rev. 1.03 for boot validation.
 
-## Keyboard translation and warm reset
+The Customer Utility files contain German, Italian, French, Spanish and English
+message resources, although the preserved boot disk defaults to German. The
+original IMD boots MS-DOS 4.01 Rev. 1.06 and reaches its date/time prompts.
+No independent English- or Spanish-default capture has yet been located.
 
-Phoenix leaves PCMODE and XLAT set together. Unlike the generic IBM AT case,
-the Olivetti keyboard still supplies scan set 2 and expects the controller to
-translate it to set 1. PCMODE therefore no longer suppresses XLAT for
-`KBC_VEN_OLIVETTI`; F1 is converted from `05h` to `3Bh`, and F2 has been
-verified in the built-in Setup.
+Both PCS386 IMD captures contain one sector marked unavailable. Preserve and
+mount the IMD originals for authoritative tests; flat conversions fill missing
+data and are working derivatives only.
 
-IOC02 is a soft-reset device. Its reset callback originally restored the PCS
-286 first-read workaround unconditionally. On the PCS 386SX this changed the
-register 6Ah read-back protocol after Ctrl+Alt+Delete and caused
-`I/O Controller Error : 2`. IOC02 reset now selects that workaround from the
-active machine, preserving the PCS 386SX write/read semantics.
+## Validated behaviour
 
-An automated Ctrl+F12 test (BluMach's Send Control+Alt+Delete action) now
-completes the second POST: memory, parity, PIC, DMA, keyboard, clock/calendar,
-protected mode and CMOS pass, followed by another MS-DOS 3.30a boot.
+- ROM checksum, POST and Phoenix Resident Diagnostics path;
+- 4 MiB configuration and onboard video at 70 Hz;
+- parity, PIC, DMA, keyboard, clock/calendar, protected mode and CMOS;
+- 80387SX detection and diagnostic pass;
+- MS-DOS 3.30a boot and repeated warm boot;
+- Customer Utility 1.51 disk boot through MS-DOS 4.01 date/time prompts;
+- IOC02 normal and service-path diagnostic transactions.
 
-The service chord Left Shift+Ctrl+Alt+Delete takes a distinct Phoenix path.
-It reads IOC02 register 6Ah immediately after reset, before writing it. The
-reset value was incorrectly transformed from `04h` to `24h`, producing
-`I/O Controller Error : 2`. A read-first transaction now exposes the ready
-value `04h`; a write-first transaction retains the transformed read-back used
-by normal POST. The corrected path completes POST and boots DOS. Physical
-confirmation that holding Left Shift selects Setup remains pending.
+## Known limitations and next tests
 
-Register 68h also selects the IOC02 function exposed at 6Ah. With its low
-five bits clear, writes to 6Ah are not latched. Phoenix verifies this isolation
-by selecting 00h, writing 55h and requiring a different value on read-back.
-Treating 6Ah as an unconditional register left `AH=03h` at the end of the test
-and was displayed as `I/O Controller Error : 2`; selector-aware writes leave
-`AH=00h` and pass the detailed test.
+- Run Resident Diagnostics repeatedly and complete Customer Utility 1.51.
+- Validate 1, 2, 4 and 8 MiB, plus cold CMOS persistence.
+- Complete the interactive keyboard matrix and physical Setup chord test.
+- Validate official 20, 40 and 100 MB hard-disk configurations.
+- Run Tutorial 2.2 end to end.
+- Replace PC87310, IOC02 assumptions and the static memory alias when stronger
+  hardware evidence becomes available.
 
-The optional 80387SX is detected and passes POST. Existing CMOS images track
-the emulator's physical FPU selection in equipment byte 14h and refresh the
-Phoenix checksum. The onboard Paradise adapter must remain selected as
-`internal`; choosing `none` produces a black 0 Hz display even though the
-machine continues running.
+## Implementation history
 
-## Relevant commits
+- `58cfdcb7d`: initial PCS 386SX port;
+- `ad8a8280e`: 8042 `FEh` reset pulse;
+- `e68fc4d5e`: Olivetti `AEh` to `3Bh` handshake;
+- `776315855`: scan translation with Olivetti PCMODE;
+- `c9e04540b`: warm-reset KBC and IOC02 state;
+- `c7e3814d0`: IOC02 read-first ready state for the service path;
+- `047b4a140`: selector-aware IOC02 writes and 80387SX CMOS state.
 
-- `58cfdcb7d` — initial PCS 386SX port;
-- `ad8a8280e` — correct the 8042 FEh reset pulse;
-- `e68fc4d5e` — emulate the PCS 386SX AEh/3Bh handshake.
-- `776315855` — preserve XLAT for Olivetti PCMODE;
-- `c9e04540b` — preserve KBC and IOC02 state across warm reset.
-- this change — distinguish IOC02 read-first Setup entry from normal POST.
+## Principal references
 
-## Remaining validation
-
-- complete Resident Diagnostics;
-- validate 1, 2, 4 and 8 MiB configurations;
-- validate date/time save and CMOS persistence;
-- validate the complete interactive keyboard matrix and repeated warm resets;
-- confirm Left Shift+Ctrl+Alt+Delete enters Setup from a physical keyboard;
-- boot the 1.44 MB floppy and Olivetti Customer Utility 1.51;
-- validate official 20, 40 and 100 MB hard-disk configurations;
-- replace PC87310, IOC02 and the static RAM alias where better hardware
-  evidence becomes available.
+- machine archive: <https://olivrea.de/olivetti-pcs-386sx/>
+- software archive: <https://olivrea.de/software/>
+- photographed restoration and board inventory:
+  <https://www.jonathandupre.fr/articles/33-ordinateurs-old-school/315-olivetti-pcs-386sx/>
