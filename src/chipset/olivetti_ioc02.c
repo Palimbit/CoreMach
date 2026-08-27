@@ -83,19 +83,27 @@ static void
 olivetti_ioc02_write(uint16_t addr, uint8_t val, void *priv)
 {
     olivetti_ioc02_t *dev = (olivetti_ioc02_t *) priv;
-    olivetti_ioc02_log("Olivetti ioc02 Gate Array: Write %02x at %02x\n", val, addr);
+    olivetti_ioc02_log("[%04X:%08X AX=%04X] IOC02 W %04x=%02x\n",
+                      CS, cpu_state.pc, AX, addr, val);
 
     switch (addr) {
         case 0x068:
             dev->reg_068 = val;
             break;
         case 0x06a:
-            /* reg_06a: store the value as-is. The init value 0x04
+            /* Register 0x68 selects the IOC02 function exposed at 0x6A.
+               With selector bits 0-4 clear, writes to 0x6A do not reach
+               the latched register. Phoenix v1.14 verifies this by
+               selecting 0x00, writing 0x55, and requiring the following
+               read not to reproduce 0x55.
+
+               Otherwise store the value as-is. The init value 0x04
                has bit 2 = 1 (I/O subsystem ready). When the BIOS
                writes other values (0xA0, 0x80, 0x55, etc.), bit 2
                is cleared, which is fine for the MEMORY CONTROLLER
                sub-tests in test 6 (they expect exact value match). */
-            dev->reg_06a        = val;
+            if (dev->reg_068 & 0x1f)
+                dev->reg_06a = val;
             dev->write_before_read = 1;
             break;
         case 0x06c:
@@ -175,8 +183,9 @@ olivetti_ioc02_read(uint16_t addr, void *priv)
             ret = dev->reg_06c;
             break;
     }
-    olivetti_ioc02_log("Olivetti ioc02 Gate Array: Read %02x at %02x (stored=%02x)\n",
-                       ret, addr, (addr == 0x06a) ? dev->reg_06a : 0);
+    olivetti_ioc02_log("[%04X:%08X AX=%04X] IOC02 R %04x=%02x stored=%02x\n",
+                      CS, cpu_state.pc, AX, addr, ret,
+                      (addr == 0x06a) ? dev->reg_06a : dev->reg_068);
     return ret;
 }
 

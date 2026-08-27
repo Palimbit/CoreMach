@@ -1241,7 +1241,7 @@ nvr_at_init(const device_t *info)
     /* Factory state expected by the PCS 386SX Phoenix v1.14 diagnostics. */
     if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs386sx_init)) {
         nvr->regs[0x0e] = 0x00;
-        nvr->regs[0x14] = 0x21; /* IPL, 80x25 colour, one floppy, no 80387. */
+        nvr->regs[0x14] = 0x21 | ((fpu_type != FPU_NONE) ? 0x02 : 0x00);
         nvr->regs[0x15] = 0x80;
         nvr->regs[0x16] = 0x02; /* 640 KiB base memory. */
         nvr->regs[0x17] = 0x80;
@@ -1251,6 +1251,22 @@ nvr_at_init(const device_t *info)
             sum += nvr->regs[i];
         nvr->regs[0x2e] = (sum >> 8) & 0xff;
         nvr->regs[0x2f] = sum & 0x7f;
+    }
+
+    /* The 80387 socket is a physical equipment option, not a SET-UP choice.
+     * Keep an existing PCS 386SX CMOS image consistent when the emulator's
+     * FPU selection changes, and refresh the Phoenix checksum. */
+    if (machines[machine].init == machine_at_olivetti_pcs386sx_init) {
+        const uint8_t equipment =
+            (nvr->regs[0x14] & ~0x02) | ((fpu_type != FPU_NONE) ? 0x02 : 0x00);
+        if (nvr->regs[0x14] != equipment) {
+            nvr->regs[0x14] = equipment;
+            uint16_t sum = 0;
+            for (int i = 0x10; i <= 0x2d; i++)
+                sum += nvr->regs[i];
+            nvr->regs[0x2e] = (sum >> 8) & 0xff;
+            nvr->regs[0x2f] = sum & 0x7f;
+        }
     }
 
     return nvr;

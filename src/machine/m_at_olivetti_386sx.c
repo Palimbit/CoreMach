@@ -129,8 +129,10 @@ machine_at_olivetti_pcs386sx_init(const machine_t *model)
      *   bit 1 = FPU installed
      * 86Box's generic BDA init writes 0x10 (bit 4 set, which is
      * 40x25 color) without the IPL bit. The Olivetti has 80x25 color
-     * and 1 FDD, so the correct BDA value is 0x20 (bit 5 = 80x25
-     * color). Without this override Phoenix reads BDA 0x10, compares
+     * and 1 FDD, so the BDA seed is 0x20 (bit 5 = 80x25
+     * color). Phoenix updates the coprocessor bit after detecting the
+     * socket; setting it before POST diverts video initialization. Without
+     * this override Phoenix reads BDA 0x10, compares
      * against NVR 0x20, finds a "mismatch", and sets bit 5 of
      * CMOS 0x0E (Equipment Error), which keeps the SET-UP showing
      * on every boot.
@@ -140,10 +142,9 @@ machine_at_olivetti_pcs386sx_init(const machine_t *model)
      * as the Olivetti PCS 286 driver. */
     extern uint8_t *ram;
     if (ram != NULL) {
-        ram[0x0410] = 0x20;  /* equip: 80x25 color, 1 FDD, no FPU, no IPL */
+        ram[0x0410] = 0x20;
         ram[0x0411] = 0x00;
-    }
-
+}
     /* Olivetti IOC02 glue chip. Same gate array as the PCS 286, but
        the BIOS version is Phoenix v1.14 (instead of v1.42 on the
        PCS 286). v1.14 does a write-then-read verification of reg
@@ -197,4 +198,3 @@ machine_at_olivetti_pcs386sx_init(const machine_t *model)
 
     return ret;
 }
-

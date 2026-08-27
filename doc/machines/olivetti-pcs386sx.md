@@ -91,6 +91,19 @@ value `04h`; a write-first transaction retains the transformed read-back used
 by normal POST. The corrected path completes POST and boots DOS. Physical
 confirmation that holding Left Shift selects Setup remains pending.
 
+Register 68h also selects the IOC02 function exposed at 6Ah. With its low
+five bits clear, writes to 6Ah are not latched. Phoenix verifies this isolation
+by selecting 00h, writing 55h and requiring a different value on read-back.
+Treating 6Ah as an unconditional register left `AH=03h` at the end of the test
+and was displayed as `I/O Controller Error : 2`; selector-aware writes leave
+`AH=00h` and pass the detailed test.
+
+The optional 80387SX is detected and passes POST. Existing CMOS images track
+the emulator's physical FPU selection in equipment byte 14h and refresh the
+Phoenix checksum. The onboard Paradise adapter must remain selected as
+`internal`; choosing `none` produces a black 0 Hz display even though the
+machine continues running.
+
 ## Relevant commits
 
 - `58cfdcb7d` — initial PCS 386SX port;
@@ -109,6 +122,5 @@ confirmation that holding Left Shift selects Setup remains pending.
 - confirm Left Shift+Ctrl+Alt+Delete enters Setup from a physical keyboard;
 - boot the 1.44 MB floppy and Olivetti Customer Utility 1.51;
 - validate official 20, 40 and 100 MB hard-disk configurations;
-- validate optional 80387 detection;
 - replace PC87310, IOC02 and the static RAM alias where better hardware
   evidence becomes available.
