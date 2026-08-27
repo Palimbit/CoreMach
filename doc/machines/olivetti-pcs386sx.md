@@ -83,6 +83,14 @@ An automated Ctrl+F12 test (BluMach's Send Control+Alt+Delete action) now
 completes the second POST: memory, parity, PIC, DMA, keyboard, clock/calendar,
 protected mode and CMOS pass, followed by another MS-DOS 3.30a boot.
 
+The service chord Left Shift+Ctrl+Alt+Delete takes a distinct Phoenix path.
+It reads IOC02 register 6Ah immediately after reset, before writing it. The
+reset value was incorrectly transformed from `04h` to `24h`, producing
+`I/O Controller Error : 2`. A read-first transaction now exposes the ready
+value `04h`; a write-first transaction retains the transformed read-back used
+by normal POST. The corrected path completes POST and boots DOS. Physical
+confirmation that holding Left Shift selects Setup remains pending.
+
 ## Relevant commits
 
 - `58cfdcb7d` — initial PCS 386SX port;
@@ -90,6 +98,7 @@ protected mode and CMOS pass, followed by another MS-DOS 3.30a boot.
 - `e68fc4d5e` — emulate the PCS 386SX AEh/3Bh handshake.
 - `776315855` — preserve XLAT for Olivetti PCMODE;
 - `c9e04540b` — preserve KBC and IOC02 state across warm reset.
+- this change — distinguish IOC02 read-first Setup entry from normal POST.
 
 ## Remaining validation
 
@@ -97,6 +106,7 @@ protected mode and CMOS pass, followed by another MS-DOS 3.30a boot.
 - validate 1, 2, 4 and 8 MiB configurations;
 - validate date/time save and CMOS persistence;
 - validate the complete interactive keyboard matrix and repeated warm resets;
+- confirm Left Shift+Ctrl+Alt+Delete enters Setup from a physical keyboard;
 - boot the 1.44 MB floppy and Olivetti Customer Utility 1.51;
 - validate official 20, 40 and 100 MB hard-disk configurations;
 - validate optional 80387 detection;

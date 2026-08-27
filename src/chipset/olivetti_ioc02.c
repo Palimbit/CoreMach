@@ -50,17 +50,16 @@ typedef struct
                                    writes, so the hack works there. */
     uint8_t first_read_hack_enabled;  /* Per-machine override. Default 1 (legacy
                                          PCS 286 behavior). The PCS 386SX init
-                                         sets this to 0 because Phoenix v1.14
-                                         expects a write-then-read sequence and
-                                         returning 0x04 on the first read
-                                         breaks it. */
+                                         sets this to 0 so a preceding write
+                                         suppresses the one-shot; a read-first
+                                         SET-UP path still sees 0x04. */
 } olivetti_ioc02_t;
 
 /* Global handle to the single IOC02 device. Used by
-   olivetti_ioc02_set_first_read_hack() to toggle the legacy
-   "return 0x04 on first read" hack per-machine. The PCS 286
-   keeps it ON (matches Phoenix v1.42). The PCS 386SX disables
-   it (Phoenix v1.14 actually verifies writes to 0x6A). */
+   olivetti_ioc02_set_first_read_hack() to toggle whether the legacy
+   "return 0x04 on first read" response survives a preceding write.
+   The PCS 286 keeps it ON (matches Phoenix v1.42). The PCS 386SX
+   disables it because Phoenix v1.14 verifies writes to 0x6A. */
 static olivetti_ioc02_t *current_ioc02_dev = NULL;
 
 #ifdef ENABLE_OLIVETTI_ioc02_LOG
@@ -121,9 +120,11 @@ olivetti_ioc02_read(uint16_t addr, void *priv)
                  skips the detailed sub-test.  The ROM does perform
                  setup writes before this read, so write_before_read
                  must not suppress the machine-specific one-shot.
-               - On the PCS 386SX the one-shot is disabled explicitly;
-                 reads therefore return the transformed stored value
-                 required by Phoenix v1.14 read-back verification.
+               - On the PCS 386SX a first read with no preceding write
+                 is the SET-UP entry path and must expose the reset-ready
+                 value 0x04.  Its normal POST writes first, so that path
+                 still receives the transformed stored value required by
+                 Phoenix v1.14 read-back verification.
                - On subsequent reads: return the actual stored value
                  so the MEMORY CONTROLLER sub-tests in test 6 can
                  verify exact value match.
@@ -161,7 +162,8 @@ olivetti_ioc02_read(uint16_t addr, void *priv)
                The 0x68 read does NOT have this transformation
                (the BIOS only does AND 0x1F on those reads, never
                XOR 0x20). */
-            if (dev->first_read_hack_enabled && !dev->first_read_done) {
+            if (!dev->first_read_done
+                && (dev->first_read_hack_enabled || !dev->write_before_read)) {
                 ret = 0x04;
                 dev->first_read_done = 1;
             } else {
