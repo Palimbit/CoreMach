@@ -242,11 +242,12 @@ kbc_at_olivetti_pcs386sx_enable_reply(atkbc_t *dev)
     /* Phoenix 1.14 checks the PCS 386SX controller's enable-keyboard
        handshake by polling port 60h for 3Bh immediately after AEh. */
     if ((machines[machine].init == machine_at_olivetti_pcs386sx_init) &&
-        dev->olivetti_pcs386sx_enable_reply && !(dev->status & STAT_OFULL)) {
+        dev->olivetti_pcs386sx_enable_reply) {
         dev->olivetti_pcs386sx_enable_reply = 0;
-        dev->ob = 0x3b;
-        dev->status |= STAT_OFULL;
-        kbc_at_log("ATkbc: Olivetti PCS 386SX enable reply 3B\n");
+        /* A warm reset can leave Ctrl, Alt or Delete break codes in OBF.
+           Queue the response so Phoenix can consume those bytes first. */
+        kbc_at_queue_add(dev, 0x3b);
+        kbc_at_log("ATkbc: queued Olivetti PCS 386SX enable reply 3B\n");
     }
 }
 
@@ -772,6 +773,12 @@ write_p2(atkbc_t *dev, uint8_t val)
     kbc_at_log("ATkbc: write P2: %02X (old: %02X)\n", val, dev->p2);
 
     uint8_t kbc_ven = dev->flags & KBC_VEN_MASK;
+
+    /* Every assertion of the 8042 reset output starts a new POST. Rearm the
+       PCS 386SX handshake here so D1 writes and pulse paths are covered too. */
+    if ((machines[machine].init == machine_at_olivetti_pcs386sx_init) &&
+        (old & 0x01) && !(val & 0x01))
+        dev->olivetti_pcs386sx_enable_reply = 1;
 
     /* AT, PS/2: Handle A20. */
     if ((mem_a20_key ^ val) & 0x02) { /* A20 enable change */
@@ -2746,7 +2753,10 @@ kbc_at_port_2_write(uint16_t port, uint8_t val, void *priv)
         set_enable_kbd(dev, 1);
         kbc_at_olivetti_pcs386sx_enable_reply(dev);
 
-        dev->state     = STATE_MAIN_IBF;
+        /* The PCS 386SX helper may have queued its AEh/3Bh handshake.
+           Preserve KBC_OUT so the poller can deliver it. */
+        if (dev->state != STATE_KBC_OUT)
+            dev->state = STATE_MAIN_IBF;
 
         /*
            Explicitly clear IBF so that any preceding

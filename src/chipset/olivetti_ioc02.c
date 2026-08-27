@@ -30,6 +30,7 @@
 #include <86box/io.h>
 #include <86box/device.h>
 #include <86box/chipset.h>
+#include <86box/machine.h>
 #include <86box/video.h>
 #include <86box/mem.h>
 
@@ -204,9 +205,12 @@ olivetti_ioc02_reset(void *priv)
     dev->reg_06c                  = 0xff;
     dev->first_read_done          = 0;
     dev->write_before_read        = 0;
-    /* Default: legacy hack ON (matches Phoenix v1.42 on the PCS 286).
-       The PCS 386SX init explicitly disables it. */
-    dev->first_read_hack_enabled  = 1;
+    /* Phoenix 1.42 on the PCS 286 needs the legacy first-read response.
+       Phoenix 1.14 on the PCS 386SX verifies a write/read round trip and
+       must keep that response disabled across DEVICE_SOFTRESET as well as
+       initial construction. */
+    dev->first_read_hack_enabled =
+        (machines[machine].init != machine_at_olivetti_pcs386sx_init);
 }
 
 void
@@ -260,4 +264,3 @@ const device_t olivetti_ioc02_device = {
     .force_redraw = NULL,
     .config = NULL
 };
-
