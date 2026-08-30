@@ -453,36 +453,6 @@
       ]
     },
     {
-      "id": "ta-dario86",
-      "manufacturer_id": "triumph-adler",
-      "family_id": "triumph-adler-dario",
-      "name": "Triumph-Adler Dario 86 (unconfirmed)",
-      "summary_key": "product.ta-dario86.summary",
-      "history_key": "product.ta-dario86.history",
-      "warning_key": "product.ta-dario86.warning",
-      "status": "research",
-      "period": "1989–1990",
-      "aliases": ["TA Dario 86"],
-      "tags": ["reported rebrand", "identity research", "PCS86"],
-      "firmware": {
-        "known_sets": [],
-        "required": true,
-        "identity_note": "No Dario 86 firmware or primary product record is currently known"
-      },
-      "relationships": {
-        "reported_relative": ["olivetti-pcs86"]
-      },
-      "technical": [
-        {
-          "title_key": "technical.section.sources",
-          "evidence_key": "technical.evidence.traceable",
-          "entries": [
-            {"label_key": "technical.label.source_notes", "value_key": "product.ta-dario86.technical.identity", "url": "https://www.techmonitor.ai/ai-and-automation/after_the_bloodletting_automation_triumph_adler_starts_to_earn_its_keep_at_olivetti/"}
-          ]
-        }
-      ]
-    },
-    {
       "id": "ta-dario286",
       "manufacturer_id": "triumph-adler",
       "family_id": "triumph-adler-dario",

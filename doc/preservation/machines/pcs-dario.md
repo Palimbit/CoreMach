@@ -14,12 +14,8 @@ does not contain firmware files or software media.
 | Olivetti PCS 386SX | `olivetti_pcs386sx` | Implemented; validation still partial | Phoenix 1.14 with embedded OVC 1.06 identified | 80386SX, Headland HT18-B model, IOC02 and PC87310 behavior. |
 | Triumph-Adler Dario 386SX / P45 | `ta_dario386sx` | Implemented on the same executable platform | Dario 1.14 identified separately | Executable video and system BIOS regions are byte-identical to PCS 386SX 1.14; only unused padding differs. |
 
-## Names not promoted to machines
+## Reported name not promoted to a machine
 
-- **Dario 86:** contemporary reporting says Triumph-Adler manufactured the
-  PCS86 for Olivetti but did not establish a marketed Dario 86. Until a badge,
-  manual or firmware dump proves that product identity, BluMach does not expose
-  a separate runnable Dario 86.
 - **Quelle/Privileg PCS 286:** a collector report describes a Privileg-badged
   example. This is retained as a research lead, not a machine identity.
 
