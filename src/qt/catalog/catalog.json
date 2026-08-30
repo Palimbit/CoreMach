@@ -1,10 +1,17 @@
 {
-  "schema": "blumach-catalog-v1",
+  "schema": "blumach-catalog-v2",
   "manufacturers": [
     {
       "id": "olivetti",
       "name": "Olivetti",
       "description_key": "manufacturer.olivetti.description"
+    },
+    {
+      "id": "triumph-adler",
+      "name": "Triumph-Adler",
+      "description_key": "manufacturer.triumph-adler.description",
+      "history_key": "manufacturer.triumph-adler.history",
+      "history_source_url": "https://www.triumph-adler.com/resource/blob/18288/94911497d9a5c4ed3c64a7cb8cd6fbde/ta-historie-e_2022-09-08.pdf"
     }
   ],
   "families": [
@@ -14,6 +21,13 @@
       "parent_family_id": "",
       "name": "PCS",
       "description_key": "family.olivetti-pcs.description"
+    },
+    {
+      "id": "triumph-adler-dario",
+      "manufacturer_id": "triumph-adler",
+      "parent_family_id": "",
+      "name": "Dario",
+      "description_key": "family.triumph-adler-dario.description"
     }
   ],
   "platforms": [
@@ -28,8 +42,23 @@
       "architecture": "80286"
     },
     {
+      "id": "olivetti-pcs286s-ti-platform",
+      "emulator_machine_id": "olivetti_pcs286s",
+      "architecture": "80286"
+    },
+    {
       "id": "olivetti-pcs386sx-platform",
       "emulator_machine_id": "olivetti_pcs386sx",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "ta-dario286-platform",
+      "emulator_machine_id": "ta_dario286",
+      "architecture": "80286"
+    },
+    {
+      "id": "ta-dario386sx-platform",
+      "emulator_machine_id": "ta_dario386sx",
       "architecture": "80386SX"
     }
   ],
@@ -43,16 +72,19 @@
       "summary_key": "product.olivetti-pcs86.summary",
       "history_key": "product.olivetti-pcs86.history",
       "status": "validated",
-      "period": "1989",
+      "period": "1989–1990",
       "aliases": ["PCS 86"],
       "tags": ["V30", "8086", "XT", "VGA", "XTA", "desktop"],
       "hardware": {
-        "cpu": "NEC V30 8 MHz",
-        "memory": "640 KB + 0/384/1920 KB EMS",
+        "cpu": "NEC V30 10 MHz, 0 wait states",
+        "memory": "640 KB; expansion to 2.5 MB, LIM 4.0/EMS",
         "video": "Paradise VGA integrated",
-        "floppy": "3.5 in, 1.44 MB",
+        "floppy": "3.5 in, 720 KB",
         "rtc": "MM58167",
-        "coprocessor": "Not documented"
+        "coprocessor": "Intel 8087 optional",
+        "expansion": "3 × 8-bit full-size slots",
+        "interfaces": "RS-232C, bidirectional parallel, mouse, AT keyboard",
+        "dimensions": "360 × 312 × 100 mm; 7.6 kg"
       },
       "firmware": {
         "known_sets": ["1.09"],
@@ -62,7 +94,69 @@
         "bus": "XTA",
         "official_drives": ["Conner CP3026 20 MB"]
       },
-      "relationships": {}
+      "relationships": {},
+      "technical": [
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-pcs86.technical.cpu_bus"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.olivetti-pcs86.technical.memory_map"},
+            {"label_key": "technical.label.video", "value_key": "product.olivetti-pcs86.technical.video"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.reverse_engineered",
+          "entries": [
+            {"label_key": "technical.label.rom_layout", "value_key": "product.olivetti-pcs86.technical.rom_layout"},
+            {"label_key": "technical.label.bios_revision", "value_key": "product.olivetti-pcs86.technical.bios_revision"},
+            {"label_key": "technical.label.bios_identity", "value_key": "product.olivetti-pcs86.technical.bios_identity"},
+            {"label_key": "technical.label.diagnostics", "value_key": "product.olivetti-pcs86.technical.diagnostics"}
+          ]
+        },
+        {
+          "title_key": "technical.section.io_map",
+          "evidence_key": "technical.evidence.mixed",
+          "description_key": "product.olivetti-pcs86.technical.io_intro",
+          "entries": [
+            {"label_key": "technical.label.board_control", "value_key": "product.olivetti-pcs86.technical.board_control"},
+            {"label_key": "technical.label.keyboard_mouse", "value_key": "product.olivetti-pcs86.technical.keyboard_mouse"},
+            {"label_key": "technical.label.rtc", "value_key": "product.olivetti-pcs86.technical.rtc"},
+            {"label_key": "technical.label.floppy", "value_key": "product.olivetti-pcs86.technical.floppy"},
+            {"label_key": "technical.label.hard_disk", "value_key": "product.olivetti-pcs86.technical.hard_disk"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.olivetti-pcs86.technical.serial_parallel"},
+            {"label_key": "technical.label.video", "value_key": "product.olivetti-pcs86.technical.video_ports"},
+            {"label_key": "technical.label.ems", "value_key": "product.olivetti-pcs86.technical.ems"}
+          ]
+        },
+        {
+          "title_key": "technical.section.configuration",
+          "evidence_key": "technical.evidence.reverse_engineered",
+          "entries": [
+            {"label_key": "technical.label.jumpers", "value_key": "product.olivetti-pcs86.technical.jumpers"},
+            {"label_key": "technical.label.key_lock", "value_key": "product.olivetti-pcs86.technical.key_lock"},
+            {"label_key": "technical.label.gui_behavior", "value_key": "product.olivetti-pcs86.technical.gui_behavior"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs86.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs86.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.sources",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.brochure", "value_key": "product.olivetti-pcs86.technical.brochure", "url": "https://olivrea.de/prospekte-personal-computer/"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-pcs86.technical.source_seasip", "url": "https://www.seasip.info/VintagePC/pcs86.html"},
+            {"label_key": "technical.label.source_firmware", "value_key": "product.olivetti-pcs86.technical.source_firmware"}
+          ]
+        }
+      ]
     },
     {
       "id": "olivetti-pcs286",
@@ -78,11 +172,14 @@
       "tags": ["80286", "AT", "VGA", "IDE", "desktop", "80287"],
       "hardware": {
         "cpu": "Intel 80286 12 MHz",
-        "memory": "1–4 MB",
+        "memory": "1 MB standard; up to 4 MB on-board and 16 MB system",
         "video": "Paradise/Olivetti VGA integrated",
         "floppy": "3.5 in, 1.44 MB",
         "rtc": "Dallas-compatible CMOS RTC",
-        "coprocessor": "Intel 80287 optional"
+        "coprocessor": "Intel 80287 optional",
+        "expansion": "2 × 16-bit AT + 1 × 8-bit XT full-size slots",
+        "interfaces": "RS-232C, bidirectional parallel, mouse, AT keyboard",
+        "dimensions": "360 × 312 × 100 mm; 7.6 kg"
       },
       "firmware": {
         "known_sets": ["1.37 (archive label 1.34)", "1.42"],
@@ -93,6 +190,172 @@
         "official_drives": ["Conner CP3022 20 MB", "Conner CP346 40 MB"]
       },
       "relationships": {
+        "distinct_from": ["olivetti-pcs286s"]
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-pcs286.technical.cpu_bus"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.olivetti-pcs286.technical.memory"},
+            {"label_key": "technical.label.storage", "value_key": "product.olivetti-pcs286.technical.storage"}
+          ]
+        },
+        {
+          "title_key": "technical.section.chipset",
+          "evidence_key": "technical.evidence.documented_and_modeled",
+          "entries": [
+            {"label_key": "technical.label.chipset", "value_key": "product.olivetti-pcs286.technical.chipset"},
+            {"label_key": "technical.label.chipset_functions", "value_key": "product.olivetti-pcs286.technical.chipset_functions"},
+            {"label_key": "technical.label.headland_ports", "value_key": "product.olivetti-pcs286.technical.headland_ports"},
+            {"label_key": "technical.label.manual", "value_key": "product.olivetti-pcs286.technical.headland_manual"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.observed",
+          "entries": [
+            {"label_key": "technical.label.bios_revision", "value_key": "product.olivetti-pcs286.technical.bios_revision"},
+            {"label_key": "technical.label.setup", "value_key": "product.olivetti-pcs286.technical.setup"},
+            {"label_key": "technical.label.diagnostics", "value_key": "product.olivetti-pcs286.technical.diagnostics"}
+          ]
+        },
+        {
+          "title_key": "technical.section.bios_reverse",
+          "evidence_key": "technical.evidence.reverse_engineered",
+          "entries": [
+            {"label_key": "technical.label.rom_layout", "value_key": "product.olivetti-pcs286.technical.rom_layout"},
+            {"label_key": "technical.label.memory_controller_test", "value_key": "product.olivetti-pcs286.technical.memory_controller_test"},
+            {"label_key": "technical.label.ioc02", "value_key": "product.olivetti-pcs286.technical.ioc02"},
+            {"label_key": "technical.label.keyboard_post", "value_key": "product.olivetti-pcs286.technical.keyboard_post"},
+            {"label_key": "technical.label.cmos_bda", "value_key": "product.olivetti-pcs286.technical.cmos_bda"},
+            {"label_key": "technical.label.video_firmware", "value_key": "product.olivetti-pcs286.technical.video_firmware"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs286.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs286.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.brochure", "value_key": "product.olivetti-pcs286.technical.brochure", "url": "https://olivrea.de/prospekte-personal-computer/"},
+            {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-pcs286.technical.firmware_evidence"},
+            {"label_key": "technical.label.programmable_logic", "value_key": "product.olivetti-pcs286.technical.programmable_logic"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "olivetti-pcs286s",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs",
+      "platform_id": "olivetti-pcs286s-ti-platform",
+      "name": "Olivetti PCS 286/S (TI/OLIMCU16, 12 MHz)",
+      "summary_key": "product.olivetti-pcs286s.summary",
+      "history_key": "product.olivetti-pcs286s.history",
+      "warning_key": "product.olivetti-pcs286s.warning",
+      "status": "validated",
+      "period": "1991",
+      "aliases": ["PCS 286/S", "PCS286/S", "PCS 286 TI"],
+      "tags": ["80286", "12 MHz", "AT", "VGA", "IDE", "desktop", "80287", "TACT82300", "OLIMCU16"],
+      "hardware": {
+        "cpu": "Intel 80286 at 12 MHz; TI BIOS modes 6/6, 12/6 and 12/12 MHz",
+        "memory": "1, 2 and 4 MB validated on the TI/OLIMCU16 board. Experimental generic ISA/AT expansion profiles also boot with 8 and 16 MB total; they prove a workable emulation path, not the existence of a specific Olivetti expansion card",
+        "video": "Integrated VGA",
+        "floppy": "3.5 in, 1.44 MB",
+        "chipset": "Texas Instruments TACT82300 family + Olivetti OLIMCU16 ASIC",
+        "rtc": "128-byte AT CMOS RTC",
+        "coprocessor": "Intel 80287 optional",
+        "expansion": "2 × 16-bit AT + 1 × 8-bit XT full-size slots",
+        "interfaces": "RS-232C, bidirectional parallel, mouse, AT keyboard",
+        "dimensions": "360 × 312 × 100 mm; 7.6 kg"
+      },
+      "firmware": {
+        "known_sets": ["Olivetti BIOS / Resident Diagnostics 2.06 (1991-05-20)"],
+        "required": true,
+        "identity_note": "Authentic 2 × 64 KiB LOW/HIGH EPROM dump; verified against the supplied 128 KiB interleaved image"
+      },
+      "storage": {
+        "bus": "IDE/ATA",
+        "official_drives": ["40 MB", "80 MB", "120 MB"],
+        "emulated_limit": "40 MB CP346 geometry (805 cylinders, 4 heads, 26 sectors) validated with BIOS 2.06 and MS-DOS 6.22; certified profiles cover 1/2/4 MB on-board and hypothetical generic ISA expansion to 8/16 MB"
+      },
+      "relationships": {
+        "derived_from": ["olivetti-pcs286"],
+        "distinct_from": ["olivetti-pcs286", "olivetti-pcs286s-16"]
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-pcs286s.technical.cpu_bus"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.olivetti-pcs286s.technical.memory"},
+            {"label_key": "technical.label.storage", "value_key": "product.olivetti-pcs286s.technical.storage"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.bios_revision", "value_key": "product.olivetti-pcs286s.technical.bios_revision"},
+            {"label_key": "technical.label.video", "value_key": "product.olivetti-pcs286s.technical.video_validation"},
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-pcs286s.technical.frequency_validation"},
+            {"label_key": "technical.label.headland_ports", "value_key": "product.olivetti-pcs286s.technical.olimcu_ports"},
+            {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs286s.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs286s.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.sources",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.brochure", "value_key": "product.olivetti-pcs286s.technical.brochure", "url": "https://olivrea.de/prospekte-personal-computer/"},
+            {"label_key": "technical.label.credits", "value_key": "product.olivetti-pcs286s.technical.credits", "url": "https://groups.google.com/g/it.comp.retrocomputing/c/FqQJY7JQb8c"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-pcs286s.technical.board_evidence", "url": "https://groups.google.com/g/it.comp.retrocomputing/c/FqQJY7JQb8c"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-pcs286s.technical.reference_branch", "url": "https://github.com/EngiNerd89/86Box/tree/Olivetti-PCS"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-pcs286s.technical.olimcu_branch", "url": "https://github.com/EngiNerd89/86Box/tree/Olivetti-OLIMCU"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "olivetti-pcs286s-16",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs",
+      "name": "Olivetti PCS 286S (16 MHz)",
+      "summary_key": "product.olivetti-pcs286s16.summary",
+      "history_key": "product.olivetti-pcs286s16.history",
+      "warning_key": "product.olivetti-pcs286s16.warning",
+      "status": "research",
+      "period": "1991",
+      "aliases": ["PCS286S", "PCS 286 S"],
+      "tags": ["80286", "16 MHz", "AT", "VGA", "IDE", "desktop", "missing BIOS"],
+      "hardware": {
+        "cpu": "Intel 80286 16 MHz, zero wait states",
+        "memory": "1 MB standard; up to 8 MB on-board and 16 MB system",
+        "video": "Integrated VGA",
+        "floppy": "3.5 in, 1.44 MB",
+        "coprocessor": "Intel 80287 optional"
+      },
+      "firmware": {
+        "known_sets": [],
+        "required": true,
+        "identity_note": "The correct 16 MHz commercial PCS 286S BIOS has not been preserved; TI/OLIMCU16 BIOS 2.06 is not assigned to this machine"
+      },
+      "storage": {
+        "bus": "IDE/ATA",
+        "official_drives": ["40 MB", "80 MB", "120 MB"]
+      },
+      "relationships": {
+        "derived_from": ["olivetti-pcs286"],
         "distinct_from": ["olivetti-pcs286s"]
       }
     },
@@ -110,11 +373,14 @@
       "tags": ["80386SX", "AT", "VGA", "IDE", "desktop", "80387SX"],
       "hardware": {
         "cpu": "Intel 80386SX 16 MHz",
-        "memory": "1–8 MB",
+        "memory": "1 MB standard; up to 8 MB on-board and 16 MB system; LIM 4.0/EMS",
         "video": "Paradise PVGA1A integrated, 256 KB",
         "floppy": "3.5 in, 1.44 MB",
         "rtc": "128-byte CMOS RTC",
-        "coprocessor": "Intel 80387SX optional (pending confirmation)"
+        "coprocessor": "Intel 80387SX 16 MHz optional",
+        "expansion": "2 × 16-bit AT + 1 × 8-bit XT full-size slots",
+        "interfaces": "RS-232C, bidirectional parallel, PS/2 mouse, AT keyboard",
+        "dimensions": "360 × 312 × 100 mm; 7.6 kg"
       },
       "firmware": {
         "known_sets": ["1.14 with embedded OVC 1.06"],
@@ -124,7 +390,270 @@
         "bus": "IDE/ATA",
         "official_drives": ["20 MB", "40 MB", "100 MB"]
       },
-      "relationships": {}
+      "relationships": {},
+      "technical": [
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-pcs386sx.technical.cpu_bus"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.olivetti-pcs386sx.technical.memory"},
+            {"label_key": "technical.label.video", "value_key": "product.olivetti-pcs386sx.technical.video"},
+            {"label_key": "technical.label.storage", "value_key": "product.olivetti-pcs386sx.technical.storage"}
+          ]
+        },
+        {
+          "title_key": "technical.section.chipset",
+          "evidence_key": "technical.evidence.documented_and_modeled",
+          "entries": [
+            {"label_key": "technical.label.chipset", "value_key": "product.olivetti-pcs386sx.technical.chipset"},
+            {"label_key": "technical.label.chipset_functions", "value_key": "product.olivetti-pcs386sx.technical.chipset_functions"},
+            {"label_key": "technical.label.headland_ports", "value_key": "product.olivetti-pcs386sx.technical.headland_ports"},
+            {"label_key": "technical.label.manual", "value_key": "product.olivetti-pcs386sx.technical.headland_manual", "url": "https://theretroweb.com/"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.observed",
+          "entries": [
+            {"label_key": "technical.label.bios_revision", "value_key": "product.olivetti-pcs386sx.technical.bios_revision"},
+            {"label_key": "technical.label.setup", "value_key": "product.olivetti-pcs386sx.technical.setup"},
+            {"label_key": "technical.label.diagnostics", "value_key": "product.olivetti-pcs386sx.technical.diagnostics"}
+          ]
+        },
+        {
+          "title_key": "technical.section.bios_reverse",
+          "evidence_key": "technical.evidence.reverse_engineered",
+          "entries": [
+            {"label_key": "technical.label.rom_layout", "value_key": "product.olivetti-pcs386sx.technical.rom_layout"},
+            {"label_key": "technical.label.kbc_handshake", "value_key": "product.olivetti-pcs386sx.technical.kbc_handshake"},
+            {"label_key": "technical.label.ioc02", "value_key": "product.olivetti-pcs386sx.technical.ioc02"},
+            {"label_key": "technical.label.memory_controller_test", "value_key": "product.olivetti-pcs386sx.technical.memory_controller_test"},
+            {"label_key": "technical.label.cmos_bda", "value_key": "product.olivetti-pcs386sx.technical.cmos_bda"},
+            {"label_key": "technical.label.video_firmware", "value_key": "product.olivetti-pcs386sx.technical.video_firmware"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs386sx.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs386sx.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.brochure", "value_key": "product.olivetti-pcs386sx.technical.brochure", "url": "https://olivrea.de/olivetti-pcs-386sx/"},
+            {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-pcs386sx.technical.firmware_evidence"},
+            {"label_key": "technical.label.diagnostic_media", "value_key": "product.olivetti-pcs386sx.technical.diagnostic_media"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ta-dario86",
+      "manufacturer_id": "triumph-adler",
+      "family_id": "triumph-adler-dario",
+      "name": "Triumph-Adler Dario 86 (unconfirmed)",
+      "summary_key": "product.ta-dario86.summary",
+      "history_key": "product.ta-dario86.history",
+      "warning_key": "product.ta-dario86.warning",
+      "status": "research",
+      "period": "1989–1990",
+      "aliases": ["TA Dario 86"],
+      "tags": ["reported rebrand", "identity research", "PCS86"],
+      "firmware": {
+        "known_sets": [],
+        "required": true,
+        "identity_note": "No Dario 86 firmware or primary product record is currently known"
+      },
+      "relationships": {
+        "reported_relative": ["olivetti-pcs86"]
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.sources",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.source_notes", "value_key": "product.ta-dario86.technical.identity", "url": "https://www.techmonitor.ai/ai-and-automation/after_the_bloodletting_automation_triumph_adler_starts_to_earn_its_keep_at_olivetti/"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ta-dario286",
+      "manufacturer_id": "triumph-adler",
+      "family_id": "triumph-adler-dario",
+      "platform_id": "ta-dario286-platform",
+      "name": "Triumph-Adler Dario 286",
+      "summary_key": "product.ta-dario286.summary",
+      "history_key": "product.ta-dario286.history",
+      "status": "partial",
+      "period": "1989–1990",
+      "aliases": ["TA Dario 286", "P35"],
+      "tags": ["80286", "AT", "VGA", "IDE", "desktop", "80287"],
+      "hardware": {
+        "cpu": "Intel 80286 12/6 MHz, 1 wait state",
+        "memory": "1 MB standard; board configurations from 512 KB to 4 MB",
+        "chipset": "G2 GC101A + GC102 with IOC",
+        "video": "Paradise VGA integrated",
+        "floppy": "3.5 in, 1.44 MB",
+        "rtc": "Dallas DS1287, 128-byte CMOS",
+        "coprocessor": "Intel 80287 optional",
+        "interfaces": "Two serial ports, parallel port, mouse and AT keyboard"
+      },
+      "firmware": {
+        "known_sets": ["1.37", "1.42"],
+        "required": true,
+        "identity_note": "Uses the preserved PCS 286 ROM set for the same TA-built motherboard"
+      },
+      "storage": {
+        "bus": "IDE/ATA",
+        "official_drives": ["Conner CP3022/CP3024 20 MB", "Conner CP346/CP3044 40 MB"]
+      },
+      "relationships": {
+        "badge_equivalent": ["olivetti-pcs286"],
+        "commercial_aliases": ["P35"]
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.ta-dario286.technical.cpu_bus"},
+            {"label_key": "technical.label.chipset", "value_key": "product.ta-dario286.technical.chipset"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.ta-dario286.technical.memory"},
+            {"label_key": "technical.label.storage", "value_key": "product.ta-dario286.technical.storage"}
+          ]
+        },
+        {
+          "title_key": "technical.section.configuration",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.jumpers", "value_key": "product.ta-dario286.technical.jumpers"},
+            {"label_key": "technical.label.cmos_bda", "value_key": "product.ta-dario286.technical.cmos"},
+            {"label_key": "technical.label.diagnostics", "value_key": "product.ta-dario286.technical.diagnostics"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.mixed",
+          "entries": [
+            {"label_key": "technical.label.bios_identity", "value_key": "product.ta-dario286.technical.identity"},
+            {"label_key": "technical.label.verified", "value_key": "product.ta-dario286.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.ta-dario286.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.manual", "value_key": "product.ta-dario286.document.technical", "url": "https://forum.classic-computing.de/index.php?file-download/175186/"},
+            {"label_key": "technical.label.manual", "value_key": "product.ta-dario286.document.user", "url": "https://forum.classic-computing.de/index.php?file-download/175187/"},
+            {"label_key": "technical.label.manual", "value_key": "product.ta-dario286.document.illustrations", "url": "https://forum.classic-computing.de/index.php?file-download/175188/"},
+            {"label_key": "technical.label.video", "value_key": "product.ta-dario286.document.wd90c00"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.ta-dario286.document.tl16c451"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.ta-dario286.document.ld1107"},
+            {"label_key": "technical.label.programmable_logic", "value_key": "product.ta-dario286.document.tr9c1710"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.ta-dario286.document.km41c464"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.ta-dario286.document.gm71c464"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ta-dario286s",
+      "manufacturer_id": "triumph-adler",
+      "family_id": "triumph-adler-dario",
+      "name": "Triumph-Adler Dario 286S (16 MHz)",
+      "summary_key": "product.ta-dario286s.summary",
+      "history_key": "product.ta-dario286s.history",
+      "warning_key": "product.ta-dario286s.warning",
+      "status": "research",
+      "period": "1991",
+      "aliases": ["TA Dario 286S"],
+      "tags": ["80286", "16 MHz", "AT", "VGA", "IDE", "desktop", "missing BIOS"],
+      "hardware": {
+        "cpu": "Intel 80286 16 MHz",
+        "memory": "Configuration not yet verified from primary technical documentation",
+        "video": "Integrated VGA",
+        "floppy": "3.5 in, 1.44 MB",
+        "coprocessor": "Intel 80287 optional"
+      },
+      "firmware": {
+        "known_sets": [],
+        "required": true,
+        "identity_note": "No verified Dario 286S BIOS dump is preserved; equivalence with the Olivetti PCS 286S firmware must not be assumed"
+      },
+      "relationships": {
+        "probable_commercial_relative": ["olivetti-pcs286s-16"],
+        "distinct_from": ["ta-dario286", "olivetti-pcs286s"]
+      }
+    },
+    {
+      "id": "ta-dario386sx",
+      "manufacturer_id": "triumph-adler",
+      "family_id": "triumph-adler-dario",
+      "platform_id": "ta-dario386sx-platform",
+      "name": "Triumph-Adler Dario 386SX",
+      "summary_key": "product.ta-dario386sx.summary",
+      "history_key": "product.ta-dario386sx.history",
+      "status": "experimental",
+      "period": "1991",
+      "aliases": ["TA Dario 386SX", "P45"],
+      "tags": ["80386SX", "AT", "VGA", "IDE", "desktop", "80387SX"],
+      "hardware": {
+        "cpu": "Intel 80386SX 16 MHz",
+        "memory": "1 MB standard; up to 8 MB on-board; LIM 4.0/EMS",
+        "chipset": "Headland HT18-B model with IOC02 and PC87310",
+        "video": "Paradise PVGA1A, 256 KB, embedded OVC 1.06",
+        "floppy": "3.5 in, 1.44 MB",
+        "coprocessor": "Intel 80387SX optional"
+      },
+      "firmware": {
+        "known_sets": ["Phoenix 1.14 with embedded OVC 1.06"],
+        "required": true,
+        "identity_note": "Executable firmware is byte-identical to PCS 386SX 1.14; original FFh padding is preserved"
+      },
+      "storage": {
+        "bus": "IDE/ATA",
+        "official_drives": ["20 MB", "40 MB", "100 MB"]
+      },
+      "relationships": {
+        "badge_equivalent": ["olivetti-pcs386sx"],
+        "commercial_aliases": ["P45"]
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.reverse_engineered",
+          "entries": [
+            {"label_key": "technical.label.bios_identity", "value_key": "product.ta-dario386sx.technical.identity"},
+            {"label_key": "technical.label.rom_layout", "value_key": "product.ta-dario386sx.technical.rom_layout"},
+            {"label_key": "technical.label.bios_revision", "value_key": "product.ta-dario386sx.technical.bios_revision"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.chipset", "value_key": "product.ta-dario386sx.technical.chipset"},
+            {"label_key": "technical.label.verified", "value_key": "product.ta-dario386sx.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.ta-dario386sx.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.manual", "value_key": "product.ta-dario386sx.document.ht18", "url": "https://theretroweb.com/"},
+            {"label_key": "technical.label.brochure", "value_key": "product.ta-dario386sx.document.olivetti", "url": "https://olivrea.de/olivetti-pcs-386sx/"},
+            {"label_key": "technical.label.firmware_evidence", "value_key": "product.ta-dario386sx.document.firmware"}
+          ]
+        }
+      ]
     }
   ]
 }

@@ -9,6 +9,7 @@
 #define QT_BLUMACH_CATALOG_HPP
 
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
@@ -18,6 +19,8 @@ struct BluMachManufacturer {
     QString id;
     QString name;
     QString descriptionKey;
+    QString historyKey;
+    QString historySourceUrl;
 };
 
 struct BluMachFamily {
@@ -42,6 +45,7 @@ struct BluMachProduct {
     QString     name;
     QString     summaryKey;
     QString     historyKey;
+    QString     warningKey;
     QString     status;
     QString     period;
     QStringList aliases;
@@ -50,6 +54,7 @@ struct BluMachProduct {
     QJsonObject firmware;
     QJsonObject storage;
     QJsonObject relationships;
+    QJsonArray  technical;
 };
 
 class BluMachCatalog final {

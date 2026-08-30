@@ -236,6 +236,7 @@
 #include <86box/rom.h>
 #include <86box/device.h>
 #include <86box/nvr.h>
+#include <86box/hdd.h>
 
 /* RTC registers and bit definitions. */
 #define RTC_SECONDS                  0
@@ -1224,8 +1225,12 @@ nvr_at_init(const device_t *info)
     /* Factory state expected by the PCS 286 Phoenix diagnostics. The setup
      * utility may subsequently replace these values; they are only seeded
      * when the 128-byte NVR file is first created. */
-    if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs286_init)) {
+    if (nvr->is_new &&
+        ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+         (machines[machine].init == machine_at_olivetti_pcs286s_ti_init))) {
         nvr->regs[0x0e] = 0x00;
+        if (hdd[0].bus_type == HDD_BUS_IDE)
+            nvr->regs[0x12] = 0x20; /* Olivetti type 2: Conner CP346. */
         nvr->regs[0x14] = 0x21; /* IPL, 80x25 colour, one floppy, no 80287. */
         nvr->regs[0x15] = 0x80;
         nvr->regs[0x16] = 0x02; /* 640 KiB base memory. */
@@ -1241,6 +1246,8 @@ nvr_at_init(const device_t *info)
     /* Factory state expected by the PCS 386SX Phoenix v1.14 diagnostics. */
     if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs386sx_init)) {
         nvr->regs[0x0e] = 0x00;
+        if (hdd[0].bus_type == HDD_BUS_IDE)
+            nvr->regs[0x12] = 0x40; /* Olivetti type 4: Conner CP3104. */
         nvr->regs[0x14] = 0x21 | ((fpu_type != FPU_NONE) ? 0x02 : 0x00);
         nvr->regs[0x15] = 0x80;
         nvr->regs[0x16] = 0x02; /* 640 KiB base memory. */

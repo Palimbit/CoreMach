@@ -2663,8 +2663,8 @@ const machine_t machines[] = {
         .cpu               = {
             .package     = CPU_PKG_8086,
             .block       = CPU_BLOCK_NONE,
-            .min_bus     = 8000000,
-            .max_bus     = 8000000,
+            .min_bus     = 10000000,
+            .max_bus     = 10000000,
             .min_voltage = 0,
             .max_voltage = 0,
             .min_multi   = 0,
@@ -4175,7 +4175,7 @@ const machine_t machines[] = {
     },
     /* Olivetti PCS 286: Headland GC101A/GC102, IOC02 and onboard PVGA1A. */
     {
-        .name              = "[GC103] Olivetti PCS 286",
+        .name              = "[GC101/102] Olivetti PCS 286",
         .internal_name     = "olivetti_pcs286",
         .type              = MACHINE_TYPE_286,
         .chipset           = MACHINE_CHIPSET_GC103,
@@ -4220,6 +4220,104 @@ const machine_t machines[] = {
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "PCS286", "" }
+    },
+    /* Triumph-Adler Dario 286/P35: badge-engineered PCS 286. */
+    {
+        .name              = "[GC101/102] Triumph-Adler Dario 286",
+        .internal_name     = "ta_dario286",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_GC103,
+        .init              = machine_at_olivetti_pcs286_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 12000000,
+            .max_bus     = 12000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_FLAGS_NONE,
+        .ram       = {
+            .min  = 1024,
+            .max  = 4096,
+            .step = 1024
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &ta_dario286_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "TA Dario 286", "TA P35", "" }
+    },
+    /* PCS 286/S, TI board revision: TACT82300 family + OLIMCU16.
+       BIOS 2.06 exposes 12/12, 12/6 and 6/6 MHz modes.  Keep this
+       separate from the documented commercial PCS 286S at 16 MHz. */
+    {
+        .name              = "[TI TACT82300/OLIMCU16] Olivetti PCS 286/S (12 MHz)",
+        .internal_name     = "olivetti_pcs286s",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_at_olivetti_pcs286s_ti_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 12000000,
+            .max_bus     = 12000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_FLAGS_NONE,
+        .ram       = {
+            .min  = 1024,
+            .max  = 16384,
+            .step = 1024
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT_ZERO_DEFAULT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &olivetti_pcs286s_ti_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "PCS 286/S", "PCS286/S", "PCS 286 TI", "" }
     },
     /* Has IBM AT KBC firmware. */
     /* To configure the BIOS, use PB_2330a_diag.IMA from MS-DOS 3.30 Packard Bell OEM, GSETUP might work too*/
@@ -6349,9 +6447,8 @@ const machine_t machines[] = {
         .net_device               = NULL,
         .aliases                  = { "Acer 386SX25/N", "" }
     },
-    /* Has an AMI KBC firmware, the only photo of this is too low resolution
-       for me to read what's on the KBC chip, so I'm going to assume AMI 'F'
-       based on the other known HT18 AMI BIOS strings. */
+    /* Olivetti/TA keyboard-controller protocol; the original controller ROM
+       has not yet been preserved. */
     {
         .name              = "[HT18] Olivetti PCS 386SX",
         .internal_name     = "olivetti_pcs386sx",
@@ -6398,6 +6495,54 @@ const machine_t machines[] = {
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "PCS386SX", "" }
+    },
+    /* Triumph-Adler Dario 386SX/P45: badge-engineered PCS 386SX. */
+    {
+        .name              = "[HT18] Triumph-Adler Dario 386SX",
+        .internal_name     = "ta_dario386sx",
+        .type              = MACHINE_TYPE_386SX,
+        .chipset           = MACHINE_CHIPSET_HT18,
+        .init              = machine_at_olivetti_pcs386sx_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_386SX,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 16000000,
+            .max_bus     = 16000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_FLAGS_NONE,
+        .ram       = {
+            .min  = 1024,
+            .max  = 8192,
+            .step = 1024
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = NULL,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "TA Dario 386SX", "TA P45", "" }
     },
     {
         .name              = "[HT18] Arche AMA-932J",

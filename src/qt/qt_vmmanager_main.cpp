@@ -710,11 +710,35 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
         const char *cpuFamily;
         int         cpuSpeed;
         int         memory;
+        const char *diskFile;
+        const char *diskParameters;
+        const char *diskChannel;
+        const char *diskSpeed;
+        qint64      diskSize;
+        bool        needsIsaIde;
+        const char *video;
+        const char *keyboard;
+        const char *floppyType;
     };
     static constexpr HistoricalDefaults defaults[] = {
-        { "olivetti-pcs86", "Olivetti PCS86", "olivetti-pcs86", "necv30", 8000000, 640 },
-        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12000000, 1024 },
-        { "olivetti-pcs386sx", "Olivetti PCS 386SX", "olivetti-pcs386sx", "i386sx", 16000000, 4096 }
+        { "olivetti-pcs86", "Olivetti PCS86", "olivetti-pcs86", "necv30", 8000000, 640,
+          "conner-cp3026-20mb.img", "17, 4, 615, 0, xta", "hdd_01_xta_channel = 0", "1989_3500rpm",
+          615LL * 4 * 17 * 512, false, "internal", "keyboard_pc_xt", "35_2hd" },
+        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12000000, 1024,
+          "conner-cp346-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
+          805LL * 4 * 26 * 512, true, "pvga1a", "keyboard_at", "35_2hd" },
+        { "olivetti-pcs286s", "Olivetti PCS 286/S (TI/OLIMCU16)", "olivetti-pcs286s-ti", "286", 12000000, 1024,
+          "olivetti-pcs286s-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
+          805LL * 4 * 26 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-pcs386sx", "Olivetti PCS 386SX", "olivetti-pcs386sx", "i386sx", 16000000, 4096,
+          "conner-cp3104-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "ta-dario286", "Triumph-Adler Dario 286", "ta-dario286", "286", 12000000, 1024,
+          "conner-cp346-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
+          805LL * 4 * 26 * 512, true, "pvga1a", "keyboard_at", "35_2hd" },
+        { "ta-dario386sx", "Triumph-Adler Dario 386SX", "ta-dario386sx", "i386sx", 16000000, 4096,
+          "conner-cp3104-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" }
     };
 
     const HistoricalDefaults *selected = nullptr;
@@ -739,9 +763,10 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
 
     QString directoryName = QString::fromLatin1(selected->directoryName);
     directoryName += QStringLiteral("-%1").arg(QDateTime::currentSecsSinceEpoch());
-    const QString configuration = QStringLiteral(
+    QString configuration = QStringLiteral(
         "[General]\n"
-        "vid_renderer = qt_software\n\n"
+        "vid_renderer = qt_software\n"
+        "time_sync = disabled\n\n"
         "[Machine]\n"
         "machine = %1\n"
         "cpu_family = %2\n"
@@ -752,11 +777,67 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
                                       .arg(machineId, QString::fromLatin1(selected->cpuFamily))
                                       .arg(selected->cpuSpeed)
                                       .arg(selected->memory);
-    addNewSystem(directoryName, QDir(vmm_path).path(), displayName, configuration);
+    if (productId == QLatin1String("olivetti-pcs86"))
+        configuration += QStringLiteral(
+            "ems_size = 1920\n"
+            "keylock_locked = 0\n"
+            "fdd0_jumpers = -1\n"
+            "fdd1_jumpers = -1\n"
+            "hdd_jumper = -1\n");
+    else if (productId == QLatin1String("olivetti-pcs386sx") || productId == QLatin1String("ta-dario386sx"))
+        configuration += QStringLiteral("fpu_type = none\n");
+    if (productId == QLatin1String("olivetti-pcs286"))
+        configuration += QStringLiteral("\n[Olivetti PCS 286]\nbios = v142\n");
+    else if (productId == QLatin1String("olivetti-pcs286s"))
+        configuration += QStringLiteral("\n[Olivetti PCS 286S (TI)]\nbios = v206\n");
+    else if (productId == QLatin1String("ta-dario286"))
+        configuration += QStringLiteral("\n[Triumph-Adler Dario 286 (P35)]\nbios = v142\n");
+    configuration += QStringLiteral(
+        "\n[Video]\n"
+        "gfxcard = %1\n\n"
+        "[Input devices]\n"
+        "keyboard_type = %2\n"
+        "mouse_type = none\n\n"
+        "[Floppy and CD-ROM drives]\n"
+        "fdd_01_type = %3\n"
+        "fdd_02_type = none\n")
+                             .arg(QString::fromLatin1(selected->video),
+                                  QString::fromLatin1(selected->keyboard),
+                                  QString::fromLatin1(selected->floppyType));
+    if (productId == QLatin1String("olivetti-pcs86"))
+        configuration += QStringLiteral(
+            "\n[Ports (COM & LPT)]\n"
+            "serial1_enabled = 1\n"
+            "serial2_enabled = 0\n"
+            "lpt1_enabled = 1\n");
+    if (selected->needsIsaIde)
+        configuration += QStringLiteral("\n[Storage controllers]\nhdc_1 = ide_isa\n");
+    configuration += QStringLiteral(
+        "\n[Hard disks]\n"
+        "hdd_01_fn = %1\n"
+        "%2\n"
+        "hdd_01_parameters = %3\n"
+        "hdd_01_speed = %4\n")
+                             .arg(QString::fromLatin1(selected->diskFile),
+                                  QString::fromLatin1(selected->diskChannel),
+                                  QString::fromLatin1(selected->diskParameters),
+                                  QString::fromLatin1(selected->diskSpeed));
+    addNewSystem(directoryName, QDir(vmm_path).path(), displayName, configuration, false);
+
+    const QDir machineDirectory(QDir(vmm_path).filePath(directoryName));
+    const QString diskPath = machineDirectory.filePath(QString::fromLatin1(selected->diskFile));
+    if (machineDirectory.exists() && !QFileInfo::exists(diskPath)) {
+        QFile diskImage(diskPath);
+        if (!diskImage.open(QIODevice::WriteOnly) || !diskImage.resize(selected->diskSize)) {
+            QMessageBox::critical(this, tr("Hard disk creation failed"),
+                                  tr("The historical machine was created, but its hard disk image could not be created."));
+        }
+    }
+
 }
 
 void
-VMManagerMain::addNewSystem(const QString &name, const QString &dir, const QString &displayName, const QString &configFile)
+VMManagerMain::addNewSystem(const QString &name, const QString &dir, const QString &displayName, const QString &configFile, bool launchSettings)
 {
     const auto newSystemDirectory = QDir(QDir::cleanPath(dir + "/" + name));
 
@@ -787,6 +868,24 @@ VMManagerMain::addNewSystem(const QString &name, const QString &dir, const QStri
     }
 
     const auto new_system = new VMManagerSystem(newSystemConfigFile.absoluteFilePath());
+    if (!launchSettings) {
+        vm_model->reload(this);
+        const auto created_object = vm_model->getIndexForConfigFile(new_system->config_file);
+        if (created_object.row() < 0) {
+            QMessageBox::critical(this, tr("Error adding system"),
+                                  tr("The historical machine was created, but it could not be added to the machine list."));
+            delete new_system;
+            return;
+        }
+        auto added_system = vm_model->getConfigObjectForIndex(created_object);
+        added_system->setDisplayName(displayName);
+        ui->searchBar->clear();
+        const QModelIndex mapped_index = proxy_model->mapFromSource(created_object);
+        ui->listView->setCurrentIndex(mapped_index);
+        delete new_system;
+        modelDataChange();
+        return;
+    }
     new_system->launchSettings();
     // Handle this in a closure so we can capture the temporary new_system object
     disconnect(new_system->process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), nullptr, nullptr);

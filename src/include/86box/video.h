@@ -524,6 +524,7 @@ extern const device_t paradise_pvga1a_ncr3302_device;
 extern const device_t paradise_pvga1a_pc2086_device;
 extern const device_t paradise_pvga1a_pc3086_device;
 extern const device_t paradise_pvga1a_pcs86_device;
+extern void           paradise_pcs86_set_enabled(void *priv, int enabled);
 extern const device_t paradise_pvga1a_pcs286_device;
 extern const device_t paradise_pvga1a_pcs386sx_device;
 extern const device_t paradise_pvga1a_device;

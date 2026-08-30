@@ -62,7 +62,9 @@ BluMachCatalog::load(QString *errorMessage)
         const auto object = value.toObject();
         m_manufacturers.append({ object.value(QStringLiteral("id")).toString(),
                                  object.value(QStringLiteral("name")).toString(),
-                                 object.value(QStringLiteral("description_key")).toString() });
+                                 object.value(QStringLiteral("description_key")).toString(),
+                                 object.value(QStringLiteral("history_key")).toString(),
+                                 object.value(QStringLiteral("history_source_url")).toString() });
     }
     for (const auto &value : root.value(QStringLiteral("families")).toArray()) {
         const auto object = value.toObject();
@@ -88,6 +90,7 @@ BluMachCatalog::load(QString *errorMessage)
         product.name               = object.value(QStringLiteral("name")).toString();
         product.summaryKey         = object.value(QStringLiteral("summary_key")).toString();
         product.historyKey         = object.value(QStringLiteral("history_key")).toString();
+        product.warningKey         = object.value(QStringLiteral("warning_key")).toString();
         product.status             = object.value(QStringLiteral("status")).toString();
         product.period             = object.value(QStringLiteral("period")).toString();
         product.aliases            = stringArray(object.value(QStringLiteral("aliases")));
@@ -96,6 +99,7 @@ BluMachCatalog::load(QString *errorMessage)
         product.firmware           = object.value(QStringLiteral("firmware")).toObject();
         product.storage            = object.value(QStringLiteral("storage")).toObject();
         product.relationships      = object.value(QStringLiteral("relationships")).toObject();
+        product.technical          = object.value(QStringLiteral("technical")).toArray();
         m_products.append(product);
     }
 

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <86box/86box.h>
 #include <86box/timer.h>
@@ -27,6 +28,7 @@
 #include <86box/pit.h>
 #include <86box/ppi.h>
 #include <86box/rom.h>
+#include <86box/serial.h>
 #include <86box/snd_speaker.h>
 #include <86box/video.h>
 
@@ -50,10 +52,37 @@ typedef struct pcs86_t {
     uint32_t ems_page_offset[4];
     mem_mapping_t ems_mapping[4];
     void *hdd;
+    void *video;
     lpt_t *lpt;
+    serial_t *uart;
 } pcs86_t;
 
 static pcs86_t *pcs86_active;
+
+/*
+ * PCS86 jumper bank, read at port 100h (fitted jumper = zero):
+ *
+ *   00 = 360 KiB, 10 = 1.2 MiB, 01 = 720 KiB, 11 = 1.44 MiB.
+ *
+ * BluMach normally follows the drive selected in the main configuration,
+ * while the machine-specific settings can override these physical jumpers.
+ */
+static uint8_t
+pcs86_floppy_jumper_bits(int drive)
+{
+    const char *type = fdd_get_internal_name(fdd_get_type(drive));
+
+    if ((type == NULL) || (type[0] == '\0'))
+        return 0x03;
+    if (!strcmp(type, "525_2dd"))
+        return 0x00;
+    if (!strncmp(type, "525_", 4))
+        return 0x02;
+    if (!strcmp(type, "35_2dd"))
+        return 0x01;
+
+    return 0x03;
+}
 
 static int
 pcs86_ems_window(uint32_t addr)
@@ -227,7 +256,8 @@ pcs86_ps2_write(uint16_t port, uint8_t val, void *priv)
     const uint8_t reg = (uint8_t) (port - 0x0066);
 
     /* Port 66h bit 2 reflects the physical keylock and is read-only. */
-    dev->ps2[reg] = (port == 0x0066) ? (val | 0x04) : val;
+    dev->ps2[reg] = (port == 0x0066) ?
+        ((val & ~0x04) | (dev->ps2[0] & 0x04)) : val;
     if ((port == 0x0067) || (port == 0x0068)) {
         const int channel = port - 0x0067;
 
@@ -280,6 +310,28 @@ pcs86_board_write(uint16_t port, uint8_t val, void *priv)
         dev->control = val;
         if ((dev->hdd != NULL) && ((old_control ^ val) & 0x01))
             xta_handler(dev->hdd, val & 0x01);
+        if ((dev->lpt != NULL) && ((old_control ^ val) & 0x02)) {
+            if (val & 0x02) {
+                lpt_port_setup(dev->lpt, LPT1_ADDR);
+                /* Register this after the generic LPT handler: the PCS86 SPP
+                 * ignores control bit 5 instead of entering input mode. */
+                io_sethandler(0x037a, 1, NULL, NULL, NULL,
+                              pcs86_board_write, NULL, NULL, dev);
+            } else {
+                io_removehandler(0x037a, 1, NULL, NULL, NULL,
+                                 pcs86_board_write, NULL, NULL, dev);
+                lpt_port_remove(dev->lpt);
+            }
+        }
+        if ((dev->video != NULL) && ((old_control ^ val) & 0x04))
+            paradise_pcs86_set_enabled(dev->video, val & 0x04);
+        /* The BIOS uses bit 4 (10h), despite the surviving web notes saying bit 5. */
+        if ((dev->uart != NULL) && ((old_control ^ val) & 0x10)) {
+            if (val & 0x10)
+                serial_setup(dev->uart, COM1_ADDR, COM1_IRQ);
+            else
+                serial_remove(dev->uart);
+        }
     } else if ((port == 0x0064) || (port == 0x006b) ||
                (port == 0x006c) || (port == 0x006f)) {
         /* Bit 0 at 6Bh is a write-one-to-clear memory/parity status bit. */
@@ -347,6 +399,69 @@ static const device_config_t olivetti_pcs86_config[] = {
         },
         .bios           = { { 0 } }
     },
+    {
+        .name           = "keylock_locked",
+        .description    = "Front-panel key lock",
+        .type           = CONFIG_BINARY,
+        .default_string = NULL,
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = { { 0 } }
+    },
+    {
+        .name           = "fdd0_jumpers",
+        .description    = "Jumper bank bits 1-0: floppy drive 0",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = -1,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "Automatic (follow configured drive)", .value = -1 },
+            { .description = "Both fitted: 360 KB",                 .value =  0 },
+            { .description = "High fitted: 720 KB",                 .value =  1 },
+            { .description = "Low fitted: 1.2 MB",                  .value =  2 },
+            { .description = "Both open: 1.44 MB",                  .value =  3 },
+            { .description = ""                                                   }
+        },
+        .bios           = { { 0 } }
+    },
+    {
+        .name           = "fdd1_jumpers",
+        .description    = "Jumper bank bits 3-2: floppy drive 1",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = -1,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "Automatic (follow configured drive)", .value = -1 },
+            { .description = "Both fitted: 360 KB",                 .value =  0 },
+            { .description = "High fitted: 720 KB",                 .value =  1 },
+            { .description = "Low fitted: 1.2 MB",                  .value =  2 },
+            { .description = "Both open: 1.44 MB",                  .value =  3 },
+            { .description = ""                                                   }
+        },
+        .bios           = { { 0 } }
+    },
+    {
+        .name           = "hdd_jumper",
+        .description    = "Jumper bank bit 7: hard disk present",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = -1,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "Automatic (follow configured XTA disk)", .value = -1 },
+            { .description = "Open: no hard disk",                     .value =  0 },
+            { .description = "Fitted: hard disk present",              .value =  1 },
+            { .description = ""                                                     }
+        },
+        .bios           = { { 0 } }
+    },
     { .name = "", .description = "", .type = CONFIG_END }
     // clang-format on
 };
@@ -370,6 +485,10 @@ machine_xt_olivetti_pcs86_init(const machine_t *model)
 {
     pcs86_t *dev;
     int      ems_size;
+    int      fdd0_jumpers;
+    int      fdd1_jumpers;
+    int      hdd_jumper;
+    int      keylock_locked;
     int      ret;
 
     /* CSAB05 contains the even bytes and CSAB04 the odd bytes. */
@@ -380,16 +499,26 @@ machine_xt_olivetti_pcs86_init(const machine_t *model)
         return ret;
 
     device_context(model->device);
-    ems_size = machine_get_config_int("ems_size");
+    ems_size     = machine_get_config_int("ems_size");
+    fdd0_jumpers = machine_get_config_int("fdd0_jumpers");
+    fdd1_jumpers = machine_get_config_int("fdd1_jumpers");
+    hdd_jumper   = machine_get_config_int("hdd_jumper");
+    keylock_locked = machine_get_config_int("keylock_locked");
     device_context_restore();
 
     dev = (pcs86_t *) calloc(1, sizeof(pcs86_t));
     pcs86_active = dev;
     dev->control = 0x80;
-    /* No floppy jumpers: drive 0 is 1.44 MB. HDD jumper is set below. */
-    dev->jumpers = 0xff;
+    if (fdd0_jumpers < 0)
+        fdd0_jumpers = pcs86_floppy_jumper_bits(0);
+    if (fdd1_jumpers < 0)
+        fdd1_jumpers = pcs86_floppy_jumper_bits(1);
+    dev->jumpers = 0xf0 | (fdd0_jumpers & 0x03) |
+                   ((fdd1_jumpers & 0x03) << 2);
+    if (hdd_jumper > 0)
+        dev->jumpers &= ~0x80;
     /* Port 66h bit 2 is high while the front-panel keylock is open. */
-    dev->ps2[0] = 0x04;
+    dev->ps2[0] = keylock_locked ? 0x00 : 0x04;
     dev->ems_size = (uint32_t) ems_size << 10;
     dev->ems_pages = (uint16_t) (dev->ems_size >> 14);
     if (dev->ems_size != 0)
@@ -401,11 +530,13 @@ machine_xt_olivetti_pcs86_init(const machine_t *model)
     device_add(&olivetti_pcs86_rtc_device);
     if (hdc_current[0] == HDC_INTERNAL) {
         dev->hdd = device_add(&xta_pcs86_device);
-        /* Bit 7 is active low: fit the jumper only when an XTA disk exists. */
-        for (uint8_t i = 0; i < HDD_NUM; i++) {
-            if ((hdd[i].bus_type == HDD_BUS_XTA) && hdd[i].fn[0]) {
-                dev->jumpers &= ~0x80;
-                break;
+        /* In automatic mode, bit 7 follows the presence of an XTA image. */
+        if (hdd_jumper < 0) {
+            for (uint8_t i = 0; i < HDD_NUM; i++) {
+                if ((hdd[i].bus_type == HDD_BUS_XTA) && hdd[i].fn[0]) {
+                    dev->jumpers &= ~0x80;
+                    break;
+                }
             }
         }
         /* The BIOS enables the onboard controller through port 65h bit 0. */
@@ -448,13 +579,17 @@ machine_xt_olivetti_pcs86_init(const machine_t *model)
         device_add(&fdc_at_actlow_device);
 
     dev->lpt = device_add_inst(&lpt_port_device, 1);
-    lpt_port_setup(dev->lpt, LPT1_ADDR);
-    io_sethandler(0x037a, 1, NULL, NULL, NULL,
-                  pcs86_board_write, NULL, NULL, dev);
+    lpt_port_remove(dev->lpt);
+
+    /* The onboard 8250-compatible UART is COM1 and is gated by port 65h bit 4. */
+    dev->uart = device_add_inst(&ns16450_device, 1);
+    serial_remove(dev->uart);
 
     video_reset(gfxcard[0]);
-    if (gfxcard[0] == VID_INTERNAL)
-        device_add(&paradise_pvga1a_pcs86_device);
+    if (gfxcard[0] == VID_INTERNAL) {
+        dev->video = device_add(&paradise_pvga1a_pcs86_device);
+        paradise_pcs86_set_enabled(dev->video, 0);
+    }
 
     keyboard_set_table(scancode_set1);
     keyboard_send = pcs86_keyboard_send;

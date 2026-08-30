@@ -15,8 +15,10 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QTextBrowser;
+class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
+class QUrl;
 
 class BluMachCollectionWidget final : public QWidget {
     Q_OBJECT
@@ -35,7 +37,9 @@ private:
     void rebuildTree();
     void updateDetails(QTreeWidgetItem *item);
     void applyFilter();
+    void openTechnicalLink(const QUrl &url);
     QString hardwareHtml(const BluMachProduct &product) const;
+    QString technicalHtml(const BluMachProduct &product) const;
 
     BluMachCatalog m_catalog;
     QLabel         *m_heading = nullptr;
@@ -45,7 +49,9 @@ private:
     QTreeWidget    *m_tree = nullptr;
     QLabel         *m_title = nullptr;
     QLabel         *m_subtitle = nullptr;
-    QTextBrowser   *m_details = nullptr;
+    QTabWidget     *m_infoTabs = nullptr;
+    QTextBrowser   *m_overview = nullptr;
+    QTextBrowser   *m_technical = nullptr;
     QPushButton    *m_createButton = nullptr;
     QPushButton    *m_machinesButton = nullptr;
     QString         m_selectedProductId;

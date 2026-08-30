@@ -5,7 +5,10 @@
 
 #include "qt_blumach_collection.hpp"
 
+#include <QCoreApplication>
 #include <QComboBox>
+#include <QDesktopServices>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -13,10 +16,12 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSplitter>
+#include <QTabWidget>
 #include <QTextBrowser>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
+#include <QUrl>
 
 namespace {
 constexpr auto IdRole   = Qt::UserRole;
@@ -34,6 +39,14 @@ jsonValueText(const QJsonValue &value)
     if (value.isBool())
         return value.toBool() ? QStringLiteral("Yes") : QStringLiteral("No");
     return value.toVariant().toString();
+}
+
+QString
+richText(const QString &text)
+{
+    QString escaped = text.toHtmlEscaped();
+    escaped.replace(QStringLiteral("\n"), QStringLiteral("<br>"));
+    return escaped;
 }
 } // namespace
 
@@ -73,11 +86,16 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_title->setFont(titleFont);
     m_subtitle = new QLabel(detailPanel);
     m_subtitle->setWordWrap(true);
-    m_details = new QTextBrowser(detailPanel);
-    m_details->setOpenExternalLinks(true);
+    m_infoTabs = new QTabWidget(detailPanel);
+    m_overview = new QTextBrowser(m_infoTabs);
+    m_overview->setOpenExternalLinks(true);
+    m_technical = new QTextBrowser(m_infoTabs);
+    m_technical->setOpenLinks(false);
+    m_infoTabs->addTab(m_overview, QString());
+    m_infoTabs->addTab(m_technical, QString());
     detailLayout->addWidget(m_title);
     detailLayout->addWidget(m_subtitle);
-    detailLayout->addWidget(m_details, 1);
+    detailLayout->addWidget(m_infoTabs, 1);
 
     auto *buttonLayout = new QHBoxLayout();
     m_machinesButton = new QPushButton(detailPanel);
@@ -100,6 +118,7 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     }
 
     connect(m_tree, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *current) { updateDetails(current); });
+    connect(m_technical, &QTextBrowser::anchorClicked, this, &BluMachCollectionWidget::openTechnicalLink);
     connect(m_search, &QLineEdit::textChanged, this, [this] { applyFilter(); });
     connect(m_statusFilter, &QComboBox::currentIndexChanged, this, [this] { applyFilter(); });
     connect(m_createButton, &QPushButton::clicked, this, [this] {
@@ -113,6 +132,30 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
 }
 
 void
+BluMachCollectionWidget::openTechnicalLink(const QUrl &url)
+{
+    if (url.scheme() != QStringLiteral("blumach-doc")) {
+        QDesktopServices::openUrl(url);
+        return;
+    }
+
+    QString documentName = url.path();
+    if (documentName.isEmpty())
+        documentName = url.toString().section(':', 1);
+    if (documentName.startsWith('/'))
+        documentName.remove(0, 1);
+    documentName = QUrl::fromPercentEncoding(documentName.toUtf8());
+    if (documentName.isEmpty() || QFileInfo(documentName).fileName() != documentName || documentName.contains(QStringLiteral("..")))
+        return;
+
+    const QString documentPath = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/catalog/documents/") + documentName;
+    if (!QFileInfo(documentPath).isFile())
+        return;
+    QDesktopServices::openUrl(QUrl::fromLocalFile(documentPath));
+}
+
+void
 BluMachCollectionWidget::reloadLanguage()
 {
     m_catalog.reloadLocale();
@@ -122,6 +165,8 @@ BluMachCollectionWidget::reloadLanguage()
     m_search->setPlaceholderText(tr("Search models, aliases or hardware"));
     m_machinesButton->setText(tr("My machines"));
     m_createButton->setText(tr("Create this machine…"));
+    m_infoTabs->setTabText(0, m_catalog.text(QStringLiteral("technical.ui.overview")));
+    m_infoTabs->setTabText(1, m_catalog.text(QStringLiteral("technical.ui.operation")));
     m_statusFilter->clear();
     m_statusFilter->addItem(tr("All preservation states"), QString());
     for (const auto &status : { QStringLiteral("validated"), QStringLiteral("partial"), QStringLiteral("experimental"), QStringLiteral("research") })
@@ -174,6 +219,8 @@ BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
 {
     m_selectedProductId.clear();
     m_createButton->setEnabled(false);
+    m_infoTabs->setTabEnabled(1, false);
+    m_technical->clear();
     if (!item)
         return;
 
@@ -183,23 +230,78 @@ BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
         if (const auto *manufacturer = m_catalog.manufacturer(id)) {
             m_title->setText(manufacturer->name);
             m_subtitle->setText(tr("Manufacturer"));
-            m_details->setHtml(QStringLiteral("<p>%1</p>").arg(m_catalog.text(manufacturer->descriptionKey).toHtmlEscaped()));
+            QString html = QStringLiteral("<p>%1</p>").arg(richText(m_catalog.text(manufacturer->descriptionKey)));
+            if (!manufacturer->historyKey.isEmpty()) {
+                html += QStringLiteral("<h3>%1</h3><p>%2</p>")
+                            .arg(tr("History"), richText(m_catalog.text(manufacturer->historyKey)));
+            }
+            if (!manufacturer->historySourceUrl.isEmpty()) {
+                html += QStringLiteral("<p><a href='%1'>%2</a></p>")
+                            .arg(manufacturer->historySourceUrl.toHtmlEscaped(),
+                                 m_catalog.text(QStringLiteral("manufacturer.history.source")).toHtmlEscaped());
+            }
+            m_overview->setHtml(html);
         }
     } else if (type == FamilyItem) {
         if (const auto *family = m_catalog.family(id)) {
             m_title->setText(family->name);
             m_subtitle->setText(tr("Computer family"));
-            m_details->setHtml(QStringLiteral("<p>%1</p>").arg(m_catalog.text(family->descriptionKey).toHtmlEscaped()));
+            m_overview->setHtml(QStringLiteral("<p>%1</p>").arg(m_catalog.text(family->descriptionKey).toHtmlEscaped()));
         }
     } else if (const auto *product = m_catalog.product(id)) {
         m_selectedProductId = product->id;
         m_createButton->setEnabled(product->status != QStringLiteral("research"));
+        m_infoTabs->setTabEnabled(1, true);
         m_title->setText(product->name);
         m_subtitle->setText(tr("%1 · %2 · %3").arg(product->period, m_catalog.statusText(product->status), m_catalog.text(product->summaryKey)));
-        const QString html = QStringLiteral("<h3>%1</h3><p>%2</p><h3>%3</h3>%4")
-                                 .arg(tr("History"), m_catalog.text(product->historyKey).toHtmlEscaped(), tr("Hardware"), hardwareHtml(*product));
-        m_details->setHtml(html);
+        QString html;
+        if (!product->warningKey.isEmpty())
+            html += QStringLiteral("<div style='background:#fff3cd;border:1px solid #d39e00;padding:10px;margin:6px 0 14px 0;'><b>%1</b></div>")
+                        .arg(m_catalog.text(product->warningKey).toHtmlEscaped());
+        html += QStringLiteral("<h3>%1</h3><p>%2</p><h3>%3</h3>%4")
+                    .arg(tr("History"), m_catalog.text(product->historyKey).toHtmlEscaped(), tr("Hardware"), hardwareHtml(*product));
+        m_overview->setHtml(html);
+        m_technical->setHtml(technicalHtml(*product));
     }
+}
+
+QString
+BluMachCollectionWidget::technicalHtml(const BluMachProduct &product) const
+{
+    if (product.technical.isEmpty())
+        return QStringLiteral("<p>%1</p>").arg(m_catalog.text(QStringLiteral("technical.ui.preparing")).toHtmlEscaped());
+
+    QString html = QStringLiteral("<p>%1</p>").arg(m_catalog.text(QStringLiteral("technical.ui.intro")).toHtmlEscaped());
+    for (const auto &sectionValue : product.technical) {
+        const auto section = sectionValue.toObject();
+        const QString title = m_catalog.text(section.value(QStringLiteral("title_key")).toString());
+        const QString evidenceKey = section.value(QStringLiteral("evidence_key")).toString();
+        const QString evidence = evidenceKey.isEmpty() ? QString() : m_catalog.text(evidenceKey);
+        html += QStringLiteral("<h3>%1</h3>").arg(title.toHtmlEscaped());
+        if (!evidence.isEmpty())
+            html += QStringLiteral("<p><i>%1: %2</i></p>").arg(m_catalog.text(QStringLiteral("technical.ui.evidence")).toHtmlEscaped(), evidence.toHtmlEscaped());
+        const QString descriptionKey = section.value(QStringLiteral("description_key")).toString();
+        if (!descriptionKey.isEmpty())
+            html += QStringLiteral("<p>%1</p>").arg(richText(m_catalog.text(descriptionKey)));
+
+        html += QStringLiteral("<table width='100%' cellspacing='0' cellpadding='5'>");
+        for (const auto &entryValue : section.value(QStringLiteral("entries")).toArray()) {
+            const auto entry = entryValue.toObject();
+            const QString label = m_catalog.text(entry.value(QStringLiteral("label_key")).toString());
+            const QString value = m_catalog.text(entry.value(QStringLiteral("value_key")).toString());
+            const QString url = entry.value(QStringLiteral("url")).toString();
+            const QString document = entry.value(QStringLiteral("document")).toString();
+            QString renderedValue = richText(value);
+            if (!document.isEmpty())
+                renderedValue = QStringLiteral("<a href='blumach-doc:%1'>%2</a>").arg(QString::fromLatin1(QUrl::toPercentEncoding(document)), renderedValue);
+            else if (!url.isEmpty())
+                renderedValue = QStringLiteral("<a href='%1'>%2</a>").arg(url.toHtmlEscaped(), renderedValue);
+            html += QStringLiteral("<tr><td width='28%' valign='top'><b>%1</b></td><td>%2</td></tr>")
+                        .arg(label.toHtmlEscaped(), renderedValue);
+        }
+        html += QStringLiteral("</table>");
+    }
+    return html;
 }
 
 QString

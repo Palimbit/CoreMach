@@ -5796,10 +5796,13 @@ keyboard_at_write(void *priv)
                as normal but do not cancel the command (so keep waiting for input), unless the
                command in progress is ED (Set/reset LEDs).
 
-               It appears to also apply to command EE (Echo), F4 (Enable), F5 (Diable and Set
-               Default), and F6 (SetDefault).
+               It appears to also apply to command EE (Echo), F2 (Read ID), F4 (Enable),
+               F5 (Disable and Set Default), and F6 (Set Default).  PCS 286S BIOS 2.06 can
+               leave an F3 parameter pending across its CPU reset; the MS-DOS setup keyboard
+               probe then uses F2 and expects it to cancel that stale transaction.
              */
-            if ((val == 0xed) || (val == 0xee) || (val == 0xf4) || (val == 0xf5) || (val == 0xf6))
+            if ((val == 0xed) || (val == 0xee) || (val == 0xf2) ||
+                (val == 0xf4) || (val == 0xf5) || (val == 0xf6))
                 dev->flags &= ~FLAG_CTRLDAT;
             else
                 dev->state = DEV_STATE_MAIN_WANT_IN;
@@ -5955,7 +5958,12 @@ keyboard_at_write(void *priv)
             case 0xff: /* reset */
                 keyboard_set_in_reset(1);
                 kbc_at_dev_reset(dev, 1);
-                bat_counter = 1000;
+                /* Transitional PCS 286 behavior until its M5L8042-243P ROM
+                   is recovered and executed by the UPI-42 backend. Phoenix
+                   1.37/1.42 uses a short polling window after the FA reset
+                   acknowledgement, so keep the FA -> AA sequence but deliver
+                   BAT on the following 100 us device tick. */
+                bat_counter = !strcmp(machine_get_internal_name(), "olivetti_pcs286") ? 1 : BAT_COUNT;
                 break;
 
             default:

@@ -583,6 +583,23 @@ at_main_ibf:
             }
             break;
         case STATE_SEND_KBD:
+            /* Olivetti firmware can submit the data following a keyboard
+               command while the emulated keyboard is still clearing
+               wantcmd. Forward that byte instead of leaving IBF pending;
+               otherwise Setup can receive digits but lose the confirming
+               Enter key after programming the keyboard. */
+            if (((dev->flags & KBC_VEN_MASK) == KBC_VEN_OLIVETTI) &&
+                (dev->status & STAT_IFULL)) {
+                dev->status &= ~STAT_IFULL;
+                if (dev->status & STAT_CD)
+                    kbc_at_process_cmd(dev);
+                else {
+                    set_enable_kbd(dev, 1);
+                    if ((dev->ports[0] != NULL) && (dev->ports[0]->priv != NULL))
+                        dev->ports[0]->wantcmd = 1;
+                }
+                break;
+            }
             if (!dev->ports[0]->wantcmd)
                 dev->state = STATE_SCAN_KBD;
             break;
@@ -2036,10 +2053,62 @@ write_cmd_olivetti(void *priv, uint8_t val)
              * bit 2: keyboard fuse present
              * bits 0-1: ???
              */
-            kbc_delay_to_ob(dev, (0x0c | (is386 ? 0x00 : 0x80)) & 0xdf, 0, 0x00);
+            /* Phoenix 1.42 on the PCS 286 uses command 80h as an exact
+               read-back of the P2 value previously written with 84h.
+               Other Olivetti machines retain the generic fuse/status reply. */
+            if (machines[machine].init == machine_at_olivetti_pcs286_init)
+                kbc_delay_to_ob(dev, dev->p2, 0, 0x00);
+            else if (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)
+                /* PCS 286S BIOS 2.06 probes the manufacturing jumper with
+                   commands 8Bh/80h.  Bit 5 high is the normal production
+                   state (jumper absent); low deliberately enters the factory
+                   POST loop. */
+                kbc_delay_to_ob(dev, dev->p2 | 0x20, 0, 0x00);
+            else
+                kbc_delay_to_ob(dev, (0x0c | (is386 ? 0x00 : 0x80)) & 0xdf, 0, 0x00);
             dev->p1 = ((dev->p1 + 1) & 3) | (dev->p1 & 0xfc);
             ret = 0;
             break;
+
+        case 0x84: /* PCS 286: write output port P2 */
+            if ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)) {
+                dev->wantdata = 1;
+                dev->state    = STATE_KBC_PARAM;
+                dev->command  = 0x84;
+                ret           = 0;
+            }
+            break;
+
+        case 0x8b: /* PCS 286S: select manufacturing-jumper status */
+            if (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)
+                ret = 0;
+            break;
+
+        case 0xcf: /* PCS 286 Phoenix POST separator/no-op */
+            if ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init))
+                ret = 0;
+            break;
+    }
+
+    return ret;
+}
+
+static uint8_t
+write_cmd_data_olivetti(void *priv, uint8_t val)
+{
+    atkbc_t *dev = (atkbc_t *) priv;
+    uint8_t  ret = 1;
+
+    if (((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+         (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)) &&
+        (dev->command == 0x84)) {
+        /* Command 84h latches P2 but, unlike standard D1h, does not pulse
+           reset when bit 0 is clear. The POST verifies the value via 80h. */
+        kbc_at_log("ATkbc: Olivetti PCS 286 write P2: %02X\n", val);
+        dev->p2 = val;
+        ret     = 0;
     }
 
     return ret;
@@ -2991,7 +3060,8 @@ kbc_at_init(const device_t *info)
             break;
 
         case KBC_VEN_OLIVETTI:
-            dev->write_cmd_ven = write_cmd_olivetti;
+            dev->write_cmd_data_ven = write_cmd_data_olivetti;
+            dev->write_cmd_ven      = write_cmd_olivetti;
             break;
 
         case KBC_VEN_ALI:

@@ -75,7 +75,7 @@ public slots:
     void newHistoricalMachine(const QString &productId, const QString &machineId);
     void updateGlobalSettings();
     void deleteSystem(VMManagerSystem *sysconfig);
-    void addNewSystem(const QString &name, const QString &dir, const QString &displayName = QString(), const QString &configFile = {});
+    void addNewSystem(const QString &name, const QString &dir, const QString &displayName = QString(), const QString &configFile = {}, bool launchSettings = true);
 #if __GNUC__ >= 11
     [[nodiscard]] QStringList getSearchCompletionList() const;
 #else

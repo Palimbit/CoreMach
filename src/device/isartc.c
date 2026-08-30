@@ -761,9 +761,32 @@ pcs86_mm67_reset(nvr_t *nvr)
 {
     mm67_reset(nvr);
     const uint8_t checksum = pcs86_mm67_checksum(nvr->regs);
-    nvr->regs[MM67_AL_DOM] = (nvr->regs[MM67_AL_DOM] & 0x0f) | (checksum & 0x30);
-    nvr->regs[MM67_AL_MON] = (nvr->regs[MM67_AL_MON] & 0xcc) |
-                             ((checksum & 0x0c) << 2) | (checksum & 0x03);
+    /* Match BIOS F000:F443-F47E: the unused alarm fields retain their
+     * MM58167 "don't care" bits while the six checksum bits are packed
+     * into EEh/EFh. */
+    nvr->regs[MM67_AL_DOM] = (nvr->regs[MM67_AL_DOM] & 0x0f) |
+                             0xc0 | (checksum & 0x30);
+    nvr->regs[MM67_AL_MON] = 0xcc | ((checksum & 0x0c) << 2) |
+                             (checksum & 0x03);
+}
+
+static void
+pcs86_mm67_warm_reset(void *priv)
+{
+    rtcdev_t *dev = (rtcdev_t *) priv;
+    uint8_t *regs = dev->nvr.regs;
+    const uint8_t checksum = pcs86_mm67_checksum(regs);
+    const uint8_t stored = (regs[MM67_AL_DOM] & 0x30) |
+                           ((regs[MM67_AL_MON] & 0x30) >> 2) |
+                           (regs[MM67_AL_MON] & 0x03);
+
+    if (stored != checksum) {
+        regs[MM67_AL_DOM] = (regs[MM67_AL_DOM] & 0x0f) |
+                            0xc0 | (checksum & 0x30);
+        regs[MM67_AL_MON] = 0xcc | ((checksum & 0x0c) << 2) |
+                            (checksum & 0x03);
+        nvr_dosave = 1;
+    }
 }
 
 static uint8_t
@@ -1362,7 +1385,7 @@ const device_t olivetti_pcs86_rtc_device = {
     .local         = ISARTC_PCS86,
     .init          = isartc_init,
     .close         = isartc_close,
-    .reset         = NULL,
+    .reset         = pcs86_mm67_warm_reset,
     .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
