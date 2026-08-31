@@ -575,7 +575,7 @@
       "name": "Triumph-Adler Dario 386SX",
       "summary_key": "product.ta-dario386sx.summary",
       "history_key": "product.ta-dario386sx.history",
-      "status": "experimental",
+      "status": "partial",
       "period": "1991",
       "aliases": ["TA Dario 386SX", "P45"],
       "tags": ["80386SX", "AT", "VGA", "IDE", "desktop", "80387SX"],

@@ -1,15 +1,18 @@
 # Olivetti PCS 386SX
 
-Status as of 2026-08-27: firmware 1.14 completes POST, reaches its built-in
-Setup path and boots Olivetti MS-DOS. The optional 80387SX passes Resident
-Diagnostics. The model is usable for validation, while several chipset and I/O
-details remain explicit approximations.
+Status as of 2026-08-31: this is a usable, bootable **partial emulation**.
+Firmware 1.14 completes POST, reaches its built-in Setup path and boots
+Olivetti MS-DOS at 1, 2, 4 and 8 MiB. Internal video, keyboard, RTC/CMOS,
+floppy, a 100 MB IDE disk and the optional 80387SX have been exercised. This
+does not yet imply cycle accuracy or broad software compatibility: exact
+HT101SX/HT113 documentation, EMS validation and tests on physical hardware are
+still missing.
 
 See also the [Olivetti PCS family overview](olivetti-pcs-family.md).
 
 ## Recommended BluMach configuration
 
-- machine: `[HT18] Olivetti PCS 386SX` (`olivetti_pcs386sx`);
+- machine: `[HT101SX] Olivetti PCS 386SX` (`olivetti_pcs386sx`);
 - CPU: Intel 80386SX at 16 MHz;
 - memory: 1-8 MiB in 1 MiB steps;
 - video: `Internal` Paradise PVGA1A, 256 KiB;
@@ -39,21 +42,35 @@ is not a complete deinterleaved BIOS and must not be offered as another revision
 
 ## Documented and represented hardware
 
-Board photographs identify the Headland GC102-PC/HT113/HT101SX family, an
-8042, TL16C451 serial/parallel logic, WD37C65C floppy control, Paradise PVGA1A
-and IMS G176P-40. The current model uses:
+Board photographs identify a discrete Headland **HT101SX + HT113 + GC102-PC**
+set, Mitsubishi M5L8042 keyboard controller, TI TL16C451FN serial/parallel
+controller, WD37C65CJM floppy controller, Paradise PVGA1A and IMS G176P-40.
+The current model represents that population directly:
 
-- the available Headland HT18-B core;
-- Olivetti IOC02 and port `61h-63h` glue;
-- an Olivetti-flavoured AT 8042;
-- PC87310 as a temporary Super I/O approximation;
-- onboard PVGA1A initialised by the embedded OVC firmware;
-- 128-byte AT CMOS;
-- a fixed `60000-7FFFF` to `80000-9FFFF` RAM alias required by POST.
+- separate HT101SX system-controller, HT113 memory-controller and GC102-PC
+  data-buffer devices, linked as one board chipset;
+- Olivetti IOC02 and the machine-specific `61h-63h` glue;
+- the Olivetti AT-keyboard-controller profile, because the original M5L8042
+  mask ROM has not been preserved;
+- one TL16C450-compatible UART and one bidirectional Centronics port, matching
+  the documented functional blocks of the TL16C451FN;
+- the AT-compatible uPD765 core under the WD37C65CJM component identity;
+- onboard PVGA1A initialised by the OVC 1.06 firmware embedded in the system
+  ROM;
+- 128-byte Phoenix CMOS.
 
-The PC87310 does not claim to be the photographed TL16C451/WD37C65C circuit.
-Likewise, the static memory alias represents an observed result while its exact
-Headland control mechanism remains to be modelled.
+The PCS 386SX no longer instantiates the generic HT18/HT21 core, PC87310 or the
+PCS 286's fixed `60000-7FFFF` to `80000-9FFFF` RAM alias. It also does not add
+the HT18 fast-A20 port `92h`, CR5/CR6 or sleep-state behaviour: neither known
+PCS 386SX BIOS nor the independent HT101SX BIOS uses those interfaces.
+
+No exact public HT101SX or HT113 data sheet is known. BluMach therefore makes
+the current reconstruction explicit: HT113 owns the firmware-visible
+configuration and EMS ports `1ECh-1EFh`, conventional memory, 384 KiB
+relocation, shadow RAM and EMS mappings; HT101SX preserves the system-controller
+package identity; GC102-PC is currently a transparent 16-bit data path with
+parity state but no guessed parity NMI. This ownership can be revised without
+returning to the unrelated HT18 model if stronger primary evidence appears.
 
 ## CMOS and 80387SX
 
@@ -75,7 +92,12 @@ the Olivetti controller. BluMach queues that response once per POST. Command
 Phoenix leaves PCMODE and XLAT active together. For this Olivetti controller,
 scan set 2 must still be translated to the BIOS-visible set 1; F1 and F2 then
 reach their expected codes. Warm Ctrl+Alt+Delete completes a second POST and
-boots again.
+boots again. An instrumented reset-entry test set independent sentinel values
+in CRI, MAR, CR0-CR4 and an EMS mapping register, then issued the real 8042
+`FEh` reset command. All values were still present when soft reset began; a
+hard-reset control recreated the cold defaults. This proves BluMach's retention
+behaviour, but matching it to a physical HT113 remains a separate validation
+task.
 
 IOC02 register `68h` selects the function visible at `6Ah`. When selector bits
 0-4 are zero, a write to `6Ah` does not latch. Modelling that isolation changes
@@ -108,22 +130,33 @@ data and are working derivatives only.
 ## Validated behaviour
 
 - ROM checksum, POST and Phoenix Resident Diagnostics path;
-- 4 MiB configuration and onboard video at 70 Hz;
+- 1, 2, 4 and 8 MiB configurations and onboard video at 70 Hz;
 - parity, PIC, DMA, keyboard, clock/calendar, protected mode and CMOS;
 - 80387SX detection and diagnostic pass;
-- MS-DOS 3.30a boot and repeated warm boot;
+- MS-DOS 3.30a boot, 100 MB IDE access and repeated warm boot;
 - Customer Utility 1.51 disk boot through MS-DOS 4.01 date/time prompts;
-- IOC02 normal and service-path diagnostic transactions.
+- IOC02 normal and service-path diagnostic transactions;
+- HT113 register retention at soft-reset entry and cold defaults after a hard
+  reset, verified with an instrumented, non-mutating probe.
 
 ## Known limitations and next tests
 
-- Run Resident Diagnostics repeatedly and complete Customer Utility 1.51.
-- Validate 1, 2, 4 and 8 MiB, plus cold CMOS persistence.
-- Complete the interactive keyboard matrix and physical Setup chord test.
-- Validate official 20, 40 and 100 MB hard-disk configurations.
-- Run Tutorial 2.2 end to end.
-- Replace PC87310, IOC02 assumptions and the static memory alias when stronger
-  hardware evidence becomes available.
+- The HT101SX/HT113 division and some register semantics are reconstructed from
+  BIOS traces and related Headland documentation, not an exact data sheet.
+- Validate EMS page mapping with trusted software, original diagnostics or a
+  physical machine; also establish the GC102-PC parity/NMI wiring.
+- Preserve or read the original M5L8042 mask ROM. Until then, the keyboard
+  controller is a machine-specific functional profile, not an MCU-level model.
+- Compare warm-reset retention with a physical HT113 system.
+- Build a broader software-compatibility matrix. Current application-level
+  evidence is limited mainly to firmware diagnostics and MS-DOS boot.
+- Complete the interactive keyboard matrix, physical Setup chord and Tutorial
+  2.2 tests, and validate the official 20 and 40 MB disks in addition to the
+  tested 100 MB configuration.
+- Re-test `U_MGR` only from a trusted or repaired diagnostic image. The
+  preserved module hangs, but the damaged-disk history and historical
+  DOS/Barrotes_1310 detection mean that this is not yet evidence of an emulator
+  defect.
 
 ## Implementation history
 
@@ -133,7 +166,11 @@ data and are working derivatives only.
 - `776315855`: scan translation with Olivetti PCMODE;
 - `c9e04540b`: warm-reset KBC and IOC02 state;
 - `c7e3814d0`: IOC02 read-first ready state for the service path;
-- `047b4a140`: selector-aware IOC02 writes and 80387SX CMOS state.
+- `047b4a140`: selector-aware IOC02 writes and 80387SX CMOS state;
+- `10a1075f9`: initial HT101SX board-level model;
+- `a6b4bc119`: replace HT18/PC87310 and the copied PCS 286 alias with the
+  discrete HT101SX + HT113 + GC102-PC, TL16C451FN and WD37C65CJM model;
+- `7dd52b481`: validate HT113 state retention across the 8042 warm-reset path.
 
 ## Principal references
 
@@ -141,3 +178,7 @@ data and are working derivatives only.
 - software archive: <https://olivrea.de/software/>
 - photographed restoration and board inventory:
   <https://www.jonathandupre.fr/articles/33-ordinateurs-old-school/315-olivetti-pcs-386sx/>
+- independent HT101SX/HT113/GC102 board and BIOS evidence:
+  <https://www.vogons.org/viewtopic.php?t=86204>
+- TI TL16C451/TL16C452 data sheet:
+  <https://www.ti.com/lit/ds/symlink/tl16c451.pdf>

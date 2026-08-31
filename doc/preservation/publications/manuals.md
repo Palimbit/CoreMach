@@ -12,7 +12,10 @@ into this repository unless a later rights review establishes permission.
 | PCS 286S | Installation/use manual holding | [Museo del Calcolatore record 1795](https://www.museodelcalcolatore.it/file.php?cod=1795) | Bibliographic record; access-controlled, do not mirror. |
 | PCS 286S | English installation/operations guide holding | [Centre for Computing History record 19012](https://www.computinghistory.org.uk/det/19012/MS-DOS-Manuals-for-Olivetti-PCS-286S/) | Physical holding; no public scan assumed. |
 | PCS 286/S TI | TI TACT82411 technology preview | [DosDays](https://www.dosdays.co.uk/media/texas_instruments/TACT82411_Preview.pdf) | Related TI chipset-family behavior; not proof of exact PCS board wiring. |
-| PCS 386SX / Dario 386SX | Headland HT18 80386SX controller datasheet | [The Retro Web](https://theretroweb.com/) | Functional chipset reference; exact Olivetti board behavior still requires BIOS traces. |
+| PCS 386SX / Dario 386SX | Photographed PCS 386SX motherboard and component inventory | [Jonathan Dupré](https://www.jonathandupre.fr/articles/33-ordinateurs-old-school/315-olivetti-pcs-386sx/) | Primary physical evidence for HT101SX, HT113, GC102-PC, M5L8042, TL16C451FN and WD37C65CJM population. |
+| PCS 386SX / Dario 386SX | Independent Emerson Elite SX386/16 board and BIOS preservation | [VOGONS](https://www.vogons.org/viewtopic.php?t=86204) | Corroborates the HT101SX/HT113/GC102 set and the firmware-visible `1ECh-1EFh` interface. |
+| PCS 386SX / Dario 386SX | TI TL16C451/TL16C452 data sheet, SLLS053C | [Texas Instruments](https://www.ti.com/lit/ds/symlink/tl16c451.pdf) | Documents the UART plus bidirectional Centronics functional decomposition. |
+| PCS 386SX / Dario 386SX | Headland GC101/GC102, HT18 and HT21 family documentation | Archival component-data-sheet holdings | Comparative evidence only. HT18 is not the PCS 386SX chipset and its revision bits, CR5/CR6, sleep state and fast-A20 port must not be attributed to this board. |
 
 Component datasheets should normally be referenced from the original vendor or
 a stable archival host instead of being copied into the tree.

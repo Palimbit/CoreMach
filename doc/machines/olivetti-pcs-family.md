@@ -8,7 +8,7 @@ minor revisions of one motherboard and must not share firmware blindly.
 |---|---|---|---|---|
 | PCS 86 | `olivetti_pcs86` | NEC V30, 8 MHz | 640 KiB plus optional onboard EMS | POST, Resident Diagnostics and MS-DOS 3.30a boot |
 | PCS 286 | `olivetti_pcs286` | Intel 80286, 12 MHz | 1-4 MiB | POST, Setup and floppy boot; partial hardware fidelity |
-| PCS 386SX | `olivetti_pcs386sx` | Intel 80386SX, 16 MHz | 1-8 MiB | POST, Setup path, 80387SX and floppy boot; partial hardware fidelity |
+| PCS 386SX | `olivetti_pcs386sx` | Intel 80386SX, 16 MHz | 1-8 MiB | Usable partial emulation: POST, Setup, MS-DOS, internal VGA, 80387SX and 100 MB IDE; broader software and EMS validation pending |
 
 Detailed pages:
 
