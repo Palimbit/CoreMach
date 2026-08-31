@@ -721,7 +721,7 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
         const char *floppyType;
     };
     static constexpr HistoricalDefaults defaults[] = {
-        { "olivetti-pcs86", "Olivetti PCS86", "olivetti-pcs86", "necv30", 8000000, 640,
+        { "olivetti-pcs86", "Olivetti PCS 86", "olivetti-pcs86", "necv30", 10000000, 640,
           "conner-cp3026-20mb.img", "17, 4, 615, 0, xta", "hdd_01_xta_channel = 0", "1989_3500rpm",
           615LL * 4 * 17 * 512, false, "internal", "keyboard_pc_xt", "35_2hd" },
         { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12000000, 1024,

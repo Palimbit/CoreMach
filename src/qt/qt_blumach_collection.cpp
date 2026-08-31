@@ -169,7 +169,7 @@ BluMachCollectionWidget::reloadLanguage()
     m_infoTabs->setTabText(1, m_catalog.text(QStringLiteral("technical.ui.operation")));
     m_statusFilter->clear();
     m_statusFilter->addItem(tr("All preservation states"), QString());
-    for (const auto &status : { QStringLiteral("validated"), QStringLiteral("partial"), QStringLiteral("experimental"), QStringLiteral("research") })
+    for (const auto &status : { QStringLiteral("validated"), QStringLiteral("partial"), QStringLiteral("experimental"), QStringLiteral("research"), QStringLiteral("not_bootable") })
         m_statusFilter->addItem(m_catalog.statusText(status), status);
     rebuildTree();
     if (!selected.isEmpty()) {
@@ -250,7 +250,8 @@ BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
         }
     } else if (const auto *product = m_catalog.product(id)) {
         m_selectedProductId = product->id;
-        m_createButton->setEnabled(product->status != QStringLiteral("research"));
+        m_createButton->setEnabled(product->status != QStringLiteral("research") &&
+                                   product->status != QStringLiteral("not_bootable"));
         m_infoTabs->setTabEnabled(1, true);
         m_title->setText(product->name);
         m_subtitle->setText(tr("%1 · %2 · %3").arg(product->period, m_catalog.statusText(product->status), m_catalog.text(product->summaryKey)));
