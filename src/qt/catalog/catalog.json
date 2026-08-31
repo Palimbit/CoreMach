@@ -374,6 +374,7 @@
       "hardware": {
         "cpu": "Intel 80386SX 16 MHz",
         "memory": "1 MB standard; up to 8 MB on-board and 16 MB system; LIM 4.0/EMS",
+        "chipset": "Headland HT101SX + HT113 + GC102-PC",
         "video": "Paradise PVGA1A integrated, 256 KB",
         "floppy": "3.5 in, 1.44 MB",
         "rtc": "128-byte CMOS RTC",
@@ -409,7 +410,8 @@
             {"label_key": "technical.label.chipset", "value_key": "product.olivetti-pcs386sx.technical.chipset"},
             {"label_key": "technical.label.chipset_functions", "value_key": "product.olivetti-pcs386sx.technical.chipset_functions"},
             {"label_key": "technical.label.headland_ports", "value_key": "product.olivetti-pcs386sx.technical.headland_ports"},
-            {"label_key": "technical.label.manual", "value_key": "product.olivetti-pcs386sx.technical.headland_manual", "url": "https://theretroweb.com/"}
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.olivetti-pcs386sx.technical.serial_parallel"},
+            {"label_key": "hardware.floppy", "value_key": "product.olivetti-pcs386sx.technical.floppy_controller"}
           ]
         },
         {
@@ -446,6 +448,9 @@
           "evidence_key": "technical.evidence.traceable",
           "entries": [
             {"label_key": "technical.label.brochure", "value_key": "product.olivetti-pcs386sx.technical.brochure", "url": "https://olivrea.de/olivetti-pcs-386sx/"},
+            {"label_key": "technical.label.chipset", "value_key": "product.olivetti-pcs386sx.technical.physical_board_evidence", "url": "https://www.jonathandupre.fr/articles/33-ordinateurs-old-school/315-olivetti-pcs-386sx/"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.olivetti-pcs386sx.technical.tl16c451_datasheet", "url": "https://www.ti.com/lit/ds/symlink/tl16c451.pdf"},
+            {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-pcs386sx.technical.ht101sx_peer_bios", "url": "https://www.vogons.org/viewtopic.php?t=86204"},
             {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-pcs386sx.technical.firmware_evidence"},
             {"label_key": "technical.label.diagnostic_media", "value_key": "product.olivetti-pcs386sx.technical.diagnostic_media"}
           ]
@@ -577,7 +582,7 @@
       "hardware": {
         "cpu": "Intel 80386SX 16 MHz",
         "memory": "1 MB standard; up to 8 MB on-board; LIM 4.0/EMS",
-        "chipset": "Headland HT18-B model with IOC02 and PC87310",
+        "chipset": "Headland HT101SX + HT113 + GC102-PC with IOC02",
         "video": "Paradise PVGA1A, 256 KB, embedded OVC 1.06",
         "floppy": "3.5 in, 1.44 MB",
         "coprocessor": "Intel 80387SX optional"
@@ -618,7 +623,8 @@
           "title_key": "technical.section.research_material",
           "evidence_key": "technical.evidence.traceable",
           "entries": [
-            {"label_key": "technical.label.manual", "value_key": "product.ta-dario386sx.document.ht18", "url": "https://theretroweb.com/"},
+            {"label_key": "technical.label.chipset", "value_key": "product.olivetti-pcs386sx.technical.physical_board_evidence", "url": "https://www.jonathandupre.fr/articles/33-ordinateurs-old-school/315-olivetti-pcs-386sx/"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.olivetti-pcs386sx.technical.tl16c451_datasheet", "url": "https://www.ti.com/lit/ds/symlink/tl16c451.pdf"},
             {"label_key": "technical.label.brochure", "value_key": "product.ta-dario386sx.document.olivetti", "url": "https://olivrea.de/olivetti-pcs-386sx/"},
             {"label_key": "technical.label.firmware_evidence", "value_key": "product.ta-dario386sx.document.firmware"}
           ]

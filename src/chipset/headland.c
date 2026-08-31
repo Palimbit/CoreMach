@@ -61,20 +61,31 @@ headland_log(void *priv, const char *fmt, ...)
 #    define headland_log(fmt, ...)
 #endif
 
+#define HEADLAND_REV_MASK          0x000f
+#define HEADLAND_HAS_CRI           0x0010
+#define HEADLAND_HAS_SLEEP         0x0020
+#define HEADLAND_SUPPORTS_386_BANKS 0x0040
+#define HEADLAND_HAS_PORT_92       0x0080
+#define HEADLAND_CR0_REMAP_DEFAULT 0x0100
+
 enum {
     HEADLAND_GC103    = 0x00,
-    HEADLAND_GC113    = 0x10,
-    HEADLAND_HT18_A   = 0x11,
-    HEADLAND_HT18_B   = 0x12,
-    HEADLAND_HT18_C   = 0x18,
-    HEADLAND_HT21_C_D = 0x31,
-    HEADLAND_HT21_E   = 0x32,
+    HEADLAND_GC113    = HEADLAND_HAS_CRI,
+    HEADLAND_HT18_A   = 0x01 | HEADLAND_HAS_CRI | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT18_B   = 0x02 | HEADLAND_HAS_CRI | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT18_C   = 0x08 | HEADLAND_HAS_CRI | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT21_C_D = 0x01 | HEADLAND_HAS_CRI | HEADLAND_HAS_SLEEP | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT21_E   = 0x02 | HEADLAND_HAS_CRI | HEADLAND_HAS_SLEEP | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+
+    /* The PCS 386SX and Dario 386SX use the discrete three-chip set
+       HT101SX + HT113 + GC102, not the later single-chip HT18.  Both
+       surviving BIOS families for this set use the same 1ECh-1EFh CR/EMS
+       interface implemented by this core.  CR4's silicon-identification
+       nibble is not documented publicly; 2 preserves the value observed by
+       the working Phoenix 1.14 path while the behavioural capabilities are
+       deliberately kept separate from that identifier. */
+    HEADLAND_HT101SX = 0x02 | HEADLAND_HAS_CRI | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_CR0_REMAP_DEFAULT,
 };
-
-#define HEADLAND_REV_MASK  0x0F
-
-#define HEADLAND_HAS_CRI   0x10
-#define HEADLAND_HAS_SLEEP 0x20
 
 typedef struct headland_mr_t {
     uint8_t  valid;
@@ -88,7 +99,9 @@ typedef struct headland_mr_t {
 typedef struct headland_t {
     uint8_t revision;
     uint8_t has_cri;
-    uint8_t  has_sleep;
+    uint8_t has_sleep;
+    uint8_t supports_386_banks;
+    uint8_t has_port_92;
 
     uint8_t cri;
     uint8_t cr[7];
@@ -160,7 +173,7 @@ get_addr(headland_t *dev, uint32_t addr, headland_mr_t *mr)
     bank_base[0] = 0x00000000;
     bank_base[1] = bank_base[0] + (1 << shift);
 
-    if ((dev->revision > 0) && (dev->cr[1] & 0x40)) {
+    if (dev->supports_386_banks && (dev->cr[1] & 0x40)) {
         bank_shift[2] = bank_shift[3] = other_shift;
         bank_base[2]                  = bank_base[1] + (1 << other_shift);
         bank_base[3]                  = bank_base[2] + (1 << other_shift);
@@ -640,22 +653,20 @@ static void *
 headland_init(const device_t *info)
 {
     headland_t *dev;
-    int         ht386 = 0;
 
     dev = (headland_t *) calloc(1, sizeof(headland_t));
 
-    dev->has_cri   = (info->local & HEADLAND_HAS_CRI);
-    dev->has_sleep = (info->local & HEADLAND_HAS_SLEEP);
-    dev->revision  = info->local & HEADLAND_REV_MASK;
+    dev->has_cri            = !!(info->local & HEADLAND_HAS_CRI);
+    dev->has_sleep          = !!(info->local & HEADLAND_HAS_SLEEP);
+    dev->supports_386_banks = !!(info->local & HEADLAND_SUPPORTS_386_BANKS);
+    dev->has_port_92        = !!(info->local & HEADLAND_HAS_PORT_92);
+    dev->revision           = info->local & HEADLAND_REV_MASK;
 
-    if (dev->revision > 0)
-        ht386 = 1;
-
-    dev->cr[0] = ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
-                  (machines[machine].init == machine_at_olivetti_pcs386sx_init)) ? 0x00 : 0x04;
+    dev->cr[0] = ((info->local & HEADLAND_CR0_REMAP_DEFAULT) ||
+                  (machines[machine].init == machine_at_olivetti_pcs286_init)) ? 0x00 : 0x04;
     dev->cr[4] = dev->revision << 4;
 
-    if (ht386)
+    if (dev->has_port_92)
         device_add(&port_92_inv_device);
 
     io_sethandler(0x01ec, 4,
@@ -760,6 +771,20 @@ const device_t headland_gc113_device = {
     .internal_name = "headland_gc113",
     .flags         = 0,
     .local         = HEADLAND_GC113,
+    .init          = headland_init,
+    .close         = headland_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t headland_ht101sx_device = {
+    .name          = "Headland HT101SX/HT113/GC102",
+    .internal_name = "headland_ht101sx",
+    .flags         = 0,
+    .local         = HEADLAND_HT101SX,
     .init          = headland_init,
     .close         = headland_close,
     .reset         = NULL,

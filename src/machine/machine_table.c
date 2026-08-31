@@ -80,6 +80,7 @@ const machine_filter_t machine_chipsets[] = {
     { "Headland GC100A",            MACHINE_CHIPSET_GC100A              },
     { "Headland GC103",             MACHINE_CHIPSET_GC103               },
     { "Headland HT18",              MACHINE_CHIPSET_HT18                },
+    { "Headland HT101SX/HT113/GC102", MACHINE_CHIPSET_HT101SX             },
     { "ACC 2036",                   MACHINE_CHIPSET_ACC_2036            },
     { "ACC 2168",                   MACHINE_CHIPSET_ACC_2168            },
     { "ALi M1217",                  MACHINE_CHIPSET_ALI_M1217           },
@@ -6450,10 +6451,10 @@ const machine_t machines[] = {
     /* Olivetti/TA keyboard-controller protocol; the original controller ROM
        has not yet been preserved. */
     {
-        .name              = "[HT18] Olivetti PCS 386SX",
+        .name              = "[HT101SX] Olivetti PCS 386SX",
         .internal_name     = "olivetti_pcs386sx",
         .type              = MACHINE_TYPE_386SX,
-        .chipset           = MACHINE_CHIPSET_HT18,
+        .chipset           = MACHINE_CHIPSET_HT101SX,
         .init              = machine_at_olivetti_pcs386sx_init,
         .p1_handler        = machine_generic_p1_handler,
         .gpio_handler      = NULL,
@@ -6498,10 +6499,10 @@ const machine_t machines[] = {
     },
     /* Triumph-Adler Dario 386SX/P45: badge-engineered PCS 386SX. */
     {
-        .name              = "[HT18] Triumph-Adler Dario 386SX",
+        .name              = "[HT101SX] Triumph-Adler Dario 386SX",
         .internal_name     = "ta_dario386sx",
         .type              = MACHINE_TYPE_386SX,
-        .chipset           = MACHINE_CHIPSET_HT18,
+        .chipset           = MACHINE_CHIPSET_HT101SX,
         .init              = machine_at_olivetti_pcs386sx_init,
         .p1_handler        = machine_generic_p1_handler,
         .gpio_handler      = NULL,

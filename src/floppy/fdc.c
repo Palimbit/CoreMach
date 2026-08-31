@@ -2922,6 +2922,24 @@ const device_t fdc_at_device = {
     .config        = NULL
 };
 
+/* The WD37C65C fitted to the Olivetti PCS 386SX exposes the standard AT
+   uPD765-compatible register set.  Keep a named device even though it shares
+   the generic FDC core, so the machine definition records the real component
+   instead of borrowing an unrelated Super I/O. */
+const device_t fdc_at_wd37c65_device = {
+    .name          = "Western Digital WD37C65C FDC",
+    .internal_name = "fdc_at_wd37c65",
+    .flags         = DEVICE_ISA,
+    .local         = FDC_FLAG_AT,
+    .init          = fdc_init,
+    .close         = fdc_close,
+    .reset         = fdc_reset,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
 const device_t fdc_at_sec_device = {
     .name          = "PC/AT FDC (Secondary)",
     .internal_name = "fdc_at_sec",

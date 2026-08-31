@@ -33,8 +33,8 @@
 #include <86box/fdc_ext.h>
 #include <86box/hdc.h>
 #include <86box/nvr.h>
+#include <86box/lpt.h>
 #include <86box/port_6x.h>
-#include <86box/sio.h>
 #include <86box/serial.h>
 #include <86box/video.h>
 #include <86box/machine.h>
@@ -107,27 +107,31 @@ machine_at_olivetti_pcs386sx_init(const machine_t *model)
        KBC_P2 has custom semantics for the Olivetti firmware. */
     device_add(&port_6x_olivetti_device);
 
-    /* Headland HT18-B + KBC AT (Olivetti firmware) + AT FDC.
-       machine_at_headland_common_init(model, 2) wires all three:
-         - kbc_at_device with model->kbc_params (KBC_VEN_OLIVETTI)
-         - fdc_at_device (if fdc_current[0] == FDC_INTERNAL)
-         - headland_ht18b_device
-       The 386SX motherboard has PC87310 visible but its functionality
-       is largely unused by Phoenix v1.14 — the Olivetti KBC handles
-       port 0x64 directly, the HT18 handles memory/EMS, the PC87310
-       provides serial/parallel/floppy which we still want for cfg
-       compatibility. */
-    machine_at_headland_common_init(model, 2);
+    /* The physical board uses the three-chip Headland HT101SX + HT113 +
+       GC102 set.  PCS 386SX Phoenix 1.14 and a second surviving HT101SX
+       BIOS both program CR0-CR4 and EMS maps through 1ECh-1EFh, which is
+       the interface supplied by this dedicated profile.  Unlike the HT18-B
+       approximation previously used here, it does not install fast A20 at
+       port 92h; neither BIOS accesses that port. */
+    device_add(&headland_ht101sx_device);
 
-    /* PC87310 super I/O (visible on the motherboard). Use PC87310_ALI
-       to match the AMA-932J reference (also HT18 + PC87310). The
-       ALI param configures the DENSEL polarity bits the way the
-       FDC NSC variant expects. */
-    device_add_params(&pc87310_device, (void *) PC87310_ALI);
+    /* Real discrete I/O population: Mitsubishi M5L8042 keyboard controller,
+       WD37C65C floppy controller and TI TL16C451FN serial/parallel controller.
+       The preserved M5L8042 mask ROM is still missing, so the existing
+       Olivetti 8042 protocol profile remains the closest executable model.
+       WD37C65C uses the standard AT FDC register model.  TI documents the
+       TL16C451 as one TL16C450-compatible UART plus a Centronics interface,
+       hence one 16450-compatible UART and one standard bidirectional LPT are
+       a direct functional decomposition rather than a borrowed Super I/O. */
+    device_add_params(machine_get_kbc_device(machine), (void *) model->kbc_params);
+    if (fdc_current[0] == FDC_INTERNAL)
+        device_add(&fdc_at_wd37c65_device);
+    device_add_inst(&ns16450_device, 1);
+    device_add_inst(&lpt_port_device, 1);
 
-    /* HT18-B owns conventional, relocated, shadow and EMS memory mapping.
+    /* HT101SX owns conventional, relocated, shadow and EMS memory mapping.
        Do not install the PCS 286's 0x60000 -> 0x80000 diagnostic alias or
-       the generic mem_remap_top() mapping here: both overlap the HT18 maps,
+       the generic mem_remap_top() mapping here: both overlap the HT101SX maps,
        collapse two distinct 128 KiB conventional-memory ranges and can
        corrupt EMS/shadow behavior. The PCS 386SX BIOS 1.14 contains neither
        the PCS 286's RAM-REMAPPING string nor its 6000h/8000h segment test. */
