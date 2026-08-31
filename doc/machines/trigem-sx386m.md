@@ -42,9 +42,18 @@ distribute it. The BIOS accesses the HT113 interface at 1ECh–1EFh, clears 64
 mapping registers and programs CR0–CR4, including CR2=DAh; it does not use
 fast-A20 port 92h.
 
+The BIOS also exposes the board-level sequencing of its integrated legacy I/O.
+It first probes the LPT and UART addresses selected by CMOS byte 36h while the
+motherboard ports are still disabled, so that an actual ISA add-in card can be
+reported as a conflict. It then writes the selection byte to port 03F3h: bits
+0–1 select LPT at 378h, 3BCh, 278h or disabled, while bits 2 and 3 disable COM1
+and COM2. BluMach models this latch and delayed activation without assigning it
+to an unverified physical IC.
+
 Status is **experimental**. The authentic BIOS identifies Emerson, completes
-the 4096 KB memory test and reaches the first-boot CMOS Setup prompt using an
-external Paradise VGA. Setup input, DOS boot, all RAM populations, parity/NMI,
+the 4096 KB memory test and reaches the system-configuration summary using an
+external Paradise VGA. The BIOS now enumerates COM1 at 3F8h, COM2 at 2F8h and
+LPT at 378h without false add-in-card conflicts. Setup input, DOS boot, all RAM populations, parity/NMI,
 the 8 MHz mode and EMS remain pending. Exact peripheral ICs and the keyboard
 controller mask ROM are not preserved, so AT-compatible functional models are
 used and documented as such. BluMach `master` does not yet provide an exact

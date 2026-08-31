@@ -20,6 +20,7 @@ implementation:
     - AMI/Emerson identification screen
     - 4096 KiB memory test completed
     - first-boot CMOS Setup prompt with external Paradise VGA
+    - COM1 3F8h, COM2 2F8h and LPT 378h detected without false add-in-card conflicts
   pending:
     - keyboard entry and persistence in CMOS Setup
     - floppy and IDE boot
@@ -39,7 +40,7 @@ emulation_mapping:
   HT101SX_HT113_GC102PC: "shared chipset component model; no Olivetti dependency"
   keyboard_controller: "AMI B-compatible 8042 profile; exact mask ROM unknown"
   rtc: compatible AT CMOS RTC; exact component unknown
-  io: compatible AT FDC, two 16450 UARTs and one LPT; exact chips unknown
+  io: "compatible AT FDC, two 16450 UARTs and one LPT; BIOS-observed 03F3h activation latch modelled; exact chips unknown"
 firmware:
   required: true
   redistributed: false
