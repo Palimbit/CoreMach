@@ -153,6 +153,11 @@ add_library(ui STATIC
     qt_preferenceskeybindings.hpp
     qt_preferenceskeybindings.ui
 
+    qt_blumach_catalog.cpp
+    qt_blumach_catalog.hpp
+    qt_blumach_collection.cpp
+    qt_blumach_collection.hpp
+
     qt_settings.cpp
     qt_settings.hpp
     qt_settings.ui
@@ -493,6 +498,24 @@ if(WIN32)
         qt_import_plugins(plat INCLUDE Qt${QT_MAJOR}::QWindowsIntegrationPlugin Qt${QT_MAJOR}::QICOPlugin Qt${QT_MAJOR}::QWindowsVistaStylePlugin)
     else()
         if(USE_QT6)
+            # BluMach development builds are expected to run directly from
+            # the build tree. Deploy Qt, its Windows platform plug-in and the
+            # MinGW runtime whenever the executable is relinked, instead of
+            # requiring a separate install step first.
+            get_filename_component(BLUMACH_TOOLCHAIN_RUNTIME_DIR
+                                   "${CMAKE_CXX_COMPILER}" DIRECTORY)
+            add_custom_command(TARGET 86Box POST_BUILD
+                COMMAND $<TARGET_FILE:Qt${QT_MAJOR}::windeployqt>
+                        --no-translations
+                        --compiler-runtime
+                        "$<TARGET_FILE:86Box>"
+                COMMAND ${CMAKE_COMMAND}
+                        -DBLUMACH_EXECUTABLE=$<TARGET_FILE:86Box>
+                        -DBLUMACH_RUNTIME_SEARCH_DIR=${BLUMACH_TOOLCHAIN_RUNTIME_DIR}
+                        -P ${PROJECT_SOURCE_DIR}/cmake/DeployBluMachRuntime.cmake
+                COMMENT "Deploying the BluMach Qt runtime"
+                VERBATIM)
+
             install(CODE "
                 get_filename_component(CMAKE_INSTALL_PREFIX_ABSOLUTE \${CMAKE_INSTALL_PREFIX} ABSOLUTE)
                 execute_process(

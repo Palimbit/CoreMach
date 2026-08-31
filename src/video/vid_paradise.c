@@ -57,6 +57,8 @@ typedef struct paradise_t {
     uint32_t read_bank[4], write_bank[4];
 
     int interlace;
+    int board_enabled;
+    int board_mapping_enabled;
 
     struct {
         uint8_t reg_block_ptr;
@@ -142,6 +144,7 @@ paradise_out(uint16_t addr, uint8_t val, void *priv)
 {
     paradise_t *paradise = (paradise_t *) priv;
     svga_t     *svga     = &paradise->svga;
+
     xga_t      *xga      = (xga_t *) svga->xga;
     uint8_t     old;
 
@@ -800,6 +803,8 @@ paradise_init(const device_t *info, uint32_t memory)
     mem_mapping_set_p(&svga->mapping, paradise);
 
     io_sethandler(0x03c0, 0x0020, paradise_in, NULL, NULL, paradise_out, NULL, NULL, paradise);
+    paradise->board_enabled         = 1;
+    paradise->board_mapping_enabled = 1;
 
     /* Common to all three types. */
     svga->crtc[0x31] = 'W';
@@ -863,6 +868,55 @@ paradise_pvga1a_pc3086_init(const device_t *info)
         rom_init(&paradise->bios_rom, "roms/machines/pc3086/c000.bin", 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
 
     return paradise;
+}
+
+void
+paradise_pcs86_set_enabled(void *priv, int enabled)
+{
+    paradise_t *paradise = (paradise_t *) priv;
+    svga_t     *svga;
+
+    if (paradise == NULL)
+        return;
+    enabled = !!enabled;
+    if (enabled == paradise->board_enabled)
+        return;
+
+    svga = &paradise->svga;
+    if (enabled) {
+        io_sethandler(0x03c0, 0x0020, paradise_in, NULL, NULL,
+                      paradise_out, NULL, NULL, paradise);
+        if (paradise->board_mapping_enabled)
+            mem_mapping_enable(&svga->mapping);
+    } else {
+        paradise->board_mapping_enabled = svga->mapping.enable;
+        io_removehandler(0x03c0, 0x0020, paradise_in, NULL, NULL,
+                         paradise_out, NULL, NULL, paradise);
+        mem_mapping_disable(&svga->mapping);
+    }
+    svga->vga_enabled       = enabled;
+    paradise->board_enabled = enabled;
+}
+
+static void *
+paradise_pvga1a_pcs86_init(const device_t *info)
+{
+    /* The PCS86 VGA firmware is embedded in the motherboard BIOS. */
+    return paradise_init(info, 256);
+}
+
+static void *
+paradise_pvga1a_pcs286_init(const device_t *info)
+{
+    /* Video firmware is embedded in the 128 KiB motherboard BIOS. */
+    return paradise_init(info, 256);
+}
+
+static void *
+paradise_pvga1a_pcs386sx_init(const device_t *info)
+{
+    /* Olivetti OVC 1.06 video firmware is embedded in the system BIOS. */
+    return paradise_init(info, 256);
 }
 
 static void *
@@ -989,6 +1043,51 @@ const device_t paradise_pvga1a_pc3086_device = {
     .speed_changed = paradise_speed_changed,
     .force_redraw  = paradise_force_redraw,
     .machine       = "Amstrad PC3086",
+    .config        = NULL
+};
+
+const device_t paradise_pvga1a_pcs86_device = {
+    .name          = "Paradise PVGA1A On-Board (Olivetti PCS86)",
+    .internal_name = "pvga1a_pcs86",
+    .flags         = 0,
+    .local         = PVGA1A,
+    .init          = paradise_pvga1a_pcs86_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti PCS86",
+    .config        = NULL
+};
+
+const device_t paradise_pvga1a_pcs286_device = {
+    .name          = "Paradise PVGA1A On-Board (Olivetti PCS 286)",
+    .internal_name = "pvga1a_pcs286",
+    .flags         = 0,
+    .local         = PVGA1A,
+    .init          = paradise_pvga1a_pcs286_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti PCS 286",
+    .config        = NULL
+};
+
+const device_t paradise_pvga1a_pcs386sx_device = {
+    .name          = "Paradise PVGA1A On-Board (Olivetti PCS 386SX)",
+    .internal_name = "pvga1a_pcs386sx",
+    .flags         = 0,
+    .local         = PVGA1A,
+    .init          = paradise_pvga1a_pcs386sx_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti PCS 386SX",
     .config        = NULL
 };
 

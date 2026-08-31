@@ -113,6 +113,7 @@ typedef struct atkbc_t {
     uint8_t ami_is_megakey;
     uint8_t award_revision;
     uint8_t chips_revision;
+    uint8_t olivetti_pcs386sx_enable_reply;
 
     uint8_t mem[0x100];
 
@@ -235,13 +236,33 @@ kbc_at_queue_add(atkbc_t *dev, uint8_t val)
     dev->state = STATE_KBC_OUT;
 }
 
+static void
+kbc_at_olivetti_pcs386sx_enable_reply(atkbc_t *dev)
+{
+    /* Phoenix 1.14 checks the PCS 386SX controller's enable-keyboard
+       handshake by polling port 60h for 3Bh immediately after AEh. */
+    if ((machines[machine].init == machine_at_olivetti_pcs386sx_init) &&
+        dev->olivetti_pcs386sx_enable_reply) {
+        dev->olivetti_pcs386sx_enable_reply = 0;
+        /* A warm reset can leave Ctrl, Alt or Delete break codes in OBF.
+           Queue the response so Phoenix can consume those bytes first. */
+        kbc_at_queue_add(dev, 0x3b);
+        kbc_at_log("ATkbc: queued Olivetti PCS 386SX enable reply 3B\n");
+    }
+}
+
 static int
 kbc_translate(atkbc_t *dev, uint8_t val)
 {
-    int      xt_mode   = (dev->mem[0x20] & 0x20) && !(dev->misc_flags & FLAG_PS2);
-    /* The IBM AT keyboard controller firmware does not apply translation in XT mode. */
-    int      translate = !xt_mode && ((dev->mem[0x20] & 0x40) || (dev->is_type2));
     uint8_t  kbc_ven   = dev->flags & KBC_VEN_MASK;
+    /* Olivetti firmware can leave PCMODE and XLAT set together. On these
+       controllers PCMODE does not mean that bytes are already scan set 1;
+       XLAT must still convert the keyboard's set 2 stream for the BIOS. */
+    int      xt_mode   = (dev->mem[0x20] & CCB_PCMODE) &&
+                         !(dev->misc_flags & FLAG_PS2) &&
+                         (kbc_ven != KBC_VEN_OLIVETTI);
+    /* The IBM AT keyboard controller firmware does not apply translation in XT mode. */
+    int      translate = !xt_mode && ((dev->mem[0x20] & CCB_TRANSLATE) || (dev->is_type2));
     int      ret       = - 1;
 
     /* Allow for scan code translation. */
@@ -562,6 +583,23 @@ at_main_ibf:
             }
             break;
         case STATE_SEND_KBD:
+            /* Olivetti firmware can submit the data following a keyboard
+               command while the emulated keyboard is still clearing
+               wantcmd. Forward that byte instead of leaving IBF pending;
+               otherwise Setup can receive digits but lose the confirming
+               Enter key after programming the keyboard. */
+            if (((dev->flags & KBC_VEN_MASK) == KBC_VEN_OLIVETTI) &&
+                (dev->status & STAT_IFULL)) {
+                dev->status &= ~STAT_IFULL;
+                if (dev->status & STAT_CD)
+                    kbc_at_process_cmd(dev);
+                else {
+                    set_enable_kbd(dev, 1);
+                    if ((dev->ports[0] != NULL) && (dev->ports[0]->priv != NULL))
+                        dev->ports[0]->wantcmd = 1;
+                }
+                break;
+            }
             if (!dev->ports[0]->wantcmd)
                 dev->state = STATE_SCAN_KBD;
             break;
@@ -752,6 +790,12 @@ write_p2(atkbc_t *dev, uint8_t val)
     kbc_at_log("ATkbc: write P2: %02X (old: %02X)\n", val, dev->p2);
 
     uint8_t kbc_ven = dev->flags & KBC_VEN_MASK;
+
+    /* Every assertion of the 8042 reset output starts a new POST. Rearm the
+       PCS 386SX handshake here so D1 writes and pulse paths are covered too. */
+    if ((machines[machine].init == machine_at_olivetti_pcs386sx_init) &&
+        (old & 0x01) && !(val & 0x01))
+        dev->olivetti_pcs386sx_enable_reply = 1;
 
     /* AT, PS/2: Handle A20. */
     if ((mem_a20_key ^ val) & 0x02) { /* A20 enable change */
@@ -2009,10 +2053,62 @@ write_cmd_olivetti(void *priv, uint8_t val)
              * bit 2: keyboard fuse present
              * bits 0-1: ???
              */
-            kbc_delay_to_ob(dev, (0x0c | (is386 ? 0x00 : 0x80)) & 0xdf, 0, 0x00);
+            /* Phoenix 1.42 on the PCS 286 uses command 80h as an exact
+               read-back of the P2 value previously written with 84h.
+               Other Olivetti machines retain the generic fuse/status reply. */
+            if (machines[machine].init == machine_at_olivetti_pcs286_init)
+                kbc_delay_to_ob(dev, dev->p2, 0, 0x00);
+            else if (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)
+                /* PCS 286S BIOS 2.06 probes the manufacturing jumper with
+                   commands 8Bh/80h.  Bit 5 high is the normal production
+                   state (jumper absent); low deliberately enters the factory
+                   POST loop. */
+                kbc_delay_to_ob(dev, dev->p2 | 0x20, 0, 0x00);
+            else
+                kbc_delay_to_ob(dev, (0x0c | (is386 ? 0x00 : 0x80)) & 0xdf, 0, 0x00);
             dev->p1 = ((dev->p1 + 1) & 3) | (dev->p1 & 0xfc);
             ret = 0;
             break;
+
+        case 0x84: /* PCS 286: write output port P2 */
+            if ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)) {
+                dev->wantdata = 1;
+                dev->state    = STATE_KBC_PARAM;
+                dev->command  = 0x84;
+                ret           = 0;
+            }
+            break;
+
+        case 0x8b: /* PCS 286S: select manufacturing-jumper status */
+            if (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)
+                ret = 0;
+            break;
+
+        case 0xcf: /* PCS 286 Phoenix POST separator/no-op */
+            if ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init))
+                ret = 0;
+            break;
+    }
+
+    return ret;
+}
+
+static uint8_t
+write_cmd_data_olivetti(void *priv, uint8_t val)
+{
+    atkbc_t *dev = (atkbc_t *) priv;
+    uint8_t  ret = 1;
+
+    if (((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+         (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)) &&
+        (dev->command == 0x84)) {
+        /* Command 84h latches P2 but, unlike standard D1h, does not pulse
+           reset when bit 0 is clear. The POST verifies the value via 80h. */
+        kbc_at_log("ATkbc: Olivetti PCS 286 write P2: %02X\n", val);
+        dev->p2 = val;
+        ret     = 0;
     }
 
     return ret;
@@ -2445,6 +2541,7 @@ kbc_at_process_cmd(void *priv)
             case 0xae: /* enable keyboard */
                 kbc_at_log("ATkbc: enable keyboard\n");
                 set_enable_kbd(dev, 1);
+                kbc_at_olivetti_pcs386sx_enable_reply(dev);
                 break;
 
             case 0xc0: /* read P1 */
@@ -2515,7 +2612,23 @@ kbc_at_process_cmd(void *priv)
                 kbc_delay_to_ob(dev, 0x00, 0, 0x00);
                 break;
 
-            case 0xf0 ... 0xff: /* pulse P2 */
+            case 0xfe: /* CPU reset pulse. */
+                kbc_at_log("ATkbc: CPU reset pulse (cmd 0xFE)\n");
+                if (machines[machine].init == machine_at_olivetti_pcs386sx_init)
+                    dev->olivetti_pcs386sx_enable_reply = 1;
+                /* FE requests a pulse independently of the latched P2.0
+                   level. If P2.0 is already low, pulse_output() cannot
+                   produce the falling edge required to reset the CPU. */
+                if (!(dev->p2 & 0x01)) {
+                    softresetx86();
+                    cpu_set_edx();
+                    flushmmucache();
+                }
+                pulse_output(dev, 0x0e);
+                break;
+
+            case 0xf0 ... 0xfd: /* pulse P2; FE is handled above. */
+            case 0xff:
                 kbc_at_log("ATkbc: pulse %01X\n", dev->ib & 0x0f);
                 pulse_output(dev, dev->ib & 0x0f);
                 break;
@@ -2707,8 +2820,12 @@ kbc_at_port_2_write(uint16_t port, uint8_t val, void *priv)
         /* Fast track it because of the LG MultiNet. */
         kbc_at_log("ATkbc: enable keyboard\n");
         set_enable_kbd(dev, 1);
+        kbc_at_olivetti_pcs386sx_enable_reply(dev);
 
-        dev->state     = STATE_MAIN_IBF;
+        /* The PCS 386SX helper may have queued its AEh/3Bh handshake.
+           Preserve KBC_OUT so the poller can deliver it. */
+        if (dev->state != STATE_KBC_OUT)
+            dev->state = STATE_MAIN_IBF;
 
         /*
            Explicitly clear IBF so that any preceding
@@ -2772,6 +2889,8 @@ kbc_at_reset(void *priv)
     dev->mem[0x20]     = 0x01;
     dev->mem[0x20]    |= CCB_TRANSLATE;
     dev->command_phase = 0;
+    dev->olivetti_pcs386sx_enable_reply =
+        (machines[machine].init == machine_at_olivetti_pcs386sx_init);
 
     /* Video Type is now handled in the machine P1 handler. */
     dev->p1 = 0xff;
@@ -2941,7 +3060,8 @@ kbc_at_init(const device_t *info)
             break;
 
         case KBC_VEN_OLIVETTI:
-            dev->write_cmd_ven = write_cmd_olivetti;
+            dev->write_cmd_data_ven = write_cmd_data_olivetti;
+            dev->write_cmd_ven      = write_cmd_olivetti;
             break;
 
         case KBC_VEN_ALI:

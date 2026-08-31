@@ -42,6 +42,7 @@
 #include <86box/port_92.h>
 #include <86box/chipset.h>
 #include <86box/log.h>
+#include <86box/machine.h>
 
 #ifdef ENABLE_HEADLAND_LOG
 int headland_do_log = ENABLE_HEADLAND_LOG;
@@ -60,20 +61,21 @@ headland_log(void *priv, const char *fmt, ...)
 #    define headland_log(fmt, ...)
 #endif
 
+#define HEADLAND_REV_MASK          0x000f
+#define HEADLAND_HAS_CRI           0x0010
+#define HEADLAND_HAS_SLEEP         0x0020
+#define HEADLAND_SUPPORTS_386_BANKS 0x0040
+#define HEADLAND_HAS_PORT_92       0x0080
+
 enum {
     HEADLAND_GC103    = 0x00,
-    HEADLAND_GC113    = 0x10,
-    HEADLAND_HT18_A   = 0x11,
-    HEADLAND_HT18_B   = 0x12,
-    HEADLAND_HT18_C   = 0x18,
-    HEADLAND_HT21_C_D = 0x31,
-    HEADLAND_HT21_E   = 0x32,
+    HEADLAND_GC113    = HEADLAND_HAS_CRI,
+    HEADLAND_HT18_A   = 0x01 | HEADLAND_HAS_CRI | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT18_B   = 0x02 | HEADLAND_HAS_CRI | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT18_C   = 0x08 | HEADLAND_HAS_CRI | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT21_C_D = 0x01 | HEADLAND_HAS_CRI | HEADLAND_HAS_SLEEP | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
+    HEADLAND_HT21_E   = 0x02 | HEADLAND_HAS_CRI | HEADLAND_HAS_SLEEP | HEADLAND_SUPPORTS_386_BANKS | HEADLAND_HAS_PORT_92,
 };
-
-#define HEADLAND_REV_MASK  0x0F
-
-#define HEADLAND_HAS_CRI   0x10
-#define HEADLAND_HAS_SLEEP 0x20
 
 typedef struct headland_mr_t {
     uint8_t  valid;
@@ -87,7 +89,9 @@ typedef struct headland_mr_t {
 typedef struct headland_t {
     uint8_t revision;
     uint8_t has_cri;
-    uint8_t  has_sleep;
+    uint8_t has_sleep;
+    uint8_t supports_386_banks;
+    uint8_t has_port_92;
 
     uint8_t cri;
     uint8_t cr[7];
@@ -159,7 +163,7 @@ get_addr(headland_t *dev, uint32_t addr, headland_mr_t *mr)
     bank_base[0] = 0x00000000;
     bank_base[1] = bank_base[0] + (1 << shift);
 
-    if ((dev->revision > 0) && (dev->cr[1] & 0x40)) {
+    if (dev->supports_386_banks && (dev->cr[1] & 0x40)) {
         bank_shift[2] = bank_shift[3] = other_shift;
         bank_base[2]                  = bank_base[1] + (1 << other_shift);
         bank_base[3]                  = bank_base[2] + (1 << other_shift);
@@ -639,21 +643,19 @@ static void *
 headland_init(const device_t *info)
 {
     headland_t *dev;
-    int         ht386 = 0;
 
     dev = (headland_t *) calloc(1, sizeof(headland_t));
 
-    dev->has_cri   = (info->local & HEADLAND_HAS_CRI);
-    dev->has_sleep = (info->local & HEADLAND_HAS_SLEEP);
-    dev->revision  = info->local & HEADLAND_REV_MASK;
+    dev->has_cri            = !!(info->local & HEADLAND_HAS_CRI);
+    dev->has_sleep          = !!(info->local & HEADLAND_HAS_SLEEP);
+    dev->supports_386_banks = !!(info->local & HEADLAND_SUPPORTS_386_BANKS);
+    dev->has_port_92        = !!(info->local & HEADLAND_HAS_PORT_92);
+    dev->revision           = info->local & HEADLAND_REV_MASK;
 
-    if (dev->revision > 0)
-        ht386 = 1;
-
-    dev->cr[0] = 0x04;
+    dev->cr[0] = (machines[machine].init == machine_at_olivetti_pcs286_init) ? 0x00 : 0x04;
     dev->cr[4] = dev->revision << 4;
 
-    if (ht386)
+    if (dev->has_port_92)
         device_add(&port_92_inv_device);
 
     io_sethandler(0x01ec, 4,

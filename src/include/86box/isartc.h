@@ -58,6 +58,7 @@ extern int             isartc_has_config(int board);
 /* On-board RTC devices */
 extern const device_t vendex_xt_rtc_onboard_device;
 extern const device_t rtc58167_device;
+extern const device_t olivetti_pcs86_rtc_device;
 
 extern const device_t ibmps2m30_rtc_device;
 extern void           ibmps2m30_rtc_inform(void *, uint8_t *);

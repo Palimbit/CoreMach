@@ -311,6 +311,7 @@ enum {
     MACHINE_CHIPSET_VLSI_WILDCAT,
     MACHINE_CHIPSET_WD76C10,
     MACHINE_CHIPSET_ZYMOS_POACH,
+    MACHINE_CHIPSET_HT101SX,
     MACHINE_CHIPSET_MAX
 };
 
@@ -498,6 +499,24 @@ extern int             machine_pc2086_init(const machine_t *);
 extern const device_t  vid_pc3086_device;
 #endif
 extern int             machine_pc3086_init(const machine_t *);
+
+/* m_xt_olivetti_pcs86.c */
+#ifdef EMU_DEVICE_H
+extern const device_t  olivetti_pcs86_device;
+#endif
+extern int             machine_xt_olivetti_pcs86_init(const machine_t *);
+
+/* m_at_olivetti_286.c */
+#ifdef EMU_DEVICE_H
+extern const device_t  olivetti_pcs286_device;
+extern const device_t  ta_dario286_device;
+extern const device_t  olivetti_pcs286s_ti_device;
+#endif
+extern int             machine_at_olivetti_pcs286_init(const machine_t *);
+extern int             machine_at_olivetti_pcs286s_ti_init(const machine_t *);
+
+/* m_at_olivetti_386sx.c */
+extern int             machine_at_olivetti_pcs386sx_init(const machine_t *);
 
 /* m_at_286.c */
 /* ISA */

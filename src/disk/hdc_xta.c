@@ -1068,6 +1068,13 @@ xta_init_common(const device_t *info, int type)
             dev->irq      = 5;
             dev->dma      = 3;
             break;
+
+        case 6: /* Olivetti PCS86 onboard XTA */
+            dev->name     = "Olivetti PCS86 XTA";
+            dev->base     = 0x0320;
+            dev->irq      = 5;
+            dev->dma      = 3;
+            break;
         case 3: /* Seagate ST-05X Standalone */
         case 4: /* Seagate ST-05X Standalone secondary device */
             switch (dev->type) {
@@ -1489,6 +1496,20 @@ const device_t xta_hd20_device = {
     .internal_name = "xta_hd20",
     .flags         = DEVICE_ISA,
     .local         = 2,
+    .init          = xta_init,
+    .close         = xta_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t xta_pcs86_device = {
+    .name          = "Olivetti PCS86 onboard XTA",
+    .internal_name = "xta_pcs86",
+    .flags         = DEVICE_ISA,
+    .local         = 6,
     .init          = xta_init,
     .close         = xta_close,
     .reset         = NULL,

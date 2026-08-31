@@ -12,6 +12,46 @@ msgstr ""
 "X-Language: es_ES\n"
 "X-Source-Language: en_US\n"
 
+# BluMach historical collection
+msgid "Historical computer collection"
+msgstr "Colección histórica de ordenadores"
+
+msgid "Explore computers by manufacturer and family, review their preservation status, and create a historically accurate machine."
+msgstr "Explora equipos por fabricante y familia, revisa su estado de conservación y crea una máquina históricamente precisa."
+
+msgid "Search models, aliases or hardware"
+msgstr "Buscar modelos, alias o hardware"
+
+msgid "All preservation states"
+msgstr "Todos los estados de conservación"
+
+msgid "My machines"
+msgstr "Mis máquinas"
+
+msgid "Create this machine…"
+msgstr "Crear esta máquina…"
+
+msgid "Catalog unavailable"
+msgstr "Catálogo no disponible"
+
+msgid "Manufacturer"
+msgstr "Fabricante"
+
+msgid "Computer family"
+msgstr "Familia de ordenadores"
+
+msgid "History"
+msgstr "Historia"
+
+msgid "Hardware"
+msgstr "Hardware"
+
+msgid "Collection"
+msgstr "Colección"
+
+msgid "%1 Historical Computer Collection"
+msgstr "Colección histórica de ordenadores de %1"
+
 msgid "&Action"
 msgstr "&Acción"
 

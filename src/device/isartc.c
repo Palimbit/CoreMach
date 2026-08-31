@@ -89,6 +89,7 @@
 #define ISARTC_RTC58167 6
 #define ISARTC_MM58167  10
 #define ISARTC_PS2M30   11
+#define ISARTC_PCS86    12
 
 #define ISARTC_ROM_MM58167_1 "roms/rtc/glatick/GLaTICK_0.8.8_NS_86B.ROM"  /* Generic 58167, AST or EV-170 */
 #define ISARTC_ROM_MM58167_2 "roms/rtc/glatick/GLaTICK_0.8.8_NS_86B2.ROM" /* PII-147 */
@@ -732,6 +733,74 @@ mm67_write(uint16_t port, uint8_t val, void *priv)
     }
 }
 
+/* The PCS86 exposes the MM58167 counters at E0h-EFh and its control/status
+ * registers through a second, shortened window at B0h-B7h. */
+static uint16_t
+pcs86_mm67_port(uint16_t port)
+{
+    if ((port >= 0x00e0) && (port <= 0x00ef))
+        return port;
+    if ((port >= 0x00b0) && (port <= 0x00b6))
+        return 0x00e0 + MM67_ISTAT + (port - 0x00b0);
+    return 0x00e0 + MM67_TEST;
+}
+
+static uint8_t
+pcs86_mm67_checksum(const uint8_t *regs)
+{
+    uint8_t sum = regs[MM67_AL_MSEC] >> 4;
+    for (uint8_t reg = MM67_AL_HUNTEN; reg <= MM67_AL_HOUR; reg++)
+        sum += (regs[reg] >> 4) + (regs[reg] & 0x0f);
+    sum += regs[MM67_AL_DOW] & 0x0f;
+    sum += regs[MM67_AL_DOM] & 0x0f;
+    return (sum & 0x3f) ^ 0x15;
+}
+
+static void
+pcs86_mm67_reset(nvr_t *nvr)
+{
+    mm67_reset(nvr);
+    const uint8_t checksum = pcs86_mm67_checksum(nvr->regs);
+    /* Match BIOS F000:F443-F47E: the unused alarm fields retain their
+     * MM58167 "don't care" bits while the six checksum bits are packed
+     * into EEh/EFh. */
+    nvr->regs[MM67_AL_DOM] = (nvr->regs[MM67_AL_DOM] & 0x0f) |
+                             0xc0 | (checksum & 0x30);
+    nvr->regs[MM67_AL_MON] = 0xcc | ((checksum & 0x0c) << 2) |
+                             (checksum & 0x03);
+}
+
+static void
+pcs86_mm67_warm_reset(void *priv)
+{
+    rtcdev_t *dev = (rtcdev_t *) priv;
+    uint8_t *regs = dev->nvr.regs;
+    const uint8_t checksum = pcs86_mm67_checksum(regs);
+    const uint8_t stored = (regs[MM67_AL_DOM] & 0x30) |
+                           ((regs[MM67_AL_MON] & 0x30) >> 2) |
+                           (regs[MM67_AL_MON] & 0x03);
+
+    if (stored != checksum) {
+        regs[MM67_AL_DOM] = (regs[MM67_AL_DOM] & 0x0f) |
+                            0xc0 | (checksum & 0x30);
+        regs[MM67_AL_MON] = 0xcc | ((checksum & 0x0c) << 2) |
+                            (checksum & 0x03);
+        nvr_dosave = 1;
+    }
+}
+
+static uint8_t
+pcs86_mm67_read(uint16_t port, void *priv)
+{
+    return mm67_read(pcs86_mm67_port(port), priv);
+}
+
+static void
+pcs86_mm67_write(uint16_t port, uint8_t val, void *priv)
+{
+    mm67_write(pcs86_mm67_port(port), val, priv);
+}
+
 /*
    Multitech PC-500/PC-500+ onboard RTC 58167 device designed to use I/O port
    base+0 as register index and base+1 as register data read/write window,
@@ -860,6 +929,17 @@ isartc_init(const device_t *info)
             dev->century     = MM67_AL_DOM;
             break;
 
+        case ISARTC_PCS86: /* Olivetti PCS86 onboard MM58167 */
+            dev->base_addr   = 0x00e0;
+            dev->base_addrsz = 16;
+            dev->f_rd        = pcs86_mm67_read;
+            dev->f_wr        = pcs86_mm67_write;
+            dev->nvr.size    = 32;
+            dev->nvr.reset   = pcs86_mm67_reset;
+            dev->nvr.start   = mm67_start;
+            dev->nvr.tick    = NULL;
+            break;
+
         case ISARTC_DTK: /* DTK PII-147 Hexa I/O Plus */
             dev->flags |= FLAG_YEARBCD;
             dev->base_addr   = device_get_config_hex16("base");
@@ -936,6 +1016,9 @@ isartc_init(const device_t *info)
     } else
         io_sethandler(dev->base_addr, dev->base_addrsz,
                       dev->f_rd, NULL, NULL, dev->f_wr, NULL, NULL, dev);
+    if (dev->board == ISARTC_PCS86)
+        io_sethandler(0x00b0, 8, pcs86_mm67_read, NULL, NULL,
+                      pcs86_mm67_write, NULL, NULL, dev);
 
     /* Hook into the NVR backend. */
     dev->nvr.fn  = (char *) info->internal_name;
@@ -975,6 +1058,9 @@ isartc_close(void *priv)
     } else
         io_removehandler(dev->base_addr, dev->base_addrsz,
                          dev->f_rd, NULL, NULL, dev->f_wr, NULL, NULL, dev);
+    if (dev->board == ISARTC_PCS86)
+        io_removehandler(0x00b0, 8, pcs86_mm67_read, NULL, NULL,
+                         pcs86_mm67_write, NULL, NULL, dev);
 
     free(dev);
 }
@@ -1286,6 +1372,20 @@ const device_t rtc58167_device = {
     .init          = isartc_init,
     .close         = isartc_close,
     .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t olivetti_pcs86_rtc_device = {
+    .name          = "National Semiconductor MM58167 (Olivetti PCS86)",
+    .internal_name = "olivetti_pcs86_rtc",
+    .flags         = DEVICE_ISA,
+    .local         = ISARTC_PCS86,
+    .init          = isartc_init,
+    .close         = isartc_close,
+    .reset         = pcs86_mm67_warm_reset,
     .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,

@@ -1,0 +1,25 @@
+schema: blumach-preservation-machine-v1
+identity:
+  manufacturer: ""
+  model: ""
+  aliases: []
+  years: ""
+  confidence: reported
+implementation:
+  machine_id: null
+  status: documented
+hardware:
+  cpu: ""
+  chipset: ""
+  memory: ""
+  video: ""
+firmware:
+  required: true
+  available: false
+  sets: []
+relationships: []
+publications:
+  brochures: []
+  manuals: []
+sources: []
+notes: ""

@@ -280,6 +280,7 @@ extern const device_t fdc_xt_umc_um8398_device;
 extern const device_t fdc_xt_5550_device;
 extern const device_t fdc_pcjr_device;
 extern const device_t fdc_at_device;
+extern const device_t fdc_at_wd37c65_device;
 extern const device_t fdc_at_sec_device;
 extern const device_t fdc_at_ter_device;
 extern const device_t fdc_at_qua_device;

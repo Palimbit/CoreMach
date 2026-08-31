@@ -25,6 +25,9 @@ namespace Ui {
 class VMManagerMainWindow;
 }
 
+class BluMachCollectionWidget;
+class QTabWidget;
+
 class VMManagerMainWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -41,7 +44,9 @@ signals:
 private:
     Ui::VMManagerMainWindow *ui;
 
-    VMManagerMain *vmm;
+    VMManagerMain           *vmm;
+    BluMachCollectionWidget *collection;
+    QTabWidget              *mainTabs;
     void           saveSettings() const;
     QLabel        *statusLeft;
     QLabel        *statusRight;

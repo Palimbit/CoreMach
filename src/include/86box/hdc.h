@@ -112,6 +112,7 @@ extern const device_t mcide_device;
 
 extern const device_t xta_wdxt150_device;         /* xta_wdxt150 */
 extern const device_t xta_wdxt150_pc3086_device;  /* xta_wdxt150 (PC3086) */
+extern const device_t xta_pcs86_device;           /* Olivetti PCS86 internal */
 extern const device_t xta_hd20_device;            /* EuroPC internal */
 extern const device_t xta_st50x_device;           /* ST-50X */
 extern const device_t xta_st50x_pc5086_device;    /* ST-50X (PC5086) */

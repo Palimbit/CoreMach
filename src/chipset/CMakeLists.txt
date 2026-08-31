@@ -37,6 +37,10 @@ add_library(chipset OBJECT
     grid1520.c
     gc100.c
     headland.c
+    headland_gc102pc.c
+    headland_ht101sx.c
+    headland_ht113.c
+    headland_pcs386sx.c
     ims8848.c
     intel_82335.c
     intel_420ex.c
@@ -49,6 +53,7 @@ add_library(chipset OBJECT
     laserxt.c
     neat.c
     olivetti_eva.c
+    olivetti_ioc02.c
     opti283.c
     opti291.c
     opti391.c

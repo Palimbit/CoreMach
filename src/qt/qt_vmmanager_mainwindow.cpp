@@ -14,6 +14,7 @@
  */
 #include "qt_vmmanager_mainwindow.hpp"
 #include "qt_vmmanager_main.hpp"
+#include "qt_blumach_collection.hpp"
 #include "qt_vmmanager_preferences.hpp"
 #include "qt_vmmanager_windarkmodefilter.hpp"
 #include "ui_qt_vmmanager_mainwindow.h"
@@ -26,6 +27,7 @@
 
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QTabWidget>
 
 extern "C" {
 extern void config_load_global();
@@ -39,6 +41,8 @@ VMManagerMainWindow::
     VMManagerMainWindow(QWidget *parent)
     : ui(new Ui::VMManagerMainWindow)
     , vmm(new VMManagerMain(this))
+    , collection(new BluMachCollectionWidget(this))
+    , mainTabs(new QTabWidget(this))
     , statusLeft(new QLabel)
     , statusRight(new QLabel)
 {
@@ -52,8 +56,21 @@ VMManagerMainWindow::
     // Connect signals from the VMManagerMain widget
     connect(vmm, &VMManagerMain::selectionOrStateChanged, this, &VMManagerMainWindow::vmmStateChanged);
 
-    setWindowTitle(tr("%1 VM Manager").arg(EMU_NAME));
-    setCentralWidget(vmm);
+    setWindowTitle(tr("%1 Historical Computer Collection").arg(EMU_NAME));
+    mainTabs->addTab(collection, tr("Collection"));
+    mainTabs->addTab(vmm, tr("My machines"));
+    setCentralWidget(mainTabs);
+
+    connect(collection, &BluMachCollectionWidget::showMachinesRequested, this, [this] {
+        mainTabs->setCurrentWidget(vmm);
+    });
+    connect(collection, &BluMachCollectionWidget::createMachineRequested, this, [this](const QString &productId, const QString &machineId) {
+        mainTabs->setCurrentWidget(vmm);
+        vmm->newHistoricalMachine(productId, machineId);
+    });
+    connect(mainTabs, &QTabWidget::currentChanged, this, [this](int) {
+        vmmStateChanged(mainTabs->currentWidget() == vmm ? vmm->getSelectedSystem() : nullptr);
+    });
 
     // Set up the buttons
     connect(ui->actionNew_Machine, &QAction::triggered, vmm, &VMManagerMain::newMachineWizard);
@@ -252,7 +269,10 @@ VMManagerMainWindow::updateLanguage()
     Preferences::loadTranslators(QCoreApplication::instance());
     Preferences::reloadStrings();
     ui->retranslateUi(this);
-    setWindowTitle(tr("%1 VM Manager").arg(EMU_NAME));
+    setWindowTitle(tr("%1 Historical Computer Collection").arg(EMU_NAME));
+    mainTabs->setTabText(mainTabs->indexOf(collection), tr("Collection"));
+    mainTabs->setTabText(mainTabs->indexOf(vmm), tr("My machines"));
+    collection->reloadLanguage();
     emit languageUpdated();
 }
 

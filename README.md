@@ -1,7 +1,15 @@
 (We need help in developing this emulator! See https://github.com/86Box/86Box/issues/7386 for details. Any and all help is appreciated.)
 
-86Box
-=====
+# BluMach
+
+**BluMach** is a preservation-focused fork of
+[86Box](https://github.com/86Box/86Box). It retains the accurate, low-level x86
+emulation developed by the 86Box contributors and extends it with carefully
+documented historical machines, firmware mappings and reproducible validation.
+
+This project is independent from the upstream 86Box project. Existing source
+copyright notices and authorship are preserved. See [FORK-NOTICE.md](FORK-NOTICE.md)
+for provenance and redistribution information.
 
 [![Build Status](https://ci.86box.net/job/86Box/badge/icon)](https://ci.86box.net/job/86Box/)
 [![License](https://img.shields.io/github/license/86Box/86Box)](COPYING)
@@ -9,7 +17,18 @@
 [![Downloads](https://img.shields.io/github/downloads/86Box/86Box/total.svg)](https://github.com/86Box/86Box/releases)
 [![Translation status](https://weblate.86box.net/widget/86box/86box/language-badge.svg)](https://weblate.86box.net/engage/86box/)
 
-**86Box** is a low level x86 emulator that runs older operating systems and software designed for IBM PC systems and compatibles from 1981 through fairly recent system designs based on the PCI bus.
+BluMach is a low-level x86 emulator that runs older operating systems and
+software designed for IBM PC systems and compatibles from 1981 through fairly
+recent systems based on the PCI bus.
+
+Preserved machine families
+--------------------------
+
+The first documented BluMach collection is the
+[Olivetti PCS family](doc/machines/olivetti-pcs-family.md), with individual
+implementation and validation notes for the PCS 86, PCS 286 and PCS 386SX.
+These pages distinguish documented hardware, current emulation, verified
+behaviour and remaining approximations.
 
 Features
 --------
@@ -78,7 +97,7 @@ For instructions on how to build 86Box from source, see the [build guide](https:
 Licensing
 ---------
 
-86Box is released under the [GNU General Public License, version 2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) or later. For more information, see the `COPYING` file in the root of the repository.
+BluMach is distributed under the [GNU General Public License, version 2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) or later, consistently with its 86Box base. For more information, see `COPYING` and `FORK-NOTICE.md` in the repository root.
 
 The emulator can also optionally make use of [munt](https://github.com/munt/munt), [FluidSynth](https://www.fluidsynth.org/), [Ghostscript](https://www.ghostscript.com/) and [Discord Game SDK](https://discord.com/developers/docs/game-sdk/sdk-starter-guide), which are distributed under their respective licenses.
 

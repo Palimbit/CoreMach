@@ -236,6 +236,8 @@
 #include <86box/rom.h>
 #include <86box/device.h>
 #include <86box/nvr.h>
+#include <86box/hdd.h>
+#include <86box/video.h>
 
 /* RTC registers and bit definitions. */
 #define RTC_SECONDS                  0
@@ -1220,6 +1222,76 @@ nvr_at_init(const device_t *info)
 
     if (nvr->is_new && (local->flags & FLAG_BX6_HACK))
         nvr->regs[0x39] = 0x09;
+
+    /* Factory state expected by the PCS 286 Phoenix diagnostics. The setup
+     * utility may subsequently replace these values; they are only seeded
+     * when the 128-byte NVR file is first created. */
+    if (nvr->is_new &&
+        ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+         (machines[machine].init == machine_at_olivetti_pcs286s_ti_init))) {
+        nvr->regs[0x0e] = 0x00;
+        if (hdd[0].bus_type == HDD_BUS_IDE)
+            nvr->regs[0x12] = 0x20; /* Olivetti type 2: Conner CP346. */
+        nvr->regs[0x14] = 0x21; /* IPL, 80x25 colour, one floppy, no 80287. */
+        nvr->regs[0x15] = 0x80;
+        nvr->regs[0x16] = 0x02; /* 640 KiB base memory. */
+        nvr->regs[0x17] = 0x80;
+        nvr->regs[0x18] = 0x01; /* 384 KiB extended in the 1 MiB profile. */
+        uint16_t sum = 0;
+        for (int i = 0x10; i <= 0x2d; i++)
+            sum += nvr->regs[i];
+        nvr->regs[0x2e] = (sum >> 8) & 0xff;
+        nvr->regs[0x2f] = sum & 0x7f;
+    }
+
+    /* Factory state expected by the PCS 386SX Phoenix v1.14 diagnostics. */
+    if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs386sx_init)) {
+        nvr->regs[0x0e] = 0x00;
+        if (hdd[0].bus_type == HDD_BUS_IDE)
+            nvr->regs[0x12] = 0x40; /* Olivetti type 4: Conner CP3104. */
+        /* Phoenix splits the six SET-UP video choices across CMOS 14h and
+         * 1Ch.  Zero in bits 4-5 of 14h selects the on-board family; 1Ch
+         * then selects 40x25, 80x25 or monochrome. */
+        nvr->regs[0x14] = 0x01 | ((fpu_type != FPU_NONE) ? 0x02 : 0x00);
+        nvr->regs[0x15] = 0x80;
+        nvr->regs[0x16] = 0x02; /* 640 KiB base memory. */
+        nvr->regs[0x17] = 0x80;
+        nvr->regs[0x18] = 0x01; /* 384 KiB extended in the 1 MiB profile. */
+        nvr->regs[0x1c] = 0x20; /* SET-UP choice 5: 80x25 internal PVGA1A. */
+        uint16_t sum = 0;
+        for (int i = 0x10; i <= 0x2d; i++)
+            sum += nvr->regs[i];
+        nvr->regs[0x2e] = (sum >> 8) & 0xff;
+        nvr->regs[0x2f] = sum & 0x7f;
+    }
+
+    /* The 80387 socket and the on-board/external video choice are physical
+     * equipment options.  Keep an existing PCS 386SX CMOS image consistent
+     * with the emulator selections and refresh the Phoenix checksum once.
+     *
+     * Disassembly of Phoenix 1.14 at F:64C9 shows the exact encoding:
+     *   CMOS 14h bits 4-5 = 1/2/3 -> 40x25/80x25/mono external
+     *   CMOS 14h bits 4-5 = 0     -> use CMOS 1Ch bits 4-5
+     *   CMOS 1Ch bits 4-5 = 1/2/3 -> 40x25/80x25/mono internal
+     * Keep the machine default at 80x25 for either adapter family. */
+    if (machines[machine].init == machine_at_olivetti_pcs386sx_init) {
+        const uint8_t equipment =
+            (nvr->regs[0x14] & ~0x32) |
+            ((fpu_type != FPU_NONE) ? 0x02 : 0x00) |
+            ((gfxcard[0] == VID_INTERNAL) ? 0x00 : 0x20);
+        const uint8_t video =
+            (nvr->regs[0x1c] & ~0x30) |
+            ((gfxcard[0] == VID_INTERNAL) ? 0x20 : 0x00);
+        if ((nvr->regs[0x14] != equipment) || (nvr->regs[0x1c] != video)) {
+            nvr->regs[0x14] = equipment;
+            nvr->regs[0x1c] = video;
+            uint16_t sum = 0;
+            for (int i = 0x10; i <= 0x2d; i++)
+                sum += nvr->regs[i];
+            nvr->regs[0x2e] = (sum >> 8) & 0xff;
+            nvr->regs[0x2f] = sum & 0x7f;
+        }
+    }
 
     return nvr;
 }
