@@ -416,6 +416,7 @@ extern const device_t gd5428_vlb_device;
 extern const device_t gd5428_mca_device;
 extern const device_t gd5426_mca_device;
 extern const device_t gd5428_onboard_device;
+extern const device_t gd5428_onboard_pcs46c_device;
 extern const device_t gd5428_onboard_vlb_device;
 extern const device_t gd5429_isa_device;
 extern const device_t gd5429_vlb_device;
@@ -514,6 +515,7 @@ extern const device_t oti037_pbl300sx_device;
 extern const device_t oti067_device;
 extern const device_t oti067_acer386_device;
 extern const device_t oti067_ama932j_device;
+extern const device_t oti067_m300_device;
 extern const device_t oti077_acer100t_device;
 extern const device_t oti077_pb400_device;
 extern const device_t oti077_pcs44c_device;
@@ -530,6 +532,7 @@ extern const device_t paradise_pvga1a_pcs386sx_device;
 extern const device_t paradise_pvga1a_device;
 extern const device_t paradise_wd90c11_megapc_device;
 extern const device_t paradise_wd90c11_device;
+extern const device_t paradise_wd90c11_ba013_device;
 extern const device_t paradise_wd90c30_device;
 
 /* Quadram Quadcolor I / I + II */

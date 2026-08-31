@@ -45,8 +45,11 @@
 #define PORT_6X_EXT_REF  2
 #define PORT_6X_MIRROR   4
 #define PORT_6X_SWA      8
+#define PORT_6X_TOPCAT   16
+#define PORT_6X_TOPCAT_ACTIVE 32
 
 static int cycles_sub = 0;
+static port_6x_t *topcat_port_6x;
 
 static void
 port_6x_write(uint16_t port, uint8_t val, void *priv)
@@ -84,9 +87,19 @@ port_6x_write(uint16_t port, uint8_t val, void *priv)
 }
 
 static uint8_t
-port_61_read_simple(UNUSED(uint16_t port), UNUSED(void *priv))
+port_61_read_simple(UNUSED(uint16_t port), void *priv)
 {
+    port_6x_t *dev = (port_6x_t *) priv;
     uint8_t ret = ppi.pb & 0x1f;
+
+    if (dev->flags & PORT_6X_TOPCAT_ACTIVE) {
+        /* Keep refresh observable inside a single dynarec polling block. */
+        if (++dev->topcat_refresh_reads >= 64) {
+            dev->topcat_refresh_reads = 0;
+            dev->refresh = !dev->refresh;
+        }
+        ret = (ret & 0x0f) | (dev->refresh ? 0x10 : 0x00);
+    }
 
     cycles -= cycles_sub;
 
@@ -173,6 +186,9 @@ port_6x_close(void *priv)
 
     timer_disable(&dev->refresh_timer);
 
+    if (topcat_port_6x == dev)
+        topcat_port_6x = NULL;
+
     free(dev);
 }
 
@@ -203,7 +219,29 @@ port_6x_init(const device_t *info)
 
     cycles_sub = is486 ? ISA_CYCLES(8) : 0;
 
+    if (dev->flags & PORT_6X_TOPCAT)
+        topcat_port_6x = dev;
+
     return dev;
+}
+
+void
+port_6x_topcat_refresh_enable(void)
+{
+    if (topcat_port_6x) {
+        topcat_port_6x->refresh = 0;
+        topcat_port_6x->topcat_refresh_reads = 0;
+        topcat_port_6x->flags |= PORT_6X_TOPCAT_ACTIVE;
+    }
+}
+
+void
+port_6x_topcat_refresh_disable(void)
+{
+    if (topcat_port_6x) {
+        topcat_port_6x->flags &= ~PORT_6X_TOPCAT_ACTIVE;
+        topcat_port_6x->topcat_refresh_reads = 0;
+    }
 }
 
 const device_t port_6x_device = {
@@ -239,6 +277,20 @@ const device_t port_6x_ps2_device = {
     .internal_name = "port_6x_ps2",
     .flags         = 0,
     .local         = PORT_6X_EXT_REF,
+    .init          = port_6x_init,
+    .close         = port_6x_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t port_6x_topcat_device = {
+    .name          = "Port 6x Registers (VLSI TOPCAT)",
+    .internal_name = "port_6x_topcat",
+    .flags         = 0,
+    .local         = PORT_6X_TOPCAT,
     .init          = port_6x_init,
     .close         = port_6x_close,
     .reset         = NULL,

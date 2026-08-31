@@ -34,6 +34,7 @@ add_library(chipset OBJECT
     compaq_386.c
     contaq_82c59x.c
     cs4031.c
+    et6000.c
     grid1520.c
     gc100.c
     headland.c
@@ -99,5 +100,6 @@ add_library(chipset OBJECT
     via_pipc.c
     vl82c480.c
     vl82c59x.c
+    vlsi_topcat.c
     wd76c10.c
 )

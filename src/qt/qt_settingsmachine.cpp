@@ -168,16 +168,14 @@ SettingsMachine::changed()
     has_changed |= (force_10ms                 != (ui->radioButtonLargerFrames->isChecked() ? 1 : 0));
 
     int64_t temp_mem_size;
-    if (machine_get_ram_granularity(machine) < 1024)
+    if (ui->comboBoxRAM->isVisible())
+        temp_mem_size = ui->comboBoxRAM->currentData().toInt();
+    else if (machine_get_ram_granularity(machine) < 1024)
         temp_mem_size = ui->spinBoxRAM->value();
     else
         temp_mem_size = ui->spinBoxRAM->value() * 1024;
 
-    temp_mem_size &= ~(machine_get_ram_granularity(machine) - 1);
-    if (temp_mem_size < machine_get_min_ram(machine))
-        temp_mem_size = machine_get_min_ram(machine);
-    else if (temp_mem_size > machine_get_max_ram(machine))
-        temp_mem_size = machine_get_max_ram(machine);
+    temp_mem_size = machine_get_valid_ram(machine, temp_mem_size);
     has_changed |= (mem_size                   != static_cast<uint32_t>(temp_mem_size));
 
     if (ui->comboBoxWaitStates->isEnabled())
@@ -222,16 +220,14 @@ SettingsMachine::save(int soft)
     force_10ms               = ui->radioButtonLargerFrames->isChecked() ? 1 : 0;
 
     int64_t temp_mem_size;
-    if (machine_get_ram_granularity(machine) < 1024)
+    if (ui->comboBoxRAM->isVisible())
+        temp_mem_size = ui->comboBoxRAM->currentData().toInt();
+    else if (machine_get_ram_granularity(machine) < 1024)
         temp_mem_size = ui->spinBoxRAM->value();
     else
         temp_mem_size = ui->spinBoxRAM->value() * 1024;
 
-    temp_mem_size &= ~(machine_get_ram_granularity(machine) - 1);
-    if (temp_mem_size < machine_get_min_ram(machine))
-        temp_mem_size = machine_get_min_ram(machine);
-    else if (temp_mem_size > machine_get_max_ram(machine))
-        temp_mem_size = machine_get_max_ram(machine);
+    temp_mem_size = machine_get_valid_ram(machine, temp_mem_size);
     mem_size = static_cast<uint32_t>(temp_mem_size);
 
     if (ui->comboBoxWaitStates->isEnabled())
@@ -307,11 +303,28 @@ SettingsMachine::on_comboBoxMachine_currentIndexChanged(int index)
             divisor = 1024;
             ui->spinBoxRAM->setSuffix(QCoreApplication::translate("", "MB").prepend(' '));
         }
-        ui->spinBoxRAM->setMinimum(machine_get_min_ram(machineId) / divisor);
-        ui->spinBoxRAM->setMaximum(machine_get_max_ram(machineId) / divisor);
-        ui->spinBoxRAM->setSingleStep(machine_get_ram_granularity(machineId) / divisor);
-        ui->spinBoxRAM->setValue(mem_size / divisor);
-        ui->spinBoxRAM->setEnabled(machine_get_min_ram(machineId) != machine_get_max_ram(machineId));
+        const auto *validRam = machines[machineId].ram.valid;
+        ui->comboBoxRAM->clear();
+        ui->comboBoxRAM->setVisible(validRam != nullptr);
+        ui->spinBoxRAM->setVisible(validRam == nullptr);
+
+        if (validRam) {
+            int selectedRow = 0;
+            for (int row = 0; validRam[row] != 0; ++row) {
+                const int value = static_cast<int>(validRam[row]);
+                ui->comboBoxRAM->addItem(QString("%1 %2").arg(value / divisor).arg(divisor == 1 ? tr("KB") : tr("MB")), value);
+                if (value == static_cast<int>(mem_size))
+                    selectedRow = row;
+            }
+            ui->comboBoxRAM->setCurrentIndex(selectedRow);
+            ui->comboBoxRAM->setEnabled(ui->comboBoxRAM->count() > 1);
+        } else {
+            ui->spinBoxRAM->setMinimum(machine_get_min_ram(machineId) / divisor);
+            ui->spinBoxRAM->setMaximum(machine_get_max_ram(machineId) / divisor);
+            ui->spinBoxRAM->setSingleStep(machine_get_ram_granularity(machineId) / divisor);
+            ui->spinBoxRAM->setValue(mem_size / divisor);
+            ui->spinBoxRAM->setEnabled(machine_get_min_ram(machineId) != machine_get_max_ram(machineId));
+        }
 
         emit currentMachineChanged(machineId);
     }

@@ -59,6 +59,7 @@ typedef struct mem_remapping_t {
 typedef struct opti283_t {
     uint8_t         index;
     uint8_t         shadow_high;
+    uint8_t         isa_divisor;
     uint8_t         regs[256];
     mem_remapping_t mem_remappings[2];
     mem_mapping_t   mem_mappings[2];
@@ -248,14 +249,24 @@ opti283_write(uint16_t addr, uint8_t val, void *priv)
 
                 case 0x14: {
                     double bus_clk;
-                    switch (val & 0x01) {
-                        default:
-                        case 0x00:
-                             bus_clk = cpu_busspeed / 6.0;
-                             break;
-                        case 0x01:
-                             bus_clk = cpu_busspeed / 4.0;
-                             break;
+                    if (dev->isa_divisor) {
+                        /*
+                         * Olivetti documents a 10 MHz AT bus on the
+                         * 20 MHz M300-08 and an 8.33 MHz AT bus on the
+                         * 25 MHz M300-15.  Preserve the generic OPTi
+                         * behaviour for all other machines.
+                         */
+                        bus_clk = cpu_busspeed / dev->isa_divisor;
+                    } else {
+                        switch (val & 0x01) {
+                            default:
+                            case 0x00:
+                                 bus_clk = cpu_busspeed / 6.0;
+                                 break;
+                            case 0x01:
+                                 bus_clk = cpu_busspeed / 4.0;
+                                 break;
+                        }
                     }
                     cpu_set_isa_speed((int) round(bus_clk));
                     reset_on_hlt = !!(val & 0x40);
@@ -301,9 +312,11 @@ opti283_close(void *priv)
 }
 
 static void *
-opti283_init(UNUSED(const device_t *info))
+opti283_init(const device_t *info)
 {
     opti283_t *dev = (opti283_t *) calloc(1, sizeof(opti283_t));
+
+    dev->isa_divisor = info->local;
 
     io_sethandler(0x0022, 0x0001, opti283_read, NULL, NULL, opti283_write, NULL, NULL, dev);
     io_sethandler(0x0023, 0x0001, opti283_read, NULL, NULL, opti283_write, NULL, NULL, dev);
@@ -329,7 +342,8 @@ opti283_init(UNUSED(const device_t *info))
 
     opti283_shadow_recalc(dev);
 
-    cpu_set_isa_speed((int) round(cpu_busspeed / 6.0));
+    cpu_set_isa_speed((int) round(cpu_busspeed /
+                                  (dev->isa_divisor ? dev->isa_divisor : 6.0)));
 
     device_add(&port_92_device);
 
@@ -341,6 +355,34 @@ const device_t opti283_device = {
     .internal_name = "opti283",
     .flags         = 0,
     .local         = 0,
+    .init          = opti283_init,
+    .close         = opti283_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t opti283_m30008_device = {
+    .name          = "OPTi 82C283 (Olivetti M300-08)",
+    .internal_name = "opti283_m30008",
+    .flags         = 0,
+    .local         = 2,
+    .init          = opti283_init,
+    .close         = opti283_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t opti283_m30015_device = {
+    .name          = "OPTi 82C283 (Olivetti M300-15)",
+    .internal_name = "opti283_m30015",
+    .flags         = 0,
+    .local         = 3,
     .init          = opti283_init,
     .close         = opti283_close,
     .reset         = NULL,

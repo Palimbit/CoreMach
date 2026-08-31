@@ -20,6 +20,7 @@
 typedef struct port_6x_t {
     uint8_t refresh;
     uint8_t flags;
+    uint8_t topcat_refresh_reads;
 
     pc_timer_t refresh_timer;
 } port_6x_t;
@@ -28,6 +29,9 @@ typedef struct port_6x_t {
 extern const device_t port_6x_device;
 extern const device_t port_6x_xi8088_device;
 extern const device_t port_6x_ps2_device;
+extern const device_t port_6x_topcat_device;
 extern const device_t port_6x_olivetti_device;
+extern void           port_6x_topcat_refresh_enable(void);
+extern void           port_6x_topcat_refresh_disable(void);
 
 #endif /*EMU_PORT_6X_H*/

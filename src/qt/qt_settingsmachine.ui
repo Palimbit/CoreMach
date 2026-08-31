@@ -122,6 +122,19 @@
             </property>
            </widget>
           </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="comboBoxRAM">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="visible">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
 
          </layout>
         </widget>
@@ -604,6 +617,7 @@
   <tabstop>comboBoxFPU</tabstop>
   <tabstop>comboBoxWaitStates</tabstop>
   <tabstop>spinBoxRAM</tabstop>
+  <tabstop>comboBoxRAM</tabstop>
   <tabstop>checkBoxDynamicRecompiler</tabstop>
   <tabstop>checkBoxAccurateFPUEnvironment</tabstop>
   <tabstop>checkBoxFPUSoftfloat</tabstop>

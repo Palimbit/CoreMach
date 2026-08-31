@@ -1,0 +1,30 @@
+schema: blumach-preservation-machine-v1
+identity:
+  manufacturer: Olivetti
+  model: PCS 33
+  aliases: [PCS33]
+  years: "1992-1993"
+  confidence: documented-product-provisional-platform-assignment
+  not_aliases: [M300-02F, PCS 11]
+implementation:
+  machine_id: olivetti_pcs33
+  shared_core: olivetti-ba013
+  status: partial-provisional-awaiting-revalidation
+  warning: "Firmware behaviour supports BA013/25 reuse, but the new independent machine/NVR identity must be revalidated and PCS 33-specific physical board evidence is still required."
+hardware:
+  cpu: "Intel 80386SX 25 MHz"
+  memory: "2 MiB standard"
+  storage: "contemporary configurations list 40-120 MiB IDE disks"
+  chipset: "VLSI TOPCAT BA013/25 assignment currently provisional"
+firmware:
+  required: true
+  redistributed: false
+  sets:
+    - name: BIOS-R6.03-PCS33.ROM
+      expected_path: roms/machines/pcs33/BIOS-R6.03.ROM
+      size: 131072
+      sha256: DBB08FCA6FC31448B6ED9A312FBACD3AAE9DA57AEFE40E411F1EFE953680B2F2
+sources:
+  - type: contemporary-product-report
+    url: https://www.techmonitor.ai/technology/olivetti_adds_low_end_easy_to_run_models_to_pcs_line
+notes: "The source filename identifies this exact 6.03 dump as PCS 33. Independent product ficha sharing a provisional emulator platform; not an alias of PCS 11 or M300-02F."

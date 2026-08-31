@@ -1,0 +1,46 @@
+schema: blumach-preservation-machine-v1
+identity:
+  manufacturer: Olivetti
+  model: PCS 11
+  aliases: [PCS11]
+  years: "1992-1993"
+  confidence: documented-product-and-board-family
+  not_aliases: [M300-02F, PCS 33]
+implementation:
+  machine_id: olivetti_pcs11
+  shared_core: olivetti-ba013
+  status: implemented-awaiting-boot-validation
+  warning: "The implemented entry is PCS 11/16 with R2.04/R2.07. PCS 11/25 remains unimplemented because its exact R6.0x dump is missing."
+hardware:
+  cpu: "Intel 80386SX, documented 16 and 25 MHz variants"
+  memory: "2 MiB standard; BA013 supports up to 10 MiB"
+  chipset: "VLSI TOPCAT VL82C320/VL82C331"
+  video: "Western Digital WD90C11 integrated"
+  enclosure: "compact A4-footprint booksize product"
+firmware:
+  required: true
+  redistributed: false
+  known_identifications: ["2.04 (16 MHz, verified)", "2.07 (16 MHz, verified)", "6.0x record (25 MHz, dump missing)"]
+  sets:
+    - name: Olivetti_PCS_11-BIOS-FA42-Version_R2_04-AM27C010.BIN
+      expected_path: roms/machines/pcs11/BIOS-R2.04.ROM
+      board_clock_mhz: 16
+      internal_date: "06/03/92"
+      size: 131072
+      sha256: A26220590540E2E4DA71FC5EFD97C9C6EC9E14C4F04CAD705BC60F02366907B8
+      source: https://theretroweb.com/motherboard/bios/ba013-2-04-68455d3661669806977912.zip
+      source_archive_sha256: 34271B00BB5A314E55185E610D294B771A3C9CE8FB44A58A42F282EA98ECC930
+    - name: Olivetti-pcs-11-r2.07.BIN
+      expected_path: roms/machines/pcs11/BIOS-R2.07.ROM
+      board_clock_mhz: 16
+      internal_date: "03/01/93"
+      size: 131072
+      sha256: DAEF0B341FF3446DA6C439D7ECABC579FFB29B953FA5307442CB9238C1F28392
+      source: https://theretroweb.com/motherboard/bios/olivetti-pcs-11-r2-07-61e6bb82d9618185665720.zip
+      source_archive_sha256: B2A1531CA8ADDDC5DFBF1A12526113B9E014F917B575EB5D59D44CECD0FA172F
+sources:
+  - type: contemporary-product-report
+    url: https://www.techmonitor.ai/technology/olivetti_adds_low_end_easy_to_run_models_to_pcs_line
+  - type: preserved-board-and-firmware-record
+    url: https://theretroweb.com/motherboards/s/olivetti-ba013-m300-02
+notes: "R2.04 and R2.07 are selectable on the dedicated PCS 11/16 machine but are not redistributed. The available 6.03 dump is source-identified as PCS 33; an exact PCS 11/25 dump remains missing."

@@ -964,6 +964,13 @@ paradise_wd90c11_standalone_init(const device_t *info)
     return paradise;
 }
 
+static void *
+paradise_wd90c11_ba013_init(const device_t *info)
+{
+    /* OVC 1.06 is part of the motherboard image at E0000. */
+    return paradise_init(info, 512);
+}
+
 static int
 paradise_wd90c11_standalone_available(void)
 {
@@ -1167,6 +1174,21 @@ const device_t paradise_wd90c11_device = {
     .available     = paradise_wd90c11_standalone_available,
     .speed_changed = paradise_speed_changed,
     .force_redraw  = paradise_force_redraw,
+    .config        = NULL
+};
+
+const device_t paradise_wd90c11_ba013_device = {
+    .name          = "Western Digital WD90C11 On-Board (Olivetti BA013)",
+    .internal_name = "wd90c11_ba013",
+    .flags         = 0,
+    .local         = WD90C11,
+    .init          = paradise_wd90c11_ba013_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti BA013",
     .config        = NULL
 };
 
