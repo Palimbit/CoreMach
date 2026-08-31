@@ -27,6 +27,7 @@
 #include <86box/mem.h>
 #include <86box/rom.h>
 #include <86box/device.h>
+#include <86box/machine.h>
 #include <86box/video.h>
 #include <86box/vid_xga.h>
 #include <86box/vid_svga.h>
@@ -991,6 +992,30 @@ paradise_wd90c30_standalone_init(const device_t *info)
     return paradise;
 }
 
+static void *
+paradise_wd90c31_m30030_init(const device_t *info)
+{
+    paradise_t *paradise;
+    const char *fn;
+
+    /*
+     * OVC 1.09 occupies the first 24 KB of the selected 128 KB motherboard
+     * image. The firmware scans it as an option ROM at C0000, so expose the
+     * first 32 KB there while retaining the full image at E0000.
+     */
+    paradise = paradise_init(info, 1024);
+    if (paradise) {
+        device_context(machine_get_device(machine));
+        fn = device_get_bios_file(machine_get_device(machine),
+                                  device_get_config_bios("bios"), 0);
+        rom_init(&paradise->bios_rom, fn, 0xc0000, 0x8000, 0x7fff, 0,
+                 MEM_MAPPING_EXTERNAL);
+        device_context_restore();
+    }
+
+    return paradise;
+}
+
 static int
 paradise_wd90c30_standalone_available(void)
 {
@@ -1226,4 +1251,19 @@ const device_t paradise_wd90c30_device = {
     .speed_changed = paradise_speed_changed,
     .force_redraw  = paradise_force_redraw,
     .config        = paradise_wd90c30_config
+};
+
+const device_t paradise_wd90c31_m30030_device = {
+    .name          = "Western Digital WD90C31 On-Board (Olivetti M300-30)",
+    .internal_name = "wd90c31_m30030",
+    .flags         = 0,
+    .local         = WD90C30,
+    .init          = paradise_wd90c31_m30030_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti M300-30 / M300-30P",
+    .config        = NULL
 };

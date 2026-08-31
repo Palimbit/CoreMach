@@ -6,7 +6,7 @@
  *
  *          Olivetti M300-02/PCS 11 (BA013/16), M300-02F/PCS 33
  *          (BA013/25), M300-08
- *          (BA319/BA324/BA325) and M300-15 (BA320).
+ *          (BA319/BA324/BA325), M300-15 (BA320), M300-30 and M300-30P.
  *
  * Authors: rtzor and BluMach contributors.
  *
@@ -144,6 +144,109 @@ machine_at_olivetti_m30015_init(const machine_t *model)
 {
     return machine_at_olivetti_m300_init(model,
                                          "roms/machines/m30015/BIOS.ROM");
+}
+
+static const device_config_t olivetti_m30030_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "diag104",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "BIOS 1.09 / Resident Diagnostics 1.03",
+                .internal_name = "diag103",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 131072,
+                .files         = { "roms/machines/m30030/BIOS-1.09-DIAG-1.03.BIN", "" }
+            },
+            {
+                .name          = "BIOS 1.09 / Resident Diagnostics 1.04",
+                .internal_name = "diag104",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 131072,
+                .files         = { "roms/machines/m30030/BIOS-1.09-DIAG-1.04.BIN", "" }
+            },
+            {
+                .name          = "BIOS 1.09 / Resident Diagnostics 2.00",
+                .internal_name = "diag200",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 131072,
+                .files         = { "roms/machines/m30030/BIOS-1.09-DIAG-2.00.BIN", "" }
+            },
+            { .files_no = 0 }
+        }
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t olivetti_m30030_device = {
+    .name          = "Olivetti M300-30 / M300-30P",
+    .internal_name = "olivetti_m30030",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = olivetti_m30030_config
+};
+
+int
+machine_at_olivetti_m30030_init(const machine_t *model)
+{
+    int         ret;
+    const char *fn;
+
+    device_context(model->device);
+    fn  = device_get_bios_file(machine_get_device(machine),
+                               device_get_config_bios("bios"), 0);
+    ret = bios_load_linear(fn, 0x000e0000, 131072, 0);
+    device_context_restore();
+
+    if (bios_only || !ret)
+        return ret;
+
+    machine_at_common_init(model);
+
+    /* VL82C486 memory and AT-bus controller used by the BA356 family. */
+    device_add(&vl82c486_device);
+
+    /* Relocate the usable 256 KB of the split 640 KB-1 MB DRAM hole. */
+    mem_remap_top(256);
+
+    /* The firmware times the motherboard refresh signal at port 61h bit 4. */
+    device_add(&port_6x_vlsi_refresh_device);
+
+    device_add_params(machine_get_kbc_device(machine),
+                      (void *) model->kbc_params);
+
+    /* Buffered ISA IDE and PC87311/87312-compatible Super I/O. */
+    device_add(&ide_isa_device);
+    device_add_params(&pc873xx_device,
+                      (void *) (PCX73XX_IDE_PRI | PCX730X_398));
+
+    io_sethandler(0x0378, 1, NULL, NULL, NULL,
+                  m300_diag_write, NULL, NULL, NULL);
+
+    if (gfxcard[0] == VID_INTERNAL)
+        device_add(&paradise_wd90c31_m30030_device);
+
+    return ret;
 }
 
 static const device_config_t olivetti_m30002_config[] = {

@@ -360,6 +360,9 @@ reset_common(int hard)
         cache_index                      = 0;
         memset(_tr, 0x00, sizeof(_tr));
         memset(_cache, 0x00, sizeof(_cache));
+        memset(_cache_fill_buffer, 0x00, sizeof(_cache_fill_buffer));
+        memset(_cache_read_buffer, 0x00, sizeof(_cache_read_buffer));
+        memset(_cache_tags, 0x00, sizeof(_cache_tags));
 
         /* If we have an AT or PS/2 keyboard controller, make sure the A20 state
            is correct. */

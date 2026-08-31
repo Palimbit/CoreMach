@@ -203,6 +203,7 @@ const machine_filter_t machine_chipsets[] = {
 static const uint32_t olivetti_ba013_ram[]   = { 2048, 4096, 10240, 0 };
 static const uint32_t olivetti_m30008_ram[]   = { 2048, 4096, 8192, 10240, 14336, 16384, 0 };
 static const uint32_t olivetti_m30015_ram[]   = { 4096, 8192, 10240, 14336, 16384, 0 };
+static const uint32_t olivetti_m30030_ram[]   = { 4096, 8192, 12288, 20480, 24576, 36864, 0 };
 static const uint32_t olivetti_pcs46c_ram[]   = { 4096, 8192, 12288, 20480, 36864, 0 };
 
 const machine_t machines[] = {
@@ -10178,6 +10179,94 @@ const machine_t machines[] = {
         .kbd_device               = NULL,
         .fdc_device               = NULL,
         .vid_device               = &gd5428_onboard_pcs46c_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "" }
+    },
+    /* BA356-family 486SX/25 model with on-board WD90C31 video. */
+    {
+        .name              = "[VLSI 82C486] Olivetti M300-30",
+        .internal_name     = "olivetti_m30030",
+        .type              = MACHINE_TYPE_SOCKET1,
+        .chipset           = MACHINE_CHIPSET_VLSI_VL82C486,
+        .init              = machine_at_olivetti_m30030_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_SOCKET1,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 25000000,
+            .max_bus     = 25000000,
+            .min_voltage = 5000,
+            .max_voltage = 5000,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_PS2,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO,
+        .ram       = { .min = 4096, .max = 36864, .step = 4096, .valid = olivetti_m30030_ram },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT_ZERO_DEFAULT,
+        .sio_device               = NULL,
+        .sio_params               = 0,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &olivetti_m30030_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &paradise_wd90c31_m30030_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "" }
+    },
+    /* Performance variant with a 25 MHz bus and i486DX2/50 CPU. */
+    {
+        .name              = "[VLSI 82C486] Olivetti M300-30P",
+        .internal_name     = "olivetti_m30030p",
+        .type              = MACHINE_TYPE_SOCKET1,
+        .chipset           = MACHINE_CHIPSET_VLSI_VL82C486,
+        .init              = machine_at_olivetti_m30030_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_SOCKET1,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 25000000,
+            .max_bus     = 25000000,
+            .min_voltage = 5000,
+            .max_voltage = 5000,
+            .min_multi   = 2,
+            .max_multi   = 2
+        },
+        .bus_flags = MACHINE_PS2,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO,
+        .ram       = { .min = 4096, .max = 36864, .step = 4096, .valid = olivetti_m30030_ram },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT_ZERO_DEFAULT,
+        .sio_device               = NULL,
+        .sio_params               = 0,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &olivetti_m30030_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &paradise_wd90c31_m30030_device,
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "" }

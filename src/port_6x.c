@@ -94,7 +94,10 @@ port_61_read_simple(UNUSED(uint16_t port), void *priv)
 
     if (dev->flags & PORT_6X_TOPCAT_ACTIVE) {
         /* Keep refresh observable inside a single dynarec polling block. */
-        if (++dev->topcat_refresh_reads >= 64) {
+        const uint8_t refresh_reads =
+            (machines[machine].init == machine_at_olivetti_m30030_init) ? 8 : 64;
+
+        if (++dev->topcat_refresh_reads >= refresh_reads) {
             dev->topcat_refresh_reads = 0;
             dev->refresh = !dev->refresh;
         }
@@ -291,6 +294,20 @@ const device_t port_6x_topcat_device = {
     .internal_name = "port_6x_topcat",
     .flags         = 0,
     .local         = PORT_6X_TOPCAT,
+    .init          = port_6x_init,
+    .close         = port_6x_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t port_6x_vlsi_refresh_device = {
+    .name          = "Port 6x Registers (VLSI Refresh)",
+    .internal_name = "port_6x_vlsi_refresh",
+    .flags         = 0,
+    .local         = PORT_6X_TOPCAT_ACTIVE,
     .init          = port_6x_init,
     .close         = port_6x_close,
     .reset         = NULL,

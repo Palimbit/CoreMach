@@ -73,7 +73,8 @@ machine_at_common_init(const machine_t *model)
     if ((model->init != machine_at_m290_init) &&
         (model->init != machine_at_olivetti_pcs286_init) &&
         (model->init != machine_at_olivetti_pcs386sx_init) &&
-        (model->init != machine_at_olivetti_m30002f_init))
+        (model->init != machine_at_olivetti_m30002f_init) &&
+        (model->init != machine_at_olivetti_m30030_init))
         device_add(&port_6x_device);
 
     standalone_gameport_type = &gameport_device;

@@ -29,6 +29,8 @@ complete hardware reproduction.
 | M300-02F BA013/25 | `olivetti_m30002f` | 386SX/25; VLSI TOPCAT VL82C320/VL82C331; WD90C11C | Cold POST, memory paths, EMS register activity and boot | TOPCAT is an initial register/memory-map model; the 87C310, Acer FDC and MSI glue are aggregated through compatible devices. |
 | M300-08 BA319/BA324/BA325 | `olivetti_m30008` | 386SX/20; OPTi 82C283 plus 82C206; OAK OTI067 | POST, Setup, calendar rollover, floppy and MS-DOS 3.30a | 82C206 is represented by common AT functions; IDE and wider software validation remain pending. |
 | M300-15 BA320 | `olivetti_m30015` | Intel 386SX/25; AMD 386SX/25 documented as a later alternative; OPTi 82C283 plus 82C206; OAK OTI067 | POST, Calendar PASS, floppy and MS-DOS 3.30a | The support-chip composition is functional, not chip-accurate; IDE and broad software validation remain pending. |
+| M300-30 | `olivetti_m30030` | i486SX/25; VLSI VL82C486; WD90C31; PC87311/87312 family | Full POST and resident diagnostics, MS-DOS 5.00 boot and calendar persistence with BIOS 1.09/Diagnostics 1.04 | Initial VL82C486 model; WD90C31 and Super I/O use compatible cores; split-memory relocation needs broader validation. |
+| M300-30P | `olivetti_m30030p` | i486DX2/50 on a 25 MHz external bus; otherwise shared M300-30 platform | Shared recovered POST, diagnostics and DOS path | Separate CPU identity, but the same partial board model and validation boundary as M300-30. |
 
 ## M300 with IF378 CPU card
 
@@ -162,13 +164,55 @@ Olivetti records that BIOS 1.06 differs from M300-08 in machine identifiers and
 in programming an 8.33 MHz instead of 10 MHz AT bus. BIOS 1.07 additionally
 corrects early POD clock initialisation.
 
+## M300-30 and M300-30P
+
+These are separate selectable identities sharing the recovered motherboard
+core and firmware selector. M300-30 is fixed to the documented 25 MHz external
+bus and i486SX/25 class; M300-30P uses an i486DX2/50 on the same 25 MHz bus.
+The documented RAM populations exposed by BluMach are 4, 8, 12, 20, 24 and
+36 MiB.
+
+The board is modelled with the existing VLSI VL82C486 controller. Its split
+memory arrangement reserves 128 KiB in the conventional 640 KiB–1 MiB hole
+for shadowing and relocates the usable 256 KiB above installed RAM. BluMach now
+publishes that 256 KiB through `mem_remap_top(256)`. This corrects the earlier
+384 KiB loss observed when shadow RAM was enabled, but remains an initial
+behavioural model rather than a complete electrical reproduction of the VLSI
+logic.
+
+The on-board WD90C31 is represented by the compatible WD90C30 core with 1 MiB
+VRAM. OVC 1.09 occupies the first 24 KiB of the selected 128 KiB motherboard
+image; the first 32 KiB are mapped at C0000h for the option-ROM scan while the
+full image remains at E0000h. PC87311/87312-family functions are approximated
+by PC873xx, with buffered ISA IDE and a separate Olivetti 8042. The MCCS14681
+RTC is currently represented by 128-byte AT NVR-compatible behaviour.
+
+Resident Diagnostics depends on two behaviours added for this platform: a
+visible VLSI refresh transition at port 61h bit 4, and the i486 TR3/TR4/TR5
+cache-test data/tag operations. With BIOS 1.09/Diagnostics 1.04 the recovered
+build completed CPU, base/extended/dedicated-memory, cache, parity, PIC, DMA,
+keyboard, RTC/calendar and protected-mode tests, then booted the Olivetti
+MS-DOS 5.00 User Disk. Warm reset and calendar persistence were also observed.
+This is therefore a **partial bootable emulation**, not a claim of complete or
+cycle-accurate hardware reproduction. Every RAM population, all three firmware
+sets and a wider software set still require a formal regression campaign.
+
+Known firmware metadata (firmware is not distributed):
+
+- BIOS 1.09 / Diagnostics 1.03: 131,072 bytes, SHA-256
+  `CA62A4A70B5EBC18B84E7D943F6C615F1076A8036DCCBBC4EC4CF396FE5ED916`
+- BIOS 1.09 / Diagnostics 1.04: 131,072 bytes, SHA-256
+  `11B787C8B721C5237C34E4B7F2231AC603EE1F0FCCDCCE5C4C81C10BBD3B6AD5`
+- BIOS 1.09 / Diagnostics 2.00: 131,072 bytes, SHA-256
+  `CFF38096CAD2CF74CF4716558281A908787DD8647025A9947D4641326F58B048`
+
+Exact firmware-to-board-number assignment is not yet proven, so BA numbers are
+kept as research associations rather than machine aliases.
+
 ## Catalogued but not released
 
-M300-30 and M300-30P prototypes reach diagnostics and DOS in the recovery tree,
-but enabling VL82C486 shadowing loses 384 KiB through unresolved split-memory
-relocation. They remain research records, not selectable emulations. M300-01,
--02, -04, -05, -10, -25/P500-E and -28/PCS44 are preserved as leads only; a
-similar name is not sufficient evidence to reuse another M300 model.
+M300-01, -04, -05, -10, -25/P500-E and -28/PCS44 are preserved as leads only;
+a similar name is not sufficient evidence to reuse another M300 model.
 
 ## Sources
 
@@ -176,6 +220,7 @@ similar name is not sufficient evidence to reuse another M300 model.
 - [Olivetti Pocket Service Guide, M300-08 (chapter 28)](https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap28.pdf)
 - [Olivetti Pocket Service Guide, M300-15 (chapter 29)](https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap29.pdf)
 - [Olivetti Pocket Service Guide, M300-02/M300-02F (chapter 40)](https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap40.pdf)
+- [Olivetti Pocket Service Guide, M300-30/M300-30P (chapter 36)](https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap36.pdf)
 - [M300-02 R1.02 preserved dump record](https://theretroweb.com/motherboard/bios/olivetti-m300-02-bios-1-02-6904790be6b23201031634.bin)
 
 No firmware image is distributed by BluMach. Expected names, layouts, hashes

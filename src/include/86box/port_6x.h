@@ -30,6 +30,7 @@ extern const device_t port_6x_device;
 extern const device_t port_6x_xi8088_device;
 extern const device_t port_6x_ps2_device;
 extern const device_t port_6x_topcat_device;
+extern const device_t port_6x_vlsi_refresh_device;
 extern const device_t port_6x_olivetti_device;
 extern void           port_6x_topcat_refresh_enable(void);
 extern void           port_6x_topcat_refresh_disable(void);

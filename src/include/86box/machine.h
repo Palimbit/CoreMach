@@ -534,6 +534,7 @@ extern const device_t  olivetti_m30002_device;
 extern const device_t  olivetti_m30002f_device;
 extern const device_t  olivetti_pcs11_device;
 extern const device_t  olivetti_pcs33_device;
+extern const device_t  olivetti_m30030_device;
 #endif
 extern int             machine_at_olivetti_m30002_init(const machine_t *);
 extern int             machine_at_olivetti_m30002f_init(const machine_t *);
@@ -541,6 +542,7 @@ extern int             machine_at_olivetti_pcs11_init(const machine_t *);
 extern int             machine_at_olivetti_pcs33_init(const machine_t *);
 extern int             machine_at_olivetti_m30008_init(const machine_t *);
 extern int             machine_at_olivetti_m30015_init(const machine_t *);
+extern int             machine_at_olivetti_m30030_init(const machine_t *);
 
 /* m_at_olivetti_m300_if378.c */
 extern int             machine_at_olivetti_m300_if378_init(const machine_t *);

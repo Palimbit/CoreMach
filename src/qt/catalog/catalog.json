@@ -120,6 +120,16 @@
       "architecture": "80386SX"
     },
     {
+      "id": "olivetti-m30030-platform",
+      "emulator_machine_id": "olivetti_m30030",
+      "architecture": "i486SX"
+    },
+    {
+      "id": "olivetti-m30030p-platform",
+      "emulator_machine_id": "olivetti_m30030p",
+      "architecture": "i486DX2"
+    },
+    {
       "id": "olivetti-pcs46c-platform",
       "emulator_machine_id": "pcs46c",
       "architecture": "i486DX2"
@@ -777,16 +787,43 @@
       "id": "olivetti-m30030",
       "manufacturer_id": "olivetti",
       "family_id": "olivetti-m300",
-      "name": "Olivetti M300-30 / M300-30P",
+      "platform_id": "olivetti-m30030-platform",
+      "name": "Olivetti M300-30",
       "summary_key": "product.olivetti-m30030.summary",
       "history_key": "product.olivetti-m30030.history",
-      "warning_key": "product.olivetti-m30030.warning",
-      "status": "research",
+      "status": "partial",
       "period": "1992–1993",
-      "aliases": ["M300-30P", "BA356"],
-      "tags": ["i486SX", "i486DX2", "VLSI VL82C486", "not exposed"],
-      "hardware": {"cpu": "i486SX/25 or i486DX2/50", "memory": "4/8/12/20/24/36 MB", "chipset": "VLSI VL82C486", "video": "Integrated WD90C31"},
-      "firmware": {"known_sets": ["BIOS 1.09; Diagnostics 1.03/1.04/2.00"], "required": true}
+      "aliases": [],
+      "tags": ["i486SX", "25 MHz", "VLSI VL82C486", "WD90C31"],
+      "hardware": {"cpu": "Intel i486SX/25", "memory": "4/8/12/20/24/36 MB", "chipset": "VLSI VL82C486", "video": "Integrated Western Digital WD90C31, 1 MB", "io": "PC87311/87312 family; separate Olivetti 8042"},
+      "firmware": {"known_sets": ["BIOS 1.09 / Diagnostics 1.03", "BIOS 1.09 / Diagnostics 1.04", "BIOS 1.09 / Diagnostics 2.00"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30030.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30030.technical.limitations"}
+      ]}, {"title_key": "technical.section.sources", "evidence_key": "technical.evidence.traceable", "entries": [
+        {"label_key": "technical.label.manual", "value_key": "product.olivetti-m30030.technical.manual", "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap36.pdf"}
+      ]}]
+    },
+    {
+      "id": "olivetti-m30030p",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m30030p-platform",
+      "name": "Olivetti M300-30P",
+      "summary_key": "product.olivetti-m30030p.summary",
+      "history_key": "product.olivetti-m30030p.history",
+      "status": "partial",
+      "period": "1992–1993",
+      "aliases": [],
+      "tags": ["i486DX2", "50 MHz", "VLSI VL82C486", "WD90C31"],
+      "hardware": {"cpu": "Intel i486DX2/50; 25 MHz external bus", "memory": "4/8/12/20/24/36 MB", "chipset": "VLSI VL82C486", "video": "Integrated Western Digital WD90C31, 1 MB", "io": "PC87311/87312 family; separate Olivetti 8042"},
+      "firmware": {"known_sets": ["BIOS 1.09 / Diagnostics 1.03", "BIOS 1.09 / Diagnostics 1.04", "BIOS 1.09 / Diagnostics 2.00"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30030p.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30030p.technical.limitations"}
+      ]}, {"title_key": "technical.section.sources", "evidence_key": "technical.evidence.traceable", "entries": [
+        {"label_key": "technical.label.manual", "value_key": "product.olivetti-m30030p.technical.manual", "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap36.pdf"}
+      ]}]
     },
     {
       "id": "olivetti-pcs46c",

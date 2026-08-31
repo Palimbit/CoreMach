@@ -534,6 +534,7 @@ extern const device_t paradise_wd90c11_megapc_device;
 extern const device_t paradise_wd90c11_device;
 extern const device_t paradise_wd90c11_ba013_device;
 extern const device_t paradise_wd90c30_device;
+extern const device_t paradise_wd90c31_m30030_device;
 
 /* Quadram Quadcolor I / I + II */
 extern const device_t quadcolor_device;
