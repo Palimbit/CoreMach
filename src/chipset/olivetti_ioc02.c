@@ -12,8 +12,11 @@
  *      reverse engineering the BIOS of various machines using it.
  *
  * Authors: EngiNerd <webmaster.crrc@yahoo.it>
+ *          rtzor, BluMach PCS/Dario extensions.
  *
- *		Copyright 2020-2021 EngiNerd
+ *          Copyright 2020-2023 EngiNerd.
+ *          Copyright 2026 rtzor.
+ *          SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 

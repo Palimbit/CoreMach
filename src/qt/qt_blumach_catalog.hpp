@@ -1,7 +1,8 @@
 /*
  * BluMach historical machine catalog.
  *
- * Copyright 2026 BluMach contributors.
+ * Author: rtzor
+ * Copyright 2026 rtzor.
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 

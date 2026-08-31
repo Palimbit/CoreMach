@@ -1,5 +1,12 @@
 /*
+ * BluMach, a preservation-focused fork of 86Box.
+ *
  * Headland GC102-PC data-buffer package used by the PCS/Dario 386SX.
+ *
+ * Author: rtzor
+ *
+ * Copyright 2026 rtzor.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * The exact PC-suffix data sheet and the parity/NMI wiring have not been
  * preserved.  v0.1 therefore models a transparent 16-bit path and retains

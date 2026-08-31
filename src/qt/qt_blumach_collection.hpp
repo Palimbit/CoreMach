@@ -1,5 +1,8 @@
 /*
  * BluMach collection browser.
+ *
+ * Author: rtzor
+ * Copyright 2026 rtzor.
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 

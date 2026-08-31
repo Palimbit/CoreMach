@@ -1,7 +1,15 @@
 /*
- * 86Box    A hypervisor and IBM PC system emulator.
+ * 86Box    A hypervisor and IBM PC system emulator that specializes in
+ *          running old operating systems and software designed for IBM
+ *          PC systems and compatibles from 1981 through fairly recent
+ *          system designs based on the PCI bus.
  *
- * Initial Olivetti PCS86 machine support.
+ *          Initial Olivetti PCS 86 machine support for BluMach.
+ *
+ * Author:  rtzor
+ *
+ *          Copyright 2026 rtzor.
+ *          SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include <stdio.h>
 #include <stdint.h>

@@ -8,9 +8,10 @@
  *
  *          Implementation of the Olivetti PCS 286.
  *
- * Authors: <rauto>
+ * Author:  rtzor
  *
- *          Copyright 2026 <rauto>.
+ *          Copyright 2026 rtzor.
+ *          SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include <stdarg.h>
 #include <stdint.h>

@@ -1,6 +1,13 @@
 /*
+ * BluMach, a preservation-focused fork of 86Box.
+ *
  * Private wiring shared by the discrete Headland chipset used on the
  * Olivetti PCS 386SX and Triumph-Adler Dario 386SX/P45.
+ *
+ * Author: rtzor
+ *
+ * Copyright 2026 rtzor.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This is deliberately not a register definition.  The exact division of
  * labour between HT101SX and HT113 is not publicly documented, so the board

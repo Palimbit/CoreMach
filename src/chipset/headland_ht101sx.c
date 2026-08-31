@@ -1,5 +1,12 @@
 /*
+ * BluMach, a preservation-focused fork of 86Box.
+ *
  * Headland HT101SX package identity and board-level coordination.
+ *
+ * Author: rtzor
+ *
+ * Copyright 2026 rtzor.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * No public HT101SX data sheet is currently known.  Consequently this
  * device intentionally exposes no guessed registers.  The firmware-visible

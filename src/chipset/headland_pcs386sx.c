@@ -1,6 +1,13 @@
 /*
+ * BluMach, a preservation-focused fork of 86Box.
+ *
  * Board wiring for the discrete Headland HT101SX + HT113 + GC102-PC set.
  * The aggregate owns shared signals only; it is not a fourth physical chip.
+ *
+ * Author: rtzor
+ *
+ * Copyright 2026 rtzor.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include <stdint.h>
 #include <stdlib.h>

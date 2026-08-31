@@ -1,5 +1,26 @@
 /*
- * Headland HT113 memory controller used with HT101SX and GC102-PC.
+ * 86Box    A hypervisor and IBM PC system emulator that specializes in
+ *          running old operating systems and software designed for IBM
+ *          PC systems and compatibles from 1981 through fairly recent
+ *          system designs based on the PCI bus.
+ *
+ *          Headland HT113 memory-controller model used with HT101SX and
+ *          GC102-PC on the PCS/Dario 386SX platform.
+ *          This BluMach adaptation derives its memory-mapping core from the
+ *          86Box/PCem Headland controller named below.
+ *
+ * Authors: Sarah Walker, <https://pcem-emulator.co.uk/>
+ *          Fred N. van Kempen, <decwiz@yahoo.com>
+ *          Original Headland controller by GreatPsycho for PCem.
+ *          Miran Grca, <mgrca8@gmail.com>
+ *          rtzor, PCS/Dario 386SX adaptation.
+ *
+ *          Copyright 2010-2019 Sarah Walker.
+ *          Copyright 2017-2019 Fred N. van Kempen.
+ *          Copyright 2017-2019 Miran Grca.
+ *          Copyright 2017-2019 GreatPsycho.
+ *          Copyright 2026 rtzor.
+ *          SPDX-License-Identifier: GPL-2.0-or-later
  *
  * No exact HT113 data sheet is currently public.  This implementation is a
  * deliberately small functional contract derived from:
