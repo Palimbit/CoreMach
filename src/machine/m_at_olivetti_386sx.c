@@ -70,21 +70,19 @@ machine_at_olivetti_pcs386sx_init(const machine_t *model)
 
     machine_at_common_ide_init(model);
 
-    /* Phoenix v1.14 diagnostic compare expects BDA equip word 0x410
-     * to match NVR 0x14. The IBM AT encoding is:
+    /* Phoenix v1.14 uses the BDA equipment word at 0x410 during its early
+     * video diagnostics. The compatible encoding is:
      *   bit 5 = 80x25 color (1), bit 4 = 40x25 color (0)
      *   bit 0 = IPL (boot from FDD)
      *   bit 6 = 2 FDDs (0 = 1 FDD)
      *   bit 1 = FPU installed
      * 86Box's generic BDA init writes 0x10 (bit 4 set, which is
      * 40x25 color) without the IPL bit. The Olivetti has 80x25 color
-     * and 1 FDD, so the BDA seed is 0x20 (bit 5 = 80x25
-     * color). Phoenix updates the coprocessor bit after detecting the
-     * socket; setting it before POST diverts video initialization. Without
-     * this override Phoenix reads BDA 0x10, compares
-     * against NVR 0x20, finds a "mismatch", and sets bit 5 of
-     * CMOS 0x0E (Equipment Error), which keeps the SET-UP showing
-     * on every boot.
+     * and 1 FDD, so the BDA seed is 0x20 (bit 5 = 80x25 color).
+     * Phoenix later derives the final video mode from its split CMOS
+     * 14h/1Ch encoding and updates the coprocessor bit after probing the
+     * socket. Without this seed, the generic 0x10 value can raise the
+     * Equipment Error which keeps SET-UP appearing on every boot.
      *
      * This is a ONE-SHOT write at machine init (not a per-poll
      * force — that was a hack and is now removed). Same trick
@@ -108,12 +106,10 @@ machine_at_olivetti_pcs386sx_init(const machine_t *model)
     device_add(&port_6x_olivetti_device);
 
     /* The physical board uses the three-chip Headland HT101SX + HT113 +
-       GC102 set.  PCS 386SX Phoenix 1.14 and a second surviving HT101SX
-       BIOS both program CR0-CR4 and EMS maps through 1ECh-1EFh, which is
-       the interface supplied by this dedicated profile.  Unlike the HT18-B
-       approximation previously used here, it does not install fast A20 at
-       port 92h; neither BIOS accesses that port. */
-    device_add(&headland_ht101sx_device);
+       GC102-PC set.  Keep the packages separate: the provisional HT113 owns
+       the demonstrated CR0-CR4 and EMS interface at 1ECh-1EFh.  No HT18
+       revision bits, CR5/CR6 or fast A20 at port 92h are exposed. */
+    device_add(&headland_pcs386sx_chipset_device);
 
     /* Real discrete I/O population: Mitsubishi M5L8042 keyboard controller,
        WD37C65C floppy controller and TI TL16C451FN serial/parallel controller.
@@ -129,9 +125,10 @@ machine_at_olivetti_pcs386sx_init(const machine_t *model)
     device_add_inst(&ns16450_device, 1);
     device_add_inst(&lpt_port_device, 1);
 
-    /* HT101SX owns conventional, relocated, shadow and EMS memory mapping.
+    /* The provisional HT113 device owns conventional, relocated, shadow and
+       EMS memory mapping until exact package documentation is preserved.
        Do not install the PCS 286's 0x60000 -> 0x80000 diagnostic alias or
-       the generic mem_remap_top() mapping here: both overlap the HT101SX maps,
+       the generic mem_remap_top() mapping here: both overlap the HT113 maps,
        collapse two distinct 128 KiB conventional-memory ranges and can
        corrupt EMS/shadow behavior. The PCS 386SX BIOS 1.14 contains neither
        the PCS 286's RAM-REMAPPING string nor its 6000h/8000h segment test. */
