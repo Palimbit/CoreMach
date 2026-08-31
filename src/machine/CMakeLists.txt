@@ -38,6 +38,7 @@ add_library(mch OBJECT
     m_at_common.c
     m_at_olivetti_286.c
     m_at_olivetti_386sx.c
+    m_at_trigem_sx386m.c
     m_at_286.c
     m_at_386sx.c
     m_at_m6117.c

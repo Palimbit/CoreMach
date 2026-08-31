@@ -52,3 +52,13 @@ The regions `00000h–05FFFh` (OVC 1.06 video BIOS) and `10000h–1FFFFh`
 (Phoenix system BIOS 1.14, 30 October 1991) are byte-identical. Differences are
 confined to unused padding at `06000h–0FFFFh`: mostly `FFh` in the Dario dump
 and `00h` in the Olivetti dump. Both original dumps remain historically useful.
+
+## TriGem SX386M / Emerson Elite SX386/16
+
+| Component | Expected filename | Size | SHA-256 |
+|---|---|---:|---|
+| AMI system BIOS | `EESX386.BIN` | 65536 | `7432e489151742782bc81165ccd8c6244f59a96cc62c8c048966f084a2a4f3e9` |
+
+The independent TriGem firmware identifies itself as
+`DG2X-6080-020491-KB` and is mapped linearly at F0000h. A reconstructed image
+from the surviving Emerson EPROM pair is byte-identical. It is not distributed.

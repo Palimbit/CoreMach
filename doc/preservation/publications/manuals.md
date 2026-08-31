@@ -16,6 +16,8 @@ into this repository unless a later rights review establishes permission.
 | PCS 386SX / Dario 386SX | Independent Emerson Elite SX386/16 board and BIOS preservation | [VOGONS](https://www.vogons.org/viewtopic.php?t=86204) | Corroborates the HT101SX/HT113/GC102 set and the firmware-visible `1ECh-1EFh` interface. |
 | PCS 386SX / Dario 386SX | TI TL16C451/TL16C452 data sheet, SLLS053C | [Texas Instruments](https://www.ti.com/lit/ds/symlink/tl16c451.pdf) | Documents the UART plus bidirectional Centronics functional decomposition. |
 | PCS 386SX / Dario 386SX | Headland GC101/GC102, HT18 and HT21 family documentation | Archival component-data-sheet holdings | Comparative evidence only. HT18 is not the PCS 386SX chipset and its revision bits, CR5/CR6, sleep state and fast-A20 port must not be attributed to this board. |
+| TriGem SX386M / CMS ESP SX386M | *CMS Enhancements ESP SX386M*, two-page board reference | Micro House Technical Library archival copy; see [The Retro Web board record](https://theretroweb.com/motherboards/s/trigem-sx386m-ks-ii) | Independent TriGem board: 16 MHz CPU, no cache, 8 MB maximum, layout, ISA slots, I/O, jumpers and SIMM populations. Link/metadata only pending rights review. |
+| TriGem SX386M family | *SX386M Operations Guide* | [Epson support](https://files.support.epson.com/pdf/cw3s2c/cw3s2cu1.pdf) | Context for a different 20 MHz cached TriGem revision; not the 16 MHz KS-II specification. |
 
 Component datasheets should normally be referenced from the original vendor or
 a stable archival host instead of being copied into the tree.

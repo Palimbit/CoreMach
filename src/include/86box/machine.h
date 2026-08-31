@@ -518,6 +518,9 @@ extern int             machine_at_olivetti_pcs286s_ti_init(const machine_t *);
 /* m_at_olivetti_386sx.c */
 extern int             machine_at_olivetti_pcs386sx_init(const machine_t *);
 
+/* m_at_trigem_sx386m.c */
+extern int             machine_at_trigem_sx386m_init(const machine_t *);
+
 /* m_at_286.c */
 /* ISA */
 #ifdef EMU_DEVICE_H
