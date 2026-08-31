@@ -8,10 +8,9 @@ with 2 MiB RAM, 1.44 MiB floppy and a typical 40 MiB hard disk.
 ## Platform relationship
 
 Surviving board evidence identifies Olivetti BA013 and VLSI TOPCAT
-VL82C320/VL82C331 in PCS 11. Firmware records show both 16 MHz releases
-(2.04/2.07) and later 25 MHz 6.x records. This makes BA013 a reusable
-emulation platform, not proof that PCS 11 and M300-02F are the same finished
-machine.
+VL82C320/VL82C331 in PCS 11. The preserved PCS 11 firmware releases R2.04 and
+R2.07 correspond to the 16 MHz system. BA013 is a reusable emulation platform,
+not proof that PCS 11 and M300-02F are the same finished machine.
 
 BluMach now exposes `olivetti_pcs11` as a separate 16 MHz machine identity. It
 shares the BA013 TOPCAT implementation with M300-02/M300-02F but has its own
@@ -20,19 +19,14 @@ This avoids treating a physically different commercial product as an M300
 alias. The new target compiles but still awaits POST and operating-system
 validation.
 
-The locally preserved 6.03 image is identified by its source filename as PCS
-33, not PCS 11. It exercises the recovered 25 MHz TOPCAT path, but must not be
-presented as authentic PCS 11 firmware. A separate PCS 11/25 entry will only be
-created after an exact R6.0x dump is recovered.
-
 ## Current boundary
 
 - Product ficha: independent PCS 11 record.
 - Emulator machine: `olivetti_pcs11`, fixed at 16 MHz.
 - Selectable BIOS revisions: R2.04 and R2.07.
-- Pending: POST and boot validation, an exact PCS 11/25 dump,
-  enclosure-specific behaviour, television connection, factory
-  storage/software configurations and broad application validation.
+- Pending: POST and boot validation, enclosure-specific behaviour, television
+  connection, factory storage/software configurations and broad application
+  validation.
 
 Verified PCS 11 firmware metadata (references only; firmware is not included):
 
@@ -43,8 +37,6 @@ Verified PCS 11 firmware metadata (references only; firmware is not included):
 
 Both contain OVC 1.06 and identify an 80386SX. R2.04 and R2.07 differ in
 10,958 bytes, so R2.07 is a real firmware revision rather than a renamed copy.
-The archive also records a PCS 11/25 R6.0x branch, but currently exposes no
-corresponding dump.
 
 Sources:
 

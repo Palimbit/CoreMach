@@ -10,9 +10,9 @@ implementation:
   machine_id: olivetti_pcs11
   shared_core: olivetti-ba013
   status: implemented-awaiting-boot-validation
-  warning: "The implemented entry is PCS 11/16 with R2.04/R2.07. PCS 11/25 remains unimplemented because its exact R6.0x dump is missing."
+  warning: "The implemented entry is the 16 MHz PCS 11 with selectable R2.04 and R2.07 firmware."
 hardware:
-  cpu: "Intel 80386SX, documented 16 and 25 MHz variants"
+  cpu: "Intel 80386SX, 16 MHz"
   memory: "2 MiB standard; BA013 supports up to 10 MiB"
   chipset: "VLSI TOPCAT VL82C320/VL82C331"
   video: "Western Digital WD90C11 integrated"
@@ -20,7 +20,7 @@ hardware:
 firmware:
   required: true
   redistributed: false
-  known_identifications: ["2.04 (16 MHz, verified)", "2.07 (16 MHz, verified)", "6.0x record (25 MHz, dump missing)"]
+  known_identifications: ["2.04 (16 MHz, verified)", "2.07 (16 MHz, verified)"]
   sets:
     - name: Olivetti_PCS_11-BIOS-FA42-Version_R2_04-AM27C010.BIN
       expected_path: roms/machines/pcs11/BIOS-R2.04.ROM
@@ -43,4 +43,4 @@ sources:
     url: https://www.techmonitor.ai/technology/olivetti_adds_low_end_easy_to_run_models_to_pcs_line
   - type: preserved-board-and-firmware-record
     url: https://theretroweb.com/motherboards/s/olivetti-ba013-m300-02
-notes: "R2.04 and R2.07 are selectable on the dedicated PCS 11/16 machine but are not redistributed. The available 6.03 dump is source-identified as PCS 33; an exact PCS 11/25 dump remains missing."
+notes: "R2.04 and R2.07 are selectable on the dedicated 16 MHz PCS 11 machine but are not redistributed."
