@@ -6521,7 +6521,11 @@ const machine_t machines[] = {
             .max_multi   = 0
         },
         .bus_flags = MACHINE_AT,
-        .flags     = MACHINE_IDE,
+        /* IDE, FDC, two UARTs and LPT are motherboard resources. Mark them
+           internal so the settings layer does not add conflicting ISA I/O
+           cards on top of the devices installed by the machine driver. */
+        .flags     = MACHINE_IDE | MACHINE_FDC | MACHINE_LPT_PRI |
+                     MACHINE_UART_PRI | MACHINE_UART_SEC,
         .ram       = {
             .min  = 512,
             .max  = 8192,
