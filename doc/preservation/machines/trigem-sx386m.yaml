@@ -7,7 +7,9 @@ identity:
   confidence: documented-board-and-firmware
   board: "SX386M / KS-II"
   related_not_aliases:
-    - model: Epson-hosted SX386M 20 MHz revision
+    - model: Epson CW3S16
+      relationship: "probable 16 MHz OEM identity; board and firmware confirmation missing"
+    - model: Epson CW3S20/C / TriGem SX386MC
       relationship: "same TriGem family name, materially different configuration"
 implementation:
   machine_id: sx386m
@@ -48,15 +50,34 @@ firmware:
       size: 65536
       sha256: 7432E489151742782BC81165CCD8C6244F59A96CC62C8C048966F084A2A4F3E9
       identification: "AMI DG2X-6080-020491-KB, 1991-02-04"
+  missing_candidates:
+    - {product: Epson CW3S16, identification: DNSX-6080-051690-KB, evidence: archival-catalogue-metadata}
+    - {product: Epson CW3S20/C / TriGem SX386MC, identification: DVSX-6080-060290-KB, evidence: official-manual-example-post}
 relationships: []
 publications:
-  brochures: []
+  brochures:
+    - title: Period sales brochure or price list
+      status: not-located
   manuals:
     - title: CMS Enhancements ESP SX386M board reference
       publisher: Micro House Technical Library
       redistribution: not-reviewed-link-only
+    - title: Epson CW3S16 Canadian-product manual scan record
+      publisher: unknown
+      redistribution: link-only
+    - title: SX386MC Operations Guide
+      publisher: TriGem Computer, Inc.
+      product: Epson CW3S20/C
+      redistribution: copyrighted-link-only
+software_context:
+  scope: "related CW3S20/C only; not assigned to the Emerson machine"
+  supplied: [MS-DOS 4.01 diskettes, GW-BASIC diskette, TGSS.COM]
+  printed: [MS-DOS User's Guide, GW-BASIC User's Guide]
+  additional_applications: not-documented
 sources:
   - {type: photographed-hardware-and-firmware, url: "https://www.vogons.org/viewtopic.php?t=86204"}
   - {type: archival-motherboard-record, url: "https://theretroweb.com/motherboards/s/trigem-sx386m-ks-ii"}
   - {type: manufacturer-history, url: "https://trigem.co.kr/company/company_history.jsp"}
+  - {type: official-related-platform-manual, url: "https://files.support.epson.com/pdf/cw3s2c/cw3s2cu1.pdf"}
+  - {type: third-party-manual-record, url: "https://manualzilla.com/doc/7429223/epson-cw3s16-canadian-product-specifications"}
 notes: "Independent TriGem family. Do not classify under Olivetti or collapse the 20 MHz revision into this machine."

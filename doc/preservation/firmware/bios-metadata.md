@@ -62,3 +62,15 @@ and `00h` in the Olivetti dump. Both original dumps remain historically useful.
 The independent TriGem firmware identifies itself as
 `DG2X-6080-020491-KB` and is mapped linearly at F0000h. A reconstructed image
 from the surviving Emerson EPROM pair is byte-identical. It is not distributed.
+
+Two related identifications are documented but have no preserved, verified
+images:
+
+| Candidate | Identification | Evidence |
+|---|---|---|
+| Epson CW3S16 / 16 MHz SX386M | `DNSX-6080-051690-KB` | Archival motherboard-catalogue metadata only. |
+| Epson CW3S20/C / TriGem SX386MC | `DVSX-6080-060290-KB` | Example POST screen printed in the Epson-hosted operations guide. |
+
+The downloadable merged and LOW/HIGH files for `DG2X-6080-020491-KB` are two
+representations of the same Emerson image, not separate Emerson and Epson
+revisions.
