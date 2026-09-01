@@ -15,6 +15,8 @@
  *          Copyright 2008-2019 Sarah Walker.
  *          Copyright 2016-2019 Miran Grca.
  *          Copyright 2017-2019 Fred N. van Kempen.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef EMU_VIDEO_H
 #define EMU_VIDEO_H

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- BluMach modifications: rtzor, Project BluMach, 2026. -->
 <ui version="4.0">
  <class>SettingsMachine</class>
  <widget class="QWidget" name="SettingsMachine">

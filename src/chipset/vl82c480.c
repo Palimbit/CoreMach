@@ -11,6 +11,8 @@
  * Authors: Miran Grca, <mgrca8@gmail.com>
  *
  *          Copyright 2020 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 
 #ifdef ENABLE_VL82C48X_LOG

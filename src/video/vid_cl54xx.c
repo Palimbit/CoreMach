@@ -16,6 +16,8 @@
  *          Copyright 2016-2020 Miran Grca.
  *          Copyright 2020      tonioni.
  *          Copyright 2016-2020 TheCollector1995.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdio.h>
 #include <stdint.h>

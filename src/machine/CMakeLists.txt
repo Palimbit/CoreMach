@@ -14,6 +14,8 @@
 #          Copyright 2020-2021 David Hrdlička.
 #          Copyright 2024      Jasmine Iwanek.
 #
+# BluMach modifications: rtzor, Project BluMach, 2026.
+#
 
 add_library(mch OBJECT
     machine.c

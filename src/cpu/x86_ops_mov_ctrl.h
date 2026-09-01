@@ -1,3 +1,9 @@
+/*
+ * 86Box/PCem-derived CPU operation fragment.
+ * Original provenance is retained in the including source unit and Git history.
+ * BluMach modifications: rtzor, Project BluMach, 2026.
+ */
+
 static int
 opMOV_r_CRx_a16(uint32_t fetchdat)
 {

@@ -1,16 +1,14 @@
 /*
- * 86Box    A hypervisor and IBM PC system emulator that specializes in
- *          running old operating systems and software designed for IBM
- *          PC systems and compatibles from 1981 through fairly recent
- *          system designs based on the PCI bus.
+ * BluMach, a preservation-focused fork of 86Box.
  *
  *          Olivetti M300-02/PCS 11 (BA013/16), M300-02F/PCS 33
  *          (BA013/25), M300-08
  *          (BA319/BA324/BA325), M300-15 (BA320), M300-30 and M300-30P.
  *
- * Authors: rtzor and BluMach contributors.
+ * Author: rtzor
+ * Project: BluMach
  *
- *          Copyright 2026 rtzor and BluMach contributors.
+ * Copyright 2026 rtzor.
  */
 
 #include <stdarg.h>

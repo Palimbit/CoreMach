@@ -25,6 +25,8 @@
  * NOTE:    Forcing config files to be in Unicode encoding breaks
  *          it on Windows XP, and possibly also Vista. Use the
  *          -DANSI_CFG for use on these systems.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 
 #ifdef _WIN32

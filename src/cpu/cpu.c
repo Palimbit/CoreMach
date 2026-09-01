@@ -17,6 +17,8 @@
  *          Copyright 2016-2018 leilei.
  *          Copyright 2016-2020 Miran Grca.
  *          Copyright 2018-2021 Fred N. van Kempen.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <inttypes.h>
 #include <math.h>

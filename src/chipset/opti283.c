@@ -13,6 +13,8 @@
  *
  *          Copyright 2021 Tiseno100.
  *          Copyright 2021 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <math.h>
 #include <stdarg.h>

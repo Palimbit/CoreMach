@@ -13,6 +13,8 @@
  *
  *          Copyright 2008-2018 Sarah Walker.
  *          Copyright 2016-2018 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdint.h>
 #include <stdlib.h>

@@ -17,6 +17,8 @@
  *          Copyright 2008-2020 Sarah Walker.
  *          Copyright 2016-2018 leilei.
  *          Copyright 2016-2020 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef EMU_CPU_H
 #define EMU_CPU_H

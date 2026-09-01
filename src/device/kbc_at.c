@@ -13,6 +13,8 @@
  *
  *          Copyright 2023-2025 Miran Grca.
  *          Copyright 2023-2025 EngiNerd.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdio.h>
 #include <stdint.h>

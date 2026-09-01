@@ -11,6 +11,8 @@
  * Authors: Joakim L. Gilje <jgilje@jgilje.net>
  *
  *          Copyright 2021 Joakim L. Gilje
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include "qt_settings_completer.hpp"
 

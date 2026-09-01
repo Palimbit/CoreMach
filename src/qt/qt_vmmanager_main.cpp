@@ -13,6 +13,8 @@
  *
  *          Copyright 2024 cold-brewed
  *          Copyright 2026 rtzor
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <QDirIterator>
 #include <QLabel>

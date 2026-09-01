@@ -17,6 +17,8 @@
  *          Copyright 2016-2025 Miran Grca.
  *          Copyright 2017-2020 Fred N. van Kempen.
  *          Copyright 2025      Jasmine Iwanek.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef EMU_MACHINE_H
 #define EMU_MACHINE_H

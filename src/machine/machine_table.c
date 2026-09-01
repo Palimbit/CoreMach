@@ -15,6 +15,8 @@
  *          Copyright 2016-2026 Miran Grca.
  *          Copyright 2017-2025 Fred N. van Kempen.
  *          Copyright 2025-2026 Jasmine Iwanek.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdio.h>
 #include <stdint.h>

@@ -13,6 +13,8 @@
  *
  *          Copyright 2015-2020 Andrew Jenner.
  *          Copyright 2016-2020 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <math.h>
 #include <stdarg.h>

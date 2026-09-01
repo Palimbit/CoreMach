@@ -12,6 +12,8 @@
  * Authors: Miran Grca, <mgrca8@gmail.com>
  *
  *          Copyright 2021 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef EMU_PORT_6X_H
 #define EMU_PORT_6X_H
