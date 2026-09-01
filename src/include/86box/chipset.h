@@ -76,6 +76,7 @@ extern const device_t headland_gc102pc_device;
 extern const device_t headland_ht101sx_device;
 extern const device_t headland_ht113_device;
 extern const device_t headland_pcs386sx_chipset_device;
+extern const device_t headland_ht101sx_chipset_device;
 extern const device_t headland_ht18a_device;
 extern const device_t headland_ht18b_device;
 extern const device_t headland_ht18c_device;

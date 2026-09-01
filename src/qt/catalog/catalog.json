@@ -12,6 +12,13 @@
       "description_key": "manufacturer.triumph-adler.description",
       "history_key": "manufacturer.triumph-adler.history",
       "history_source_url": "https://www.triumph-adler.com/resource/blob/18288/94911497d9a5c4ed3c64a7cb8cd6fbde/ta-historie-e_2022-09-08.pdf"
+    },
+    {
+      "id": "trigem",
+      "name": "TriGem",
+      "description_key": "manufacturer.trigem.description",
+      "history_key": "manufacturer.trigem.history",
+      "history_source_url": "https://trigem.co.kr/company/company_history.jsp"
     }
   ],
   "families": [
@@ -28,6 +35,13 @@
       "parent_family_id": "",
       "name": "Dario",
       "description_key": "family.triumph-adler-dario.description"
+    },
+    {
+      "id": "trigem-sx386",
+      "manufacturer_id": "trigem",
+      "parent_family_id": "",
+      "name": "SX386",
+      "description_key": "family.trigem-sx386.description"
     }
   ],
   "platforms": [
@@ -49,6 +63,11 @@
     {
       "id": "olivetti-pcs386sx-platform",
       "emulator_machine_id": "olivetti_pcs386sx",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "trigem-sx386m-platform",
+      "emulator_machine_id": "sx386m",
       "architecture": "80386SX"
     },
     {
@@ -453,6 +472,81 @@
             {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-pcs386sx.technical.ht101sx_peer_bios", "url": "https://www.vogons.org/viewtopic.php?t=86204"},
             {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-pcs386sx.technical.firmware_evidence"},
             {"label_key": "technical.label.diagnostic_media", "value_key": "product.olivetti-pcs386sx.technical.diagnostic_media"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trigem-sx386m",
+      "manufacturer_id": "trigem",
+      "family_id": "trigem-sx386",
+      "platform_id": "trigem-sx386m-platform",
+      "name": "TriGem SX386M",
+      "summary_key": "product.trigem-sx386m.summary",
+      "history_key": "product.trigem-sx386m.history",
+      "warning_key": "product.trigem-sx386m.warning",
+      "status": "experimental",
+      "period": "1991",
+      "aliases": ["Emerson Elite SX386/16", "CMS Enhancements ESP SX386M"],
+      "tags": ["80386SX", "AT", "IDE", "ISA", "OEM", "80387SX"],
+      "hardware": {
+        "cpu": "Intel 80386SX 16 MHz; 8 MHz low-speed mode",
+        "memory": "512 KB to 8 MB parity DRAM, documented 30-pin SIMM populations",
+        "video": "External ISA display adapter",
+        "floppy": "Integrated AT-compatible floppy interface",
+        "rtc": "128-byte AT-compatible CMOS RTC; exact component unconfirmed",
+        "coprocessor": "Intel 80387SX optional; J2 enables/disables it",
+        "expansion": "4 × 16-bit ISA + 2 × 8-bit ISA",
+        "interfaces": "IDE, floppy, two serial, parallel and AT keyboard",
+        "dimensions": "254 × 218 mm OEM motherboard"
+      },
+      "firmware": {"known_sets": ["AMI DG2X-6080-020491-KB"], "required": true},
+      "storage": {"bus": "IDE/ATA", "official_drives": []},
+      "relationships": {},
+      "technical": [
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.trigem-sx386m.technical.cpu_bus"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.trigem-sx386m.technical.memory"},
+            {"label_key": "technical.label.chipset", "value_key": "product.trigem-sx386m.technical.chipset"},
+            {"label_key": "hardware.expansion", "value_key": "product.trigem-sx386m.technical.expansion"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.reverse_engineered",
+          "entries": [
+            {"label_key": "technical.label.bios_revision", "value_key": "product.trigem-sx386m.technical.bios_revision"},
+            {"label_key": "technical.label.rom_layout", "value_key": "product.trigem-sx386m.technical.rom_layout"},
+            {"label_key": "technical.label.headland_ports", "value_key": "product.trigem-sx386m.technical.headland_ports"}
+          ]
+        },
+        {
+          "title_key": "technical.section.configuration",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.jumpers", "value_key": "product.trigem-sx386m.technical.jumpers"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.trigem-sx386m.technical.io"},
+            {"label_key": "technical.label.video", "value_key": "product.trigem-sx386m.technical.video"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.verified", "value_key": "product.trigem-sx386m.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.trigem-sx386m.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.sources",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.manual", "value_key": "product.trigem-sx386m.technical.manual", "url": "https://theretroweb.com/motherboards/s/trigem-sx386m-ks-ii"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.trigem-sx386m.technical.vogons", "url": "https://www.vogons.org/viewtopic.php?t=86204"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.trigem-sx386m.technical.epson_caveat", "url": "https://files.support.epson.com/pdf/cw3s2c/cw3s2cu1.pdf"}
           ]
         }
       ]

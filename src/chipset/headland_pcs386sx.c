@@ -83,3 +83,20 @@ const device_t headland_pcs386sx_chipset_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+/* Manufacturer-neutral identity for unrelated boards using the same three
+   physical Headland packages. Keep the older PCS-named descriptor for source
+   compatibility with the Olivetti driver only. */
+const device_t headland_ht101sx_chipset_device = {
+    .name          = "Headland HT101SX + HT113 + GC102-PC",
+    .internal_name = "headland_ht101sx_chipset",
+    .flags         = 0,
+    .local         = 0,
+    .init          = headland_pcs386sx_chipset_init,
+    .close         = headland_pcs386sx_chipset_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};

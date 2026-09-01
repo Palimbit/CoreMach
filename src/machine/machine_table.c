@@ -6497,6 +6497,60 @@ const machine_t machines[] = {
         .net_device               = NULL,
         .aliases                  = { "PCS386SX", "" }
     },
+    /* Independent TriGem OEM platform, sold at least as the Emerson Elite
+       SX386/16 and CMS Enhancements ESP SX386M. It shares a documented
+       Headland chipset with other boards, not their manufacturer or family. */
+    {
+        .name              = "[HT101SX] TriGem SX386M",
+        .internal_name     = "sx386m",
+        .type              = MACHINE_TYPE_386SX,
+        .chipset           = MACHINE_CHIPSET_HT101SX,
+        .init              = machine_at_trigem_sx386m_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_386SX,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 16000000,
+            .max_bus     = 16000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_AT,
+        /* IDE, FDC, two UARTs and LPT are motherboard resources. Mark them
+           internal so the settings layer does not add conflicting ISA I/O
+           cards on top of the devices installed by the machine driver. */
+        .flags     = MACHINE_IDE | MACHINE_FDC | MACHINE_LPT_PRI |
+                     MACHINE_UART_PRI | MACHINE_UART_SEC,
+        .ram       = {
+            .min  = 512,
+            .max  = 8192,
+            .step = 128
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_AMI | 0x00004200,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &sx386m_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Emerson Elite SX386/16", "CMS Enhancements ESP SX386M", "" }
+    },
     /* Triumph-Adler Dario 386SX/P45: badge-engineered PCS 386SX. */
     {
         .name              = "[HT101SX] Triumph-Adler Dario 386SX",
