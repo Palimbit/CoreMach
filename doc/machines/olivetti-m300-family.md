@@ -29,8 +29,8 @@ complete hardware reproduction.
 | M300-02F BA013/25 | `olivetti_m30002f` | 386SX/25; VLSI TOPCAT VL82C320/VL82C331; WD90C11C | Cold POST, memory paths, EMS register activity and boot | TOPCAT is an initial register/memory-map model; the 87C310, Acer FDC and MSI glue are aggregated through compatible devices. |
 | M300-08 BA319/BA324/BA325 | `olivetti_m30008` | 386SX/20; OPTi 82C283 plus 82C206; OAK OTI067 | POST, Setup, calendar rollover, floppy and MS-DOS 3.30a | 82C206 is represented by common AT functions; IDE and wider software validation remain pending. |
 | M300-15 BA320 | `olivetti_m30015` | Intel 386SX/25; AMD 386SX/25 documented as a later alternative; OPTi 82C283 plus 82C206; OAK OTI067 | POST, Calendar PASS, floppy and MS-DOS 3.30a | The support-chip composition is functional, not chip-accurate; IDE and broad software validation remain pending. |
-| M300-30 | `olivetti_m30030` | i486SX/25; VLSI VL82C486; WD90C31; PC87311/87312 family | Full POST and resident diagnostics, MS-DOS 5.00 boot and calendar persistence with BIOS 1.09/Diagnostics 1.04 | Initial VL82C486 model; WD90C31 and Super I/O use compatible cores; split-memory relocation needs broader validation. |
-| M300-30P | `olivetti_m30030p` | i486DX2/50 on a 25 MHz external bus; otherwise shared M300-30 platform | Shared recovered POST, diagnostics and DOS path | Separate CPU identity, but the same partial board model and validation boundary as M300-30. |
+| M300-30 | `olivetti_m30030` | i486SX/25; VLSI VL82C486; WD90C31; PC87311/87312 family | Full POST and resident diagnostics, MS-DOS 5.00 boot and calendar persistence with BIOS 1.09/Diagnostics 1.04 | Initial VL82C486 model; WD90C31 and Super I/O use compatible cores; other RAM populations need validation. |
+| M300-30P | `olivetti_m30030p` | i486DX2/50 on a 25 MHz external bus; otherwise shared M300-30 platform | Cold boot and Diagnostics 2.00 complete at 4 MiB with the correct 640+3072+384 KiB memory accounting | Separate CPU identity and partial shared board model; Diagnostics labels the selected DX2/50 as DX2-66 and Ctrl+Alt+Del does not yet complete reliably. |
 
 ## M300 with IF378 CPU card
 
@@ -172,13 +172,16 @@ bus and i486SX/25 class; M300-30P uses an i486DX2/50 on the same 25 MHz bus.
 The documented RAM populations exposed by BluMach are 4, 8, 12, 20, 24 and
 36 MiB.
 
-The board is modelled with the existing VLSI VL82C486 controller. Its split
-memory arrangement reserves 128 KiB in the conventional 640 KiB–1 MiB hole
-for shadowing and relocates the usable 256 KiB above installed RAM. BluMach now
-publishes that 256 KiB through `mem_remap_top(256)`. This corrects the earlier
-384 KiB loss observed when shadow RAM was enabled, but remains an initial
-behavioural model rather than a complete electrical reproduction of the VLSI
-logic.
+The board is modelled with the existing VLSI VL82C486 controller. The service
+guide identifies 4 MiB soldered on the motherboard. Resident Diagnostics treats
+the complete conventional 640 KiB–1 MiB hole as 384 KiB of dedicated memory,
+used by video/system areas and shadowing; it must not also be published above
+the installed RAM. BluMach therefore keeps RAM backing in that hole without
+relocating it. With a 4 MiB configuration Diagnostics 2.00 now reports 640 KiB
+base, 3072 KiB extended, 384 KiB dedicated and 4096 KiB total. This replaces an
+incorrect 256 KiB relocation that produced 4352 KiB by counting the same RAM
+twice. It also avoids the earlier contiguous relocation that allowed the memory
+test to overwrite the C0000h video-BIOS shadow and halt after 3200 KiB.
 
 The on-board WD90C31 is represented by the compatible WD90C30 core with 1 MiB
 VRAM. OVC 1.09 occupies the first 24 KiB of the selected 128 KiB motherboard
@@ -193,6 +196,23 @@ cache-test data/tag operations. With BIOS 1.09/Diagnostics 1.04 the recovered
 build completed CPU, base/extended/dedicated-memory, cache, parity, PIC, DMA,
 keyboard, RTC/calendar and protected-mode tests, then booted the Olivetti
 MS-DOS 5.00 User Disk. Warm reset and calendar persistence were also observed.
+On the M300-30P, BIOS 1.09/Diagnostics 2.00 has also completed the resident
+tests with the correct 4 MiB accounting above. It currently identifies the
+configured DX2/50 as DX2-66, so CPU timing/identification remains an explicit
+open issue.
+
+The M300-30P still has a reproducible **warm-reset limitation**. A cold start
+completes POST and diagnostics, but Ctrl+Alt+Del can stop during early firmware
+initialisation, either after the 3200 KiB extended-memory count or at a blinking
+cursor. Instrumented runs established that the C0000h-FFFFFh shadow contents
+remain byte-accurate and that the internal video mapping is still selected.
+The firmware deliberately installs its F000:F4C1 default interrupt handler
+during reset; the failing run later reaches an invalid F4C1h code segment while
+returning through that interrupt path. The exact reset-state or interrupt-stack
+component responsible has not yet been identified. This is recorded as an open
+emulation defect; a hard reset is the current workaround. No speculative reset
+patch is included merely to hide it.
+
 This is therefore a **partial bootable emulation**, not a claim of complete or
 cycle-accurate hardware reproduction. Every RAM population, all three firmware
 sets and a wider software set still require a formal regression campaign.

@@ -2064,6 +2064,13 @@ write_cmd_olivetti(void *priv, uint8_t val)
                    state (jumper absent); low deliberately enters the factory
                    POST loop. */
                 kbc_delay_to_ob(dev, dev->p2 | 0x20, 0, 0x00);
+            else if ((machines[machine].init == machine_at_olivetti_pcs11_init) ||
+                     (machines[machine].init == machine_at_olivetti_pcs33_init))
+                /* PCS 11/33 use bit 7 as the front-panel key switch:
+                   high is the normal unlocked position. */
+                kbc_delay_to_ob(dev,
+                                0x0c | (machine_get_config_int("keylock_locked") ? 0x00 : 0x80),
+                                0, 0x00);
             else
                 kbc_delay_to_ob(dev, (0x0c | (is386 ? 0x00 : 0x80)) & 0xdf, 0, 0x00);
             dev->p1 = ((dev->p1 + 1) & 3) | (dev->p1 & 0xfc);

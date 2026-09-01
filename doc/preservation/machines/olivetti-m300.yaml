@@ -39,14 +39,14 @@ implementation:
       machine_id: olivetti_m30030
       status: partial-bootable
       documented_hardware: "i486SX/25; VLSI VL82C486; WD90C31; PC87311/87312 family"
-      emulation_boundary: "Initial VL82C486 model; WD90C31 uses WD90C30 core; PC87311/87312 uses compatible PC873xx; 256 KiB split-memory relocation implemented"
-      observed: "BIOS 1.09/Diagnostics 1.04 full POST and diagnostics, MS-DOS 5.00 boot, warm reset and calendar persistence"
+      emulation_boundary: "Initial VL82C486 model; WD90C31 uses WD90C30 core; PC87311/87312 uses compatible PC873xx; dedicated-memory layout validated at 4 MiB"
+      observed: "BIOS 1.09/Diagnostics 1.04 full POST and diagnostics, MS-DOS 5.00 boot, warm reset and calendar persistence; 4 MiB accounts as 640+3072+384 KiB"
     - model: "M300-30P"
       machine_id: olivetti_m30030p
       status: partial-bootable
       documented_hardware: "i486DX2/50 on 25 MHz external bus; otherwise shared M300-30 platform"
-      emulation_boundary: "Shares the partial M300-30 board model; dedicated DX2/50 identity"
-      observed: "Shared recovered POST, diagnostics and DOS path; dedicated regression pending"
+      emulation_boundary: "Shares the partial M300-30 board model; Diagnostics 2.00 labels the configured DX2/50 as DX2-66; Ctrl+Alt+Del warm reset can halt during early firmware initialisation"
+      observed: "Cold boot with BIOS 1.09/Diagnostics 2.00 completes resident diagnostics at 4 MiB and reports 640 KiB base, 3072 KiB extended, 384 KiB dedicated, 4096 KiB total; hard reset is the current workaround for the open warm-reset defect"
   research:
     - { model: "M300-01", machine_id: null, status: firmware-missing }
     - { model: "M300-04", machine_id: null, status: firmware-missing }

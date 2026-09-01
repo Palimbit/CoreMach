@@ -226,8 +226,10 @@ machine_at_olivetti_m30030_init(const machine_t *model)
     /* VL82C486 memory and AT-bus controller used by the BA356 family. */
     device_add(&vl82c486_device);
 
-    /* Relocate the usable 256 KB of the split 640 KB-1 MB DRAM hole. */
-    mem_remap_top(256);
+    /* BA356 has dedicated backing for video/system shadow.  Do not expose the
+       split DRAM hole again above installed RAM: Diagnostics otherwise counts
+       a false extra 256 KB and overwrites the shadow during its memory test. */
+    mem_remap_top_nomid(0);
 
     /* The firmware times the motherboard refresh signal at port 61h bit 4. */
     device_add(&port_6x_vlsi_refresh_device);
@@ -338,6 +340,17 @@ static const device_config_t olivetti_pcs11_config[] = {
             { .files_no = 0 }
         }
     },
+    {
+        .name           = "keylock_locked",
+        .description    = "Front-panel key lock",
+        .type           = CONFIG_BINARY,
+        .default_string = NULL,
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = { { 0 } }
+    },
     { .name = "", .description = "", .type = CONFIG_END }
     // clang-format on
 };
@@ -365,6 +378,17 @@ static const device_config_t olivetti_pcs33_config[] = {
             },
             { .files_no = 0 }
         }
+    },
+    {
+        .name           = "keylock_locked",
+        .description    = "Front-panel key lock",
+        .type           = CONFIG_BINARY,
+        .default_string = NULL,
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = { { 0 } }
     },
     { .name = "", .description = "", .type = CONFIG_END }
     // clang-format on
