@@ -738,7 +738,10 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
           805LL * 4 * 26 * 512, true, "pvga1a", "keyboard_at", "35_2hd" },
         { "ta-dario386sx", "Triumph-Adler Dario 386SX", "ta-dario386sx", "i386sx", 16000000, 4096,
           "conner-cp3104-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" }
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "trigem-sx386m", "TriGem SX386M / Emerson Elite SX386/16", "trigem-sx386m", "i386sx", 16000000, 4096,
+          "sx386m-40mb-type17.img", "17, 5, 977, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
+          977LL * 5 * 17 * 512, false, "pvga1a", "keyboard_at", "35_2hd" }
     };
 
     const HistoricalDefaults *selected = nullptr;
@@ -784,7 +787,8 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
             "fdd0_jumpers = -1\n"
             "fdd1_jumpers = -1\n"
             "hdd_jumper = -1\n");
-    else if (productId == QLatin1String("olivetti-pcs386sx") || productId == QLatin1String("ta-dario386sx"))
+    else if (productId == QLatin1String("olivetti-pcs386sx") || productId == QLatin1String("ta-dario386sx")
+             || productId == QLatin1String("trigem-sx386m"))
         configuration += QStringLiteral("fpu_type = none\n");
     if (productId == QLatin1String("olivetti-pcs286"))
         configuration += QStringLiteral("\n[Olivetti PCS 286]\nbios = v142\n");

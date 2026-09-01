@@ -1,17 +1,12 @@
 /*
- * 86Box    A hypervisor and IBM PC system emulator that specializes in
- *          running old operating systems and software designed for IBM
- *          PC systems and compatibles from 1981 through fairly recent
- *          system designs based on the PCI bus.
+ * BluMach, a preservation-focused fork of 86Box.
  *
- *          This file is part of the 86Box distribution.
+ * Implementation of the TriGem SX386M OEM motherboard.
  *
- *          Implementation of the TriGem SX386M.
+ * Author: rtzor
  *
- * Author:  rtzor
- *
- *          Copyright 2026 rtzor.
- *          SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright 2026 rtzor.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -33,6 +28,48 @@
 #include <86box/serial.h>
 #include <86box/rom.h>
 #include <86box/machine.h>
+
+static const device_config_t sx386m_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "emerson_020491",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "AMI DG2X-6080-020491-KB (Emerson OEM, 02/04/91)",
+                .internal_name = "emerson_020491",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 65536,
+                .files         = { "roms/machines/sx386m/EESX386.BIN", "" }
+            },
+            { .files_no = 0 }
+        },
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t sx386m_device = {
+    .name          = "TriGem SX386M",
+    .internal_name = "sx386m",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = sx386m_config
+};
 
 typedef struct sx386m_io_t {
     serial_t *uart[2];
