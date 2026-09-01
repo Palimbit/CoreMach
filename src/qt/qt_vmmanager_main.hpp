@@ -9,8 +9,10 @@
  *          Header for 86Box VM manager main module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #ifndef QT_VMMANAGER_MAIN_H
 #define QT_VMMANAGER_MAIN_H
@@ -70,7 +72,7 @@ public slots:
     void shutdownRequestButtonPressed() const;
     void shutdownForceButtonPressed() const;
     void cadButtonPressed() const;
-    void searchSystems(const QString &text) const;
+    void searchSystems(const QString &text);
     void newMachineWizard();
     void newHistoricalMachine(const QString &productId, const QString &machineId);
     void updateGlobalSettings();
@@ -111,6 +113,7 @@ private:
                                                   const QModelIndex &previous);
     void                  updateDisplayName(const QModelIndex &index);
     void                  loadSettings();
+    void                  updateAppearance();
     [[nodiscard]] bool    currentSelectionIsValid() const;
     [[nodiscard]] QString machineCountString(QString states = "") const;
 #if EMU_BUILD_NUM != 0

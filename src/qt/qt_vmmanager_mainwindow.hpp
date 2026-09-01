@@ -9,8 +9,10 @@
  *          Header for 86Box VM manager main window
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #ifndef VMM_MAINWINDOW_H
 #define VMM_MAINWINDOW_H
@@ -26,7 +28,9 @@ class VMManagerMainWindow;
 }
 
 class BluMachCollectionWidget;
-class QTabWidget;
+class QFrame;
+class QPushButton;
+class QStackedWidget;
 
 class VMManagerMainWindow final : public QMainWindow {
     Q_OBJECT
@@ -46,12 +50,20 @@ private:
 
     VMManagerMain           *vmm;
     BluMachCollectionWidget *collection;
-    QTabWidget              *mainTabs;
+    QStackedWidget          *mainStack;
+    QFrame                  *navigationHeader;
+    QPushButton             *collectionNavButton;
+    QPushButton             *machinesNavButton;
+    QPushButton             *primaryActionButton;
     void           saveSettings() const;
+    void           updateActiveSection();
+    void           updateShellAppearance();
     QLabel        *statusLeft;
     QLabel        *statusRight;
     QIcon          runIcon;
     QIcon          pauseIcon;
+    bool           toolBarHiddenByUser = false;
+    bool           collectionSelectionCanCreate = false;
 
 public slots:
     void setStatusLeft(const QString &text) const;

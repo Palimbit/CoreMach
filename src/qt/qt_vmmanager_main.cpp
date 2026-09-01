@@ -9,20 +9,24 @@
  *          86Box VM manager main module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #include <QDirIterator>
 #include <QLabel>
 #include <QLineEdit>
 #include <QAbstractListModel>
 #include <QCompleter>
+#include <QColor>
 #include <QDateTime>
 #include <QDebug>
 #include <QDesktopServices>
 #include <QMenu>
 #include <QMessageBox>
 #include <QInputDialog>
+#include <QFrame>
 #include <QStringBuilder>
 #include <QStringListModel>
 #include <QTimer>
@@ -84,6 +88,16 @@ VMManagerMain::VMManagerMain(QWidget *parent)
     , selected_sysconfig(new VMManagerSystem)
 {
     ui->setupUi(this);
+
+    ui->horizontalLayout->setContentsMargins(18, 14, 18, 16);
+    ui->splitter->setHandleWidth(10);
+    ui->listView->setFrameShape(QFrame::NoFrame);
+    ui->listView->setSpacing(3);
+    ui->listView->setUniformItemSizes(true);
+    ui->widget->setMinimumWidth(270);
+    ui->widget->setMaximumWidth(390);
+    ui->searchBar->setPlaceholderText(tr("Search machines"));
+    updateAppearance();
 
     // Set up the main listView
     ui->listView->setItemDelegate(new VMManagerListViewDelegate);
@@ -419,7 +433,7 @@ illegal_chars:
 
     // Load and apply settings
     loadSettings();
-    ui->splitter->setSizes({ ui->detailsArea->width(), (ui->listView->minimumWidth() * 2) });
+    ui->splitter->setSizes({ 330, 870 });
 
     // Set up search bar
     connect(ui->searchBar, &QLineEdit::textChanged, this, &VMManagerMain::searchSystems);
@@ -665,7 +679,7 @@ VMManagerMain::getCurrentSelection() const
 }
 
 void
-VMManagerMain::searchSystems(const QString &text) const
+VMManagerMain::searchSystems(const QString &text)
 {
     // Escape the search text string unless regular expression searching is enabled.
     // When escaped, the search string functions as a plain text match.
@@ -676,6 +690,22 @@ VMManagerMain::searchSystems(const QString &text) const
         return;
     }
     proxy_model->setFilterRegularExpression(regex);
+
+    if (proxy_model->rowCount() == 0) {
+        ui->listView->clearSelection();
+        ui->listView->setCurrentIndex({});
+        vm_details->reset();
+        emit selectionOrStateChanged(nullptr);
+        return;
+    }
+
+    // A filtered-out item must never remain as the contextual selection. Select
+    // the first visible machine so the detail pane and toolbar always describe
+    // an item that is actually present in the list.
+    if (!ui->listView->currentIndex().isValid()) {
+        ui->listView->setCurrentIndex(proxy_model->index(0, 0));
+    }
+
     // Searching (filtering) can cause the list view to change. If there is still a valid selection,
     // make sure to scroll to it
     if (ui->listView->currentIndex().isValid()) {
@@ -1079,7 +1109,7 @@ VMManagerMain::onLanguageUpdated()
 {
     vm_model->refreshConfigs();
     modelDataChange();
-    ui->searchBar->setPlaceholderText(tr("Search"));
+    ui->searchBar->setPlaceholderText(tr("Search machines"));
     /* Hack to work around details widgets not being re-translatable
        without going through layers of abstraction */
     ui->detailsArea->layout()->removeWidget(vm_details);
@@ -1094,9 +1124,30 @@ VMManagerMain::onLanguageUpdated()
 void
 VMManagerMain::onDarkModeUpdated()
 {
+    updateAppearance();
     vm_details->updateStyle();
 }
 #endif
+
+void
+VMManagerMain::updateAppearance()
+{
+    const auto pal = palette();
+    const QColor base = pal.color(QPalette::Base);
+    const QColor text = pal.color(QPalette::Text);
+    const QColor border = QColor::fromRgbF(base.redF() * 0.84 + text.redF() * 0.16,
+                                           base.greenF() * 0.84 + text.greenF() * 0.16,
+                                           base.blueF() * 0.84 + text.blueF() * 0.16);
+    setStyleSheet(QStringLiteral(
+        "QWidget#VMManagerMain { background: palette(window); color: palette(text); }"
+        "QLineEdit#searchBar { color: palette(text); background: palette(base); border: 1px solid %1; border-radius: 7px; padding: 7px 9px; }"
+        "QListView#listView { color: palette(text); background: palette(base); border: 1px solid %1; border-radius: 8px; outline: 0; padding: 4px; }"
+        "QListView#listView::item { background: transparent; border: 0; }"
+        "QSplitter::handle { background: transparent; }"
+        "QWidget#detailsArea { background: transparent; }")
+        .arg(border.name()));
+    ui->listView->viewport()->update();
+}
 
 int
 VMManagerMain::getActiveMachineCount()

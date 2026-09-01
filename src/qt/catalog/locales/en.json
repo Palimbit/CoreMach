@@ -31,6 +31,8 @@
   "hardware.interfaces": "Interfaces",
   "hardware.dimensions": "Dimensions and weight",
   "technical.ui.overview": "Machine overview",
+  "technical.ui.research": "Research",
+  "technical.ui.sources": "Sources",
   "technical.ui.operation": "Technical operation",
   "technical.ui.preparing": "Technical documentation for this machine is still being prepared.",
   "technical.ui.intro": "This page separates documented hardware facts, behavior observed in original firmware, and the current fidelity of BluMach emulation.",

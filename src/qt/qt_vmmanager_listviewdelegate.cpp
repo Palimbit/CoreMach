@@ -9,8 +9,10 @@
  *          86Box VM manager list view delegate module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #include <QApplication>
 
@@ -43,10 +45,6 @@ void
 VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
                                  const QModelIndex &index) const
 {
-    bool windows_light_mode = true;
-#ifdef Q_OS_WINDOWS
-    windows_light_mode = util::isWindowsLightTheme();
-#endif
     QStyleOptionViewItem opt(option);
     initStyleOption(&opt, index);
     const QPalette &palette(opt.palette);
@@ -62,7 +60,7 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     auto process_status  = process_variant.value<VMManagerSystem::ProcessStatus>();
     // The main icon, configurable. Falls back to default if it cannot be loaded.
     auto customIcon = index.data(VMManagerModel::Roles::Icon).toString();
-    opt.icon        = default_icon;
+    opt.icon        = {};
     if (!customIcon.isEmpty()) {
         const auto customPixmap = QPixmap(customIcon);
         if (!customPixmap.isNull())
@@ -87,10 +85,7 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
             status_icon = unknown_icon;
     }
 
-    // Used to determine if the horizontal separator should be drawn
-    const bool lastIndex  = (index.model()->rowCount() - 1) == index.row();
     const bool hasIcon    = !opt.icon.isNull();
-    const int  bottomEdge = rect.bottom();
     QFont      f(opt.font);
 
     f.setPointSizeF(m_ptr->statusFontPointSize(opt.font));
@@ -100,30 +95,46 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     painter->setClipRect(rect);
     painter->setFont(opt.font);
 
-    // Draw the background
+    painter->fillRect(rect, palette.base());
     if (opt.state & QStyle::State_Selected) {
-        // When selected, only draw the highlighted part until the horizontal separator
-        int  offset        = 2;
-        auto highlightRect = rect.adjusted(0, 0, 0, -offset);
-        painter->fillRect(highlightRect, windows_light_mode ? palette.highlight().color() : highlight_color);
-        // Then fill the remainder with the normal color
-        auto regularRect = rect.adjusted(0, rect.height() - offset, 0, 0);
-        painter->fillRect(regularRect, windows_light_mode ? palette.light().color() : bg_color);
-    } else {
-        // Otherwise just draw the background color as usual
-        painter->fillRect(rect, windows_light_mode ? palette.light().color() : bg_color);
+        QColor selected = palette.highlight().color();
+        selected.setAlpha(palette.base().color().lightnessF() < 0.5 ? 86 : 42);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(selected);
+        painter->drawRoundedRect(rect.adjusted(2, 2, -2, -2), 7, 7);
+        painter->setBrush(palette.highlight());
+        painter->drawRoundedRect(QRect(rect.left() + 2, rect.top() + 9, 3, rect.height() - 18), 2, 2);
     }
 
-    // Draw bottom line. Last line gets a different color
-    painter->setPen(lastIndex ? palette.dark().color()
-                              : palette.mid().color());
-    painter->drawLine(lastIndex ? rect.left() : m_ptr->margins.left(),
-                      bottomEdge, rect.right(), bottomEdge);
-
-    // Draw system icon
+    // Draw a user-supplied icon when present. Otherwise use a compact family
+    // badge so the list does not fall back to the legacy pixel-art 86Box mark.
     if (hasIcon) {
         painter->drawPixmap(contentRect.left(), contentRect.top(),
                             opt.icon.pixmap(m_ptr->iconSize));
+    } else {
+        const QString identity = QStringList({ opt.text,
+                                               index.data(VMManagerModel::Roles::ConfigName).toString(),
+                                               index.data(VMManagerModel::Roles::SearchList).toStringList().join(' ') })
+                                     .join(' ')
+                                     .toLower();
+        const bool dario = identity.contains(QStringLiteral("dario"));
+        const bool pcs = identity.contains(QStringLiteral("olivetti"))
+                      || identity.contains(QStringLiteral("pcs"));
+        const QString mark = dario ? QStringLiteral("D")
+                                   : (pcs ? QStringLiteral("PCS") : QStringLiteral("PC"));
+        QRect badgeRect(QPoint(contentRect.left(), contentRect.top()), m_ptr->iconSize);
+        badgeRect.adjust(2, 2, -2, -2);
+        QColor badgeColor = dario ? palette.link().color() : palette.highlight().color();
+        badgeColor.setAlpha(palette.base().color().lightnessF() < 0.5 ? 60 : 30);
+        painter->setPen(QPen(palette.mid().color(), 1));
+        painter->setBrush(badgeColor);
+        painter->drawRoundedRect(badgeRect, 8, 8);
+        auto badgeFont = opt.font;
+        badgeFont.setBold(true);
+        badgeFont.setPointSizeF(qMax(7.0, badgeFont.pointSizeF() - (mark.size() > 2 ? 2.0 : 1.0)));
+        painter->setFont(badgeFont);
+        painter->setPen(palette.text().color());
+        painter->drawText(badgeRect, Qt::AlignCenter, mark);
     }
 
     // System name
@@ -134,13 +145,28 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
                           contentRect.top());
     // If desired, font can be changed here
     //    painter->setFont(f);
-    painter->setFont(opt.font);
+    auto nameFont = opt.font;
+    nameFont.setBold(true);
+    painter->setFont(nameFont);
     painter->setPen(palette.text().color());
-    painter->drawText(systemNameRect, Qt::TextSingleLine, opt.text);
+    const int availableWidth = qMax(30, rect.right() - systemNameRect.left() - m_ptr->margins.right());
+    systemNameRect.setWidth(availableWidth);
+    painter->drawText(systemNameRect, Qt::TextSingleLine,
+                      painter->fontMetrics().elidedText(opt.text, Qt::ElideRight, availableWidth));
 
     // Draw status icon
-    painter->drawPixmap(systemNameRect.left(), systemNameRect.bottom() + m_ptr->spacingVertical,
-                        status_icon.pixmap(m_ptr->smallIconSize));
+    QColor statusColor = palette.mid().color();
+    if (process_status == VMManagerSystem::ProcessStatus::Running
+        || process_status == VMManagerSystem::ProcessStatus::RunningWaiting)
+        statusColor = palette.highlight().color();
+    else if (process_status == VMManagerSystem::ProcessStatus::Paused
+             || process_status == VMManagerSystem::ProcessStatus::PausedWaiting)
+        statusColor = palette.link().color();
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(statusColor);
+    const QPoint statusCenter(systemNameRect.left() + 5,
+                              systemNameRect.bottom() + m_ptr->spacingVertical + 7);
+    painter->drawEllipse(statusCenter, 4, 4);
 
     // This rectangle is around the status icon
     // auto point = QPoint(systemNameRect.left(), systemNameRect.bottom()
@@ -152,12 +178,14 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     // Draw status text
     QRect statusRect(m_ptr->statusBox(opt, index));
     int   extraaa = 2;
-    statusRect.moveTo(systemNameRect.left() + m_ptr->margins.left() + m_ptr->smallIconSize.width(),
-                      systemNameRect.bottom() + m_ptr->spacingVertical + extraaa + (m_ptr->smallIconSize.height() - systemNameRect.height()));
+    statusRect.moveTo(systemNameRect.left() + 16,
+                      systemNameRect.bottom() + m_ptr->spacingVertical + extraaa);
 
     //    painter->setFont(opt.font);
     painter->setFont(f);
-    painter->setPen(palette.windowText().color());
+    QColor statusTextColor = palette.text().color();
+    statusTextColor.setAlphaF(0.68);
+    painter->setPen(statusTextColor);
     painter->drawText(statusRect, Qt::TextSingleLine,
                       index.data(VMManagerModel::Roles::ProcessStatusString).toString());
 
