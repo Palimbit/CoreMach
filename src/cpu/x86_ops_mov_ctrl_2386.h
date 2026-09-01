@@ -1,3 +1,9 @@
+/*
+ * 86Box/PCem-derived CPU operation fragment.
+ * Original provenance is retained in the including source unit and Git history.
+ * BluMach modifications: rtzor, Project BluMach, 2026.
+ */
+
 static int
 opMOV_r_CRx_a16(uint32_t fetchdat)
 {
@@ -379,19 +385,9 @@ opMOV_DRx_r_a32(uint32_t fetchdat)
 static void
 opMOV_r_TRx(void)
 {
-#if 0
-    uint32_t base;
-
-    base = _tr[4] & 0xfffff800;
-#endif
-
     switch (cpu_reg) {
         case 3:
-#if 0
-            pclog("[R] %08X cache = %08X\n", base + cache_index, _tr[3]);
-#endif
-            _tr[3]      = *(uint32_t *) &(_cache[cache_index]);
-            cache_index = (cache_index + 4) & 0xf;
+            _tr[3] = *(uint32_t *) &(_cache_read_buffer[_tr[5] & 0x0c]);
             break;
     }
     cpu_state.regs[cpu_rm].l = _tr[cpu_reg];
@@ -425,58 +421,32 @@ opMOV_r_TRx_a32(uint32_t fetchdat)
 static void
 opMOV_TRx_r(void)
 {
-    uint32_t base;
-    int      i;
+    uint32_t line;
     int      ctl;
 
     _tr[cpu_reg] = cpu_state.regs[cpu_rm].l;
-    base         = _tr[4] & 0xfffff800;
     ctl          = _tr[5] & 3;
     switch (cpu_reg) {
         case 3:
-#if 0
-            pclog("[W] %08X cache = %08X\n", base + cache_index, _tr[3]);
-#endif
-            *(uint32_t *) &(_cache[cache_index]) = _tr[3];
-            cache_index                          = (cache_index + 4) & 0xf;
-            break;
-        case 4:
-#if 0
-            if (!(cr0 & 1) && !(_tr[5] & (1 << 19)))
-                pclog("TAG = %08X, DEST = %08X\n", base, base + cache_index - 16);
-#endif
+            *(uint32_t *) &(_cache_fill_buffer[_tr[5] & 0x0c]) = _tr[3];
             break;
         case 5:
-#if 0
-            pclog("[16] EXT = %i (%i), SET = %04X\n", !!(_tr[5] & (1 << 19)), _tr[5] & 0x03, _tr[5] & 0x7f0);
-#endif
             if (!(_tr[5] & (1 << 19))) {
+                line = (_tr[5] >> 2) & 0x1ff;
                 switch (ctl) {
                     case 0:
-#if 0
-                        pclog("    Cache fill or read...\n", base);
-#endif
                         break;
                     case 1:
-                        base += (_tr[5] & 0x7f0);
-#if 0
-                        pclog("    Writing 16 bytes to   %08X...\n", base);
-#endif
-                        for (i = 0; i < 16; i += 4)
-                            mem_writel_phys(base + i, *(uint32_t *) &(_cache[i]));
+                        memcpy(&_cache[line << 4], _cache_fill_buffer, 16);
+                        _cache_tags[line] = _tr[4];
                         break;
                     case 2:
-                        base += (_tr[5] & 0x7f0);
-#if 0
-                        pclog("    Reading 16 bytes from %08X...\n", base);
-#endif
-                        for (i = 0; i < 16; i += 4)
-                            *(uint32_t *) &(_cache[i]) = mem_readl_phys(base + i);
+                        memcpy(_cache_read_buffer, &_cache[line << 4], 16);
+                        _tr[4] = _cache_tags[line];
                         break;
                     case 3:
-#if 0
-                        pclog("    Cache invalidate/flush...\n", base);
-#endif
+                        memset(_cache_tags, 0x00, sizeof(_cache_tags));
+                        _tr[4] = 0;
                         break;
                 }
             }

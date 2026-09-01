@@ -11,6 +11,8 @@
  * Authors: Miran Grca, <mgrca8@gmail.com>
  *
  *          Copyright 2019-2020 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef EMU_CHIPSET_H
 #define EMU_CHIPSET_H
@@ -134,8 +136,13 @@ extern const device_t lxt3_device;
 /* Olivetti */
 extern const device_t olivetti_eva_device;
 
+/* ETEQ */
+extern const device_t et6000_device;
+
 /* OPTi */
 extern const device_t opti283_device;
+extern const device_t opti283_m30008_device;
+extern const device_t opti283_m30015_device;
 extern const device_t opti291_device;
 extern const device_t opti381_device;
 extern const device_t opti391_device;
@@ -232,6 +239,7 @@ extern const device_t vl82c59x_compaq_device;
 extern const device_t vl82c59x_wildcat_device;
 extern const device_t vl82c59x_wildcat_compaq_device;
 extern const device_t vlsi_scamp_device;
+extern const device_t vlsi_topcat_device;
 
 /* WD */
 extern const device_t wd76c10_device;

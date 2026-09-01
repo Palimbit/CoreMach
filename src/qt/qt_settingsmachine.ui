@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- BluMach modifications: rtzor, Project BluMach, 2026. -->
 <ui version="4.0">
  <class>SettingsMachine</class>
  <widget class="QWidget" name="SettingsMachine">
@@ -119,6 +120,19 @@
               <horstretch>0</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="comboBoxRAM">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="visible">
+             <bool>false</bool>
             </property>
            </widget>
           </item>
@@ -604,6 +618,7 @@
   <tabstop>comboBoxFPU</tabstop>
   <tabstop>comboBoxWaitStates</tabstop>
   <tabstop>spinBoxRAM</tabstop>
+  <tabstop>comboBoxRAM</tabstop>
   <tabstop>checkBoxDynamicRecompiler</tabstop>
   <tabstop>checkBoxAccurateFPUEnvironment</tabstop>
   <tabstop>checkBoxFPUSoftfloat</tabstop>

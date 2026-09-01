@@ -13,6 +13,8 @@
  *
  *          Copyright 2008-2018 Sarah Walker.
  *          Copyright 2016-2018 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -24,6 +26,7 @@
 #include <86box/mem.h>
 #include <86box/rom.h>
 #include <86box/device.h>
+#include <86box/machine.h>
 #include <86box/video.h>
 #include <86box/vid_svga.h>
 #include <86box/vid_svga_render.h>
@@ -502,7 +505,9 @@ oti_init(const device_t *info)
             break;
 
         case OTI_067_M300:
-            if (rom_present(BIOS_067_M300_15_PATH))
+            if (!strcmp(machine_get_internal_name(), "olivetti_m30008"))
+                romfn = BIOS_067_M300_08_PATH;
+            else if (rom_present(BIOS_067_M300_15_PATH))
                 romfn = BIOS_067_M300_15_PATH;
             else
                 romfn = BIOS_067_M300_08_PATH;

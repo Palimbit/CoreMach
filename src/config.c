@@ -25,6 +25,8 @@
  * NOTE:    Forcing config files to be in Unicode encoding breaks
  *          it on Windows XP, and possibly also Vista. Use the
  *          -DANSI_CFG for use on these systems.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 
 #ifdef _WIN32
@@ -598,8 +600,7 @@ load_machine(void)
 
     mem_size = ini_section_get_int(cat, "mem_size", 64);
 
-    if (mem_size > machine_get_max_ram(machine))
-        mem_size = machine_get_max_ram(machine);
+    mem_size = machine_get_valid_ram(machine, mem_size);
 
     cpu_use_dynarec = !!ini_section_get_int(cat, "cpu_use_dynarec", 0);
     fpu_softfloat = !!ini_section_get_int(cat, "fpu_softfloat", 0);

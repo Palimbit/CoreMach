@@ -11,6 +11,8 @@
  * Authors: Miran Grca, <mgrca8@gmail.com>
  *
  *          Copyright 2020 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 
 #ifdef ENABLE_VL82C48X_LOG
@@ -57,8 +59,63 @@ typedef struct vl82c480_t {
     uint8_t  regs[256];
     uint32_t banks[4];
 
+    /* The Olivetti BA356 implementation provides dedicated backing for the
+       C0000h-FFFFFh shadow area.  It must not alias the DRAM-hole relocation
+       above installed memory: the resident memory test writes that region
+       before returning through the shadowed video BIOS. */
+    uint8_t      *shadow_ram;
+    mem_mapping_t shadow_mapping;
+
     void *  log; // New logging system
 } vl82c480_t;
+
+static uint8_t
+vl82c480_shadow_readb(uint32_t addr, void *priv)
+{
+    const vl82c480_t *dev = (vl82c480_t *) priv;
+
+    return dev->shadow_ram[(addr - 0x000c0000) & 0x0003ffff];
+}
+
+static uint16_t
+vl82c480_shadow_readw(uint32_t addr, void *priv)
+{
+    uint16_t ret = vl82c480_shadow_readb(addr, priv);
+
+    ret |= (uint16_t) vl82c480_shadow_readb(addr + 1, priv) << 8;
+    return ret;
+}
+
+static uint32_t
+vl82c480_shadow_readl(uint32_t addr, void *priv)
+{
+    uint32_t ret = vl82c480_shadow_readw(addr, priv);
+
+    ret |= (uint32_t) vl82c480_shadow_readw(addr + 2, priv) << 16;
+    return ret;
+}
+
+static void
+vl82c480_shadow_writeb(uint32_t addr, uint8_t val, void *priv)
+{
+    vl82c480_t *dev = (vl82c480_t *) priv;
+
+    dev->shadow_ram[(addr - 0x000c0000) & 0x0003ffff] = val;
+}
+
+static void
+vl82c480_shadow_writew(uint32_t addr, uint16_t val, void *priv)
+{
+    vl82c480_shadow_writeb(addr, val, priv);
+    vl82c480_shadow_writeb(addr + 1, val >> 8, priv);
+}
+
+static void
+vl82c480_shadow_writel(uint32_t addr, uint32_t val, void *priv)
+{
+    vl82c480_shadow_writew(addr, val, priv);
+    vl82c480_shadow_writew(addr + 2, val >> 16, priv);
+}
 
 static int
 vl82c480_shflags(uint8_t access)
@@ -250,6 +307,7 @@ vl82c480_close(void *priv)
         dev->log = NULL;
     }
 
+    free(dev->shadow_ram);
     free(dev);
 }
 
@@ -298,6 +356,14 @@ vl82c480_init(const device_t *info)
     }
 
     io_sethandler(0x00ec, 0x0004, vl82c480_read, NULL, NULL, vl82c480_write, NULL, NULL, dev);
+
+    if (machines[machine].init == machine_at_olivetti_m30030_init) {
+        dev->shadow_ram = (uint8_t *) calloc(1, 0x00040000);
+        mem_mapping_add(&dev->shadow_mapping, 0x000c0000, 0x00040000,
+                        vl82c480_shadow_readb, vl82c480_shadow_readw, vl82c480_shadow_readl,
+                        vl82c480_shadow_writeb, vl82c480_shadow_writew, vl82c480_shadow_writel,
+                        dev->shadow_ram, MEM_MAPPING_INTERNAL, dev);
+    }
 
     device_add(&port_92_pci_device);
 

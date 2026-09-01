@@ -17,6 +17,8 @@
  *          Copyright 2016-2025 Miran Grca.
  *          Copyright 2017-2020 Fred N. van Kempen.
  *          Copyright 2025      Jasmine Iwanek.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef EMU_MACHINE_H
 #define EMU_MACHINE_H
@@ -312,6 +314,8 @@ enum {
     MACHINE_CHIPSET_WD76C10,
     MACHINE_CHIPSET_ZYMOS_POACH,
     MACHINE_CHIPSET_HT101SX,
+    MACHINE_CHIPSET_VLSI_TOPCAT,
+    MACHINE_CHIPSET_ETEQ_ET6000,
     MACHINE_CHIPSET_MAX
 };
 
@@ -335,6 +339,7 @@ typedef struct _machine_memory_ {
     uint32_t min;
     uint32_t max;
     int      step;
+    const uint32_t *valid;
 } machine_memory_t;
 
 typedef struct _machine_ {
@@ -437,6 +442,7 @@ extern const char *    machine_get_jumpered_ecp_dma_name(int dma);
 extern int             machine_get_min_ram(int m);
 extern int             machine_get_max_ram(int m);
 extern int             machine_get_ram_granularity(int m);
+extern int             machine_get_valid_ram(int m, int requested);
 extern int             machine_get_type(int m);
 extern int             machine_get_chipset(int m);
 extern void            machine_close(void);
@@ -523,6 +529,25 @@ extern int             machine_at_olivetti_pcs386sx_init(const machine_t *);
 extern const device_t  sx386m_device;
 #endif
 extern int             machine_at_trigem_sx386m_init(const machine_t *);
+
+/* m_at_olivetti_m300.c */
+#ifdef EMU_DEVICE_H
+extern const device_t  olivetti_m30002_device;
+extern const device_t  olivetti_m30002f_device;
+extern const device_t  olivetti_pcs11_device;
+extern const device_t  olivetti_pcs33_device;
+extern const device_t  olivetti_m30030_device;
+#endif
+extern int             machine_at_olivetti_m30002_init(const machine_t *);
+extern int             machine_at_olivetti_m30002f_init(const machine_t *);
+extern int             machine_at_olivetti_pcs11_init(const machine_t *);
+extern int             machine_at_olivetti_pcs33_init(const machine_t *);
+extern int             machine_at_olivetti_m30008_init(const machine_t *);
+extern int             machine_at_olivetti_m30015_init(const machine_t *);
+extern int             machine_at_olivetti_m30030_init(const machine_t *);
+
+/* m_at_olivetti_m300_if378.c */
+extern int             machine_at_olivetti_m300_if378_init(const machine_t *);
 
 /* m_at_286.c */
 /* ISA */
@@ -774,6 +799,7 @@ extern int             machine_at_d824_init(const machine_t *);
 
 /* VLSI 82C486 */
 extern int             machine_at_pcs44c_init(const machine_t *);
+extern int             machine_at_pcs46c_init(const machine_t *);
 extern int             machine_at_sensation1_init(const machine_t *);
 extern int             machine_at_tuliptc38_init(const machine_t *);
 

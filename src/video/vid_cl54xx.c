@@ -16,6 +16,8 @@
  *          Copyright 2016-2020 Miran Grca.
  *          Copyright 2020      tonioni.
  *          Copyright 2016-2020 TheCollector1995.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -5165,9 +5167,11 @@ gd54xx_init(const device_t *info)
             if (local & 0x200) {
                 if (machines[machine].init == machine_at_acera1g_init)
                     romfn = BIOS_GD5428_ONBOARD_ACER_PATH;
+                else if (machines[machine].init == machine_at_pcs46c_init)
+                    romfn = "roms/machines/pcs46c/OLIVETTI.BIN";
                 else
                     romfn            = NULL;
-                gd54xx->has_bios = 0;
+                gd54xx->has_bios = (romfn != NULL);
             } else if (local & 0x100)
                 romfn = BIOS_GD5428_DIAMOND_B1_VLB_PATH;
             else {
@@ -6429,6 +6433,21 @@ const device_t gd5428_onboard_device = {
     .speed_changed = gd54xx_speed_changed,
     .force_redraw  = gd54xx_force_redraw,
     .config        = gd542x_config
+};
+
+const device_t gd5428_onboard_pcs46c_device = {
+    .name          = "Cirrus Logic GD5428 (ISA) (On-Board) (Olivetti PCS 46/C)",
+    .internal_name = "cl_gd5428_onboard_pcs46c",
+    .flags         = DEVICE_ISA16,
+    .local         = CIRRUS_ID_CLGD5428 | 0x200 | 0x1000,
+    .init          = gd54xx_init,
+    .close         = gd54xx_close,
+    .reset         = gd54xx_reset,
+    .available     = NULL,
+    .speed_changed = gd54xx_speed_changed,
+    .force_redraw  = gd54xx_force_redraw,
+    .machine       = "Olivetti PCS 46/C",
+    .config        = NULL
 };
 
 const device_t gd5428_vlb_onboard_device = {

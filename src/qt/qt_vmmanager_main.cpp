@@ -13,6 +13,8 @@
  *
  *          Copyright 2024 cold-brewed
  *          Copyright 2026 rtzor
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <QDirIterator>
 #include <QLabel>
@@ -739,6 +741,7 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
         const char *directoryName;
         const char *cpuFamily;
         int         cpuSpeed;
+        int         cpuMulti;
         int         memory;
         const char *diskFile;
         const char *diskParameters;
@@ -751,27 +754,57 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
         const char *floppyType;
     };
     static constexpr HistoricalDefaults defaults[] = {
-        { "olivetti-pcs86", "Olivetti PCS 86", "olivetti-pcs86", "necv30", 10000000, 640,
+        { "olivetti-pcs86", "Olivetti PCS 86", "olivetti-pcs86", "necv30", 10000000, 1, 640,
           "conner-cp3026-20mb.img", "17, 4, 615, 0, xta", "hdd_01_xta_channel = 0", "1989_3500rpm",
           615LL * 4 * 17 * 512, false, "internal", "keyboard_pc_xt", "35_2hd" },
-        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12000000, 1024,
+        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12000000, 1, 1024,
           "conner-cp346-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
           805LL * 4 * 26 * 512, true, "pvga1a", "keyboard_at", "35_2hd" },
-        { "olivetti-pcs286s", "Olivetti PCS 286/S (TI/OLIMCU16)", "olivetti-pcs286s-ti", "286", 12000000, 1024,
+        { "olivetti-pcs286s", "Olivetti PCS 286/S (TI/OLIMCU16)", "olivetti-pcs286s-ti", "286", 12000000, 1, 1024,
           "olivetti-pcs286s-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
           805LL * 4 * 26 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-pcs386sx", "Olivetti PCS 386SX", "olivetti-pcs386sx", "i386sx", 16000000, 4096,
+        { "olivetti-pcs386sx", "Olivetti PCS 386SX", "olivetti-pcs386sx", "i386sx", 16000000, 1, 4096,
           "conner-cp3104-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
           776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "ta-dario286", "Triumph-Adler Dario 286", "ta-dario286", "286", 12000000, 1024,
+        { "ta-dario286", "Triumph-Adler Dario 286", "ta-dario286", "286", 12000000, 1, 1024,
           "conner-cp346-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
           805LL * 4 * 26 * 512, true, "pvga1a", "keyboard_at", "35_2hd" },
-        { "ta-dario386sx", "Triumph-Adler Dario 386SX", "ta-dario386sx", "i386sx", 16000000, 4096,
+        { "ta-dario386sx", "Triumph-Adler Dario 386SX", "ta-dario386sx", "i386sx", 16000000, 1, 4096,
           "conner-cp3104-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
           776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "trigem-sx386m", "TriGem SX386M / Emerson Elite SX386/16", "trigem-sx386m", "i386sx", 16000000, 4096,
+        { "trigem-sx386m", "TriGem SX386M / Emerson Elite SX386/16", "trigem-sx386m", "i386sx", 16000000, 1, 4096,
           "sx386m-40mb-type17.img", "17, 5, 977, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          977LL * 5 * 17 * 512, false, "pvga1a", "keyboard_at", "35_2hd" }
+          977LL * 5 * 17 * 512, false, "pvga1a", "keyboard_at", "35_2hd" },
+        { "olivetti-m300-if378", "Olivetti M300 (IF378)", "olivetti-m300-if378", "i386sx", 16000000, 1, 2048,
+          "olivetti-m300-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
+          805LL * 4 * 26 * 512, false, "pvga1a", "keyboard_at", "35_2hd" },
+        { "olivetti-m30002", "Olivetti M300-02", "olivetti-m30002", "i386sx", 16000000, 1, 2048,
+          "olivetti-m30002-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
+          805LL * 4 * 26 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-m30002f", "Olivetti M300-02F", "olivetti-m30002f", "i386sx", 25000000, 1, 2048,
+          "olivetti-m30002f-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-pcs11", "Olivetti PCS 11", "olivetti-pcs11", "i386sx", 16000000, 1, 2048,
+          "olivetti-pcs11-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
+          805LL * 4 * 26 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-pcs33", "Olivetti PCS 33", "olivetti-pcs33", "i386sx", 25000000, 1, 2048,
+          "olivetti-pcs33-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-m30008", "Olivetti M300-08", "olivetti-m30008", "i386sx", 20000000, 1, 2048,
+          "olivetti-m30008-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-m30015", "Olivetti M300-15", "olivetti-m30015", "am386sx", 25000000, 1, 4096,
+          "olivetti-m30015-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-m30030", "Olivetti M300-30", "olivetti-m30030", "i486sx", 25000000, 1, 4096,
+          "olivetti-m30030-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-m30030p", "Olivetti M300-30P", "olivetti-m30030p", "i486dx2", 50000000, 2, 4096,
+          "olivetti-m30030p-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
+        { "olivetti-pcs46c", "Olivetti PCS 46/C", "olivetti-pcs46c", "i486dx2", 50000000, 2, 4096,
+          "olivetti-pcs46c-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
+          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" }
     };
 
     const HistoricalDefaults *selected = nullptr;
@@ -796,6 +829,9 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
 
     QString directoryName = QString::fromLatin1(selected->directoryName);
     directoryName += QStringLiteral("-%1").arg(QDateTime::currentSecsSinceEpoch());
+    const QString cpuFamily = QString::fromLatin1(selected->cpuFamily);
+    const bool useDynarec = cpuFamily.contains(QLatin1String("386")) ||
+                            cpuFamily.contains(QLatin1String("486"));
     QString configuration = QStringLiteral(
         "[General]\n"
         "vid_renderer = qt_software\n"
@@ -804,11 +840,13 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
         "machine = %1\n"
         "cpu_family = %2\n"
         "cpu_speed = %3\n"
-        "cpu_multi = 1\n"
-        "cpu_use_dynarec = 0\n"
-        "mem_size = %4\n")
-                                      .arg(machineId, QString::fromLatin1(selected->cpuFamily))
+        "cpu_multi = %4\n"
+        "cpu_use_dynarec = %5\n"
+        "mem_size = %6\n")
+                                      .arg(machineId, cpuFamily)
                                       .arg(selected->cpuSpeed)
+                                      .arg(selected->cpuMulti)
+                                      .arg(useDynarec ? 1 : 0)
                                       .arg(selected->memory);
     if (productId == QLatin1String("olivetti-pcs86"))
         configuration += QStringLiteral(
@@ -826,6 +864,12 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
         configuration += QStringLiteral("\n[Olivetti PCS 286S (TI)]\nbios = v206\n");
     else if (productId == QLatin1String("ta-dario286"))
         configuration += QStringLiteral("\n[Triumph-Adler Dario 286 (P35)]\nbios = v142\n");
+    else if (productId == QLatin1String("olivetti-pcs11"))
+        configuration += QStringLiteral("\n[Olivetti PCS 11 (BA013/16)]\nkeylock_locked = 0\n");
+    else if (productId == QLatin1String("olivetti-pcs33"))
+        configuration += QStringLiteral("\n[Olivetti PCS 33 (BA013/25)]\nkeylock_locked = 0\n");
+    else if (productId == QLatin1String("olivetti-m30030") || productId == QLatin1String("olivetti-m30030p"))
+        configuration += QStringLiteral("\n[Olivetti M300-30 / M300-30P]\nbios = diag104\n");
     configuration += QStringLiteral(
         "\n[Video]\n"
         "gfxcard = %1\n\n"

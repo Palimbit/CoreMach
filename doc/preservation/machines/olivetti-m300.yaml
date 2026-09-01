@@ -1,0 +1,121 @@
+schema: blumach-preservation-family-v1
+identity:
+  manufacturer: Olivetti
+  family: M300
+  identity_warning: "Commercial family; members are not necessarily motherboard-compatible."
+implementation:
+  released:
+    - model: "M300 (IF378)"
+      machine_id: olivetti_m300_if378
+      status: partial-bootable
+      documented_hardware: "386SX/16; Intel 82230, 82231, 82335; IN108; GO477; GO481"
+      emulation_boundary: "82335 model plus compatible AT/IDE/FDC/serial substitutes; GO481 not modelled"
+      observed: "Resident Diagnostics and MS-DOS 3.30a"
+    - model: "M300-02F BA013/25"
+      machine_id: olivetti_m30002f
+      status: partial-bootable
+      documented_hardware: "386SX/25; VLSI VL82C320/VL82C331 TOPCAT; WD90C11C; 87C310; Acer FDC; MSI IDE"
+      emulation_boundary: "Initial TOPCAT register/memory model; compatible multifunction substitutes for discrete I/O"
+      observed: "Cold POST, memory paths, EMS programming and boot"
+    - model: "M300-02 BA013/16"
+      machine_id: olivetti_m30002
+      status: implemented-awaiting-boot-validation
+      documented_hardware: "386SX/16; VLSI VL82C320/VL82C331 TOPCAT; WD90C11C; 87C310; Acer FDC; MSI IDE"
+      emulation_boundary: "Shares the initial BA013 TOPCAT model; exact 16 MHz behaviour and R1.03 remain pending"
+      observed: "Exact R1.02 image identified and machine target compiled"
+    - model: "M300-08 BA319/BA324/BA325"
+      machine_id: olivetti_m30008
+      status: partial-bootable
+      documented_hardware: "386SX/20; OPTi 82C283; 82C206; OAK OTI067"
+      emulation_boundary: "Dedicated 82C283 with 10 MHz ISA clock; 82C206 supplied by common AT functions"
+      observed: "POST, Setup, calendar rollover, floppy and MS-DOS 3.30a"
+    - model: "M300-15 BA320"
+      machine_id: olivetti_m30015
+      status: partial-bootable
+      documented_hardware: "Intel 386SX/25 with AMD 386SX/25 later alternative; OPTi 82C283; 82C206; OAK OTI067"
+      emulation_boundary: "Dedicated 82C283 with 8.33 MHz ISA clock; 82C206 supplied by common AT functions"
+      observed: "POST, Calendar PASS, floppy and MS-DOS 3.30a"
+    - model: "M300-30"
+      machine_id: olivetti_m30030
+      status: partial-bootable
+      documented_hardware: "i486SX/25; VLSI VL82C486; WD90C31; PC87311/87312 family"
+      emulation_boundary: "Initial VL82C486 model; WD90C31 uses WD90C30 core; PC87311/87312 uses compatible PC873xx; dedicated-memory layout validated at 4 MiB"
+      observed: "BIOS 1.09/Diagnostics 1.04 full POST and diagnostics, MS-DOS 5.00 boot, warm reset and calendar persistence; 4 MiB accounts as 640+3072+384 KiB"
+    - model: "M300-30P"
+      machine_id: olivetti_m30030p
+      status: partial-bootable
+      documented_hardware: "i486DX2/50 on 25 MHz external bus; otherwise shared M300-30 platform"
+      emulation_boundary: "Shares the partial M300-30 board model; Diagnostics 2.00 labels the configured DX2/50 as DX2-66; Ctrl+Alt+Del warm reset can halt during early firmware initialisation"
+      observed: "Cold boot with BIOS 1.09/Diagnostics 2.00 completes resident diagnostics at 4 MiB and reports 640 KiB base, 3072 KiB extended, 384 KiB dedicated, 4096 KiB total; hard reset is the current workaround for the open warm-reset defect"
+  research:
+    - { model: "M300-01", machine_id: null, status: firmware-missing }
+    - { model: "M300-04", machine_id: null, status: firmware-missing }
+    - { model: "M300-05", machine_id: null, status: firmware-and-proprietary-logic-missing }
+    - { model: "M300-10", machine_id: null, status: firmware-and-nord-chipset-missing }
+    - { model: "M300-25 / P500-E", machine_id: null, status: firmware-and-mca-dba-storage-missing }
+    - { model: "M300-28 / PCS44 BA362", machine_id: null, status: exact-firmware-identity-unresolved }
+memory_populations_kib:
+  olivetti_m30002: [2048, 4096, 10240]
+  olivetti_m30002f: [2048, 4096, 10240]
+  olivetti_m30008: [2048, 4096, 8192, 10240, 14336, 16384]
+  olivetti_m30015: [4096, 8192, 10240, 14336, 16384]
+  olivetti_m30030: [4096, 8192, 12288, 20480, 24576, 36864]
+  olivetti_m30030p: [4096, 8192, 12288, 20480, 24576, 36864]
+firmware_policy:
+  redistributed: false
+  note: "Only expected names, layouts, hashes and identification strings may be committed."
+firmware_metadata:
+  - machine_id: olivetti_m300_if378
+    expected_file: roms/machines/m300_if378/BIOS.ROM
+    size: 65536
+    sha256: 858C46B968832D3CE26C8ABBD9A825782427F8DB1D674F571F2F9B20F02A6E9A
+  - machine_id: olivetti_m30002f
+    set: M300-02F-5.01
+    size: 131072
+    sha256: 4BEC628E10388D656C571DEE2E8A99500C098D273F8B61D79A8E53B7744441E4
+  - machine_id: olivetti_m30002
+    model: M300-02-BA013-16
+    set: M300-02-1.02
+    expected_file: roms/machines/m30002/BIOS-R1.02.ROM
+    internal_date: "04/28/92"
+    size: 131072
+    sha256: 5E3E0BF74741C7C68B81711E410B5900132C1F81D1F4240F683A97DDC3288177
+    source: https://theretroweb.com/motherboard/bios/olivetti-m300-02-bios-1-02-6904790be6b23201031634.bin
+  - machine_id: olivetti_m30008
+    set: system-bios-logical
+    size: 65536
+    sha256: A9929E5195E74510C636B2C24E87FA1F7F0034DD64FD16EC2E947F070AE391B6
+  - machine_id: olivetti_m30008
+    set: evc-logical
+    size: 32768
+    sha256: 421A9737C890D48C44593A05218140145438297676247222B60264AD3FDDB40A
+  - machine_id: olivetti_m30015
+    set: system-bios-logical
+    size: 65536
+    sha256: 2E6E6BD47A1726D261A57531D20DF121F0651F76A0E62E83FBEA124F9194B4F6
+  - machine_id: olivetti_m30015
+    set: evc-logical
+    size: 32768
+    sha256: 421A9737C890D48C44593A05218140145438297676247222B60264AD3FDDB40A
+  - machine_ids: [olivetti_m30030, olivetti_m30030p]
+    set: BIOS-1.09-DIAG-1.03
+    expected_file: roms/machines/m30030/BIOS-1.09-DIAG-1.03.BIN
+    size: 131072
+    sha256: CA62A4A70B5EBC18B84E7D943F6C615F1076A8036DCCBBC4EC4CF396FE5ED916
+  - machine_ids: [olivetti_m30030, olivetti_m30030p]
+    set: BIOS-1.09-DIAG-1.04
+    expected_file: roms/machines/m30030/BIOS-1.09-DIAG-1.04.BIN
+    size: 131072
+    sha256: 11B787C8B721C5237C34E4B7F2231AC603EE1F0FCCDCCE5C4C81C10BBD3B6AD5
+  - machine_ids: [olivetti_m30030, olivetti_m30030p]
+    set: BIOS-1.09-DIAG-2.00
+    expected_file: roms/machines/m30030/BIOS-1.09-DIAG-2.00.BIN
+    size: 131072
+    sha256: CFF38096CAD2CF74CF4716558281A908787DD8647025A9947D4641326F58B048
+sources:
+  - { type: primary-service-documentation, model: "M300 IF378", url: "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap10.pdf" }
+  - { type: primary-service-documentation, model: "M300-08", url: "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap28.pdf" }
+  - { type: primary-service-documentation, model: "M300-15", url: "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap29.pdf" }
+  - { type: primary-service-documentation, model: "M300-02/M300-02F", url: "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap40.pdf" }
+  - { type: primary-service-documentation, model: "M300-30/M300-30P", url: "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap36.pdf" }
+notes: "Observed boot paths validate only the listed scenarios; none of these machines is presented as cycle-accurate or complete."

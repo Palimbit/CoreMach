@@ -19,6 +19,8 @@
  *          Copyright 2025      Jasmine Iwanek.
  *          Copyright 2017-2025 Fred N. van Kempen.
  *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free  Software  Foundation; either  version 2 of the License, or
@@ -72,7 +74,9 @@ machine_at_common_init(const machine_t *model)
 
     if ((model->init != machine_at_m290_init) &&
         (model->init != machine_at_olivetti_pcs286_init) &&
-        (model->init != machine_at_olivetti_pcs386sx_init))
+        (model->init != machine_at_olivetti_pcs386sx_init) &&
+        (model->init != machine_at_olivetti_m30002f_init) &&
+        (model->init != machine_at_olivetti_m30030_init))
         device_add(&port_6x_device);
 
     standalone_gameport_type = &gameport_device;

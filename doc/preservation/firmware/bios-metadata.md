@@ -74,3 +74,16 @@ images:
 The downloadable merged and LOW/HIGH files for `DG2X-6080-020491-KB` are two
 representations of the same Emerson image, not separate Emerson and Epson
 revisions.
+
+## Olivetti M300-30 and M300-30P
+
+Both selectable machine identities use the same 128 KiB firmware selector.
+Exact set-to-board-number assignment is not yet proven. The first 24 KiB hold
+OVC 1.09; BluMach maps the first 32 KiB at C0000h while keeping the complete
+image at E0000h.
+
+| Set | Expected filename | Size | SHA-256 |
+|---|---|---:|---|
+| BIOS 1.09 / Diagnostics 1.03 | `BIOS-1.09-DIAG-1.03.BIN` | 131072 | `ca62a4a70b5ebc18b84e7d943f6c615f1076a8036dccbbc4ec4cf396fe5ed916` |
+| BIOS 1.09 / Diagnostics 1.04 | `BIOS-1.09-DIAG-1.04.BIN` | 131072 | `11b787c8b721c5237c34e4b7f2231ac603ee1f0fccdcce5c4c81c10bbd3b6ad5` |
+| BIOS 1.09 / Diagnostics 2.00 | `BIOS-1.09-DIAG-2.00.BIN` | 131072 | `cff38096cad2cf74cf4716558281a908787dd8647025a9947d4641326f58b048` |

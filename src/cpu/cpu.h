@@ -17,6 +17,8 @@
  *          Copyright 2008-2020 Sarah Walker.
  *          Copyright 2016-2018 leilei.
  *          Copyright 2016-2020 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef EMU_CPU_H
 #define EMU_CPU_H
@@ -626,7 +628,10 @@ extern uint32_t cr4;
 extern uint32_t dr[8];
 extern uint32_t _tr[8];
 extern uint32_t cache_index;
-extern uint8_t  _cache[2048];
+extern uint8_t  _cache[8192];
+extern uint8_t  _cache_fill_buffer[16];
+extern uint8_t  _cache_read_buffer[16];
+extern uint32_t _cache_tags[512];
 
 /* For the Cyrix 6x86(MX) */
 extern uint8_t ccr0;

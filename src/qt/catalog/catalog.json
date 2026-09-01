@@ -30,6 +30,20 @@
       "description_key": "family.olivetti-pcs.description"
     },
     {
+      "id": "olivetti-m300",
+      "manufacturer_id": "olivetti",
+      "parent_family_id": "",
+      "name": "M300",
+      "description_key": "family.olivetti-m300.description"
+    },
+    {
+      "id": "olivetti-pcs-4xc",
+      "manufacturer_id": "olivetti",
+      "parent_family_id": "olivetti-pcs",
+      "name": "PCS 4x/C",
+      "description_key": "family.olivetti-pcs-4xc.description"
+    },
+    {
       "id": "triumph-adler-dario",
       "manufacturer_id": "triumph-adler",
       "parent_family_id": "",
@@ -69,6 +83,56 @@
       "id": "trigem-sx386m-platform",
       "emulator_machine_id": "sx386m",
       "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-m300-if378-platform",
+      "emulator_machine_id": "olivetti_m300_if378",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-m30002-platform",
+      "emulator_machine_id": "olivetti_m30002",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-m30002f-platform",
+      "emulator_machine_id": "olivetti_m30002f",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-pcs11-platform",
+      "emulator_machine_id": "olivetti_pcs11",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-pcs33-platform",
+      "emulator_machine_id": "olivetti_pcs33",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-m30008-platform",
+      "emulator_machine_id": "olivetti_m30008",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-m30015-platform",
+      "emulator_machine_id": "olivetti_m30015",
+      "architecture": "80386SX"
+    },
+    {
+      "id": "olivetti-m30030-platform",
+      "emulator_machine_id": "olivetti_m30030",
+      "architecture": "i486SX"
+    },
+    {
+      "id": "olivetti-m30030p-platform",
+      "emulator_machine_id": "olivetti_m30030p",
+      "architecture": "i486DX2"
+    },
+    {
+      "id": "olivetti-pcs46c-platform",
+      "emulator_machine_id": "pcs46c",
+      "architecture": "i486DX2"
     },
     {
       "id": "ta-dario286-platform",
@@ -550,6 +614,240 @@
           ]
         }
       ]
+    },
+    {
+      "id": "olivetti-m300-if378",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m300-if378-platform",
+      "name": "Olivetti M300 (IF378)",
+      "summary_key": "product.olivetti-m300-if378.summary",
+      "history_key": "product.olivetti-m300-if378.history",
+      "status": "partial",
+      "period": "1990",
+      "aliases": ["M300 UC.112/113"],
+      "tags": ["80386SX", "16 MHz", "Intel 82335", "modular", "IDE"],
+      "hardware": {
+        "cpu": "Intel 80386SX 16 MHz on IF378",
+        "memory": "1–12 MB",
+        "chipset": "Intel 82230/82231/82335",
+        "expansion": "IN108 system bus; GO477 multifunction board"
+      },
+      "firmware": {"known_sets": ["PEQX Resident Diagnostics 1.09"], "required": true},
+      "technical": [{
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {"label_key": "technical.label.verified", "value_key": "product.olivetti-m300-if378.technical.verified"},
+          {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m300-if378.technical.limitations"}
+        ]
+      }]
+    },
+    {
+      "id": "olivetti-m30002",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m30002-platform",
+      "name": "Olivetti M300-02",
+      "summary_key": "product.olivetti-m30002.summary",
+      "history_key": "product.olivetti-m30002.history",
+      "status": "partial",
+      "period": "1992",
+      "aliases": ["BA013/16"],
+      "tags": ["80386SX", "16 MHz", "VLSI TOPCAT", "WD90C11", "EMS"],
+      "hardware": {
+        "cpu": "Intel 80386SX 16 MHz",
+        "memory": "2, 4 or 10 MB",
+        "chipset": "VLSI TOPCAT VL82C320/VL82C331",
+        "video": "Integrated Western Digital WD90C11, 512 KB"
+      },
+      "firmware": {"known_sets": ["Resident Diagnostics 1.02", "Resident Diagnostics 1.03 (missing)"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30002.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30002.technical.limitations"}
+      ]}]
+    },
+    {
+      "id": "olivetti-m30002f",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m30002f-platform",
+      "name": "Olivetti M300-02F",
+      "summary_key": "product.olivetti-m30002f.summary",
+      "history_key": "product.olivetti-m30002f.history",
+      "status": "partial",
+      "period": "1992",
+      "aliases": ["BA013/25"],
+      "tags": ["80386SX", "25 MHz", "VLSI TOPCAT", "WD90C11", "EMS"],
+      "hardware": {
+        "cpu": "Intel 80386SX 25 MHz",
+        "memory": "2, 4 or 10 MB",
+        "chipset": "VLSI TOPCAT VL82C320/VL82C331",
+        "video": "Integrated Western Digital WD90C11, 512 KB"
+      },
+      "firmware": {"known_sets": ["Resident Diagnostics 5.01"], "required": true},
+      "technical": [{
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30002f.technical.verified"},
+          {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30002f.technical.limitations"}
+        ]
+      }]
+    },
+    {
+      "id": "olivetti-pcs11",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs",
+      "platform_id": "olivetti-pcs11-platform",
+      "name": "Olivetti PCS 11",
+      "summary_key": "product.olivetti-pcs11.summary",
+      "history_key": "product.olivetti-pcs11.history",
+      "status": "partial",
+      "period": "1992–1993",
+      "aliases": ["PCS11"],
+      "tags": ["80386SX", "16 MHz", "VLSI TOPCAT", "WD90C11", "booksize"],
+      "hardware": {
+        "cpu": "Intel 80386SX 16 MHz",
+        "memory": "2 MB standard; up to 10 MB",
+        "chipset": "VLSI TOPCAT VL82C320/VL82C331",
+        "video": "Integrated Western Digital WD90C11",
+        "enclosure": "Compact A4-footprint booksize unit"
+      },
+      "firmware": {"known_sets": ["2.04/2.07 verified dumps (16 MHz)"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs11.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs11.technical.limitations"}
+      ]}]
+    },
+    {
+      "id": "olivetti-pcs33",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs",
+      "platform_id": "olivetti-pcs33-platform",
+      "name": "Olivetti PCS 33",
+      "summary_key": "product.olivetti-pcs33.summary",
+      "history_key": "product.olivetti-pcs33.history",
+      "status": "partial",
+      "period": "1992–1993",
+      "aliases": ["PCS33"],
+      "tags": ["80386SX", "25 MHz", "VLSI TOPCAT", "WD90C11", "office"],
+      "hardware": {
+        "cpu": "Intel 80386SX 25 MHz",
+        "memory": "2 MB standard; shared BA013 model supports up to 10 MB",
+        "chipset": "VLSI TOPCAT VL82C320/VL82C331 (current shared-platform identification)",
+        "video": "Integrated Western Digital WD90C11",
+        "storage": "Contemporary configurations list 40–120 MB IDE disks"
+      },
+      "firmware": {"known_sets": ["6.03 PCS 33 (25 MHz)"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs33.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs33.technical.limitations"}
+      ]}]
+    },
+    {
+      "id": "olivetti-m30008",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m30008-platform",
+      "name": "Olivetti M300-08",
+      "summary_key": "product.olivetti-m30008.summary",
+      "history_key": "product.olivetti-m30008.history",
+      "status": "partial",
+      "period": "1992",
+      "aliases": ["BA319", "BA324", "BA325"],
+      "tags": ["80386SX", "20 MHz", "OPTi 82C283", "OAK OTI-067"],
+      "hardware": {"cpu": "Intel 80386SX 20 MHz", "memory": "2/4/8/10/14/16 MB", "chipset": "OPTi 82C283 + separate 82C206", "bus": "ISA/AT 10 MHz", "video": "Integrated OAK OTI-067"},
+      "firmware": {"known_sets": ["64 KB system BIOS + 32 KB EVC"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30008.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30008.technical.limitations"}
+      ]}]
+    },
+    {
+      "id": "olivetti-m30015",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m30015-platform",
+      "name": "Olivetti M300-15",
+      "summary_key": "product.olivetti-m30015.summary",
+      "history_key": "product.olivetti-m30015.history",
+      "status": "partial",
+      "period": "1992",
+      "aliases": ["BA320"],
+      "tags": ["80386SX", "25 MHz", "OPTi 82C283", "OAK OTI-067"],
+      "hardware": {"cpu": "Intel 80386SX 25 MHz; AMD 80386SX-25 alternative", "memory": "4/8/10/14/16 MB", "chipset": "OPTi 82C283 + separate 82C206", "bus": "ISA/AT 8.33 MHz", "video": "Integrated OAK OTI-067"},
+      "firmware": {"known_sets": ["64 KB system BIOS + 32 KB EVC"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30015.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30015.technical.limitations"}
+      ]}]
+    },
+    {
+      "id": "olivetti-m30030",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m30030-platform",
+      "name": "Olivetti M300-30",
+      "summary_key": "product.olivetti-m30030.summary",
+      "history_key": "product.olivetti-m30030.history",
+      "status": "partial",
+      "period": "1992–1993",
+      "aliases": [],
+      "tags": ["i486SX", "25 MHz", "VLSI VL82C486", "WD90C31"],
+      "hardware": {"cpu": "Intel i486SX/25", "memory": "4/8/12/20/24/36 MB", "chipset": "VLSI VL82C486", "video": "Integrated Western Digital WD90C31, 1 MB", "io": "PC87311/87312 family; separate Olivetti 8042"},
+      "firmware": {"known_sets": ["BIOS 1.09 / Diagnostics 1.03", "BIOS 1.09 / Diagnostics 1.04", "BIOS 1.09 / Diagnostics 2.00"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30030.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30030.technical.limitations"}
+      ]}, {"title_key": "technical.section.sources", "evidence_key": "technical.evidence.traceable", "entries": [
+        {"label_key": "technical.label.manual", "value_key": "product.olivetti-m30030.technical.manual", "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap36.pdf"}
+      ]}]
+    },
+    {
+      "id": "olivetti-m30030p",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-m300",
+      "platform_id": "olivetti-m30030p-platform",
+      "name": "Olivetti M300-30P",
+      "summary_key": "product.olivetti-m30030p.summary",
+      "history_key": "product.olivetti-m30030p.history",
+      "status": "partial",
+      "period": "1992–1993",
+      "aliases": [],
+      "tags": ["i486DX2", "50 MHz", "VLSI VL82C486", "WD90C31"],
+      "hardware": {"cpu": "Intel i486DX2/50; 25 MHz external bus", "memory": "4/8/12/20/24/36 MB", "chipset": "VLSI VL82C486", "video": "Integrated Western Digital WD90C31, 1 MB", "io": "PC87311/87312 family; separate Olivetti 8042"},
+      "firmware": {"known_sets": ["BIOS 1.09 / Diagnostics 1.03", "BIOS 1.09 / Diagnostics 1.04", "BIOS 1.09 / Diagnostics 2.00"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30030p.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30030p.technical.limitations"}
+      ]}, {"title_key": "technical.section.sources", "evidence_key": "technical.evidence.traceable", "entries": [
+        {"label_key": "technical.label.manual", "value_key": "product.olivetti-m30030p.technical.manual", "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap36.pdf"}
+      ]}]
+    },
+    {
+      "id": "olivetti-pcs46c",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-pcs-4xc",
+      "platform_id": "olivetti-pcs46c-platform",
+      "name": "Olivetti PCS 46/C",
+      "summary_key": "product.olivetti-pcs46c.summary",
+      "history_key": "product.olivetti-pcs46c.history",
+      "status": "partial",
+      "period": "1993",
+      "aliases": ["BA2036"],
+      "tags": ["i486DX2", "50 MHz", "ETEQ ET6000", "CL-GD5428", "IDE"],
+      "hardware": {"cpu": "Intel i486DX2/50", "memory": "4/8/12/20/36 MB", "chipset": "ETEQ ET6000 + separate 83C206Q", "board": "BA2036 based on T.1 BA2044", "video": "Integrated Cirrus Logic CL-GD5428, 1 MB", "floppy": "PC87310 integrated controller"},
+      "firmware": {"known_sets": ["Resident Diagnostics 1.05 + OVC 1.09"], "required": true},
+      "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
+        {"label_key": "technical.label.rom_layout", "value_key": "product.olivetti-pcs46c.technical.rom_layout"},
+        {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs46c.technical.verified"},
+        {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs46c.technical.limitations"}
+      ]}, {
+        "title_key": "technical.section.sources",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [{"label_key": "technical.label.manual", "value_key": "product.olivetti-pcs46c.technical.manual", "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems2/cap2.pdf"}]
+      }]
     },
     {
       "id": "ta-dario286",

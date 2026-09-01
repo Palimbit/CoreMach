@@ -17,6 +17,8 @@
  *          Copyright 2016-2018 leilei.
  *          Copyright 2016-2020 Miran Grca.
  *          Copyright 2018-2021 Fred N. van Kempen.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <inttypes.h>
 #include <math.h>
@@ -277,7 +279,10 @@ uint32_t cpu_fast_off_flags;
 
 uint32_t _tr[8]      = { 0, 0, 0, 0, 0, 0, 0, 0 };
 uint32_t cache_index = 0;
-uint8_t  _cache[2048];
+uint8_t  _cache[8192];
+uint8_t  _cache_fill_buffer[16];
+uint8_t  _cache_read_buffer[16];
+uint32_t _cache_tags[512];
 
 uint64_t cpu_CR4_mask;
 uint64_t tsc = 0;

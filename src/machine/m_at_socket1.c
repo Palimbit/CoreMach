@@ -11,6 +11,8 @@
  * Authors: Miran Grca, <mgrca8@gmail.com>
  *
  *          Copyright 2016-2025 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdarg.h>
 #include <stdint.h>
@@ -546,6 +548,33 @@ machine_at_pcs44c_init(const machine_t *model)
 
     device_add(&intel_flash_bxt_device);
 
+    return ret;
+}
+
+/* ETEQ ET6000 - Olivetti PCS 46/C BA2036, based on T.1 BA2044. */
+int
+machine_at_pcs46c_init(const machine_t *model)
+{
+    int ret;
+
+    /* The lower 64 KiB of the 27C010 contain OVC video firmware; the upper
+       64 KiB contain the system BIOS. */
+    ret = bios_load_linear("roms/machines/pcs46c/OLIVETTI.BIN",
+                           0x000f0000, 65536, 65536);
+
+    if (bios_only || !ret)
+        return ret;
+
+    machine_at_common_init(model);
+    device_add(&et6000_device);
+    device_add_params(machine_get_kbc_device(machine),
+                      (void *) model->kbc_params);
+
+    if (gfxcard[0] == VID_INTERNAL)
+        device_add(machine_get_vid_device(machine));
+
+    device_add_params(&pc87310_device, (void *) PCX73XX_IDE_PRI);
+    device_add(&gameport_201_device);
     return ret;
 }
 

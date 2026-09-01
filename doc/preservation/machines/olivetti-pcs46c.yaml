@@ -1,0 +1,61 @@
+schema: blumach-preservation-machine-v1
+identity:
+  manufacturer: Olivetti
+  model: PCS 46/C
+  aliases: []
+  years: "1993"
+  confidence: documented
+  board: "BA2036, based on T.1 BA2044 base assembly"
+  related_not_aliases:
+    - model: M4-46
+      relationship: "related design family and distinct commercial/board variant"
+implementation:
+  machine_id: pcs46c
+  status: partial-bootable
+  observed:
+    - cold POST and 4 MiB memory detection
+    - internal video and OVC execution
+    - CMOS diagnostics
+    - floppy and MS-DOS 3.30a boot
+    - second boot with retained NVR state
+    - Ctrl+Alt+Del warm reset
+  pending:
+    - Setup date/time persistence after editing
+    - documented IDE geometry and storage diagnostics
+    - 8/12/20/36 MiB configurations
+    - broad DOS, application and expansion-card compatibility
+    - dedicated 83C206Q behaviour
+hardware:
+  cpu: Intel i486DX2/50, 25 MHz external bus
+  chipset: ETEQ ET6000 plus 83C206Q
+  memory: 4/8/12/20/36 MiB
+  video: Cirrus Logic CL-GD5428, 1 MiB, integrated OVC
+  super_io: National Semiconductor PC87310
+  keyboard_mouse: 8042
+  storage_glue: Olivetti MSI hard-disk buffer/logic
+emulation_mapping:
+  ET6000: dedicated existing chipset model
+  83C206Q: common AT PIC/DMA/PIT and nvr_at functional substitute
+  PC87310: compatible multifunction model including primary IDE
+  MSI: electrical buffering not separately modelled
+  GD5428: dedicated onboard PCS46C profile with 1 MiB video memory
+firmware:
+  required: true
+  redistributed: false
+  physical_layout: "one 27C010; lower 64 KiB OVC, upper 64 KiB diagnostics/system BIOS"
+  sets:
+    - name: OLIVETTI.BIN
+      expected_path: roms/machines/pcs46c/OLIVETTI.BIN
+      size: 131072
+      sha256: E34EE6ADE7CEA7D40FA15D63C3AFAF43CD68E05932841D877915741716BD1995
+      identification: "Resident Diagnostics 1.05 (1993-07-07); OVC 1.09"
+relationships: []
+publications:
+  brochures: []
+  manuals:
+    - title: Olivetti Pocket Service Guide, M4-4x / M4-6x / PCS4xx
+      url: https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems2/cap2.pdf
+sources:
+  - type: primary-service-documentation
+    url: https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems2/cap2.pdf
+notes: "Bootable and useful, but explicitly partial; M4-46 must not be used as an alias."
