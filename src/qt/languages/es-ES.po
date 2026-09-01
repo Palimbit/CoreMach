@@ -22,6 +22,12 @@ msgstr "Explora equipos por fabricante y familia, revisa su estado de conservaci
 msgid "Search models, aliases or hardware"
 msgstr "Buscar modelos, alias o hardware"
 
+msgid "Search machines"
+msgstr "Buscar máquinas"
+
+msgid "No machines found"
+msgstr "No se encontraron máquinas"
+
 msgid "All preservation states"
 msgstr "Todos los estados de conservación"
 
@@ -34,6 +40,12 @@ msgstr "Crear esta máquina…"
 msgid "Catalog unavailable"
 msgstr "Catálogo no disponible"
 
+msgid "No matching computers"
+msgstr "No hay equipos que coincidan"
+
+msgid "Try changing the search text or preservation-state filter."
+msgstr "Prueba a cambiar el texto de búsqueda o el filtro de estado de conservación."
+
 msgid "Manufacturer"
 msgstr "Fabricante"
 
@@ -45,6 +57,21 @@ msgstr "Historia"
 
 msgid "Hardware"
 msgstr "Hardware"
+
+msgid "Unpreserved firmware"
+msgstr "Firmware no conservado"
+
+msgid "Authentic firmware"
+msgstr "Firmware auténtico"
+
+msgid "Evidence: %1"
+msgstr "Evidencia: %1"
+
+msgid "%1 computer"
+msgstr "%1 ordenador"
+
+msgid "%1 computers"
+msgstr "%1 ordenadores"
 
 msgid "Collection"
 msgstr "Colección"
@@ -3526,3 +3553,9 @@ msgstr ""
 
 msgid "Luminance threshold (%)"
 msgstr ""
+
+msgid "Concept illustration"
+msgstr "Ilustración conceptual"
+
+msgid "Board recreation"
+msgstr "Recreación de la placa"

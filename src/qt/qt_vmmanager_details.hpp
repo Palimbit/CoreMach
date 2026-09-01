@@ -9,8 +9,10 @@
  *          Header for 86Box VM manager system details module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #ifndef QT_VMMANAGER_DETAILS_H
 #define QT_VMMANAGER_DETAILS_H
@@ -26,6 +28,8 @@ namespace Ui {
 class VMManagerDetails;
 }
 QT_END_NAMESPACE
+
+class QResizeEvent;
 
 class VMManagerDetails : public QWidget {
     Q_OBJECT
@@ -83,6 +87,8 @@ private:
 
     void            updateConfig(VMManagerSystem *passed_sysconfig);
     void            updateScreenshots(VMManagerSystem *passed_sysconfig);
+    void            applyAppearance();
+    void            updateResponsiveLayout();
     static QWidget *createHorizontalLine(int leftSpacing = 25, int rightSpacing = 25);
     // QVBoxLayout *detailsLayout;
 private slots:
@@ -93,6 +99,7 @@ private slots:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 #if 0
     CollapseButton *systemCollapseButton;

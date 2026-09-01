@@ -9,8 +9,10 @@
  *          86Box VM manager main window
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #include "qt_vmmanager_mainwindow.hpp"
 #include "qt_vmmanager_main.hpp"
@@ -25,14 +27,32 @@
 #include "qt_preferences.hpp"
 #include "qt_util.hpp"
 
+#include <QApplication>
+#include <QButtonGroup>
 #include <QCloseEvent>
+#include <QColor>
 #include <QDesktopServices>
-#include <QTabWidget>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QStackedWidget>
+#include <QVBoxLayout>
 
 extern "C" {
 extern void config_load_global();
 extern void config_save_global();
 }
+
+namespace {
+QColor
+blendShellColor(const QColor &background, const QColor &foreground, const qreal amount)
+{
+    const qreal inverse = 1.0 - amount;
+    return QColor::fromRgbF(background.redF() * inverse + foreground.redF() * amount,
+                            background.greenF() * inverse + foreground.greenF() * amount,
+                            background.blueF() * inverse + foreground.blueF() * amount);
+}
+} // namespace
 
 VMManagerMainWindow          *vmm_main_window = nullptr;
 extern WindowsDarkModeFilter *vmm_dark_mode_filter;
@@ -42,7 +62,11 @@ VMManagerMainWindow::
     : ui(new Ui::VMManagerMainWindow)
     , vmm(new VMManagerMain(this))
     , collection(new BluMachCollectionWidget(this))
-    , mainTabs(new QTabWidget(this))
+    , mainStack(new QStackedWidget(this))
+    , navigationHeader(new QFrame(this))
+    , collectionNavButton(new QPushButton(this))
+    , machinesNavButton(new QPushButton(this))
+    , primaryActionButton(new QPushButton(this))
     , statusLeft(new QLabel)
     , statusRight(new QLabel)
 {
@@ -50,26 +74,99 @@ VMManagerMainWindow::
 
     vmm_main_window = this;
 
-    runIcon = QIcon(":/menuicons/qt/icons/run.ico");
-    pauseIcon = QIcon(":/menuicons/qt/icons/pause.ico");
+    runIcon = QIcon(QStringLiteral(":/blumach/ui/play.png"));
+    pauseIcon = QIcon(QStringLiteral(":/blumach/ui/pause.png"));
+    ui->actionStartPause->setIcon(runIcon);
+    ui->actionHard_Reset->setIcon(QIcon(QStringLiteral(":/blumach/ui/restart.png")));
+    ui->actionForce_Shutdown->setIcon(QIcon(QStringLiteral(":/blumach/ui/power.png")));
+    ui->actionCtrl_Alt_Del->setIcon(QIcon(QStringLiteral(":/blumach/ui/keyboard-command.png")));
+    ui->actionSettings->setIcon(QIcon(QStringLiteral(":/blumach/ui/settings.png")));
+    ui->actionNew_Machine->setIcon(QIcon(QStringLiteral(":/blumach/ui/new-machine.png")));
 
     // Connect signals from the VMManagerMain widget
     connect(vmm, &VMManagerMain::selectionOrStateChanged, this, &VMManagerMainWindow::vmmStateChanged);
 
     setWindowTitle(tr("%1 Historical Computer Collection").arg(EMU_NAME));
-    mainTabs->addTab(collection, tr("Collection"));
-    mainTabs->addTab(vmm, tr("My machines"));
-    setCentralWidget(mainTabs);
+
+    navigationHeader->setObjectName(QStringLiteral("blumachNavigationHeader"));
+    collectionNavButton->setObjectName(QStringLiteral("blumachCollectionNav"));
+    machinesNavButton->setObjectName(QStringLiteral("blumachMachinesNav"));
+    primaryActionButton->setObjectName(QStringLiteral("blumachPrimaryAction"));
+    collectionNavButton->setText(tr("Collection"));
+    machinesNavButton->setText(tr("My machines"));
+    collectionNavButton->setMinimumWidth(96);
+    machinesNavButton->setMinimumWidth(112);
+    collectionNavButton->setCheckable(true);
+    machinesNavButton->setCheckable(true);
+    collectionNavButton->setAutoExclusive(true);
+    machinesNavButton->setAutoExclusive(true);
+
+    auto *navigationGroup = new QButtonGroup(this);
+    navigationGroup->setExclusive(true);
+    navigationGroup->addButton(collectionNavButton);
+    navigationGroup->addButton(machinesNavButton);
+
+    auto *headerLayout = new QHBoxLayout(navigationHeader);
+    headerLayout->setContentsMargins(18, 7, 18, 7);
+    headerLayout->setSpacing(6);
+    auto *brandLabel = new QLabel(QStringLiteral("BluMach"), navigationHeader);
+    brandLabel->setObjectName(QStringLiteral("blumachBrand"));
+    headerLayout->addWidget(brandLabel);
+    headerLayout->addSpacing(14);
+    headerLayout->addWidget(collectionNavButton);
+    headerLayout->addWidget(machinesNavButton);
+    headerLayout->addStretch(1);
+    headerLayout->addWidget(primaryActionButton);
+
+    mainStack->addWidget(collection);
+    mainStack->addWidget(vmm);
+    // Let the active page reflow inside compact windows instead of propagating
+    // the larger desktop-oriented size hint from either stacked page.
+    mainStack->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    auto *centralWidget = new QWidget(this);
+    auto *centralLayout = new QVBoxLayout(centralWidget);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    removeToolBar(ui->toolBar);
+    ui->toolBar->setParent(centralWidget);
+    ui->toolBar->setMovable(false);
+    ui->toolBar->setFloatable(false);
+    ui->toolBar->removeAction(ui->actionNew_Machine);
+    ui->toolBar->setIconSize(QSize(20, 20));
+    ui->toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    ui->toolBar->setStyleSheet(QStringLiteral(
+        "QToolBar { border: 0; border-bottom: 1px solid palette(mid); padding: 5px 12px; spacing: 4px; }"
+        "QToolButton { border: 0; border-radius: 6px; padding: 6px 9px; }"
+        "QToolButton:hover { background: palette(midlight); }"
+        "QToolButton:pressed { background: palette(mid); }"));
+    centralLayout->addWidget(navigationHeader);
+    centralLayout->addWidget(ui->toolBar);
+    centralLayout->addWidget(mainStack, 1);
+    setCentralWidget(centralWidget);
+
+    connect(collectionNavButton, &QPushButton::clicked, this, [this] { mainStack->setCurrentWidget(collection); });
+    connect(machinesNavButton, &QPushButton::clicked, this, [this] { mainStack->setCurrentWidget(vmm); });
+    connect(primaryActionButton, &QPushButton::clicked, this, [this] {
+        if (mainStack->currentWidget() == collection)
+            collection->createSelectedMachine();
+        else
+            vmm->newMachineWizard();
+    });
 
     connect(collection, &BluMachCollectionWidget::showMachinesRequested, this, [this] {
-        mainTabs->setCurrentWidget(vmm);
+        mainStack->setCurrentWidget(vmm);
     });
     connect(collection, &BluMachCollectionWidget::createMachineRequested, this, [this](const QString &productId, const QString &machineId) {
-        mainTabs->setCurrentWidget(vmm);
+        mainStack->setCurrentWidget(vmm);
         vmm->newHistoricalMachine(productId, machineId);
     });
-    connect(mainTabs, &QTabWidget::currentChanged, this, [this](int) {
-        vmmStateChanged(mainTabs->currentWidget() == vmm ? vmm->getSelectedSystem() : nullptr);
+    connect(collection, &BluMachCollectionWidget::selectionContextChanged, this, [this](const QString &, const QString &, const bool canCreate) {
+        collectionSelectionCanCreate = canCreate;
+        if (mainStack->currentWidget() == collection)
+            primaryActionButton->setEnabled(canCreate);
+    });
+    connect(mainStack, &QStackedWidget::currentChanged, this, [this](int) {
+        updateActiveSection();
     });
 
     // Set up the buttons
@@ -118,14 +215,14 @@ VMManagerMainWindow::
     connect(this, &VMManagerMainWindow::languageUpdated, vmm, &VMManagerMain::onLanguageUpdated);
 #ifdef Q_OS_WINDOWS
     connect(this, &VMManagerMainWindow::darkModeUpdated, vmm, &VMManagerMain::onDarkModeUpdated);
+    connect(this, &VMManagerMainWindow::darkModeUpdated, collection, &BluMachCollectionWidget::updateAppearance);
     connect(this, &VMManagerMainWindow::preferencesUpdated, []() { vmm_dark_mode_filter->reselectDarkMode(); });
 #endif
 
     {
         auto config = new VMManagerConfig(VMManagerConfig::ConfigType::General);
-        ui->actionHide_tool_bar->setChecked(!!config->getStringValue("hide_tool_bar").toInt());
-        if (ui->actionHide_tool_bar->isChecked())
-            ui->toolBar->setVisible(false);
+        toolBarHiddenByUser = !!config->getStringValue("hide_tool_bar").toInt();
+        ui->actionHide_tool_bar->setChecked(toolBarHiddenByUser);
         if (!!config->getStringValue("window_remember").toInt()) {
             QString coords = config->getStringValue("window_coordinates");
             if (!coords.isEmpty()) {
@@ -165,6 +262,9 @@ VMManagerMainWindow::
         }
         delete config;
     }
+
+    updateActiveSection();
+    updateShellAppearance();
 }
 
 VMManagerMainWindow::~VMManagerMainWindow()
@@ -216,6 +316,48 @@ VMManagerMainWindow::vmmStateChanged(const VMManagerSystem *sysconfig) const
     ui->actionForce_Shutdown->setEnabled(sysconfig->window_obscured ? false : running);
     ui->actionCtrl_Alt_Del->setEnabled(sysconfig->window_obscured ? false : running);
 }
+
+void
+VMManagerMainWindow::updateActiveSection()
+{
+    const bool machinesActive = mainStack->currentWidget() == vmm;
+    collectionNavButton->setChecked(!machinesActive);
+    machinesNavButton->setChecked(machinesActive);
+    ui->toolBar->setVisible(machinesActive && !toolBarHiddenByUser);
+    ui->statusbar->setVisible(machinesActive);
+    ui->actionHide_tool_bar->setVisible(machinesActive);
+    ui->actionNew_Machine->setVisible(machinesActive);
+    primaryActionButton->setText(machinesActive ? tr("New machine…") : tr("Create this machine…"));
+    primaryActionButton->setEnabled(machinesActive || collectionSelectionCanCreate);
+    vmmStateChanged(machinesActive ? vmm->getSelectedSystem() : nullptr);
+}
+
+void
+VMManagerMainWindow::updateShellAppearance()
+{
+    const auto shellPalette = navigationHeader->palette();
+    const QColor windowColor = shellPalette.color(QPalette::Window);
+    const QColor textColor = shellPalette.color(QPalette::WindowText);
+    const QColor highlightColor = shellPalette.color(QPalette::Highlight);
+    const QColor highlightedTextColor = shellPalette.color(QPalette::HighlightedText);
+    const bool dark = windowColor.lightnessF() < 0.5;
+    const QColor borderColor = blendShellColor(windowColor, textColor, dark ? 0.28 : 0.16);
+    const QColor hoverColor = blendShellColor(windowColor, textColor, dark ? 0.10 : 0.045);
+    const QColor selectedColor = blendShellColor(windowColor, highlightColor, dark ? 0.34 : 0.13);
+    const QColor mutedColor = blendShellColor(windowColor, textColor, dark ? 0.52 : 0.46);
+    navigationHeader->setStyleSheet(QStringLiteral(
+        "QFrame#blumachNavigationHeader { background: %1; border-bottom: 1px solid %2; }"
+        "QLabel#blumachBrand { color: %3; font-size: 18px; font-weight: 600; padding-right: 8px; }"
+        "QPushButton#blumachCollectionNav, QPushButton#blumachMachinesNav { color: %3; background: transparent; border: 0; border-radius: 7px; padding: 7px 12px; }"
+        "QPushButton#blumachCollectionNav:hover, QPushButton#blumachMachinesNav:hover { background: %4; }"
+        "QPushButton#blumachCollectionNav:checked, QPushButton#blumachMachinesNav:checked { color: %3; background: %5; font-weight: 600; }"
+        "QPushButton#blumachPrimaryAction { color: %6; background: %7; border: 0; border-radius: 7px; padding: 8px 15px; font-weight: 600; }"
+        "QPushButton#blumachPrimaryAction:disabled { color: %8; background: %4; }"
+        "QPushButton#blumachPrimaryAction:hover:!disabled { background: %7; }")
+        .arg(windowColor.name(), borderColor.name(), textColor.name(), hoverColor.name(),
+             selectedColor.name(), highlightedTextColor.name(), highlightColor.name(), mutedColor.name()));
+}
+
 void
 VMManagerMainWindow::preferencesTriggered()
 {
@@ -249,7 +391,7 @@ VMManagerMainWindow::saveSettings() const
     const auto currentSelection = vmm->getCurrentSelection();
     const auto config           = new VMManagerConfig(VMManagerConfig::ConfigType::General);
     config->setStringValue("last_selection", currentSelection);
-    config->setStringValue("hide_tool_bar", (ui->toolBar->isVisible() ? "0" : "1"));
+    config->setStringValue("hide_tool_bar", toolBarHiddenByUser ? "1" : "0");
     if (!!config->getStringValue("window_remember").toInt()) {
         config->setStringValue("window_coordinates", QString::asprintf("%i, %i, %i, %i", this->geometry().x(), this->geometry().y(), this->geometry().width(), this->geometry().height()));
         config->setStringValue("window_maximized", this->isMaximized() ? "1" : "");
@@ -270,9 +412,10 @@ VMManagerMainWindow::updateLanguage()
     Preferences::reloadStrings();
     ui->retranslateUi(this);
     setWindowTitle(tr("%1 Historical Computer Collection").arg(EMU_NAME));
-    mainTabs->setTabText(mainTabs->indexOf(collection), tr("Collection"));
-    mainTabs->setTabText(mainTabs->indexOf(vmm), tr("My machines"));
+    collectionNavButton->setText(tr("Collection"));
+    machinesNavButton->setText(tr("My machines"));
     collection->reloadLanguage();
+    updateActiveSection();
     emit languageUpdated();
 }
 
@@ -280,6 +423,7 @@ VMManagerMainWindow::updateLanguage()
 void
 VMManagerMainWindow::updateDarkMode()
 {
+    updateShellAppearance();
     emit darkModeUpdated();
 }
 #endif
@@ -287,6 +431,10 @@ VMManagerMainWindow::updateDarkMode()
 void
 VMManagerMainWindow::changeEvent(QEvent *event)
 {
+    if (event->type() == QEvent::PaletteChange) {
+        updateShellAppearance();
+        collection->updateAppearance();
+    }
 #ifdef Q_OS_WINDOWS
     if (event->type() == QEvent::LanguageChange) {
         QApplication::setFont(QFont(Preferences::getUIFont()));
@@ -327,9 +475,11 @@ void
 VMManagerMainWindow::on_actionHide_tool_bar_triggered()
 {
     const auto config = new VMManagerConfig(VMManagerConfig::ConfigType::General);
-    int isHidden = config->getStringValue("hide_tool_bar").toInt();
-    ui->toolBar->setVisible(!!isHidden);
-    config->setStringValue("hide_tool_bar", (isHidden ? "0" : "1"));
+    toolBarHiddenByUser = ui->actionHide_tool_bar->isChecked();
+    ui->toolBar->setVisible(mainStack->currentWidget() == vmm && !toolBarHiddenByUser);
+    config->setStringValue("hide_tool_bar", toolBarHiddenByUser ? "1" : "0");
+    config->sync();
+    delete config;
 }
 
 #if EMU_BUILD_NUM != 0

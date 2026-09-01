@@ -9,11 +9,15 @@
  *          86Box VM manager system details module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #include <QApplication>
+#include <QColor>
 #include <QDebug>
+#include <QResizeEvent>
 #include <QStyle>
 
 extern "C" {
@@ -42,6 +46,19 @@ VMManagerDetails::VMManagerDetails(QWidget *parent)
     , ui(new Ui::VMManagerDetails)
 {
     ui->setupUi(this);
+
+    ui->verticalLayout->setContentsMargins(20, 14, 18, 16);
+    ui->verticalLayout->setSpacing(12);
+    ui->horizontalLayout->setSpacing(16);
+    ui->systemLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    ui->systemLabel->setMargin(0);
+    ui->systemLabel->setWordWrap(true);
+    ui->systemLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    ui->scrollArea->setFrameShape(QFrame::NoFrame);
+    ui->rightColumn->setMinimumWidth(250);
+    ui->rightColumn->setMaximumWidth(320);
+    ui->toolButtonHolder->hide();
+    ui->LeftRight->hide();
 
     const auto leftColumnLayout = qobject_cast<QVBoxLayout *>(ui->leftColumn->layout());
 
@@ -154,6 +171,7 @@ VMManagerDetails::VMManagerDetails(QWidget *parent)
     ui->toolButtonHolder->layout()->addWidget(configureButton);
 
     ui->notesTextEdit->setEnabled(false);
+    applyAppearance();
 
 #ifdef Q_OS_WINDOWS
     connect(this, &VMManagerDetails::styleUpdated, systemSection, &VMManagerDetailSection::updateStyle);
@@ -218,13 +236,14 @@ VMManagerDetails::reset()
     configureButton->setEnabled(false);
     cadButton->setEnabled(false);
 
-    ui->systemLabel->setText(tr("No Machines Found!"));
+    ui->systemLabel->setText(tr("No machines found"));
     ui->systemLabel->setStyleSheet("");
     ui->statusLabel->setText("");
     ui->scrollArea->setStyleSheet("");
 
     ui->notesTextEdit->setPlainText("");
     ui->notesTextEdit->setEnabled(false);
+    ui->LeftRight->hide();
 
     sysconfig = new VMManagerSystem();
 }
@@ -232,6 +251,8 @@ VMManagerDetails::reset()
 void
 VMManagerDetails::updateData(VMManagerSystem *passed_sysconfig)
 {
+    ui->LeftRight->show();
+    updateResponsiveLayout();
 
     // Set the scrollarea background but also set the scroll bar to none. Otherwise it will also
     // set the scrollbar background to the same.
@@ -465,27 +486,53 @@ VMManagerDetails::updateWindowStatus()
 void
 VMManagerDetails::updateStyle()
 {
-    QString    toolButtonStyleSheet;
-    const bool lightMode = util::isWindowsLightTheme();
-    if (lightMode) {
-        toolButtonStyleSheet = TOOLBUTTON_STYLESHEET_LIGHT;
-        ui->scrollArea->setStyleSheet(SCROLLAREA_STYLESHEET_LIGHT);
-        ui->systemLabel->setStyleSheet(SYSTEMLABEL_STYLESHEET_LIGHT);
-        if (!ui->screenshot->isEnabled())
-            ui->screenshot->setStyleSheet("");
-    } else {
-        toolButtonStyleSheet = TOOLBUTTON_STYLESHEET_DARK;
-        ui->scrollArea->setStyleSheet("");
-        ui->systemLabel->setStyleSheet("");
-        if (!ui->screenshot->isEnabled())
-            ui->screenshot->setStyleSheet(SCREENSHOTBORDER_STYLESHEET_DARK);
-    }
-    ui->ssNavTBHolder->setStyleSheet(toolButtonStyleSheet);
-    ui->toolButtonHolder->setStyleSheet(toolButtonStyleSheet);
-
+    applyAppearance();
     emit styleUpdated();
 }
 #endif
+
+void
+VMManagerDetails::applyAppearance()
+{
+    const auto pal = palette();
+    const QColor base = pal.color(QPalette::Base);
+    const QColor text = pal.color(QPalette::Text);
+    const QColor accent = pal.color(QPalette::Highlight);
+    const bool dark = base.lightnessF() < 0.5;
+    const auto blend = [](const QColor &background, const QColor &foreground, const qreal amount) {
+        const qreal inverse = 1.0 - amount;
+        return QColor::fromRgbF(background.redF() * inverse + foreground.redF() * amount,
+                                background.greenF() * inverse + foreground.greenF() * amount,
+                                background.blueF() * inverse + foreground.blueF() * amount);
+    };
+    const QColor border = blend(base, text, dark ? 0.28 : 0.16);
+    const QColor muted = blend(base, text, dark ? 0.68 : 0.56);
+    const QColor status = blend(base, accent, dark ? 0.24 : 0.10);
+    setStyleSheet(QStringLiteral(
+        "QWidget#VMManagerDetails { background: transparent; color: palette(text); }"
+        "QLabel#systemLabel { color: palette(text); font-weight: 600; }"
+        "QScrollArea#scrollArea { background: palette(base); border: 1px solid %1; border-radius: 8px; }"
+        "QWidget#leftColumn { background: palette(base); }"
+        "QLabel#screenshot { color: %2; background: palette(base); border: 1px solid %1; border-radius: 8px; }"
+        "QPlainTextEdit#notesTextEdit { color: palette(text); background: palette(base); border: 1px solid %1; border-radius: 8px; padding: 8px; }"
+        "QLabel#statusLabel { color: palette(text); background: %3; border-radius: 9px; padding: 4px 8px; }"
+        "QLabel#blumachMachineDetailKey { color: %2; font-weight: 600; }"
+        "QLabel#blumachMachineDetailValue { color: palette(text); }")
+        .arg(border.name(), muted.name(), status.name()));
+}
+
+void
+VMManagerDetails::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateResponsiveLayout();
+}
+
+void
+VMManagerDetails::updateResponsiveLayout()
+{
+    ui->rightColumn->setVisible(width() >= 600 && ui->LeftRight->isVisible());
+}
 
 QWidget *
 VMManagerDetails::createHorizontalLine(const int leftSpacing, const int rightSpacing)

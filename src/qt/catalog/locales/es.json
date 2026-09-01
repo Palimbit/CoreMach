@@ -31,6 +31,8 @@
   "hardware.interfaces": "Interfaces",
   "hardware.dimensions": "Dimensiones y peso",
   "technical.ui.overview": "Ficha de la máquina",
+  "technical.ui.research": "Investigación",
+  "technical.ui.sources": "Fuentes",
   "technical.ui.operation": "Funcionamiento técnico",
   "technical.ui.preparing": "La documentación técnica de esta máquina todavía se está preparando.",
   "technical.ui.intro": "Esta ficha separa los datos documentados del hardware, el comportamiento observado en el firmware original y la fidelidad actual de la emulación en BluMach.",

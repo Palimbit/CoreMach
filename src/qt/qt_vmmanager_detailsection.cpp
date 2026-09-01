@@ -9,8 +9,10 @@
  *          86Box VM manager system details section module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #include "qt_vmmanager_detailsection.hpp"
 #include "ui_qt_vmmanager_detailsection.h"
@@ -44,21 +46,9 @@ VMManagerDetailSection::
     setSectionName(sectionName);
     ui->collapseButtonHolder->setContentsMargins(getMargins(MarginSection::ToolButton));
 
-    // Simple method to try and determine if light mode is enabled on the host
-#ifdef Q_OS_WINDOWS
-    const bool lightMode = util::isWindowsLightTheme();
-#else
-    const bool lightMode = QApplication::palette().window().color().value() > QApplication::palette().windowText().color().value();
-#endif
-    // Alternate layout
-    if (lightMode) {
-        ui->collapseButtonHolder->setStyleSheet(HEADER_STYLESHEET_LIGHT);
-    } else {
-#ifdef Q_OS_WINDOWS
-        ui->outerFrame->setStyleSheet(BACKGROUND_STYLESHEET_DARK);
-#endif
-        ui->collapseButtonHolder->setStyleSheet(HEADER_STYLESHEET_DARK);
-    }
+    ui->outerFrame->setStyleSheet(QStringLiteral("background: transparent;"));
+    ui->collapseButtonHolder->setStyleSheet(
+        QStringLiteral("background: transparent; border: 0; border-bottom: 1px solid palette(mid);"));
     const auto sectionLabel = new QLabel(sectionName);
     sectionLabel->setStyleSheet(sectionLabel->styleSheet().append("font-weight: bold;"));
     ui->collapseButtonHolder->setContentsMargins(QMargins(3, 2, 0, 2));
@@ -173,6 +163,7 @@ VMManagerDetailSection::setSections()
             }
 
             const auto labelValue = new QLabel();
+            labelValue->setObjectName(QStringLiteral("blumachMachineDetailValue"));
             labelValue->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
             labelValue->setTextInteractionFlags(labelValue->textInteractionFlags() | Qt::TextSelectableByMouse);
             labelValue->setText(line);
@@ -180,6 +171,7 @@ VMManagerDetailSection::setSections()
 
             if (!labelKey) {
                 labelKey = new QLabel();
+                labelKey->setObjectName(QStringLiteral("blumachMachineDetailKey"));
                 labelKey->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
                 labelKey->setTextInteractionFlags(labelValue->textInteractionFlags());
                 labelKey->setText(QCoreApplication::translate("", QString(section.name + ":").toUtf8().data()));
@@ -224,14 +216,9 @@ VMManagerDetailSection::clear()
 void
 VMManagerDetailSection::updateStyle()
 {
-    const bool lightMode = util::isWindowsLightTheme();
-    if (lightMode) {
-        ui->outerFrame->setStyleSheet("");
-        ui->collapseButtonHolder->setStyleSheet(HEADER_STYLESHEET_LIGHT);
-    } else {
-        ui->outerFrame->setStyleSheet(BACKGROUND_STYLESHEET_DARK);
-        ui->collapseButtonHolder->setStyleSheet(HEADER_STYLESHEET_DARK);
-    }
+    ui->outerFrame->setStyleSheet(QStringLiteral("background: transparent;"));
+    ui->collapseButtonHolder->setStyleSheet(
+        QStringLiteral("background: transparent; border: 0; border-bottom: 1px solid palette(mid);"));
 }
 #endif
 

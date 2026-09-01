@@ -113,6 +113,36 @@
         <file alias="locales/fr.json">qt/catalog/locales/fr.json</file>
         <file alias="locales/it.json">qt/catalog/locales/it.json</file>
         <file alias="locales/pt.json">qt/catalog/locales/pt.json</file>
+        <file alias="images/olivetti-pcs86.jpg">qt/catalog/images/olivetti-pcs86-family-v3.jpg</file>
+        <file alias="images/olivetti-pcs286.jpg">qt/catalog/images/olivetti-pcs286-family-v3.jpg</file>
+        <file alias="images/olivetti-pcs286s-board.jpg">qt/catalog/images/olivetti-pcs286s-board.jpg</file>
+        <file alias="images/olivetti-pcs386sx.jpg">qt/catalog/images/olivetti-pcs386sx-branded.jpg</file>
+        <file alias="images/ta-dario286.jpg">qt/catalog/images/ta-dario286-family-v1.jpg</file>
+        <file alias="images/ta-dario286s.jpg">qt/catalog/images/ta-dario286s-family-v1.jpg</file>
+        <file alias="images/ta-dario386sx.jpg">qt/catalog/images/ta-dario386sx-family-v1.jpg</file>
+    </qresource>
+    <qresource prefix="/blumach/ui">
+        <file alias="play.svg">qt/assets/blumach-icons/play.svg</file>
+        <file alias="pause.svg">qt/assets/blumach-icons/pause.svg</file>
+        <file alias="restart.svg">qt/assets/blumach-icons/restart.svg</file>
+        <file alias="power.svg">qt/assets/blumach-icons/power.svg</file>
+        <file alias="keyboard-command.svg">qt/assets/blumach-icons/keyboard-command.svg</file>
+        <file alias="settings.svg">qt/assets/blumach-icons/settings.svg</file>
+        <file alias="new-machine.svg">qt/assets/blumach-icons/new-machine.svg</file>
+        <file alias="play.png">qt/assets/blumach-icons/play.png</file>
+        <file alias="play@2x.png">qt/assets/blumach-icons/play@2x.png</file>
+        <file alias="pause.png">qt/assets/blumach-icons/pause.png</file>
+        <file alias="pause@2x.png">qt/assets/blumach-icons/pause@2x.png</file>
+        <file alias="restart.png">qt/assets/blumach-icons/restart.png</file>
+        <file alias="restart@2x.png">qt/assets/blumach-icons/restart@2x.png</file>
+        <file alias="power.png">qt/assets/blumach-icons/power.png</file>
+        <file alias="power@2x.png">qt/assets/blumach-icons/power@2x.png</file>
+        <file alias="keyboard-command.png">qt/assets/blumach-icons/keyboard-command.png</file>
+        <file alias="keyboard-command@2x.png">qt/assets/blumach-icons/keyboard-command@2x.png</file>
+        <file alias="settings.png">qt/assets/blumach-icons/settings.png</file>
+        <file alias="settings@2x.png">qt/assets/blumach-icons/settings@2x.png</file>
+        <file alias="new-machine.png">qt/assets/blumach-icons/new-machine.png</file>
+        <file alias="new-machine@2x.png">qt/assets/blumach-icons/new-machine@2x.png</file>
     </qresource>
     <qresource prefix="/">
         <file alias="/texture_vert.spv">qt/texture_vert.spv</file>
