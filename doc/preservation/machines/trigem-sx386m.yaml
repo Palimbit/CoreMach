@@ -21,9 +21,9 @@ implementation:
     - 4096 KiB memory test completed
     - first-boot CMOS Setup prompt with external Paradise VGA
     - COM1 3F8h, COM2 2F8h and LPT 378h detected without false add-in-card conflicts
+    - MS-DOS 6.22 installed from 1.44 MB floppy and booted from a 40 MB type 17 IDE disk
   pending:
-    - keyboard entry and persistence in CMOS Setup
-    - floppy and IDE boot
+    - persistence of every CMOS Setup option
     - every documented RAM population
     - 80387SX/J2 behavior
     - 8 MHz low-speed mode
@@ -36,6 +36,7 @@ hardware:
   video: external ISA adapter
   expansion: "4 x 16-bit ISA plus 2 x 8-bit ISA"
   storage: integrated IDE and floppy interfaces
+  validated_ide_geometry: "BIOS type 17: 977 cylinders, 5 heads, 17 sectors; 42,519,040-byte image"
 emulation_mapping:
   HT101SX_HT113_GC102PC: "shared chipset component model; no Olivetti dependency"
   keyboard_controller: "AMI B-compatible 8042 profile; exact mask ROM unknown"

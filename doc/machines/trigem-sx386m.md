@@ -53,7 +53,11 @@ to an unverified physical IC.
 Status is **experimental**. The authentic BIOS identifies Emerson, completes
 the 4096 KB memory test and reaches the system-configuration summary using an
 external Paradise VGA. The BIOS now enumerates COM1 at 3F8h, COM2 at 2F8h and
-LPT at 378h without false add-in-card conflicts. Setup input, DOS boot, all RAM populations, parity/NMI,
+LPT at 378h without false add-in-card conflicts. On 1 September 2026 a clean
+MS-DOS 6.22 installation was completed from the emulated 1.44 MB floppy drive
+onto an internal 40 MB IDE disk using BIOS type 17 geometry (977 cylinders,
+5 heads and 17 sectors); the installed system subsequently booted from C:
+without errors. All RAM populations, parity/NMI,
 the 8 MHz mode and EMS remain pending. Exact peripheral ICs and the keyboard
 controller mask ROM are not preserved, so AT-compatible functional models are
 used and documented as such. BluMach `master` does not yet provide an exact

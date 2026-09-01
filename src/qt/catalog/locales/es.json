@@ -228,7 +228,7 @@
   "product.trigem-sx386m.technical.jumpers": "J2 habilita 80387SX; JP4 selecciona LPT1/LPT2; JP6 mono/color; la RAM sigue las poblaciones SIMM documentadas.",
   "product.trigem-sx386m.technical.io": "IDE, disquete, dos series, paralelo y teclado AT integrados. El latch 3F3h observado en la BIOS retrasa la activación de COM/LPT; los controladores exactos siguen en investigación.",
   "product.trigem-sx386m.technical.video": "Vídeo ISA externo; no hereda vídeo integrado ni firmware de Olivetti.",
-  "product.trigem-sx386m.technical.verified": "Compilación limpia; la BIOS AMI auténtica identifica Emerson, completa 4096 KB y detecta COM1 3F8h, COM2 2F8h y LPT 378h sin falsos conflictos con tarjetas externas.",
+  "product.trigem-sx386m.technical.verified": "La BIOS AMI auténtica identifica Emerson, completa 4096 KB, detecta COM1/COM2/LPT sin falsos conflictos e instala y arranca MS-DOS 6.22 desde un IDE de 40 MB tipo 17.",
   "product.trigem-sx386m.technical.limitations": "Experimental. Faltan Setup, DOS, RAM, paridad/NMI, modo lento y EMS. Los periféricos son aproximaciones AT. Hasta que master admita listas exactas de RAM, la GUI permite también valores intermedios de 128 KB no documentados.",
   "product.trigem-sx386m.technical.manual": "Referencia Micro House de dos páginas para CMS Enhancements ESP SX386M; sólo enlace y metadatos.",
   "product.trigem-sx386m.technical.vogons": "Hilo de conservación Emerson Elite SX386/16 con fotos, FCC, BIOS AMI y prueba del jumper 80387SX.",
