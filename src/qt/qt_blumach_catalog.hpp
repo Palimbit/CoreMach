@@ -55,6 +55,7 @@ struct BluMachProduct {
     QJsonObject firmware;
     QJsonObject storage;
     QJsonObject relationships;
+    QJsonObject creation;
     QJsonArray  technical;
 };
 

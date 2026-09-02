@@ -37,6 +37,13 @@
       "description_key": "family.olivetti-m300.description"
     },
     {
+      "id": "olivetti-prodest",
+      "manufacturer_id": "olivetti",
+      "parent_family_id": "",
+      "name": "Prodest",
+      "description_key": "family.olivetti-prodest.description"
+    },
+    {
       "id": "olivetti-pcs-4xc",
       "manufacturer_id": "olivetti",
       "parent_family_id": "olivetti-pcs",
@@ -63,6 +70,16 @@
       "id": "olivetti-pcs86-platform",
       "emulator_machine_id": "olivetti_pcs86",
       "architecture": "8086"
+    },
+    {
+      "id": "olivetti-prodest-pc1-platform",
+      "emulator_machine_id": "olivetti_prodest_pc1",
+      "architecture": "NEC V40"
+    },
+    {
+      "id": "olivetti-prodest-pc1hd-platform",
+      "emulator_machine_id": "olivetti_prodest_pc1hd",
+      "architecture": "NEC V40"
     },
     {
       "id": "olivetti-pcs286-platform",
@@ -147,6 +164,220 @@
   ],
   "products": [
     {
+      "id": "olivetti-prodest-pc1",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-prodest",
+      "platform_id": "olivetti-prodest-pc1-platform",
+      "name": "Olivetti Prodest PC 1",
+      "summary_key": "product.olivetti-prodest-pc1.summary",
+      "history_key": "product.olivetti-prodest-pc1.history",
+      "warning_key": "product.olivetti-prodest-pc1.warning",
+      "status": "partial",
+      "period": "1987–1989",
+      "aliases": ["Prodest PC1", "Olivetti PC 1"],
+      "tags": ["NEC V40", "XT", "V6355", "720 KB", "desktop"],
+      "hardware": {
+        "cpu": "NEC V40, switchable 4.77/8 MHz",
+        "memory": "256 or 512 KB base; 640 KB through expansion",
+        "video": "Integrated Yamaha V6355-compatible display logic with Italian character ROM",
+        "floppy": "3.5 in, 720 KB",
+        "expansion": "External ISA-like side connector; not a complete ISA bus",
+        "interfaces": "Non-standard-pinout serial, parallel, XT-style keyboard and quadrature mouse/joystick connector"
+      },
+      "firmware": {
+        "known_sets": ["System BIOS 1.06", "System BIOS 1.07", "System BIOS 1.21", "Character ROM 1.01", "Italian character ROM 1.02"],
+        "required": true,
+        "identity_note": "Firmware is identified by filename, size and SHA-256 metadata only; no ROM data is distributed with BluMach"
+      },
+      "storage": {
+        "bus": "Internal floppy; the distinct PC 1 HD has an internal XT-class hard-disk interface",
+        "official_drives": ["MF 3510 3.5-inch 720 KB floppy", "External 5.25-inch 360 KB floppy", "PC 1 HD 20 MB hard disk"]
+      },
+      "relationships": {
+        "commercial_variants": ["PC 1 floppy model", "PC 1 HD"]
+      },
+      "creation": {
+        "status": "validated",
+        "directory_prefix": "olivetti-prodest-pc1",
+        "facts": [
+          {"label_key": "creation.label.commercial_model", "value_key": "product.olivetti-prodest-pc1.creation.model"}
+        ],
+        "fields": [
+          {
+            "id": "memory",
+            "label_key": "creation.label.memory",
+            "default": "512",
+            "choices": [
+              {"id": "256", "label_key": "creation.option.memory.256kb", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 256}]},
+              {"id": "512", "label_key": "creation.option.memory.512kb", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 512}]},
+              {"id": "640", "label_key": "creation.option.memory.640kb", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 640}]}
+            ]
+          },
+          {
+            "id": "floppy_drives",
+            "label_key": "creation.label.floppy_drives",
+            "default": "one-720",
+            "choices": [
+              {"id": "one-720", "label_key": "creation.option.floppy.one-720", "status": "validated", "set": [{"section": "Floppy and CD-ROM drives", "key": "fdd_02_type", "value": "none"}]},
+              {"id": "two-720", "label_key": "creation.option.floppy.two-720", "status": "validated", "set": [{"section": "Floppy and CD-ROM drives", "key": "fdd_02_type", "value": "35_2dd"}]}
+            ]
+          }
+        ],
+        "note_keys": ["product.olivetti-prodest-pc1.creation.note"],
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"bios": "v107", "cpu_family": "necv40", "cpu_speed": 8000000, "cpu_multi": 1, "cpu_use_dynarec": 0, "mem_size": 512}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_pc_xt", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2dd", "fdd_02_type": "none"}}
+        ],
+        "generated_files": []
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.commercial",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.market", "value_key": "product.olivetti-prodest-pc1.technical.market"},
+            {"label_key": "technical.label.commercial_configurations", "value_key": "product.olivetti-prodest-pc1.technical.commercial_configurations"},
+            {"label_key": "technical.label.accessories", "value_key": "product.olivetti-prodest-pc1.technical.accessories"},
+            {"label_key": "technical.label.physical", "value_key": "product.olivetti-prodest-pc1.technical.physical"},
+            {"label_key": "technical.label.bundled_software", "value_key": "product.olivetti-prodest-pc1.technical.bundled_software"}
+          ]
+        },
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-prodest-pc1.technical.cpu"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.olivetti-prodest-pc1.technical.memory"},
+            {"label_key": "technical.label.video", "value_key": "product.olivetti-prodest-pc1.technical.video"},
+            {"label_key": "technical.label.storage", "value_key": "product.olivetti-prodest-pc1.technical.storage"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.olivetti-prodest-pc1.technical.interfaces"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.bios_revision", "value_key": "product.olivetti-prodest-pc1.technical.firmware"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.verified", "value_key": "product.olivetti-prodest-pc1.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.olivetti-prodest-pc1.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-prodest-pc1.technical.seasip", "url": "https://www.seasip.info/VintagePC/prodestpc1.html"},
+            {"label_key": "technical.label.manual", "value_key": "product.olivetti-prodest-pc1.technical.manual_es", "url": "https://archive.org/details/pc1instalacionymanualdelusuario"},
+            {"label_key": "technical.label.brochure", "value_key": "product.olivetti-prodest-pc1.technical.brochure_it", "url": "https://archive.org/details/olivetti-prodest-pc-1"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-prodest-pc1.technical.pc1_magazine_1987", "url": "https://archive.org/details/PC1-1987-01"},
+            {"label_key": "technical.label.software", "value_key": "product.olivetti-prodest-pc1.technical.ti99iuc", "url": "https://www.ti99iuc.it/web/?artid=134&pageid=articoli_tech"},
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-prodest-pc1.technical.1000bit", "url": "https://www.1000bit.it/scheda.asp?id=259"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "olivetti-prodest-pc1hd",
+      "manufacturer_id": "olivetti",
+      "family_id": "olivetti-prodest",
+      "platform_id": "olivetti-prodest-pc1hd-platform",
+      "name": "Olivetti Prodest PC 1 HD",
+      "summary_key": "product.olivetti-prodest-pc1hd.summary",
+      "history_key": "product.olivetti-prodest-pc1hd.history",
+      "warning_key": "product.olivetti-prodest-pc1hd.warning",
+      "status": "partial",
+      "period": "1989",
+      "aliases": ["Prodest PC1 HD", "Olivetti PC 1 HD"],
+      "tags": ["NEC V40", "XT", "V6355", "XTA", "20 MB", "desktop"],
+      "hardware": {
+        "cpu": "NEC V40, switchable 4.77/8 MHz",
+        "memory": "640 KB visible; 768 KB physically populated according to the technical guide",
+        "video": "Integrated Yamaha V6355-compatible display logic with 16 KB mirrored VRAM",
+        "floppy": "One internal 3.5-inch 720 KB drive",
+        "hard_disk": "Internal 8-bit XTA interface at 0320h-0323h, IRQ 5; 20 MB factory configuration",
+        "interfaces": "Serial, parallel, audio, RGB/mono and quadrature mouse/joystick"
+      },
+      "firmware": {
+        "known_sets": ["System BIOS 1.21", "Character ROM 1.01", "Italian character ROM 1.02"],
+        "required": true,
+        "identity_note": "Firmware is identified by filename, size and SHA-256 metadata only; no ROM data is distributed with BluMach"
+      },
+      "storage": {
+        "bus": "Internal 8-bit XTA without an option ROM",
+        "official_drives": ["20 MB hard disk", "40 MB hard disk documented as supported; exact selector geometry remains unresolved"]
+      },
+      "relationships": {
+        "commercial_variants": ["PC 1 HD"],
+        "related_models": ["Olivetti Prodest PC 1"]
+      },
+      "creation": {
+        "status": "experimental",
+        "directory_prefix": "olivetti-prodest-pc1hd",
+        "facts": [
+          {"label_key": "creation.label.commercial_model", "value_key": "product.olivetti-prodest-pc1hd.creation.model"},
+          {"label_key": "creation.label.hard_disk", "value_key": "creation.option.hard_disk.20mb"}
+        ],
+        "fields": [],
+        "note_keys": ["product.olivetti-prodest-pc1hd.creation.note"],
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"bios": "v121", "cpu_family": "necv40", "cpu_speed": 8000000, "cpu_multi": 1, "cpu_use_dynarec": 0, "mem_size": 640}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_pc_xt", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2dd", "fdd_02_type": "none"}},
+          {"section": "Storage controllers", "values": {"hdc_1": "internal"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "pc1hd-20mb.img", "hdd_01_parameters": "32, 2, 667, 0, xta", "hdd_01_xta_channel": 0}}
+        ],
+        "generated_files": [
+          {"path": "pc1hd-20mb.img", "size": 21856256}
+        ]
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-prodest-pc1hd.technical.cpu"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.olivetti-prodest-pc1hd.technical.memory"},
+            {"label_key": "technical.label.video", "value_key": "product.olivetti-prodest-pc1hd.technical.video"},
+            {"label_key": "technical.label.storage", "value_key": "product.olivetti-prodest-pc1hd.technical.storage"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.bios_revision", "value_key": "product.olivetti-prodest-pc1hd.technical.firmware"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.verified", "value_key": "product.olivetti-prodest-pc1hd.technical.verified"},
+            {"label_key": "technical.label.limitations", "value_key": "product.olivetti-prodest-pc1hd.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.source_notes", "value_key": "product.olivetti-prodest-pc1hd.technical.vogons", "url": "https://www.vogons.org/viewtopic.php?t=109593"},
+            {"label_key": "technical.label.manual", "value_key": "product.olivetti-prodest-pc1hd.technical.cfguide", "url": "https://www.ti99iuc.it/web/_upload/image/PC1-OnePage/Docs/GuidaCFModPC1HD/pc1CF-IDE-Guide.pdf"}
+          ]
+        }
+      ]
+    },
+    {
       "id": "olivetti-pcs86",
       "manufacturer_id": "olivetti",
       "family_id": "olivetti-pcs",
@@ -178,6 +409,39 @@
         "official_drives": ["Conner CP3026 20 MB"]
       },
       "relationships": {},
+      "creation": {
+        "status": "validated",
+        "directory_prefix": "olivetti-pcs86",
+        "facts": [
+          {"label_key": "creation.label.commercial_model", "value_key": "product.olivetti-pcs86.creation.model"},
+          {"label_key": "creation.label.hard_disk", "value_key": "creation.option.hard_disk.20mb"}
+        ],
+        "fields": [
+          {
+            "id": "ems",
+            "label_key": "creation.label.ems",
+            "default": "1920",
+            "choices": [
+              {"id": "none", "label_key": "creation.option.ems.none", "status": "documented", "set": [{"section": "Machine", "key": "ems_size", "value": 0}]},
+              {"id": "384", "label_key": "creation.option.ems.384kb", "status": "documented", "set": [{"section": "Machine", "key": "ems_size", "value": 384}]},
+              {"id": "1920", "label_key": "creation.option.ems.1920kb", "status": "validated", "set": [{"section": "Machine", "key": "ems_size", "value": 1920}]}
+            ]
+          }
+        ],
+        "note_keys": ["product.olivetti-pcs86.creation.note"],
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "necv30", "cpu_speed": 9545456, "cpu_multi": 1, "cpu_use_dynarec": 0, "mem_size": 640, "ems_size": 1920, "keylock_locked": 0, "fdd0_jumpers": -1, "fdd1_jumpers": -1, "hdd_jumper": -1}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_pc_xt", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Ports (COM & LPT)", "values": {"serial2_enabled": 0}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "conner-cp3026-20mb.img", "hdd_01_parameters": "17, 4, 615, 0, xta", "hdd_01_xta_channel": 0}}
+        ],
+        "generated_files": [
+          {"path": "conner-cp3026-20mb.img", "size": 21411840}
+        ]
+      },
       "technical": [
         {
           "title_key": "technical.section.architecture",
@@ -274,6 +538,20 @@
       },
       "relationships": {
         "distinct_from": ["olivetti-pcs286s"]
+      },
+      "creation": {
+        "status": "validated", "directory_prefix": "olivetti-pcs286",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "286", "cpu_speed": 12000000, "cpu_multi": 1, "cpu_use_dynarec": 0, "mem_size": 1024}},
+          {"section": "Olivetti PCS 286", "values": {"bios": "v142"}},
+          {"section": "Video", "values": {"gfxcard": "pvga1a"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Storage controllers", "values": {"hdc_1": "ide_isa"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "conner-cp346-40mb.img", "hdd_01_parameters": "26, 4, 805, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "1989_3500rpm"}}
+        ],
+        "generated_files": [{"path": "conner-cp346-40mb.img", "size": 42864640}]
       },
       "technical": [
         {
@@ -373,6 +651,19 @@
       "relationships": {
         "derived_from": ["olivetti-pcs286"],
         "distinct_from": ["olivetti-pcs286", "olivetti-pcs286s-16"]
+      },
+      "creation": {
+        "status": "validated", "directory_prefix": "olivetti-pcs286s-ti",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "286", "cpu_speed": 12000000, "cpu_multi": 1, "cpu_use_dynarec": 0, "mem_size": 1024}},
+          {"section": "Olivetti PCS 286S (TI)", "values": {"bios": "v206"}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-pcs286s-40mb.img", "hdd_01_parameters": "26, 4, 805, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "1989_3500rpm"}}
+        ],
+        "generated_files": [{"path": "olivetti-pcs286s-40mb.img", "size": 42864640}]
       },
       "technical": [
         {
@@ -475,6 +766,18 @@
         "official_drives": ["20 MB", "40 MB", "100 MB"]
       },
       "relationships": {},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-pcs386sx",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 16000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 4096, "fpu_type": "none"}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "conner-cp3104-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "conner-cp3104-100mb.img", "size": 104890368}]
+      },
       "technical": [
         {
           "title_key": "technical.section.architecture",
@@ -567,6 +870,18 @@
       "firmware": {"known_sets": ["AMI DG2X-6080-020491-KB"], "required": true},
       "storage": {"bus": "IDE/ATA", "official_drives": []},
       "relationships": {},
+      "creation": {
+        "status": "experimental", "directory_prefix": "trigem-sx386m",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 16000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 4096, "fpu_type": "none"}},
+          {"section": "Video", "values": {"gfxcard": "pvga1a"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "sx386m-40mb-type17.img", "hdd_01_parameters": "17, 5, 977, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "1989_3500rpm"}}
+        ],
+        "generated_files": [{"path": "sx386m-40mb-type17.img", "size": 42511360}]
+      },
       "technical": [
         {
           "title_key": "technical.section.architecture",
@@ -634,6 +949,18 @@
         "expansion": "IN108 system bus; GO477 multifunction board"
       },
       "firmware": {"known_sets": ["PEQX Resident Diagnostics 1.09"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-m300-if378",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 16000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 2048}},
+          {"section": "Video", "values": {"gfxcard": "pvga1a"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-m300-40mb.img", "hdd_01_parameters": "26, 4, 805, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "1989_3500rpm"}}
+        ],
+        "generated_files": [{"path": "olivetti-m300-40mb.img", "size": 42864640}]
+      },
       "technical": [{
         "title_key": "technical.section.emulation",
         "evidence_key": "technical.evidence.implementation",
@@ -662,6 +989,18 @@
         "video": "Integrated Western Digital WD90C11, 512 KB"
       },
       "firmware": {"known_sets": ["Resident Diagnostics 1.02", "Resident Diagnostics 1.03 (missing)"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-m30002",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 16000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 2048}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-m30002-40mb.img", "hdd_01_parameters": "26, 4, 805, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "1989_3500rpm"}}
+        ],
+        "generated_files": [{"path": "olivetti-m30002-40mb.img", "size": 42864640}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30002.technical.verified"},
         {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30002.technical.limitations"}
@@ -686,6 +1025,18 @@
         "video": "Integrated Western Digital WD90C11, 512 KB"
       },
       "firmware": {"known_sets": ["Resident Diagnostics 5.01"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-m30002f",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 25000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 2048}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-m30002f-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "olivetti-m30002f-100mb.img", "size": 104890368}]
+      },
       "technical": [{
         "title_key": "technical.section.emulation",
         "evidence_key": "technical.evidence.implementation",
@@ -715,6 +1066,19 @@
         "enclosure": "Compact A4-footprint booksize unit"
       },
       "firmware": {"known_sets": ["2.04/2.07 verified dumps (16 MHz)"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-pcs11",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 16000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 2048}},
+          {"section": "Olivetti PCS 11 (BA013/16)", "values": {"keylock_locked": 0}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-pcs11-40mb.img", "hdd_01_parameters": "26, 4, 805, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "1989_3500rpm"}}
+        ],
+        "generated_files": [{"path": "olivetti-pcs11-40mb.img", "size": 42864640}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs11.technical.verified"},
         {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs11.technical.limitations"}
@@ -740,6 +1104,19 @@
         "storage": "Contemporary configurations list 40–120 MB IDE disks"
       },
       "firmware": {"known_sets": ["6.03 PCS 33 (25 MHz)"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-pcs33",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 25000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 2048}},
+          {"section": "Olivetti PCS 33 (BA013/25)", "values": {"keylock_locked": 0}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-pcs33-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "olivetti-pcs33-100mb.img", "size": 104890368}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs33.technical.verified"},
         {"label_key": "technical.label.limitations", "value_key": "product.olivetti-pcs33.technical.limitations"}
@@ -759,6 +1136,18 @@
       "tags": ["80386SX", "20 MHz", "OPTi 82C283", "OAK OTI-067"],
       "hardware": {"cpu": "Intel 80386SX 20 MHz", "memory": "2/4/8/10/14/16 MB", "chipset": "OPTi 82C283 + separate 82C206", "bus": "ISA/AT 10 MHz", "video": "Integrated OAK OTI-067"},
       "firmware": {"known_sets": ["64 KB system BIOS + 32 KB EVC"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-m30008",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 20000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 2048}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-m30008-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "olivetti-m30008-100mb.img", "size": 104890368}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30008.technical.verified"},
         {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30008.technical.limitations"}
@@ -778,6 +1167,18 @@
       "tags": ["80386SX", "25 MHz", "OPTi 82C283", "OAK OTI-067"],
       "hardware": {"cpu": "Intel 80386SX 25 MHz; AMD 80386SX-25 alternative", "memory": "4/8/10/14/16 MB", "chipset": "OPTi 82C283 + separate 82C206", "bus": "ISA/AT 8.33 MHz", "video": "Integrated OAK OTI-067"},
       "firmware": {"known_sets": ["64 KB system BIOS + 32 KB EVC"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-m30015",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "am386sx", "cpu_speed": 25000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 4096}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-m30015-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "olivetti-m30015-100mb.img", "size": 104890368}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30015.technical.verified"},
         {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30015.technical.limitations"}
@@ -797,6 +1198,19 @@
       "tags": ["i486SX", "25 MHz", "VLSI VL82C486", "WD90C31"],
       "hardware": {"cpu": "Intel i486SX/25", "memory": "4/8/12/20/24/36 MB", "chipset": "VLSI VL82C486", "video": "Integrated Western Digital WD90C31, 1 MB", "io": "PC87311/87312 family; separate Olivetti 8042"},
       "firmware": {"known_sets": ["BIOS 1.09 / Diagnostics 1.03", "BIOS 1.09 / Diagnostics 1.04", "BIOS 1.09 / Diagnostics 2.00"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-m30030",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i486sx", "cpu_speed": 25000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 4096}},
+          {"section": "Olivetti M300-30 / M300-30P", "values": {"bios": "diag104"}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-m30030-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "olivetti-m30030-100mb.img", "size": 104890368}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30030.technical.verified"},
         {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30030.technical.limitations"}
@@ -818,6 +1232,19 @@
       "tags": ["i486DX2", "50 MHz", "VLSI VL82C486", "WD90C31"],
       "hardware": {"cpu": "Intel i486DX2/50; 25 MHz external bus", "memory": "4/8/12/20/24/36 MB", "chipset": "VLSI VL82C486", "video": "Integrated Western Digital WD90C31, 1 MB", "io": "PC87311/87312 family; separate Olivetti 8042"},
       "firmware": {"known_sets": ["BIOS 1.09 / Diagnostics 1.03", "BIOS 1.09 / Diagnostics 1.04", "BIOS 1.09 / Diagnostics 2.00"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-m30030p",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i486dx2", "cpu_speed": 50000000, "cpu_multi": 2, "cpu_use_dynarec": 1, "mem_size": 4096}},
+          {"section": "Olivetti M300-30 / M300-30P", "values": {"bios": "diag104"}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-m30030p-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "olivetti-m30030p-100mb.img", "size": 104890368}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-m30030p.technical.verified"},
         {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m30030p.technical.limitations"}
@@ -839,6 +1266,18 @@
       "tags": ["i486DX2", "50 MHz", "ETEQ ET6000", "CL-GD5428", "IDE"],
       "hardware": {"cpu": "Intel i486DX2/50", "memory": "4/8/12/20/36 MB", "chipset": "ETEQ ET6000 + separate 83C206Q", "board": "BA2036 based on T.1 BA2044", "video": "Integrated Cirrus Logic CL-GD5428, 1 MB", "floppy": "PC87310 integrated controller"},
       "firmware": {"known_sets": ["Resident Diagnostics 1.05 + OVC 1.09"], "required": true},
+      "creation": {
+        "status": "experimental", "directory_prefix": "olivetti-pcs46c",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i486dx2", "cpu_speed": 50000000, "cpu_multi": 2, "cpu_use_dynarec": 1, "mem_size": 4096}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "olivetti-pcs46c-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "olivetti-pcs46c-100mb.img", "size": 104890368}]
+      },
       "technical": [{"title_key": "technical.section.emulation", "evidence_key": "technical.evidence.implementation", "entries": [
         {"label_key": "technical.label.rom_layout", "value_key": "product.olivetti-pcs46c.technical.rom_layout"},
         {"label_key": "technical.label.verified", "value_key": "product.olivetti-pcs46c.technical.verified"},
@@ -883,6 +1322,20 @@
       "relationships": {
         "badge_equivalent": ["olivetti-pcs286"],
         "commercial_aliases": ["P35"]
+      },
+      "creation": {
+        "status": "experimental", "directory_prefix": "ta-dario286",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "286", "cpu_speed": 12000000, "cpu_multi": 1, "cpu_use_dynarec": 0, "mem_size": 1024}},
+          {"section": "Triumph-Adler Dario 286 (P35)", "values": {"bios": "v142"}},
+          {"section": "Video", "values": {"gfxcard": "pvga1a"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Storage controllers", "values": {"hdc_1": "ide_isa"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "conner-cp346-40mb.img", "hdd_01_parameters": "26, 4, 805, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "1989_3500rpm"}}
+        ],
+        "generated_files": [{"path": "conner-cp346-40mb.img", "size": 42864640}]
       },
       "technical": [
         {
@@ -991,6 +1444,18 @@
       "relationships": {
         "badge_equivalent": ["olivetti-pcs386sx"],
         "commercial_aliases": ["P45"]
+      },
+      "creation": {
+        "status": "experimental", "directory_prefix": "ta-dario386sx",
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "i386sx", "cpu_speed": 16000000, "cpu_multi": 1, "cpu_use_dynarec": 1, "mem_size": 4096, "fpu_type": "none"}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "keyboard_at", "mouse_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "35_2hd", "fdd_02_type": "none"}},
+          {"section": "Hard disks", "values": {"hdd_01_fn": "conner-cp3104-100mb.img", "hdd_01_parameters": "33, 8, 776, 0, ide", "hdd_01_ide_channel": "0:0", "hdd_01_speed": "CP3104"}}
+        ],
+        "generated_files": [{"path": "conner-cp3104-100mb.img", "size": 104890368}]
       },
       "technical": [
         {

@@ -15,12 +15,15 @@
  *          Copyright 2008-2018 Sarah Walker.
  *          Copyright 2016-2018 Miran Grca.
  *          Copyright 2025      starfrost (refactoring).
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef VIDEO_V6355_H
 #define VIDEO_V6355_H
 
 typedef struct v6355_t {
     mem_mapping_t mapping;
+    mem_mapping_t prodest_low_mirrors[2];
 
     uint8_t       cgastat;
     uint8_t       cgamode;
@@ -57,6 +60,7 @@ typedef struct v6355_t {
     int           revision;
     int           rgb_type;
     int           double_type;
+    int           prodest_pc1;
 
     uint32_t      v6355pal[16];
 
@@ -67,5 +71,7 @@ typedef struct v6355_t {
 
     uint8_t *     vram;
 } v6355_t;
+
+void v6355_prodest_set_low_mirrors(int enabled);
 
 #endif /*VIDEO_V6355_H*/

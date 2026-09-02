@@ -634,6 +634,7 @@ extern const device_t wy700_device;
 
 /* Yamaha V6355 */
 extern const device_t v6355d_device;
+extern const device_t v6355d_prodest_pc1_device;
 
 /* Tandy */
 extern const device_t tandy_1000_video_device;
