@@ -28,9 +28,11 @@ class VMManagerMainWindow;
 }
 
 class BluMachCollectionWidget;
+class QAction;
 class QFrame;
 class QPushButton;
 class QStackedWidget;
+class QToolButton;
 
 class VMManagerMainWindow final : public QMainWindow {
     Q_OBJECT
@@ -55,6 +57,8 @@ private:
     QPushButton             *collectionNavButton;
     QPushButton             *machinesNavButton;
     QPushButton             *primaryActionButton;
+    QToolButton             *moreActionsButton;
+    QAction                 *moreActionsWidgetAction;
     void           saveSettings() const;
     void           updateActiveSection();
     void           updateShellAppearance();

@@ -17,8 +17,12 @@
 #include <QApplication>
 #include <QColor>
 #include <QDebug>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QResizeEvent>
 #include <QStyle>
+#include <QVBoxLayout>
 
 extern "C" {
 #include <86box/86box.h>
@@ -50,18 +54,48 @@ VMManagerDetails::VMManagerDetails(QWidget *parent)
     ui->verticalLayout->setContentsMargins(20, 14, 18, 16);
     ui->verticalLayout->setSpacing(12);
     ui->horizontalLayout->setSpacing(16);
+
+    machineHeader = new QFrame(this);
+    machineHeader->setObjectName(QStringLiteral("blumachMachineHeader"));
+    auto *machineHeaderLayout = new QHBoxLayout(machineHeader);
+    machineHeaderLayout->setContentsMargins(14, 10, 12, 10);
+    machineHeaderLayout->setSpacing(12);
+    auto *machineIdentityLayout = new QVBoxLayout();
+    machineIdentityLayout->setContentsMargins(0, 0, 0, 0);
+    machineIdentityLayout->setSpacing(2);
+    ui->verticalLayout->removeWidget(ui->systemLabel);
+    machineIdentityLayout->addWidget(ui->systemLabel);
+    machineMetaLabel = new QLabel(machineHeader);
+    machineMetaLabel->setObjectName(QStringLiteral("blumachMachineMeta"));
+    machineMetaLabel->setWordWrap(true);
+    machineIdentityLayout->addWidget(machineMetaLabel);
+    machineHeaderLayout->addLayout(machineIdentityLayout, 1);
+    machineHeaderLayout->addWidget(ui->statusLabel, 0, Qt::AlignRight | Qt::AlignVCenter);
+    ui->verticalLayout->insertWidget(0, machineHeader);
+
     ui->systemLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     ui->systemLabel->setMargin(0);
     ui->systemLabel->setWordWrap(true);
     ui->systemLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     ui->scrollArea->setFrameShape(QFrame::NoFrame);
     ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    ui->scrollArea->viewport()->setAutoFillBackground(false);
     ui->rightColumn->setMinimumWidth(250);
     ui->rightColumn->setMaximumWidth(320);
+    auto *rightColumnLayout = qobject_cast<QVBoxLayout *>(ui->rightColumn->layout());
+    rightColumnLayout->setSpacing(8);
+    const auto screenshotHeading = new QLabel(tr("Screenshots"), ui->rightColumn);
+    screenshotHeading->setObjectName(QStringLiteral("blumachSupplementaryHeading"));
+    rightColumnLayout->insertWidget(0, screenshotHeading);
+    const auto notesHeading = new QLabel(tr("Notes"), ui->rightColumn);
+    notesHeading->setObjectName(QStringLiteral("blumachSupplementaryHeading"));
+    rightColumnLayout->insertWidget(rightColumnLayout->indexOf(ui->notesTextEdit), notesHeading);
+    ui->notesTextEdit->setMinimumHeight(120);
     ui->toolButtonHolder->hide();
     ui->LeftRight->hide();
 
     const auto leftColumnLayout = qobject_cast<QVBoxLayout *>(ui->leftColumn->layout());
+    leftColumnLayout->setSpacing(8);
 
     // Each section here gets its own VMManagerDetailSection, named in the constructor.
     // When a system is selected in the list view it is updated through this object
@@ -114,6 +148,7 @@ VMManagerDetails::VMManagerDetails(QWidget *parent)
     // Disabled by default
     ui->screenshotNext->setEnabled(false);
     ui->screenshotPrevious->setEnabled(false);
+    ui->screenshotNavButtons->hide();
     // Connect their signals
     connect(ui->screenshotNext, &QToolButton::clicked, this, &VMManagerDetails::nextScreenshot);
     connect(ui->screenshotPrevious, &QToolButton::clicked, this, &VMManagerDetails::previousScreenshot);
@@ -130,13 +165,6 @@ VMManagerDetails::VMManagerDetails(QWidget *parent)
         toolButtonStyleSheet = TOOLBUTTON_STYLESHEET_DARK;
     }
     ui->ssNavTBHolder->setStyleSheet(toolButtonStyleSheet);
-
-    // Margins are a little different on macos
-#ifdef Q_OS_MACOS
-    ui->systemLabel->setMargin(15);
-#else
-    ui->systemLabel->setMargin(10);
-#endif
 
     pauseIcon = QIcon(":/menuicons/qt/icons/pause.ico");
     runIcon   = QIcon(":/menuicons/qt/icons/run.ico");
@@ -199,8 +227,8 @@ QSize
 VMManagerDetails::minimumSizeHint() const
 {
     // The optional screenshot/notes column must not force the entire manager
-    // wider than a compact window. updateResponsiveLayout() hides it when the
-    // available details width is small.
+    // wider than a compact window. updateResponsiveLayout() moves it below the
+    // hardware cards when the available details width is small.
     return QSize(0, 0);
 }
 
@@ -228,9 +256,9 @@ VMManagerDetails::reset()
     ui->screenshotPrevious->setEnabled(false);
     ui->screenshot->setPixmap(QString());
     ui->screenshot->setFixedSize(240, 160);
-    ui->screenshot->setFrameStyle(QFrame::Box | QFrame::Sunken);
+    ui->screenshot->setFrameStyle(QFrame::NoFrame);
     ui->screenshot->setText(tr("No screenshot"));
-    ui->screenshot->setEnabled(false);
+    ui->screenshot->setEnabled(true);
     ui->screenshot->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
 #ifdef Q_OS_WINDOWS
     if (!util::isWindowsLightTheme()) {
@@ -248,7 +276,11 @@ VMManagerDetails::reset()
 
     ui->systemLabel->setText(tr("No machines found"));
     ui->systemLabel->setStyleSheet("");
+    machineMetaLabel->clear();
+    machineMetaLabel->hide();
     ui->statusLabel->setText("");
+    ui->statusLabel->hide();
+    ui->statusLabel->setProperty("machineState", QString());
     ui->scrollArea->setStyleSheet("");
 
     ui->notesTextEdit->setPlainText("");
@@ -306,7 +338,10 @@ VMManagerDetails::updateData(VMManagerSystem *passed_sysconfig)
     updateScreenshots(passed_sysconfig);
 
     ui->systemLabel->setText(passed_sysconfig->displayName);
-    ui->statusLabel->setText(sysconfig->process->processId() == 0 ? tr("Not running") : QString(Preferences::languageIdToCode(lang_id).startsWith("fr-") ? "%1 : PID %2" : "%1: PID %2").arg(tr("Running"), QString::number(sysconfig->process->processId())));
+    const QString machineDescription = passed_sysconfig->getDisplayValue(VMManager::Display::Name::Machine);
+    machineMetaLabel->setText(machineDescription);
+    machineMetaLabel->setVisible(!machineDescription.isEmpty());
+    ui->statusLabel->show();
     ui->notesTextEdit->setPlainText(passed_sysconfig->notes);
     ui->notesTextEdit->setEnabled(true);
 
@@ -341,7 +376,6 @@ VMManagerDetails::updateConfig(VMManagerSystem *passed_sysconfig)
 
     // System
     systemSection->clear();
-    systemSection->addSection("Machine", passed_sysconfig->getDisplayValue(VMManager::Display::Name::Machine));
     systemSection->addSection("CPU", passed_sysconfig->getDisplayValue(VMManager::Display::Name::CPU));
     systemSection->addSection("Memory", passed_sysconfig->getDisplayValue(VMManager::Display::Name::Memory));
 
@@ -406,6 +440,7 @@ VMManagerDetails::updateScreenshots(VMManagerSystem *passed_sysconfig)
     // Disable screenshot navigation buttons by default
     ui->screenshotNext->setEnabled(false);
     ui->screenshotPrevious->setEnabled(false);
+    ui->screenshotNavButtons->hide();
 
     // Different actions are taken depending on the existence and number of screenshots
     screenshots = passed_sysconfig->getScreenshots();
@@ -415,6 +450,7 @@ VMManagerDetails::updateScreenshots(VMManagerSystem *passed_sysconfig)
         if (screenshots.size() > 1) {
             ui->screenshotNext->setEnabled(true);
             ui->screenshotPrevious->setEnabled(true);
+            ui->screenshotNavButtons->show();
         }
 #ifdef Q_OS_WINDOWS
         ui->screenshot->setStyleSheet("");
@@ -429,9 +465,9 @@ VMManagerDetails::updateScreenshots(VMManagerSystem *passed_sysconfig)
         ui->screenshotPrevious->setEnabled(false);
         ui->screenshot->setPixmap(QString());
         ui->screenshot->setFixedSize(240, 160);
-        ui->screenshot->setFrameStyle(QFrame::Box | QFrame::Sunken);
+        ui->screenshot->setFrameStyle(QFrame::NoFrame);
         ui->screenshot->setText(tr("No screenshot"));
-        ui->screenshot->setEnabled(false);
+        ui->screenshot->setEnabled(true);
         ui->screenshot->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
 #ifdef Q_OS_WINDOWS
         if (!util::isWindowsLightTheme()) {
@@ -446,10 +482,12 @@ VMManagerDetails::updateScreenshots(VMManagerSystem *passed_sysconfig)
 void
 VMManagerDetails::updateProcessStatus()
 {
-    const bool running     = sysconfig->process->state() == QProcess::ProcessState::Running;
-    QString    status_text = running ? QString(Preferences::languageIdToCode(lang_id).startsWith("fr-") ? "%1 : PID %2" : "%1: PID %2").arg(tr("Running"), QString::number(sysconfig->process->processId())) : tr("Not running");
-    status_text.append(sysconfig->window_obscured ? QString(" (%1)").arg(tr("Waiting")) : "");
-    ui->statusLabel->setText(status_text);
+    const bool running = sysconfig->process->state() == QProcess::ProcessState::Running;
+    ui->statusLabel->setText(sysconfig->getProcessStatusString());
+    ui->statusLabel->setToolTip(running
+                                    ? QStringLiteral("PID %1").arg(sysconfig->process->processId())
+                                    : QString());
+    updateStatusAppearance();
     resetButton->setEnabled(running);
     stopButton->setEnabled(running);
     cadButton->setEnabled(running);
@@ -502,6 +540,28 @@ VMManagerDetails::updateStyle()
 #endif
 
 void
+VMManagerDetails::updateStatusAppearance()
+{
+    QString state = QStringLiteral("stopped");
+    if (sysconfig->process->state() == QProcess::ProcessState::Running) {
+        const auto processStatus = sysconfig->getProcessStatus();
+        state = (sysconfig->window_obscured
+                 || processStatus == VMManagerSystem::ProcessStatus::Paused
+                 || processStatus == VMManagerSystem::ProcessStatus::PausedWaiting
+                 || processStatus == VMManagerSystem::ProcessStatus::RunningWaiting)
+            ? QStringLiteral("waiting")
+            : QStringLiteral("running");
+    }
+
+    if (ui->statusLabel->property("machineState").toString() == state)
+        return;
+
+    ui->statusLabel->setProperty("machineState", state);
+    ui->statusLabel->style()->unpolish(ui->statusLabel);
+    ui->statusLabel->style()->polish(ui->statusLabel);
+}
+
+void
 VMManagerDetails::applyAppearance()
 {
     const auto pal = QApplication::palette();
@@ -520,7 +580,10 @@ VMManagerDetails::applyAppearance()
     };
     const QColor border = blend(base, text, dark ? 0.28 : 0.16);
     const QColor muted = blend(base, text, dark ? 0.68 : 0.56);
-    const QColor status = blend(base, accent, dark ? 0.24 : 0.10);
+    const QColor card = blend(base, text, dark ? 0.035 : 0.02);
+    const QColor stoppedStatus = blend(base, text, dark ? 0.15 : 0.07);
+    const QColor runningStatus = blend(base, accent, dark ? 0.30 : 0.14);
+    const QColor waitingStatus = blend(base, pal.color(QPalette::Link), dark ? 0.26 : 0.12);
     auto contentPalette = pal;
     contentPalette.setColor(QPalette::Base, base);
     contentPalette.setColor(QPalette::Text, text);
@@ -529,15 +592,28 @@ VMManagerDetails::applyAppearance()
     ui->leftColumn->setPalette(contentPalette);
     setStyleSheet(QStringLiteral(
         "QWidget#VMManagerDetails { background: transparent; color: palette(text); }"
-        "QLabel#systemLabel { color: palette(text); font-weight: 600; }"
-        "QScrollArea#scrollArea { background: palette(base); border: 1px solid %1; border-radius: 8px; }"
-        "QWidget#leftColumn { background: palette(base); }"
+        "QFrame#blumachMachineHeader { background: %3; border: 1px solid %1; border-radius: 9px; }"
+        "QLabel#systemLabel { color: palette(text); font-weight: 600; background: transparent; }"
+        "QLabel#blumachMachineMeta { color: %2; background: transparent; }"
+        "QScrollArea#scrollArea { background: transparent; border: 0; }"
+        "QWidget#leftColumn { background: transparent; }"
+        "QWidget#blumachMachineDetailSection { background: %3; border: 1px solid %1; border-radius: 8px; }"
+        "QWidget#blumachMachineDetailHeader { background: transparent; border: 0; border-bottom: 1px solid %1; }"
+        "QFrame#detailFrame { background: transparent; border: 0; }"
+        "QLabel#blumachSupplementaryHeading { color: palette(text); background: transparent; font-weight: 600; padding: 2px 0; }"
         "QLabel#screenshot { color: %2; background: palette(base); border: 1px solid %1; border-radius: 8px; }"
         "QPlainTextEdit#notesTextEdit { color: palette(text); background: palette(base); border: 1px solid %1; border-radius: 8px; padding: 8px; }"
-        "QLabel#statusLabel { color: palette(text); background: %3; border-radius: 9px; padding: 4px 8px; }"
+        "QLabel#statusLabel { color: palette(text); background: %4; border-radius: 9px; padding: 4px 9px; }"
+        "QLabel#statusLabel[machineState=\"running\"] { background: %5; }"
+        "QLabel#statusLabel[machineState=\"waiting\"] { background: %6; }"
         "QLabel#blumachMachineDetailKey { color: %2; font-weight: 600; }"
         "QLabel#blumachMachineDetailValue { color: palette(text); }")
-        .arg(border.name(), muted.name(), status.name()));
+        .arg(border.name())
+        .arg(muted.name())
+        .arg(card.name())
+        .arg(stoppedStatus.name())
+        .arg(runningStatus.name())
+        .arg(waitingStatus.name()));
 }
 
 void
@@ -550,7 +626,40 @@ VMManagerDetails::resizeEvent(QResizeEvent *event)
 void
 VMManagerDetails::updateResponsiveLayout()
 {
-    ui->rightColumn->setVisible(width() >= 600 && ui->LeftRight->isVisible());
+    const bool compact = width() < 760;
+    ui->verticalLayout->setContentsMargins(compact ? 8 : 20,
+                                           compact ? 8 : 14,
+                                           compact ? 8 : 18,
+                                           compact ? 10 : 16);
+    ui->verticalLayout->setSpacing(compact ? 8 : 12);
+    ui->horizontalLayout->setSpacing(compact ? 8 : 16);
+    auto titleFont = ui->systemLabel->font();
+    titleFont.setPointSize(compact ? 14 : 18);
+    ui->systemLabel->setFont(titleFont);
+    if (const auto headerLayout = qobject_cast<QHBoxLayout *>(machineHeader->layout())) {
+        headerLayout->setContentsMargins(compact ? 10 : 14,
+                                         compact ? 8 : 10,
+                                         compact ? 10 : 12,
+                                         compact ? 8 : 10);
+        headerLayout->setSpacing(compact ? 8 : 12);
+    }
+    if (compact != compactSupplementaryLayout) {
+        if (compact) {
+            const auto leftColumnLayout = qobject_cast<QVBoxLayout *>(ui->leftColumn->layout());
+            leftColumnLayout->insertWidget(qMax(0, leftColumnLayout->count() - 1), ui->rightColumn);
+            ui->rightColumn->setMinimumWidth(0);
+            ui->rightColumn->setMaximumWidth(QWIDGETSIZE_MAX);
+            ui->notesTextEdit->setMaximumHeight(180);
+        } else {
+            ui->horizontalLayout->addWidget(ui->rightColumn, 0, Qt::AlignTop);
+            ui->rightColumn->setMinimumWidth(250);
+            ui->rightColumn->setMaximumWidth(320);
+            ui->notesTextEdit->setMaximumHeight(QWIDGETSIZE_MAX);
+        }
+        compactSupplementaryLayout = compact;
+    }
+
+    ui->rightColumn->setVisible(!ui->LeftRight->isHidden());
 }
 
 QWidget *

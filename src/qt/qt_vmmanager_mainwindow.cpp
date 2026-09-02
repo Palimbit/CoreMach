@@ -34,10 +34,16 @@
 #include <QDesktopServices>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeySequence>
+#include <QMenu>
 #include <QMenuBar>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QShortcut>
 #include <QStackedWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 extern "C" {
@@ -54,6 +60,29 @@ blendShellColor(const QColor &background, const QColor &foreground, const qreal 
                             background.greenF() * inverse + foreground.greenF() * amount,
                             background.blueF() * inverse + foreground.blueF() * amount);
 }
+
+QIcon
+toolbarIcon(const QString &resourcePath)
+{
+    const QPixmap source(resourcePath);
+    if (source.isNull())
+        return QIcon(resourcePath);
+
+    QPixmap disabled(source.size());
+    disabled.fill(Qt::transparent);
+    disabled.setDevicePixelRatio(source.devicePixelRatio());
+    {
+        QPainter painter(&disabled);
+        painter.setOpacity(0.34);
+        painter.drawPixmap(0, 0, source);
+    }
+
+    QIcon icon;
+    icon.addPixmap(source, QIcon::Normal, QIcon::Off);
+    icon.addPixmap(source, QIcon::Active, QIcon::Off);
+    icon.addPixmap(disabled, QIcon::Disabled, QIcon::Off);
+    return icon;
+}
 } // namespace
 
 VMManagerMainWindow          *vmm_main_window = nullptr;
@@ -69,6 +98,8 @@ VMManagerMainWindow::
     , collectionNavButton(new QPushButton(this))
     , machinesNavButton(new QPushButton(this))
     , primaryActionButton(new QPushButton(this))
+    , moreActionsButton(new QToolButton(this))
+    , moreActionsWidgetAction(nullptr)
     , statusLeft(new QLabel)
     , statusRight(new QLabel)
 {
@@ -76,14 +107,14 @@ VMManagerMainWindow::
 
     vmm_main_window = this;
 
-    runIcon = QIcon(QStringLiteral(":/blumach/ui/play.png"));
-    pauseIcon = QIcon(QStringLiteral(":/blumach/ui/pause.png"));
+    runIcon = toolbarIcon(QStringLiteral(":/blumach/ui/play.png"));
+    pauseIcon = toolbarIcon(QStringLiteral(":/blumach/ui/pause.png"));
     ui->actionStartPause->setIcon(runIcon);
-    ui->actionHard_Reset->setIcon(QIcon(QStringLiteral(":/blumach/ui/restart.png")));
-    ui->actionForce_Shutdown->setIcon(QIcon(QStringLiteral(":/blumach/ui/power.png")));
-    ui->actionCtrl_Alt_Del->setIcon(QIcon(QStringLiteral(":/blumach/ui/keyboard-command.png")));
-    ui->actionSettings->setIcon(QIcon(QStringLiteral(":/blumach/ui/settings.png")));
-    ui->actionNew_Machine->setIcon(QIcon(QStringLiteral(":/blumach/ui/new-machine.png")));
+    ui->actionHard_Reset->setIcon(toolbarIcon(QStringLiteral(":/blumach/ui/restart.png")));
+    ui->actionForce_Shutdown->setIcon(toolbarIcon(QStringLiteral(":/blumach/ui/power.png")));
+    ui->actionCtrl_Alt_Del->setIcon(toolbarIcon(QStringLiteral(":/blumach/ui/keyboard-command.png")));
+    ui->actionSettings->setIcon(toolbarIcon(QStringLiteral(":/blumach/ui/settings.png")));
+    ui->actionNew_Machine->setIcon(toolbarIcon(QStringLiteral(":/blumach/ui/new-machine.png")));
 
     // Connect signals from the VMManagerMain widget
     connect(vmm, &VMManagerMain::selectionOrStateChanged, this, &VMManagerMainWindow::vmmStateChanged);
@@ -102,6 +133,14 @@ VMManagerMainWindow::
     machinesNavButton->setCheckable(true);
     collectionNavButton->setAutoExclusive(true);
     machinesNavButton->setAutoExclusive(true);
+    collectionNavButton->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+    machinesNavButton->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_2));
+    collectionNavButton->setToolTip(QStringLiteral("%1 (%2)")
+                                        .arg(collectionNavButton->text(),
+                                             collectionNavButton->shortcut().toString(QKeySequence::NativeText)));
+    machinesNavButton->setToolTip(QStringLiteral("%1 (%2)")
+                                      .arg(machinesNavButton->text(),
+                                           machinesNavButton->shortcut().toString(QKeySequence::NativeText)));
 
     auto *navigationGroup = new QButtonGroup(this);
     navigationGroup->setExclusive(true);
@@ -119,6 +158,8 @@ VMManagerMainWindow::
     headerLayout->addWidget(machinesNavButton);
     headerLayout->addStretch(1);
     headerLayout->addWidget(primaryActionButton);
+    setTabOrder(collectionNavButton, machinesNavButton);
+    setTabOrder(machinesNavButton, primaryActionButton);
 
     mainStack->addWidget(collection);
     mainStack->addWidget(vmm);
@@ -134,13 +175,26 @@ VMManagerMainWindow::
     ui->toolBar->setMovable(false);
     ui->toolBar->setFloatable(false);
     ui->toolBar->removeAction(ui->actionNew_Machine);
+    if (!ui->toolBar->actions().isEmpty() && ui->toolBar->actions().constFirst()->isSeparator())
+        ui->toolBar->removeAction(ui->toolBar->actions().constFirst());
+
+    moreActionsButton->setObjectName(QStringLiteral("blumachMoreMachineActions"));
+    moreActionsButton->setText(tr("More"));
+    moreActionsButton->setToolTip(tr("More"));
+    moreActionsButton->setPopupMode(QToolButton::InstantPopup);
+    moreActionsButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    const auto moreActionsMenu = new QMenu(moreActionsButton);
+    moreActionsMenu->addAction(ui->actionHard_Reset);
+    moreActionsMenu->addAction(ui->actionForce_Shutdown);
+    moreActionsMenu->addAction(ui->actionCtrl_Alt_Del);
+    moreActionsButton->setMenu(moreActionsMenu);
+    moreActionsWidgetAction = ui->toolBar->insertWidget(ui->actionSettings, moreActionsButton);
+    moreActionsWidgetAction->setVisible(false);
+
     ui->toolBar->setIconSize(QSize(20, 20));
     ui->toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    ui->toolBar->setStyleSheet(QStringLiteral(
-        "QToolBar { border: 0; border-bottom: 1px solid palette(mid); padding: 5px 12px; spacing: 4px; }"
-        "QToolButton { border: 0; border-radius: 6px; padding: 6px 9px; }"
-        "QToolButton:hover { background: palette(midlight); }"
-        "QToolButton:pressed { background: palette(mid); }"));
+    if (const auto startButton = qobject_cast<QToolButton *>(ui->toolBar->widgetForAction(ui->actionStartPause)))
+        startButton->setObjectName(QStringLiteral("blumachPrimaryMachineAction"));
     centralLayout->addWidget(navigationHeader);
     centralLayout->addWidget(ui->toolBar);
     centralLayout->addWidget(mainStack, 1);
@@ -154,6 +208,9 @@ VMManagerMainWindow::
         else
             vmm->newMachineWizard();
     });
+    const auto primaryShortcut = new QShortcut(QKeySequence::New, this);
+    primaryShortcut->setContext(Qt::WindowShortcut);
+    connect(primaryShortcut, &QShortcut::activated, primaryActionButton, &QPushButton::click);
 
     connect(collection, &BluMachCollectionWidget::showMachinesRequested, this, [this] {
         mainStack->setCurrentWidget(vmm);
@@ -331,6 +388,9 @@ VMManagerMainWindow::updateActiveSection()
     ui->actionHide_tool_bar->setVisible(machinesActive);
     ui->actionNew_Machine->setVisible(machinesActive);
     primaryActionButton->setText(machinesActive ? tr("New machine…") : tr("Create this machine…"));
+    primaryActionButton->setToolTip(QStringLiteral("%1 (%2)")
+                                        .arg(primaryActionButton->text(),
+                                             QKeySequence(QKeySequence::New).toString(QKeySequence::NativeText)));
     primaryActionButton->setEnabled(machinesActive || collectionSelectionCanCreate);
     vmmStateChanged(machinesActive ? vmm->getSelectedSystem() : nullptr);
 }
@@ -346,7 +406,12 @@ VMManagerMainWindow::updateShellAppearance()
     const QColor windowColor = shellPalette.color(QPalette::Window);
     const QColor textColor = shellPalette.color(QPalette::WindowText);
     const QColor highlightColor = shellPalette.color(QPalette::Highlight);
-    const QColor highlightedTextColor = shellPalette.color(QPalette::HighlightedText);
+    // Keep the BluMach brand action recognisable even on Windows themes whose
+    // Link and Highlight roles are neutral grey or white.
+    const QColor accentColor = dark ? QColor(QStringLiteral("#2388df"))
+                                    : QColor(QStringLiteral("#0b70c9"));
+    const QColor accentTextColor(Qt::white);
+    const QColor accentHoverColor = blendShellColor(accentColor, accentTextColor, dark ? 0.13 : 0.09);
     const QColor borderColor = blendShellColor(windowColor, textColor, dark ? 0.28 : 0.16);
     const QColor hoverColor = blendShellColor(windowColor, textColor, dark ? 0.10 : 0.045);
     const QColor selectedColor = blendShellColor(windowColor, highlightColor, dark ? 0.34 : 0.13);
@@ -371,7 +436,19 @@ VMManagerMainWindow::updateShellAppearance()
         "QPushButton#blumachPrimaryAction:disabled { color: %8; background: %4; }"
         "QPushButton#blumachPrimaryAction:hover:!disabled { background: %7; }")
         .arg(windowColor.name(), borderColor.name(), textColor.name(), hoverColor.name(),
-             selectedColor.name(), highlightedTextColor.name(), highlightColor.name(), mutedColor.name()));
+             selectedColor.name(), accentTextColor.name(), accentColor.name(), mutedColor.name()));
+    ui->toolBar->setStyleSheet(QStringLiteral(
+        "QToolBar { border: 0; border-bottom: 1px solid %1; padding: 5px 12px; spacing: 4px; }"
+        "QToolButton { color: %2; border: 1px solid transparent; border-radius: 6px; padding: 6px 9px; }"
+        "QToolButton:hover:!disabled { background: %3; }"
+        "QToolButton:pressed:!disabled { background: %4; }"
+        "QToolButton:focus { border-color: %5; }"
+        "QToolButton:disabled { color: %6; }"
+        "QToolButton#blumachPrimaryMachineAction:!disabled { color: %7; background: %5; font-weight: 600; }"
+        "QToolButton#blumachPrimaryMachineAction:hover:!disabled { background: %8; }"
+        "QToolButton#blumachMoreMachineActions { padding-left: 11px; padding-right: 11px; }")
+        .arg(borderColor.name(), textColor.name(), hoverColor.name(), selectedColor.name(),
+             accentColor.name(), mutedColor.name(), accentTextColor.name(), accentHoverColor.name()));
 }
 
 void
@@ -388,8 +465,27 @@ VMManagerMainWindow::updateResponsiveLayout()
     if (compact == compactShell)
         return;
     compactShell = compact;
+
+    if (compact) {
+        ui->toolBar->removeAction(ui->actionHard_Reset);
+        ui->toolBar->removeAction(ui->actionForce_Shutdown);
+        ui->toolBar->removeAction(ui->actionCtrl_Alt_Del);
+        moreActionsWidgetAction->setVisible(true);
+    } else {
+        const auto toolbarActions = ui->toolBar->actions();
+        if (!toolbarActions.contains(ui->actionHard_Reset))
+            ui->toolBar->insertAction(ui->actionSettings, ui->actionHard_Reset);
+        if (!ui->toolBar->actions().contains(ui->actionForce_Shutdown))
+            ui->toolBar->insertAction(ui->actionSettings, ui->actionForce_Shutdown);
+        if (!ui->toolBar->actions().contains(ui->actionCtrl_Alt_Del))
+            ui->toolBar->insertAction(ui->actionSettings, ui->actionCtrl_Alt_Del);
+        moreActionsWidgetAction->setVisible(false);
+    }
+
     ui->toolBar->setToolButtonStyle(compact ? Qt::ToolButtonIconOnly
                                             : Qt::ToolButtonTextBesideIcon);
+    if (const auto startButton = qobject_cast<QToolButton *>(ui->toolBar->widgetForAction(ui->actionStartPause)))
+        startButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     ui->toolBar->setIconSize(compact ? QSize(22, 22) : QSize(20, 20));
     navigationHeader->layout()->setContentsMargins(compact ? 12 : 18, 7,
                                                     compact ? 12 : 18, 7);
@@ -451,6 +547,14 @@ VMManagerMainWindow::updateLanguage()
     setWindowTitle(tr("%1 Historical Computer Collection").arg(EMU_NAME));
     collectionNavButton->setText(tr("Collection"));
     machinesNavButton->setText(tr("My machines"));
+    collectionNavButton->setToolTip(QStringLiteral("%1 (%2)")
+                                        .arg(collectionNavButton->text(),
+                                             collectionNavButton->shortcut().toString(QKeySequence::NativeText)));
+    machinesNavButton->setToolTip(QStringLiteral("%1 (%2)")
+                                      .arg(machinesNavButton->text(),
+                                           machinesNavButton->shortcut().toString(QKeySequence::NativeText)));
+    moreActionsButton->setText(tr("More"));
+    moreActionsButton->setToolTip(tr("More"));
     collection->reloadLanguage();
     updateActiveSection();
     emit languageUpdated();

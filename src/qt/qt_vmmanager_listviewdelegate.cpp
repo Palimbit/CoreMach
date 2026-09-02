@@ -20,6 +20,18 @@
 #include "qt_vmmanager_listviewdelegate.hpp"
 #include "qt_vmmanager_model.hpp"
 
+namespace {
+bool
+isLegacyManagerIcon(const QString &iconPath)
+{
+    const QString normalized = iconPath.trimmed().toLower();
+    return normalized == QStringLiteral(":/settings/qt/icons/86box-gray.ico")
+        || normalized == QStringLiteral(":/settings/qt/icons/86box-green.ico")
+        || normalized == QStringLiteral(":/settings/qt/icons/86box-red.ico")
+        || normalized == QStringLiteral(":/settings/qt/icons/86box-yellow.ico");
+}
+} // namespace
+
 // Thanks to scopchanov https://github.com/scopchanov/SO-MessageLog
 // from https://stackoverflow.com/questions/53105343/is-it-possible-to-add-a-custom-widget-into-a-qlistview
 
@@ -27,15 +39,6 @@ VMManagerListViewDelegate::VMManagerListViewDelegate(QObject *parent)
     : QStyledItemDelegate(parent)
     , m_ptr(new VMManagerListViewDelegateStyle)
 {
-    default_icon = QIcon(":/settings/qt/icons/86Box-gray.ico");
-    stop_icon    = QApplication::style()->standardIcon(QStyle::SP_MediaStop);
-    running_icon = QIcon(":/menuicons/qt/icons/run.ico");
-    stopped_icon = QIcon(":/menuicons/qt/icons/acpi_shutdown.ico");
-    paused_icon  = QIcon(":/menuicons/qt/icons/pause.ico");
-    unknown_icon = QApplication::style()->standardIcon(QStyle::SP_MessageBoxQuestion);
-
-    highlight_color = QColor("#616161");
-    bg_color        = QColor("#272727");
 }
 
 VMManagerListViewDelegate::~VMManagerListViewDelegate()
@@ -61,28 +64,10 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     // The main icon, configurable. Falls back to default if it cannot be loaded.
     auto customIcon = index.data(VMManagerModel::Roles::Icon).toString();
     opt.icon        = {};
-    if (!customIcon.isEmpty()) {
+    if (!customIcon.isEmpty() && !isLegacyManagerIcon(customIcon)) {
         const auto customPixmap = QPixmap(customIcon);
         if (!customPixmap.isNull())
             opt.icon = customPixmap;
-    }
-
-    // Set the status icon based on the process status
-    QIcon status_icon;
-    switch (process_status) {
-        case VMManagerSystem::ProcessStatus::Running:
-        case VMManagerSystem::ProcessStatus::RunningWaiting:
-            status_icon = running_icon;
-            break;
-        case VMManagerSystem::ProcessStatus::Stopped:
-            status_icon = stopped_icon;
-            break;
-        case VMManagerSystem::ProcessStatus::PausedWaiting:
-        case VMManagerSystem::ProcessStatus::Paused:
-            status_icon = paused_icon;
-            break;
-        default:
-            status_icon = unknown_icon;
     }
 
     const bool hasIcon    = !opt.icon.isNull();
@@ -118,10 +103,16 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
                                      .join(' ')
                                      .toLower();
         const bool dario = identity.contains(QStringLiteral("dario"));
-        const bool pcs = identity.contains(QStringLiteral("olivetti"))
-                      || identity.contains(QStringLiteral("pcs"));
+        const bool pcs = identity.contains(QStringLiteral("pcs"));
+        const bool olivettiM = identity.contains(QStringLiteral("olivetti m"))
+                            || identity.contains(QStringLiteral("olivetti_m"))
+                            || identity.contains(QStringLiteral("olivetti-m"));
+        const bool prodest = identity.contains(QStringLiteral("prodest"));
         const QString mark = dario ? QStringLiteral("D")
-                                   : (pcs ? QStringLiteral("PCS") : QStringLiteral("PC"));
+                                   : (pcs ? QStringLiteral("PCS")
+                                          : (olivettiM ? QStringLiteral("M")
+                                                       : (prodest ? QStringLiteral("P")
+                                                                  : QStringLiteral("PC"))));
         QRect badgeRect(QPoint(contentRect.left(), contentRect.top()), m_ptr->iconSize);
         badgeRect.adjust(2, 2, -2, -2);
         QColor badgeColor = dario ? palette.link().color() : palette.highlight().color();
@@ -248,7 +239,6 @@ VMManagerListViewDelegate::sizeHint(const QStyleOptionViewItem &option,
 
 VMManagerListViewDelegateStyle::VMManagerListViewDelegateStyle()
     : iconSize(30, 30)
-    , smallIconSize(16, 16)
     ,
     // bottom gets a little more than the top because of the custom separator
     margins(4, 6, 8, 7)

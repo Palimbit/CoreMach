@@ -1445,6 +1445,15 @@ msgstr ""
 msgid "No screenshot"
 msgstr ""
 
+msgid "Screenshots"
+msgstr ""
+
+msgid "Notes"
+msgstr ""
+
+msgid "More"
+msgstr ""
+
 msgid "Search"
 msgstr ""
 

@@ -9,8 +9,10 @@
  *          Header for 86Box VM manager list view delegate module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #ifndef QT_VMMANAGER_LISTVIEWDELEGATE_H
 #define QT_VMMANAGER_LISTVIEWDELEGATE_H
@@ -28,7 +30,6 @@ class VMManagerListViewDelegateStyle {
     [[nodiscard]] inline QRect statusBox(const QStyleOptionViewItem &option, const QModelIndex &index) const;
 
     QSize    iconSize;
-    QSize    smallIconSize;
     QMargins margins;
     int      spacingHorizontal;
     int      spacingVertical;
@@ -60,15 +61,5 @@ public:
 
 private:
     VMManagerListViewDelegateStyle *m_ptr;
-
-    QIcon default_icon;
-    QIcon stop_icon;
-    QIcon running_icon;
-    QIcon stopped_icon;
-    QIcon paused_icon;
-    QIcon unknown_icon;
-
-    QColor bg_color;
-    QColor highlight_color;
 };
 #endif // QT_VMMANAGER_LISTVIEWDELEGATE_H
