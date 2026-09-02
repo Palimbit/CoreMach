@@ -39,6 +39,9 @@ VMManagerDetailSection::
     , ui(new Ui::DetailSection)
 {
     ui->setupUi(this);
+    setObjectName(QStringLiteral("blumachMachineDetailSection"));
+    setAttribute(Qt::WA_StyledBackground, true);
+    ui->outerFrame->setStyleSheet(QStringLiteral("background: transparent; border: 0;"));
 
     frameGridLayout = new QGridLayout();
     // Create the collapse button, set the name and add it to the layout
@@ -46,9 +49,7 @@ VMManagerDetailSection::
     setSectionName(sectionName);
     ui->collapseButtonHolder->setContentsMargins(getMargins(MarginSection::ToolButton));
 
-    ui->outerFrame->setStyleSheet(QStringLiteral("background: transparent;"));
-    ui->collapseButtonHolder->setStyleSheet(
-        QStringLiteral("background: transparent; border: 0; border-bottom: 1px solid palette(mid);"));
+    ui->collapseButtonHolder->setObjectName(QStringLiteral("blumachMachineDetailHeader"));
     const auto sectionLabel = new QLabel(sectionName);
     sectionLabel->setStyleSheet(sectionLabel->styleSheet().append("font-weight: bold;"));
     ui->collapseButtonHolder->setContentsMargins(QMargins(3, 2, 0, 2));
@@ -219,9 +220,9 @@ VMManagerDetailSection::clear()
 void
 VMManagerDetailSection::updateStyle()
 {
-    ui->outerFrame->setStyleSheet(QStringLiteral("background: transparent;"));
-    ui->collapseButtonHolder->setStyleSheet(
-        QStringLiteral("background: transparent; border: 0; border-bottom: 1px solid palette(mid);"));
+    ui->outerFrame->setStyleSheet(QStringLiteral("background: transparent; border: 0;"));
+    style()->unpolish(this);
+    style()->polish(this);
 }
 #endif
 

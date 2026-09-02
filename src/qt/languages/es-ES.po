@@ -1523,6 +1523,15 @@ msgstr "Mostrar archivo de &configuración"
 msgid "No screenshot"
 msgstr "Sin captura de pantalla"
 
+msgid "Screenshots"
+msgstr "Capturas"
+
+msgid "Notes"
+msgstr "Notas"
+
+msgid "More"
+msgstr "Más"
+
 msgid "Search"
 msgstr "Buscar"
 

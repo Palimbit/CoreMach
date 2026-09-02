@@ -30,6 +30,8 @@ class VMManagerDetails;
 QT_END_NAMESPACE
 
 class QResizeEvent;
+class QFrame;
+class QLabel;
 
 class VMManagerDetails : public QWidget {
     Q_OBJECT
@@ -64,6 +66,9 @@ private:
     Ui::VMManagerDetails *ui;
     VMManagerSystem      *sysconfig;
 
+    QFrame *machineHeader;
+    QLabel *machineMetaLabel;
+
     VMManagerDetailSection *systemSection;
     VMManagerDetailSection *videoSection;
     VMManagerDetailSection *storageSection;
@@ -86,10 +91,12 @@ private:
 
     QIcon pauseIcon;
     QIcon runIcon;
+    bool  compactSupplementaryLayout = false;
 
     void            updateConfig(VMManagerSystem *passed_sysconfig);
     void            updateScreenshots(VMManagerSystem *passed_sysconfig);
     void            applyAppearance();
+    void            updateStatusAppearance();
     void            updateResponsiveLayout();
     static QWidget *createHorizontalLine(int leftSpacing = 25, int rightSpacing = 25);
     // QVBoxLayout *detailsLayout;

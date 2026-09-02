@@ -9,8 +9,10 @@
  *          86Box VM manager system details section module
  *
  * Authors: cold-brewed
+ *          rtzor
  *
  *          Copyright 2024 cold-brewed
+ *          Copyright 2026 rtzor
  */
 #ifndef QT_VMMANAGER_DETAILSECTION_H
 #define QT_VMMANAGER_DETAILSECTION_H

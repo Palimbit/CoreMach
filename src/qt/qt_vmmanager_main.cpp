@@ -106,6 +106,7 @@ VMManagerMain::VMManagerMain(QWidget *parent)
     ui->horizontalLayout->setContentsMargins(18, 14, 18, 16);
     ui->splitter->setHandleWidth(10);
     ui->listView->setFrameShape(QFrame::NoFrame);
+    ui->listView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     ui->listView->setSpacing(0);
     ui->listView->setUniformItemSizes(true);
     ui->widget->setMinimumWidth(270);
@@ -492,6 +493,10 @@ VMManagerMain::updateResponsiveLayout()
     if (compact == compactLayout)
         return;
     compactLayout = compact;
+    ui->horizontalLayout->setContentsMargins(compact ? 10 : 18,
+                                             compact ? 10 : 14,
+                                             compact ? 10 : 18,
+                                             compact ? 12 : 16);
     ui->widget->setMinimumWidth(compact ? 210 : 270);
     ui->widget->setMaximumWidth(compact ? 250 : 390);
     ui->splitter->setSizes(compact ? QList<int>({ 225, 535 })
@@ -1239,8 +1244,8 @@ VMManagerMain::updateAppearance()
         "QLineEdit#searchBar { color: palette(text); background: palette(base); border: 1px solid %1; border-radius: 7px; padding: 7px 9px; }"
         "QListView#listView { color: palette(text); background: palette(base); border: 1px solid %1; border-radius: 8px; outline: 0; padding: 4px; }"
         "QListView#listView::item { background: transparent; border: 0; }"
-        "QSplitter::handle { background: transparent; }"
-        "QWidget#detailsArea { background: transparent; }")
+        "QSplitter#splitter::handle:horizontal { background: palette(window); border: 0; image: none; }"
+        "QWidget#detailsArea { background: palette(window); }")
         .arg(border.name()));
     ui->listView->viewport()->update();
 }
