@@ -39,6 +39,8 @@ public:
 
     ~VMManagerDetails() override;
 
+    QSize minimumSizeHint() const override;
+
     void reset();
 
     void updateData(VMManagerSystem *passed_sysconfig);

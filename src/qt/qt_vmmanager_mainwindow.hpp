@@ -58,12 +58,14 @@ private:
     void           saveSettings() const;
     void           updateActiveSection();
     void           updateShellAppearance();
+    void           updateResponsiveLayout();
     QLabel        *statusLeft;
     QLabel        *statusRight;
     QIcon          runIcon;
     QIcon          pauseIcon;
     bool           toolBarHiddenByUser = false;
     bool           collectionSelectionCanCreate = false;
+    bool           compactShell = false;
 
 public slots:
     void setStatusLeft(const QString &text) const;
@@ -89,6 +91,7 @@ private slots:
 protected:
     void changeEvent(QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 };
 
 #endif // VMM_MAINWINDOW_H

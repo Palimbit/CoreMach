@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QWidget>
+#include <QPalette>
 
 #include <initializer_list>
 
@@ -16,6 +17,7 @@ QString DlgFilter(QStringList extensions, bool last = false);
 QScreen *screenOfWidget(QWidget *widget);
 #ifdef Q_OS_WINDOWS
 bool isWindowsLightTheme(void);
+QPalette darkUiPalette();
 void setWin11RoundedCorners(WId hwnd, bool enable);
 #endif
 QString currentUuid();

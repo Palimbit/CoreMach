@@ -34,7 +34,9 @@
 #include <QDesktopServices>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QMenuBar>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -265,6 +267,7 @@ VMManagerMainWindow::
 
     updateActiveSection();
     updateShellAppearance();
+    updateResponsiveLayout();
 }
 
 VMManagerMainWindow::~VMManagerMainWindow()
@@ -335,19 +338,32 @@ VMManagerMainWindow::updateActiveSection()
 void
 VMManagerMainWindow::updateShellAppearance()
 {
-    const auto shellPalette = navigationHeader->palette();
+    const auto shellPalette = QApplication::palette();
+    bool dark = shellPalette.color(QPalette::Window).lightnessF() < 0.5;
+#ifdef Q_OS_WINDOWS
+    dark = !util::isWindowsLightTheme();
+#endif
     const QColor windowColor = shellPalette.color(QPalette::Window);
     const QColor textColor = shellPalette.color(QPalette::WindowText);
     const QColor highlightColor = shellPalette.color(QPalette::Highlight);
     const QColor highlightedTextColor = shellPalette.color(QPalette::HighlightedText);
-    const bool dark = windowColor.lightnessF() < 0.5;
     const QColor borderColor = blendShellColor(windowColor, textColor, dark ? 0.28 : 0.16);
     const QColor hoverColor = blendShellColor(windowColor, textColor, dark ? 0.10 : 0.045);
     const QColor selectedColor = blendShellColor(windowColor, highlightColor, dark ? 0.34 : 0.13);
     const QColor mutedColor = blendShellColor(windowColor, textColor, dark ? 0.52 : 0.46);
+    ui->menubar->setStyleSheet(QStringLiteral(
+        "QMenuBar { color: %1; background: %2; }"
+        "QMenuBar::item { color: %1; background: transparent; padding: 5px 9px; }"
+        "QMenuBar::item:selected { background: %3; }"
+        "QMenu { color: %1; background: %2; border: 1px solid %4; }"
+        "QMenu::item:selected { background: %3; }")
+        .arg(textColor.name())
+        .arg(windowColor.name())
+        .arg(hoverColor.name())
+        .arg(borderColor.name()));
     navigationHeader->setStyleSheet(QStringLiteral(
         "QFrame#blumachNavigationHeader { background: %1; border-bottom: 1px solid %2; }"
-        "QLabel#blumachBrand { color: %3; font-size: 18px; font-weight: 600; padding-right: 8px; }"
+        "QLabel#blumachBrand { color: %3; background: transparent; font-size: 18px; font-weight: 600; padding-right: 8px; }"
         "QPushButton#blumachCollectionNav, QPushButton#blumachMachinesNav { color: %3; background: transparent; border: 0; border-radius: 7px; padding: 7px 12px; }"
         "QPushButton#blumachCollectionNav:hover, QPushButton#blumachMachinesNav:hover { background: %4; }"
         "QPushButton#blumachCollectionNav:checked, QPushButton#blumachMachinesNav:checked { color: %3; background: %5; font-weight: 600; }"
@@ -356,6 +372,27 @@ VMManagerMainWindow::updateShellAppearance()
         "QPushButton#blumachPrimaryAction:hover:!disabled { background: %7; }")
         .arg(windowColor.name(), borderColor.name(), textColor.name(), hoverColor.name(),
              selectedColor.name(), highlightedTextColor.name(), highlightColor.name(), mutedColor.name()));
+}
+
+void
+VMManagerMainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    updateResponsiveLayout();
+}
+
+void
+VMManagerMainWindow::updateResponsiveLayout()
+{
+    const bool compact = width() < 900;
+    if (compact == compactShell)
+        return;
+    compactShell = compact;
+    ui->toolBar->setToolButtonStyle(compact ? Qt::ToolButtonIconOnly
+                                            : Qt::ToolButtonTextBesideIcon);
+    ui->toolBar->setIconSize(compact ? QSize(22, 22) : QSize(20, 20));
+    navigationHeader->layout()->setContentsMargins(compact ? 12 : 18, 7,
+                                                    compact ? 12 : 18, 7);
 }
 
 void

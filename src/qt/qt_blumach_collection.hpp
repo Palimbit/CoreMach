@@ -68,6 +68,7 @@ private:
     QLineEdit      *m_search = nullptr;
     QComboBox      *m_statusFilter = nullptr;
     QLabel         *m_resultsLabel = nullptr;
+    QGridLayout    *m_filterLayout = nullptr;
     QSplitter      *m_splitter = nullptr;
     QTreeWidget    *m_tree = nullptr;
     QLabel         *m_title = nullptr;
@@ -76,6 +77,7 @@ private:
     QLabel         *m_statusBadge = nullptr;
     QLabel         *m_architectureBadge = nullptr;
     QLabel         *m_firmwareBadge = nullptr;
+    QGridLayout    *m_badgeLayout = nullptr;
     QFrame         *m_warningFrame = nullptr;
     QLabel         *m_warningLabel = nullptr;
     QWidget        *m_machineIllustration = nullptr;
@@ -88,6 +90,7 @@ private:
     QVBoxLayout    *m_sourcesLayout = nullptr;
     QString         m_selectedProductId;
     bool            m_compactLayout = false;
+    bool            m_narrowLayout = false;
 };
 
 #endif

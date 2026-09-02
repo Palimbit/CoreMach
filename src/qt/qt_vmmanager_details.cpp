@@ -55,6 +55,7 @@ VMManagerDetails::VMManagerDetails(QWidget *parent)
     ui->systemLabel->setWordWrap(true);
     ui->systemLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     ui->scrollArea->setFrameShape(QFrame::NoFrame);
+    ui->scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     ui->rightColumn->setMinimumWidth(250);
     ui->rightColumn->setMaximumWidth(320);
     ui->toolButtonHolder->hide();
@@ -192,6 +193,15 @@ VMManagerDetails::VMManagerDetails(QWidget *parent)
 VMManagerDetails::~VMManagerDetails()
 {
     delete ui;
+}
+
+QSize
+VMManagerDetails::minimumSizeHint() const
+{
+    // The optional screenshot/notes column must not force the entire manager
+    // wider than a compact window. updateResponsiveLayout() hides it when the
+    // available details width is small.
+    return QSize(0, 0);
 }
 
 void
@@ -494,11 +504,14 @@ VMManagerDetails::updateStyle()
 void
 VMManagerDetails::applyAppearance()
 {
-    const auto pal = palette();
-    const QColor base = pal.color(QPalette::Base);
+    const auto pal = QApplication::palette();
+    bool dark = pal.color(QPalette::Window).lightnessF() < 0.5;
+#ifdef Q_OS_WINDOWS
+    dark = !util::isWindowsLightTheme();
+#endif
     const QColor text = pal.color(QPalette::Text);
+    const QColor base = pal.color(QPalette::Base);
     const QColor accent = pal.color(QPalette::Highlight);
-    const bool dark = base.lightnessF() < 0.5;
     const auto blend = [](const QColor &background, const QColor &foreground, const qreal amount) {
         const qreal inverse = 1.0 - amount;
         return QColor::fromRgbF(background.redF() * inverse + foreground.redF() * amount,
@@ -508,6 +521,12 @@ VMManagerDetails::applyAppearance()
     const QColor border = blend(base, text, dark ? 0.28 : 0.16);
     const QColor muted = blend(base, text, dark ? 0.68 : 0.56);
     const QColor status = blend(base, accent, dark ? 0.24 : 0.10);
+    auto contentPalette = pal;
+    contentPalette.setColor(QPalette::Base, base);
+    contentPalette.setColor(QPalette::Text, text);
+    contentPalette.setColor(QPalette::WindowText, text);
+    ui->scrollArea->setPalette(contentPalette);
+    ui->leftColumn->setPalette(contentPalette);
     setStyleSheet(QStringLiteral(
         "QWidget#VMManagerDetails { background: transparent; color: palette(text); }"
         "QLabel#systemLabel { color: palette(text); font-weight: 600; }"

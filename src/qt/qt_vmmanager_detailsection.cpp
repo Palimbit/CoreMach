@@ -164,10 +164,11 @@ VMManagerDetailSection::setSections()
 
             const auto labelValue = new QLabel();
             labelValue->setObjectName(QStringLiteral("blumachMachineDetailValue"));
-            labelValue->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+            labelValue->setWordWrap(true);
+            labelValue->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
             labelValue->setTextInteractionFlags(labelValue->textInteractionFlags() | Qt::TextSelectableByMouse);
             labelValue->setText(line);
-            frameGridLayout->addWidget(labelValue, row, 1, Qt::AlignLeft);
+            frameGridLayout->addWidget(labelValue, row, 1, Qt::AlignLeft | Qt::AlignTop);
 
             if (!labelKey) {
                 labelKey = new QLabel();
@@ -184,6 +185,8 @@ VMManagerDetailSection::setSections()
             row++;
         }
     }
+
+    frameGridLayout->setColumnStretch(1, 1);
 
     collapseButton->setContent(ui->detailFrame);
     if (!empty)
@@ -208,7 +211,7 @@ VMManagerDetailSection::clear()
     delete frameGridLayout;
     frameGridLayout = new QGridLayout();
     frameGridLayout->setContentsMargins(getMargins(MarginSection::DisplayGrid));
-    ui->detailFrame->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+    ui->detailFrame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     ui->detailFrame->setLayout(frameGridLayout);
 }
 

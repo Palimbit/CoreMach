@@ -52,16 +52,13 @@ WindowsDarkModeFilter::reselectDarkMode()
             } else
                 printf("Unable to set stylesheet, unable to open file\n");
         }
-        QPalette palette(qApp->palette());
-        palette.setColor(QPalette::Link, Qt::white);
-        palette.setColor(QPalette::LinkVisited, Qt::lightGray);
-        qApp->setPalette(palette);
+        qApp->setPalette(util::darkUiPalette());
         window->resize(window->size());
 
         NewDarkMode = TRUE;
     } else {
         qApp->setStyleSheet("");
-        QPalette palette(qApp->palette());
+        QPalette palette(qApp->style()->standardPalette());
         palette.setColor(QPalette::Link, Qt::blue);
         palette.setColor(QPalette::LinkVisited, Qt::magenta);
         qApp->setPalette(palette);
