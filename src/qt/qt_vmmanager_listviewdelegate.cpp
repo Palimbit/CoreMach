@@ -91,41 +91,17 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
         painter->drawRoundedRect(QRect(rect.left() + 2, rect.top() + 9, 3, rect.height() - 18), 2, 2);
     }
 
-    // Draw a user-supplied icon when present. Otherwise use a compact family
-    // badge so the list does not fall back to the legacy pixel-art 86Box mark.
+    // Draw a user-supplied icon when present. Otherwise use BluMach's provisional
+    // Linea mark so the application brand is not repeated for every VM and the
+    // legacy pixel-art 86Box icon never becomes the fallback. Replace this once
+    // the definitive per-family machine icon system is available.
     if (hasIcon) {
         painter->drawPixmap(contentRect.left(), contentRect.top(),
                             opt.icon.pixmap(m_ptr->iconSize));
     } else {
-        const QString identity = QStringList({ opt.text,
-                                               index.data(VMManagerModel::Roles::ConfigName).toString(),
-                                               index.data(VMManagerModel::Roles::SearchList).toStringList().join(' ') })
-                                     .join(' ')
-                                     .toLower();
-        const bool dario = identity.contains(QStringLiteral("dario"));
-        const bool pcs = identity.contains(QStringLiteral("pcs"));
-        const bool olivettiM = identity.contains(QStringLiteral("olivetti m"))
-                            || identity.contains(QStringLiteral("olivetti_m"))
-                            || identity.contains(QStringLiteral("olivetti-m"));
-        const bool prodest = identity.contains(QStringLiteral("prodest"));
-        const QString mark = dario ? QStringLiteral("D")
-                                   : (pcs ? QStringLiteral("PCS")
-                                          : (olivettiM ? QStringLiteral("M")
-                                                       : (prodest ? QStringLiteral("P")
-                                                                  : QStringLiteral("PC"))));
-        QRect badgeRect(QPoint(contentRect.left(), contentRect.top()), m_ptr->iconSize);
-        badgeRect.adjust(2, 2, -2, -2);
-        QColor badgeColor = dario ? palette.link().color() : palette.highlight().color();
-        badgeColor.setAlpha(palette.base().color().lightnessF() < 0.5 ? 60 : 30);
-        painter->setPen(QPen(palette.mid().color(), 1));
-        painter->setBrush(badgeColor);
-        painter->drawRoundedRect(badgeRect, 8, 8);
-        auto badgeFont = opt.font;
-        badgeFont.setBold(true);
-        badgeFont.setPointSizeF(qMax(7.0, badgeFont.pointSizeF() - (mark.size() > 2 ? 2.0 : 1.0)));
-        painter->setFont(badgeFont);
-        painter->setPen(palette.text().color());
-        painter->drawText(badgeRect, Qt::AlignCenter, mark);
+        static const QIcon defaultMachineIcon(QStringLiteral(":/blumach/ui/machine-default.png"));
+        painter->drawPixmap(contentRect.left(), contentRect.top(),
+                            defaultMachineIcon.pixmap(m_ptr->iconSize));
     }
 
     // System name
