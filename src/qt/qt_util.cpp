@@ -93,6 +93,41 @@ isWindowsLightTheme(void)
     return i == 1;
 }
 
+QPalette
+darkUiPalette()
+{
+    QPalette palette;
+    const QColor window(QStringLiteral("#272727"));
+    const QColor text(QStringLiteral("#E3E3E3"));
+    const QColor disabledText(QStringLiteral("#8B8B8B"));
+    palette.setColor(QPalette::Window, window);
+    palette.setColor(QPalette::WindowText, text);
+    palette.setColor(QPalette::Base, window);
+    palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#383838")));
+    palette.setColor(QPalette::ToolTipBase, QColor(QStringLiteral("#616161")));
+    palette.setColor(QPalette::ToolTipText, text);
+    palette.setColor(QPalette::Text, text);
+    palette.setColor(QPalette::Button, QColor(QStringLiteral("#525252")));
+    palette.setColor(QPalette::ButtonText, text);
+    palette.setColor(QPalette::BrightText, text);
+    palette.setColor(QPalette::Link, text);
+    palette.setColor(QPalette::LinkVisited, QColor(QStringLiteral("#BDBDBD")));
+    palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#616161")));
+    palette.setColor(QPalette::HighlightedText, text);
+    palette.setColor(QPalette::Light, QColor(QStringLiteral("#767676")));
+    palette.setColor(QPalette::Midlight, QColor(QStringLiteral("#666666")));
+    palette.setColor(QPalette::Mid, QColor(QStringLiteral("#525252")));
+    palette.setColor(QPalette::Dark, QColor(QStringLiteral("#383838")));
+    palette.setColor(QPalette::Shadow, QColor(QStringLiteral("#181818")));
+    palette.setColor(QPalette::PlaceholderText, disabledText);
+    palette.setColor(QPalette::Disabled, QPalette::WindowText, disabledText);
+    palette.setColor(QPalette::Disabled, QPalette::Text, disabledText);
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText, disabledText);
+    palette.setColor(QPalette::Disabled, QPalette::HighlightedText, disabledText);
+    palette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(QStringLiteral("#444444")));
+    return palette;
+}
+
 void
 setWin11RoundedCorners(WId hwnd, bool enable)
 {

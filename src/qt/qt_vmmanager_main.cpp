@@ -17,6 +17,7 @@
  * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <QDirIterator>
+#include <QApplication>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -41,6 +42,7 @@
 #include <QStringListModel>
 #include <QTimer>
 #include <QProgressDialog>
+#include <QResizeEvent>
 #include <QShortcut>
 
 #include <thread>
@@ -52,6 +54,7 @@
 #include "ui_qt_vmmanager_main.h"
 #include "qt_vmmanager_model.hpp"
 #include "qt_vmmanager_addmachine.hpp"
+#include "qt_util.hpp"
 
 extern VMManagerMainWindow *vmm_main_window;
 
@@ -103,7 +106,7 @@ VMManagerMain::VMManagerMain(QWidget *parent)
     ui->horizontalLayout->setContentsMargins(18, 14, 18, 16);
     ui->splitter->setHandleWidth(10);
     ui->listView->setFrameShape(QFrame::NoFrame);
-    ui->listView->setSpacing(3);
+    ui->listView->setSpacing(0);
     ui->listView->setUniformItemSizes(true);
     ui->widget->setMinimumWidth(270);
     ui->widget->setMaximumWidth(390);
@@ -473,6 +476,26 @@ illegal_chars:
             backgroundUpdateCheckStart();
     });
 #endif
+}
+
+void
+VMManagerMain::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateResponsiveLayout();
+}
+
+void
+VMManagerMain::updateResponsiveLayout()
+{
+    const bool compact = width() < 900;
+    if (compact == compactLayout)
+        return;
+    compactLayout = compact;
+    ui->widget->setMinimumWidth(compact ? 210 : 270);
+    ui->widget->setMaximumWidth(compact ? 250 : 390);
+    ui->splitter->setSizes(compact ? QList<int>({ 225, 535 })
+                                   : QList<int>({ 330, 870 }));
 }
 
 const VMManagerSystem *
@@ -1200,12 +1223,17 @@ VMManagerMain::onDarkModeUpdated()
 void
 VMManagerMain::updateAppearance()
 {
-    const auto pal = palette();
-    const QColor base = pal.color(QPalette::Base);
+    const auto pal = QApplication::palette();
     const QColor text = pal.color(QPalette::Text);
+    const QColor base = pal.color(QPalette::Base);
     const QColor border = QColor::fromRgbF(base.redF() * 0.84 + text.redF() * 0.16,
                                            base.greenF() * 0.84 + text.greenF() * 0.16,
                                            base.blueF() * 0.84 + text.blueF() * 0.16);
+    auto listPalette = pal;
+    listPalette.setColor(QPalette::Base, base);
+    listPalette.setColor(QPalette::Text, text);
+    listPalette.setColor(QPalette::WindowText, text);
+    ui->listView->setPalette(listPalette);
     setStyleSheet(QStringLiteral(
         "QWidget#VMManagerMain { background: palette(window); color: palette(text); }"
         "QLineEdit#searchBar { color: palette(text); background: palette(base); border: 1px solid %1; border-radius: 7px; padding: 7px 9px; }"

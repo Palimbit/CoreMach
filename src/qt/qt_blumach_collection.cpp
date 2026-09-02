@@ -7,6 +7,7 @@
  */
 
 #include "qt_blumach_collection.hpp"
+#include "qt_util.hpp"
 
 #include <QAbstractItemView>
 #include <QApplication>
@@ -31,6 +32,7 @@
 #include <QStyledItemDelegate>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
@@ -163,7 +165,7 @@ public:
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
         const int type = index.data(TypeRole).toInt();
-        return { option.rect.width(), type == 3 ? 58 : 30 };
+        return { option.rect.width(), type == 3 ? 50 : 26 };
     }
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
@@ -187,7 +189,7 @@ public:
             return;
         }
 
-        QRect row = opt.rect.adjusted(4, 2, -4, -2);
+        QRect row = opt.rect.adjusted(4, 1, -4, -1);
         if (opt.state & QStyle::State_Selected) {
             QColor selected = opt.palette.color(QPalette::Highlight);
             selected.setAlpha(44);
@@ -197,7 +199,7 @@ public:
             const QRect selectionRow(4, row.top(), selectionWidth, row.height());
             painter->drawRoundedRect(selectionRow, 7, 7);
         }
-        QRect monitor(row.left() + 8, row.top() + 11, 30, 30);
+        QRect monitor(row.left() + 8, row.top() + 10, 28, 28);
         const bool dario = index.data(FamilyRole).toString().contains(QStringLiteral("dario"));
         QColor familyColor = dario ? opt.palette.color(QPalette::Link)
                                    : opt.palette.color(QPalette::Highlight);
@@ -221,7 +223,7 @@ public:
         painter->setPen(opt.palette.color(QPalette::Text));
         const int textWidth = qMax(24, row.right() - textLeft - 22);
         const QString displayName = painter->fontMetrics().elidedText(opt.text, Qt::ElideRight, textWidth);
-        painter->drawText(QRect(textLeft, row.top() + 7, textWidth, 21),
+        painter->drawText(QRect(textLeft, row.top() + 4, textWidth, 20),
                           Qt::AlignLeft | Qt::AlignVCenter, displayName);
         auto metaFont = opt.font;
         metaFont.setPointSizeF(qMax(7.0, metaFont.pointSizeF() - 1.0));
@@ -230,7 +232,7 @@ public:
         const QString meta = QStringLiteral("%1 · %2").arg(index.data(PeriodRole).toString(),
                                                            index.data(ArchitectureRole).toString());
         const QString displayMeta = painter->fontMetrics().elidedText(meta, Qt::ElideRight, textWidth);
-        painter->drawText(QRect(textLeft, row.top() + 28, textWidth, 18),
+        painter->drawText(QRect(textLeft, row.top() + 24, textWidth, 17),
                           Qt::AlignLeft | Qt::AlignVCenter, displayMeta);
 
         QColor statusColor = opt.palette.color(QPalette::Mid);
@@ -243,7 +245,7 @@ public:
             statusColor = opt.palette.color(QPalette::Shadow);
         painter->setPen(Qt::NoPen);
         painter->setBrush(statusColor);
-        painter->drawEllipse(QPointF(row.right() - 11, row.center().y()), 4, 4);
+        painter->drawEllipse(QPointF(row.right() - 11, row.center().y()), 3.5, 3.5);
         painter->restore();
     }
 };
@@ -251,6 +253,7 @@ public:
 QLabel *makeWrappedLabel(const QString &text, QWidget *parent)
 {
     auto *label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("blumachBodyText"));
     label->setWordWrap(true);
     label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     return label;
@@ -285,8 +288,9 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_intro->setObjectName(QStringLiteral("blumachCollectionIntro"));
     mainLayout->addWidget(m_intro);
 
-    auto *filterLayout = new QHBoxLayout();
-    filterLayout->setSpacing(8);
+    m_filterLayout = new QGridLayout();
+    m_filterLayout->setHorizontalSpacing(8);
+    m_filterLayout->setVerticalSpacing(7);
     m_search = new QLineEdit(this);
     m_search->setClearButtonEnabled(true);
     m_statusFilter = new QComboBox(this);
@@ -294,10 +298,11 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_resultsLabel = new QLabel(this);
     m_resultsLabel->setObjectName(QStringLiteral("blumachResultsLabel"));
     m_resultsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    filterLayout->addWidget(m_search, 1);
-    filterLayout->addWidget(m_statusFilter);
-    filterLayout->addWidget(m_resultsLabel);
-    mainLayout->addLayout(filterLayout);
+    m_filterLayout->addWidget(m_search, 0, 0);
+    m_filterLayout->addWidget(m_statusFilter, 0, 1);
+    m_filterLayout->addWidget(m_resultsLabel, 0, 2);
+    m_filterLayout->setColumnStretch(0, 1);
+    mainLayout->addLayout(m_filterLayout);
 
     m_splitter = new QSplitter(this);
     m_splitter->setChildrenCollapsible(false);
@@ -337,16 +342,18 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     productText->addWidget(m_title);
     productText->addWidget(m_subtitle);
     productText->addWidget(m_summary);
-    auto *badgeLayout = new QHBoxLayout();
-    badgeLayout->setSpacing(6);
+    m_badgeLayout = new QGridLayout();
+    m_badgeLayout->setHorizontalSpacing(6);
+    m_badgeLayout->setVerticalSpacing(5);
+    int badgeColumn = 0;
     for (auto **badge : { &m_statusBadge, &m_architectureBadge, &m_firmwareBadge }) {
         *badge = new QLabel(detailPanel);
         (*badge)->setObjectName(QStringLiteral("blumachBadge"));
         (*badge)->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
-        badgeLayout->addWidget(*badge);
+        m_badgeLayout->addWidget(*badge, 0, badgeColumn++);
     }
-    badgeLayout->addStretch(1);
-    productText->addLayout(badgeLayout);
+    m_badgeLayout->setColumnStretch(3, 1);
+    productText->addLayout(m_badgeLayout);
     productText->addStretch(1);
     productHeader->addLayout(productText, 1);
     m_machineIllustration = new MachineIllustration(detailPanel);
@@ -364,6 +371,8 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
 
     m_infoTabs = new QTabWidget(detailPanel);
     m_infoTabs->setDocumentMode(true);
+    m_infoTabs->setElideMode(Qt::ElideRight);
+    m_infoTabs->tabBar()->setUsesScrollButtons(false);
     const auto createPage = [this](QScrollArea **scroll, QVBoxLayout **layout) {
         *scroll = new QScrollArea(m_infoTabs);
         (*scroll)->setWidgetResizable(true);
@@ -397,6 +406,10 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     connect(m_statusFilter, &QComboBox::currentIndexChanged, this, [this] { applyFilter(); });
     reloadLanguage();
     updateAppearance();
+    // The catalogue is constructed before the main-window header connects to
+    // selectionContextChanged. Repeat the initial context once the event loop
+    // starts so the primary action always reflects the visible first product.
+    QTimer::singleShot(0, this, [this] { updateDetails(m_tree->currentItem()); });
 }
 
 void BluMachCollectionWidget::createSelectedMachine()
@@ -417,11 +430,41 @@ void BluMachCollectionWidget::resizeEvent(QResizeEvent *event)
 void BluMachCollectionWidget::updateResponsiveLayout()
 {
     const bool compact = width() < 900;
+    const bool narrow = width() < 700;
     if (compact != m_compactLayout) {
         m_compactLayout = compact;
-        m_tree->setMaximumWidth(compact ? 290 : 430);
-        m_splitter->setSizes(compact ? QList<int>({ 285, 475 })
+        if (auto *mainLayout = qobject_cast<QVBoxLayout *>(layout()))
+            mainLayout->setContentsMargins(compact ? 12 : 20, compact ? 10 : 14,
+                                           compact ? 12 : 20, compact ? 12 : 16);
+        m_tree->setMinimumWidth(compact ? 210 : 270);
+        m_tree->setMaximumWidth(compact ? 250 : 430);
+        m_splitter->setSizes(compact ? QList<int>({ 225, 535 })
                                      : QList<int>({ 340, 660 }));
+
+        updateAppearance();
+    }
+    if (narrow != m_narrowLayout) {
+        m_narrowLayout = narrow;
+        for (auto *widget : { static_cast<QWidget *>(m_search), static_cast<QWidget *>(m_statusFilter), static_cast<QWidget *>(m_resultsLabel) })
+            m_filterLayout->removeWidget(widget);
+        if (narrow) {
+            m_filterLayout->addWidget(m_search, 0, 0, 1, 3);
+            m_filterLayout->addWidget(m_statusFilter, 1, 0, 1, 2);
+            m_filterLayout->addWidget(m_resultsLabel, 1, 2);
+        } else {
+            m_filterLayout->addWidget(m_search, 0, 0);
+            m_filterLayout->addWidget(m_statusFilter, 0, 1);
+            m_filterLayout->addWidget(m_resultsLabel, 0, 2);
+        }
+
+        for (auto *badge : { m_statusBadge, m_architectureBadge, m_firmwareBadge })
+            m_badgeLayout->removeWidget(badge);
+        m_badgeLayout->addWidget(m_statusBadge, 0, 0);
+        m_badgeLayout->addWidget(m_architectureBadge, 0, 1);
+        if (narrow)
+            m_badgeLayout->addWidget(m_firmwareBadge, 1, 0, 1, 2, Qt::AlignLeft);
+        else
+            m_badgeLayout->addWidget(m_firmwareBadge, 0, 2);
     }
     m_machineIllustration->setVisible(!m_selectedProductId.isEmpty() && width() >= 900);
 }
@@ -515,8 +558,12 @@ void BluMachCollectionWidget::rebuildTree()
             }
         }
     }
-    if (m_tree->topLevelItemCount())
-        m_tree->setCurrentItem(m_tree->topLevelItem(0));
+    for (auto iterator = QTreeWidgetItemIterator(m_tree); *iterator; ++iterator) {
+        if ((*iterator)->data(0, TypeRole).toInt() == ProductItem) {
+            m_tree->setCurrentItem(*iterator);
+            break;
+        }
+    }
 }
 
 void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
@@ -807,25 +854,37 @@ void BluMachCollectionWidget::applyFilter()
 
 void BluMachCollectionWidget::updateAppearance()
 {
-    const auto pal = palette();
+    const auto pal = QApplication::palette();
+    bool dark = pal.color(QPalette::Window).lightnessF() < 0.5;
+#ifdef Q_OS_WINDOWS
+    dark = !util::isWindowsLightTheme();
+#endif
     const QColor windowColor = pal.color(QPalette::Window);
     const QColor baseColor = pal.color(QPalette::Base);
     const QColor textColor = pal.color(QPalette::Text);
     const QColor accentColor = pal.color(QPalette::Highlight);
     const QColor linkColor = pal.color(QPalette::Link);
-    const bool dark = baseColor.lightnessF() < 0.5;
     const QColor surfaceColor = blendColor(baseColor, textColor, dark ? 0.055 : 0.018);
     const QColor mutedColor = blendColor(baseColor, textColor, dark ? 0.68 : 0.58);
     const QColor borderColor = blendColor(baseColor, textColor, dark ? 0.28 : 0.16);
     const QColor badgeColor = blendColor(baseColor, accentColor, dark ? 0.26 : 0.11);
     const QColor badgeBorder = blendColor(baseColor, accentColor, dark ? 0.58 : 0.42);
     const QColor warningColor = blendColor(baseColor, linkColor, dark ? 0.20 : 0.075);
+    auto contentPalette = pal;
+    contentPalette.setColor(QPalette::Base, baseColor);
+    contentPalette.setColor(QPalette::AlternateBase, surfaceColor);
+    contentPalette.setColor(QPalette::Text, textColor);
+    contentPalette.setColor(QPalette::WindowText, textColor);
+    contentPalette.setColor(QPalette::PlaceholderText, mutedColor);
+    m_tree->setPalette(contentPalette);
     setStyleSheet(QStringLiteral(
         "QWidget#blumachCollection { background: %1; color: %4; }"
-        "QLabel#blumachCollectionIntro, QLabel#blumachResultsLabel, QLabel#blumachProductSubtitle, QLabel#blumachEvidence { color: %5; }"
-        "QLabel#blumachProductSummary, QLabel#blumachWarningText { color: %4; }"
+        "QLabel#blumachCollectionHeading, QLabel#blumachProductTitle, QLabel#blumachBodyText { color: %4; background: transparent; }"
+        "QLabel#blumachCollectionIntro, QLabel#blumachResultsLabel, QLabel#blumachProductSubtitle, QLabel#blumachEvidence { color: %5; background: transparent; }"
+        "QLabel#blumachProductSummary, QLabel#blumachWarningText { color: %4; background: transparent; }"
         "QLineEdit, QComboBox { color: %4; background: %2; border: 1px solid %6; border-radius: 6px; padding: 6px 8px; }"
         "QLabel#blumachBadge { color: %4; background: %7; border: 1px solid %8; border-radius: 9px; padding: 3px 9px; }"
+        "QWidget#blumachCollection[compact=\"true\"] QLabel#blumachBadge { padding: 2px 6px; }"
         "QFrame#blumachWarning { color: %4; background: %9; border: 0; border-left: 3px solid %8; border-radius: 6px; }"
         "QFrame#blumachDetailSection { background: %3; border: 1px solid %6; border-radius: 7px; }"
         "QLabel#blumachSectionHeading { color: %4; font-weight: 600; }"
@@ -841,5 +900,8 @@ void BluMachCollectionWidget::updateAppearance()
         .arg(windowColor.name(), baseColor.name(), surfaceColor.name(), textColor.name(),
              mutedColor.name(), borderColor.name(), badgeColor.name(), badgeBorder.name(),
              warningColor.name()));
+    setProperty("compact", m_compactLayout);
+    style()->unpolish(this);
+    style()->polish(this);
     update();
 }

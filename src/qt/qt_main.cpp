@@ -595,10 +595,7 @@ main(int argc, char *argv[])
             } else
                 printf("Unable to set stylesheet, unable to open file\n");
         }
-        QPalette palette(qApp->palette());
-        palette.setColor(QPalette::Link, Qt::white);
-        palette.setColor(QPalette::LinkVisited, Qt::lightGray);
-        qApp->setPalette(palette);
+        qApp->setPalette(util::darkUiPalette());
     }
 #endif
 
@@ -626,7 +623,7 @@ main(int argc, char *argv[])
 #ifdef Q_OS_WINDOWS
     if (util::isWindowsLightTheme() && wasDarkTheme) {
         qApp->setStyleSheet("");
-        QPalette palette(qApp->palette());
+        QPalette palette(qApp->style()->standardPalette());
         palette.setColor(QPalette::Link, Qt::blue);
         palette.setColor(QPalette::LinkVisited, Qt::magenta);
         qApp->setPalette(palette);
@@ -684,6 +681,7 @@ main(int argc, char *argv[])
             const auto vmm_main_window = new VMManagerMainWindow();
 #ifdef Q_OS_WINDOWS
             darkModeFilter.get()->setWindow(vmm_main_window);
+            darkModeFilter.get()->reselectDarkMode();
             // HACK
             vmm_dark_mode_filter = darkModeFilter.get();
 #endif

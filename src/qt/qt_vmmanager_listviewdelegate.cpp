@@ -247,15 +247,15 @@ VMManagerListViewDelegate::sizeHint(const QStyleOptionViewItem &option,
 }
 
 VMManagerListViewDelegateStyle::VMManagerListViewDelegateStyle()
-    : iconSize(32, 32)
+    : iconSize(30, 30)
     , smallIconSize(16, 16)
     ,
     // bottom gets a little more than the top because of the custom separator
-    margins(4, 10, 8, 12)
+    margins(4, 6, 8, 7)
     ,
     // Spacing between icon and text
     spacingHorizontal(8)
-    , spacingVertical(4)
+    , spacingVertical(2)
 {
     //
 }

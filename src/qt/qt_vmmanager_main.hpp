@@ -94,6 +94,9 @@ public slots:
     QList<int> getPaneSizes() const;
     void       setPaneSizes(const QList<int> &sizes);
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private:
     Ui::VMManagerMain *ui;
 
@@ -106,6 +109,7 @@ private:
     bool updateCheck = false;
 #endif
     bool regexSearch = false;
+    bool compactLayout = false;
 
     // void updateSelection(const QItemSelection &selected,
     //                      const QItemSelection &deselected);
@@ -114,6 +118,7 @@ private:
     void                  updateDisplayName(const QModelIndex &index);
     void                  loadSettings();
     void                  updateAppearance();
+    void                  updateResponsiveLayout();
     [[nodiscard]] bool    currentSelectionIsValid() const;
     [[nodiscard]] QString machineCountString(QString states = "") const;
 #if EMU_BUILD_NUM != 0
