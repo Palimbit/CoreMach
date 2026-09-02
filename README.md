@@ -15,9 +15,17 @@ BluMach is an independent project and is not an official 86Box build. Existing
 [FORK-NOTICE.md](FORK-NOTICE.md) for provenance and redistribution details.
 
 > [!IMPORTANT]
-> BluMach is in active development and does not yet publish official binary
-> releases. The repository does not distribute ROMs, operating systems or other
-> proprietary machine software.
+> BluMach began as a personal preservation fork maintained by rtzor and is
+> developed in public so its research, documentation and emulator improvements
+> can be reviewed, reused and extended by others.
+>
+> The project is under active development and is provided as-is, without warranty,
+> under the terms of the GPL-2.0-or-later license. Official binary releases are
+> planned once the emulator and its user experience are sufficiently mature; no
+> release date has been announced.
+>
+> BluMach does not distribute ROMs, operating systems or other proprietary
+> machine software.
 
 ## What makes BluMach different
 
