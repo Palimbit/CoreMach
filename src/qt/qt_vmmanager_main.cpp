@@ -17,8 +17,16 @@
  * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <QDirIterator>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QFile>
 #include <QLabel>
 #include <QLineEdit>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QAbstractListModel>
 #include <QCompleter>
 #include <QColor>
@@ -40,6 +48,7 @@
 
 #include "qt_vmmanager_main.hpp"
 #include "qt_vmmanager_mainwindow.hpp"
+#include "qt_blumach_catalog.hpp"
 #include "ui_qt_vmmanager_main.h"
 #include "qt_vmmanager_model.hpp"
 #include "qt_vmmanager_addmachine.hpp"
@@ -735,183 +744,198 @@ VMManagerMain::newMachineWizard()
 void
 VMManagerMain::newHistoricalMachine(const QString &productId, const QString &machineId)
 {
-    struct HistoricalDefaults {
-        const char *productId;
-        const char *displayName;
-        const char *directoryName;
-        const char *cpuFamily;
-        int         cpuSpeed;
-        int         cpuMulti;
-        int         memory;
-        const char *diskFile;
-        const char *diskParameters;
-        const char *diskChannel;
-        const char *diskSpeed;
-        qint64      diskSize;
-        bool        needsIsaIde;
-        const char *video;
-        const char *keyboard;
-        const char *floppyType;
-    };
-    static constexpr HistoricalDefaults defaults[] = {
-        { "olivetti-pcs86", "Olivetti PCS 86", "olivetti-pcs86", "necv30", 10000000, 1, 640,
-          "conner-cp3026-20mb.img", "17, 4, 615, 0, xta", "hdd_01_xta_channel = 0", "1989_3500rpm",
-          615LL * 4 * 17 * 512, false, "internal", "keyboard_pc_xt", "35_2hd" },
-        { "olivetti-pcs286", "Olivetti PCS 286", "olivetti-pcs286", "286", 12000000, 1, 1024,
-          "conner-cp346-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          805LL * 4 * 26 * 512, true, "pvga1a", "keyboard_at", "35_2hd" },
-        { "olivetti-pcs286s", "Olivetti PCS 286/S (TI/OLIMCU16)", "olivetti-pcs286s-ti", "286", 12000000, 1, 1024,
-          "olivetti-pcs286s-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          805LL * 4 * 26 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-pcs386sx", "Olivetti PCS 386SX", "olivetti-pcs386sx", "i386sx", 16000000, 1, 4096,
-          "conner-cp3104-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "ta-dario286", "Triumph-Adler Dario 286", "ta-dario286", "286", 12000000, 1, 1024,
-          "conner-cp346-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          805LL * 4 * 26 * 512, true, "pvga1a", "keyboard_at", "35_2hd" },
-        { "ta-dario386sx", "Triumph-Adler Dario 386SX", "ta-dario386sx", "i386sx", 16000000, 1, 4096,
-          "conner-cp3104-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "trigem-sx386m", "TriGem SX386M / Emerson Elite SX386/16", "trigem-sx386m", "i386sx", 16000000, 1, 4096,
-          "sx386m-40mb-type17.img", "17, 5, 977, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          977LL * 5 * 17 * 512, false, "pvga1a", "keyboard_at", "35_2hd" },
-        { "olivetti-m300-if378", "Olivetti M300 (IF378)", "olivetti-m300-if378", "i386sx", 16000000, 1, 2048,
-          "olivetti-m300-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          805LL * 4 * 26 * 512, false, "pvga1a", "keyboard_at", "35_2hd" },
-        { "olivetti-m30002", "Olivetti M300-02", "olivetti-m30002", "i386sx", 16000000, 1, 2048,
-          "olivetti-m30002-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          805LL * 4 * 26 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-m30002f", "Olivetti M300-02F", "olivetti-m30002f", "i386sx", 25000000, 1, 2048,
-          "olivetti-m30002f-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-pcs11", "Olivetti PCS 11", "olivetti-pcs11", "i386sx", 16000000, 1, 2048,
-          "olivetti-pcs11-40mb.img", "26, 4, 805, 0, ide", "hdd_01_ide_channel = 0:0", "1989_3500rpm",
-          805LL * 4 * 26 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-pcs33", "Olivetti PCS 33", "olivetti-pcs33", "i386sx", 25000000, 1, 2048,
-          "olivetti-pcs33-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-m30008", "Olivetti M300-08", "olivetti-m30008", "i386sx", 20000000, 1, 2048,
-          "olivetti-m30008-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-m30015", "Olivetti M300-15", "olivetti-m30015", "am386sx", 25000000, 1, 4096,
-          "olivetti-m30015-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-m30030", "Olivetti M300-30", "olivetti-m30030", "i486sx", 25000000, 1, 4096,
-          "olivetti-m30030-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-m30030p", "Olivetti M300-30P", "olivetti-m30030p", "i486dx2", 50000000, 2, 4096,
-          "olivetti-m30030p-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" },
-        { "olivetti-pcs46c", "Olivetti PCS 46/C", "olivetti-pcs46c", "i486dx2", 50000000, 2, 4096,
-          "olivetti-pcs46c-100mb.img", "33, 8, 776, 0, ide", "hdd_01_ide_channel = 0:0", "CP3104",
-          776LL * 8 * 33 * 512, false, "internal", "keyboard_at", "35_2hd" }
-    };
-
-    const HistoricalDefaults *selected = nullptr;
-    for (const auto &candidate : defaults) {
-        if (productId == QLatin1String(candidate.productId)) {
-            selected = &candidate;
-            break;
-        }
-    }
-    if (!selected || machineId.isEmpty()) {
+    if (machineId.isEmpty()) {
         QMessageBox::warning(this, tr("Machine unavailable"),
                              tr("This catalog entry does not yet have a usable emulator profile."));
         return;
     }
 
-    bool ok = false;
-    const QString displayName = QInputDialog::getText(this, tr("Create historical machine"),
-                                                       tr("Machine name:"), QLineEdit::Normal,
-                                                       tr(selected->displayName), &ok).trimmed();
-    if (!ok || displayName.isEmpty())
+    BluMachCatalog catalog;
+    QString        catalogError;
+    if (!catalog.load(&catalogError)) {
+        QMessageBox::critical(this, tr("Catalog unavailable"), catalogError);
         return;
+    }
+    const BluMachProduct *product = catalog.product(productId);
+    if (!product) {
+        QMessageBox::warning(this, tr("Machine unavailable"),
+                             tr("This catalog entry does not yet have a usable emulator profile."));
+        return;
+    }
 
-    QString directoryName = QString::fromLatin1(selected->directoryName);
-    directoryName += QStringLiteral("-%1").arg(QDateTime::currentSecsSinceEpoch());
-    const QString cpuFamily = QString::fromLatin1(selected->cpuFamily);
-    const bool useDynarec = cpuFamily.contains(QLatin1String("386")) ||
-                            cpuFamily.contains(QLatin1String("486"));
-    QString configuration = QStringLiteral(
-        "[General]\n"
-        "vid_renderer = qt_software\n"
-        "time_sync = disabled\n\n"
-        "[Machine]\n"
-        "machine = %1\n"
-        "cpu_family = %2\n"
-        "cpu_speed = %3\n"
-        "cpu_multi = %4\n"
-        "cpu_use_dynarec = %5\n"
-        "mem_size = %6\n")
-                                      .arg(machineId, cpuFamily)
-                                      .arg(selected->cpuSpeed)
-                                      .arg(selected->cpuMulti)
-                                      .arg(useDynarec ? 1 : 0)
-                                      .arg(selected->memory);
-    if (productId == QLatin1String("olivetti-pcs86"))
-        configuration += QStringLiteral(
-            "ems_size = 1920\n"
-            "keylock_locked = 0\n"
-            "fdd0_jumpers = -1\n"
-            "fdd1_jumpers = -1\n"
-            "hdd_jumper = -1\n");
-    else if (productId == QLatin1String("olivetti-pcs386sx") || productId == QLatin1String("ta-dario386sx")
-             || productId == QLatin1String("trigem-sx386m"))
-        configuration += QStringLiteral("fpu_type = none\n");
-    if (productId == QLatin1String("olivetti-pcs286"))
-        configuration += QStringLiteral("\n[Olivetti PCS 286]\nbios = v142\n");
-    else if (productId == QLatin1String("olivetti-pcs286s"))
-        configuration += QStringLiteral("\n[Olivetti PCS 286S (TI)]\nbios = v206\n");
-    else if (productId == QLatin1String("ta-dario286"))
-        configuration += QStringLiteral("\n[Triumph-Adler Dario 286 (P35)]\nbios = v142\n");
-    else if (productId == QLatin1String("olivetti-pcs11"))
-        configuration += QStringLiteral("\n[Olivetti PCS 11 (BA013/16)]\nkeylock_locked = 0\n");
-    else if (productId == QLatin1String("olivetti-pcs33"))
-        configuration += QStringLiteral("\n[Olivetti PCS 33 (BA013/25)]\nkeylock_locked = 0\n");
-    else if (productId == QLatin1String("olivetti-m30030") || productId == QLatin1String("olivetti-m30030p"))
-        configuration += QStringLiteral("\n[Olivetti M300-30 / M300-30P]\nbios = diag104\n");
-    configuration += QStringLiteral(
-        "\n[Video]\n"
-        "gfxcard = %1\n\n"
-        "[Input devices]\n"
-        "keyboard_type = %2\n"
-        "mouse_type = none\n\n"
-        "[Floppy and CD-ROM drives]\n"
-        "fdd_01_type = %3\n"
-        "fdd_02_type = none\n")
-                             .arg(QString::fromLatin1(selected->video),
-                                  QString::fromLatin1(selected->keyboard),
-                                  QString::fromLatin1(selected->floppyType));
-    if (productId == QLatin1String("olivetti-pcs86"))
-        configuration += QStringLiteral(
-            "\n[Ports (COM & LPT)]\n"
-            "serial1_enabled = 1\n"
-            "serial2_enabled = 0\n"
-            "lpt1_enabled = 1\n");
-    if (selected->needsIsaIde)
-        configuration += QStringLiteral("\n[Storage controllers]\nhdc_1 = ide_isa\n");
-    configuration += QStringLiteral(
-        "\n[Hard disks]\n"
-        "hdd_01_fn = %1\n"
-        "%2\n"
-        "hdd_01_parameters = %3\n"
-        "hdd_01_speed = %4\n")
-                             .arg(QString::fromLatin1(selected->diskFile),
-                                  QString::fromLatin1(selected->diskChannel),
-                                  QString::fromLatin1(selected->diskParameters),
-                                  QString::fromLatin1(selected->diskSpeed));
-    addNewSystem(directoryName, QDir(vmm_path).path(), displayName, configuration, false);
+    const QJsonObject creation = product->creation;
 
-    const QDir machineDirectory(QDir(vmm_path).filePath(directoryName));
-    const QString diskPath = machineDirectory.filePath(QString::fromLatin1(selected->diskFile));
-    if (machineDirectory.exists() && !QFileInfo::exists(diskPath)) {
-        QFile diskImage(diskPath);
-        if (!diskImage.open(QIODevice::WriteOnly) || !diskImage.resize(selected->diskSize)) {
-            QMessageBox::critical(this, tr("Hard disk creation failed"),
-                                  tr("The historical machine was created, but its hard disk image could not be created."));
+    struct FieldBinding {
+        QComboBox *widget;
+        QJsonArray choices;
+    };
+    QVector<FieldBinding> fields;
+
+    QDialog dialog(this);
+    dialog.setMinimumWidth(520);
+    dialog.setWindowTitle(catalog.text(QStringLiteral("creation.dialog.title")).arg(product->name));
+    QFormLayout form(&dialog);
+
+    QLineEdit nameEdit(product->name, &dialog);
+    form.addRow(catalog.text(QStringLiteral("creation.label.machine_name")), &nameEdit);
+
+    const QString profileStatus = creation.value(QStringLiteral("status")).toString();
+    if (!profileStatus.isEmpty()) {
+        auto *status = new QLabel(catalog.text(QStringLiteral("creation.status.%1").arg(profileStatus)), &dialog);
+        status->setWordWrap(true);
+        form.addRow(catalog.text(QStringLiteral("creation.label.profile_status")), status);
+    }
+
+    for (const auto &factValue : creation.value(QStringLiteral("facts")).toArray()) {
+        const auto fact = factValue.toObject();
+        auto      *value = new QLabel(catalog.text(fact.value(QStringLiteral("value_key")).toString()), &dialog);
+        value->setWordWrap(true);
+        form.addRow(catalog.text(fact.value(QStringLiteral("label_key")).toString()), value);
+    }
+
+    for (const auto &fieldValue : creation.value(QStringLiteral("fields")).toArray()) {
+        const auto field = fieldValue.toObject();
+        const auto choices = field.value(QStringLiteral("choices")).toArray();
+        auto      *combo = new QComboBox(&dialog);
+        const QString defaultId = field.value(QStringLiteral("default")).toString();
+        int           defaultIndex = -1;
+        for (qsizetype index = 0; index < choices.size(); ++index) {
+            const auto choice = choices.at(index).toObject();
+            QString label = catalog.text(choice.value(QStringLiteral("label_key")).toString());
+            const QString status = choice.value(QStringLiteral("status")).toString();
+            if (!status.isEmpty())
+                label += QStringLiteral(" — %1").arg(catalog.text(QStringLiteral("creation.status.%1").arg(status)));
+            combo->addItem(label, index);
+            if (choice.value(QStringLiteral("id")).toString() == defaultId)
+                defaultIndex = static_cast<int>(index);
+            if (status == QStringLiteral("unavailable"))
+                combo->setItemData(static_cast<int>(index), 0, Qt::UserRole - 1);
+        }
+        if (defaultIndex >= 0)
+            combo->setCurrentIndex(defaultIndex);
+        form.addRow(catalog.text(field.value(QStringLiteral("label_key")).toString()), combo);
+        fields.append({ combo, choices });
+    }
+
+    if (creation.isEmpty()) {
+        auto *fallback = new QLabel(catalog.text(QStringLiteral("creation.note.emulator_defaults")), &dialog);
+        fallback->setWordWrap(true);
+        form.addRow(fallback);
+    } else {
+        for (const auto &noteValue : creation.value(QStringLiteral("note_keys")).toArray()) {
+            auto *note = new QLabel(catalog.text(noteValue.toString()), &dialog);
+            note->setWordWrap(true);
+            form.addRow(note);
         }
     }
 
+    QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form.addRow(&buttons);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    const QString displayName = nameEdit.text().trimmed();
+    if (displayName.isEmpty()) {
+        QMessageBox::warning(this, tr("Invalid machine name"), tr("Enter a name for the machine."));
+        return;
+    }
+
+    struct ConfigSection {
+        QString                         name;
+        QVector<QPair<QString, QString>> values;
+    };
+    QVector<ConfigSection> sections;
+
+    const auto scalarText = [](const QJsonValue &value) {
+        if (value.isBool())
+            return value.toBool() ? QStringLiteral("1") : QStringLiteral("0");
+        if (value.isDouble())
+            return QString::number(value.toDouble(), 'g', 16);
+        return value.toString();
+    };
+    const auto setConfig = [&sections, &scalarText](const QString &sectionName, const QString &key,
+                                                    const QJsonValue &value) {
+        for (auto &section : sections) {
+            if (section.name != sectionName)
+                continue;
+            for (auto &entry : section.values) {
+                if (entry.first == key) {
+                    entry.second = scalarText(value);
+                    return;
+                }
+            }
+            section.values.append({ key, scalarText(value) });
+            return;
+        }
+        ConfigSection section;
+        section.name = sectionName;
+        section.values.append({ key, scalarText(value) });
+        sections.append(section);
+    };
+
+    if (creation.isEmpty()) {
+        setConfig(QStringLiteral("General"), QStringLiteral("vid_renderer"), QStringLiteral("qt_software"));
+        setConfig(QStringLiteral("General"), QStringLiteral("time_sync"), QStringLiteral("disabled"));
+    } else {
+        for (const auto &sectionValue : creation.value(QStringLiteral("configuration")).toArray()) {
+            const auto section = sectionValue.toObject();
+            const auto name = section.value(QStringLiteral("section")).toString();
+            const auto values = section.value(QStringLiteral("values")).toObject();
+            for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+                setConfig(name, it.key(), it.value());
+        }
+    }
+    setConfig(QStringLiteral("Machine"), QStringLiteral("machine"), machineId);
+
+    for (const auto &field : fields) {
+        const int choiceIndex = field.widget->currentData().toInt();
+        if (choiceIndex < 0 || choiceIndex >= field.choices.size())
+            continue;
+        const auto choice = field.choices.at(choiceIndex).toObject();
+        for (const auto &settingValue : choice.value(QStringLiteral("set")).toArray()) {
+            const auto setting = settingValue.toObject();
+            setConfig(setting.value(QStringLiteral("section")).toString(),
+                      setting.value(QStringLiteral("key")).toString(),
+                      setting.value(QStringLiteral("value")));
+        }
+    }
+
+    QString configuration;
+    for (const auto &section : sections) {
+        configuration += QStringLiteral("[%1]\n").arg(section.name);
+        for (const auto &entry : section.values)
+            configuration += QStringLiteral("%1 = %2\n").arg(entry.first, entry.second);
+        configuration += QLatin1Char('\n');
+    }
+
+    QString directoryName = creation.value(QStringLiteral("directory_prefix")).toString();
+    if (directoryName.isEmpty())
+        directoryName = product->id;
+    directoryName += QStringLiteral("-%1").arg(QDateTime::currentSecsSinceEpoch());
+
+    addNewSystem(directoryName, QDir(vmm_path).path(), displayName, configuration, false);
+
+    const QDir machineDirectory(QDir(vmm_path).filePath(directoryName));
+    if (!machineDirectory.exists())
+        return;
+    for (const auto &fileValue : creation.value(QStringLiteral("generated_files")).toArray()) {
+        const auto fileDefinition = fileValue.toObject();
+        const auto relativePath = fileDefinition.value(QStringLiteral("path")).toString();
+        const auto size = static_cast<qint64>(fileDefinition.value(QStringLiteral("size")).toDouble());
+        if (relativePath.isEmpty() || size <= 0)
+            continue;
+        const QString path = machineDirectory.filePath(relativePath);
+        if (QFileInfo::exists(path))
+            continue;
+        QFile generatedFile(path);
+        if (!generatedFile.open(QIODevice::WriteOnly) || !generatedFile.resize(size)) {
+            QMessageBox::critical(this, tr("Hard disk creation failed"),
+                                  tr("The historical machine was created, but its hard disk image could not be created."));
+            break;
+        }
+    }
 }
 
 void

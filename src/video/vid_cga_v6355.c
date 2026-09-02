@@ -17,6 +17,8 @@
  *          Copyright 2025 John Elliott.
  *          Copyright 2016-2025 Miran Grca.
  *          Copyright 2023-2025 W. M. Martinez
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -137,6 +139,24 @@ static uint8_t defpalette[32] = {
     0x07, 0x77,     /* Bright white */
 };
 
+static v6355_t *v6355_prodest_active = NULL;
+
+void
+v6355_prodest_set_low_mirrors(int enabled)
+{
+    v6355_t *v6355 = v6355_prodest_active;
+
+    if (v6355 == NULL)
+        return;
+
+    for (int i = 0; i < 2; i++) {
+        if (enabled)
+            mem_mapping_enable(&v6355->prodest_low_mirrors[i]);
+        else
+            mem_mapping_disable(&v6355->prodest_low_mirrors[i]);
+    }
+}
+
 static void v6355_recalctimings(v6355_t *v6355);
 
 static void
@@ -228,6 +248,18 @@ v6355_in(uint16_t addr, void *priv)
     }
 
     return ret;
+}
+
+static void
+v6355_prodest_alias_out(uint16_t addr, uint8_t val, void *priv)
+{
+    v6355_out(addr + 0x0300, val, priv);
+}
+
+static uint8_t
+v6355_prodest_alias_in(uint16_t addr, void *priv)
+{
+    return v6355_in(addr + 0x0300, priv);
 }
 
 static void
@@ -923,13 +955,33 @@ v6355_standalone_init(const device_t *info) {
 
     timer_add(&v6355->timer, v6355_poll, v6355, 1);
 
+    v6355->prodest_pc1 = (info->local == 1);
+
     mem_mapping_add(&v6355->mapping, 0xb8000, 0x08000,
                     v6355_read, NULL, NULL, v6355_write, NULL, NULL, NULL,
                     MEM_MAPPING_EXTERNAL, v6355);
 
+    if (v6355->prodest_pc1) {
+        static const uint32_t low_mirror_addr[2] = { 0xb0000, 0xb4000 };
+
+        for (int i = 0; i < 2; i++) {
+            mem_mapping_add(&v6355->prodest_low_mirrors[i],
+                            low_mirror_addr[i], 0x04000,
+                            v6355_read, NULL, NULL, v6355_write, NULL, NULL, NULL,
+                            MEM_MAPPING_EXTERNAL, v6355);
+            mem_mapping_disable(&v6355->prodest_low_mirrors[i]);
+        }
+        v6355_prodest_active = v6355;
+    }
+
     io_sethandler(0x03d0, 0x0010,
                   v6355_in, NULL, NULL, v6355_out, NULL, NULL,
                   v6355);
+
+    if (v6355->prodest_pc1)
+        io_sethandler(0x00dd, 0x0002,
+                      v6355_prodest_alias_in, NULL, NULL,
+                      v6355_prodest_alias_out, NULL, NULL, v6355);
 
     v6355->rgb_type = device_get_config_int("rgb_type");
     if (&(cga_palette) != NULL)
@@ -940,7 +992,10 @@ v6355_standalone_init(const device_t *info) {
     v6355->double_type = device_get_config_int("double_type");
     cga_interpolate_init();
 
-    switch(device_get_config_int("font")) {
+    if (info->local == 1) {
+        video_load_font("roms/machines/olivetti_prodest_pc1/pc1_font_italian_1.02.bin",
+                        FONT_FORMAT_PRAVETZ, LOAD_FONT_NO_OFFSET);
+    } else switch(device_get_config_int("font")) {
         case 0:
             video_load_font(FONT_IBM_MDA_437_PATH, FONT_FORMAT_MDA, LOAD_FONT_NO_OFFSET);
             break;
@@ -961,6 +1016,12 @@ static void
 v6355_close(void *priv) {
     v6355_t *v6355 = (v6355_t *) priv;
 
+    if (v6355->prodest_pc1)
+        io_removehandler(0x00dd, 0x0002,
+                         v6355_prodest_alias_in, NULL, NULL,
+                         v6355_prodest_alias_out, NULL, NULL, v6355);
+    if (v6355_prodest_active == v6355)
+        v6355_prodest_active = NULL;
     free(v6355->vram);
     free(v6355);
 }
@@ -1074,4 +1135,18 @@ const device_t v6355d_device = {
     .force_redraw  = NULL,
     .config        = v6355_config,
     .alias         = "Tulip DGA"
+};
+
+const device_t v6355d_prodest_pc1_device = {
+    .name          = "Olivetti Prodest PC 1 V6355D",
+    .internal_name = "v6355d_prodest_pc1",
+    .flags         = DEVICE_ISA,
+    .local         = 1,
+    .init          = v6355_standalone_init,
+    .close         = v6355_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = v6355_speed_changed,
+    .force_redraw  = NULL,
+    .config        = v6355_config
 };

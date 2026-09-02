@@ -52,6 +52,8 @@
  *
  *          Copyright 2017-2018 Fred N. van Kempen.
  *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
+ *
  *          Redistribution and  use  in source  and binary forms, with
  *          or  without modification, are permitted  provided that the
  *          following conditions are met:
@@ -766,7 +768,16 @@ write_error:
                     params        = (dprm_t *) dev->data;
                     drive->tracks = (params->cyl_high << 8) | params->cyl_low;
                     drive->hpc    = params->heads;
-                    drive->spt    = 17 /*hardcoded*/;
+                    /* Standard XTA drive parameters do not carry a sectors-per-
+                       track field and the legacy controllers modelled here use
+                       17 sectors.  The PC 1 HD selects its complete geometry
+                       through the board option register, however: BIOS 1.21
+                       uses 667/2/32 for its 20 MB entry.  Keep the selected
+                       physical geometry instead of silently reducing it to 17
+                       sectors, which makes the second half of every track
+                       inaccessible and breaks FORMAT while creating the root
+                       directory. */
+                    drive->spt    = (dev->type == 7) ? drive->cfg_spt : 17;
                     dev->status &= ~STAT_REQ;
                     set_intr(dev);
                     break;
@@ -1075,6 +1086,14 @@ xta_init_common(const device_t *info, int type)
             dev->irq      = 5;
             dev->dma      = 3;
             break;
+        case 7: /* Olivetti Prodest PC 1 HD onboard XTA */
+            dev->name     = "Olivetti Prodest PC 1 HD XTA";
+            dev->base     = 0x0320;
+            dev->irq      = 5;
+            dev->dma      = 3;
+            dev->sw       = 0x01;
+            max           = 1;
+            break;
         case 3: /* Seagate ST-05X Standalone */
         case 4: /* Seagate ST-05X Standalone secondary device */
             switch (dev->type) {
@@ -1279,6 +1298,14 @@ xta_init_common(const device_t *info, int type)
                     dev->sw = 0xfd;
                 else
                     dev->sw = 0xff;
+            } else if (dev->type == 7) {
+                /* BIOS 1.21 maps option value 1 to its 667/2/32 table entry.
+                   A 612/4/17 XTA geometry uses the alternate value 0. */
+                if ((drive->tracks == 612) && (drive->hpc == 4) &&
+                    (drive->spt == 17))
+                    dev->sw = 0x00;
+                else
+                    dev->sw = 0x01;
             }
 
             xta_log("%s: drive%d (cyl=%d,hd=%d,spt=%d), disk %d\n",
@@ -1510,6 +1537,20 @@ const device_t xta_pcs86_device = {
     .internal_name = "xta_pcs86",
     .flags         = DEVICE_ISA,
     .local         = 6,
+    .init          = xta_init,
+    .close         = xta_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t xta_prodest_pc1hd_device = {
+    .name          = "Olivetti Prodest PC 1 HD onboard XTA",
+    .internal_name = "xta_prodest_pc1hd",
+    .flags         = DEVICE_ISA,
+    .local         = 7,
     .init          = xta_init,
     .close         = xta_close,
     .reset         = NULL,

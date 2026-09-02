@@ -25,6 +25,8 @@
  *          Copyright 2020      RichardG.
  *          Copyright 2021      dob205.
  *          Copyright 2022-2024 Jasmine Iwanek.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -759,6 +761,49 @@ const cpu_family_t cpu_families[] = {
                 .cache_read_cycles  = 0,
                 .cache_write_cycles = 0,
                 .atclk_div          = 2
+            },
+            { .name = "", 0 }
+        }
+    },
+    {
+        .package       = CPU_PKG_V40,
+        .manufacturer  = "NEC",
+        .name          = "V40",
+        .internal_name = "necv40",
+        .cpus          = (const CPU[]) {
+            {
+                .name               = "4.77",
+                .cpu_type           = CPU_V20,
+                .fpus               = fpus_8088,
+                .rspeed             = 4772728,
+                .multi              = 1,
+                .voltage            = 5000,
+                .edx_reset          = 0,
+                .cpuid_model        = 0,
+                .cyrix_id           = 0,
+                .cpu_flags          = 0,
+                .mem_read_cycles    = 0,
+                .mem_write_cycles   = 0,
+                .cache_read_cycles  = 0,
+                .cache_write_cycles = 0,
+                .atclk_div          = 1
+            },
+            {
+                .name               = "8",
+                .cpu_type           = CPU_V20,
+                .fpus               = fpus_8088,
+                .rspeed             = 8000000,
+                .multi              = 1,
+                .voltage            = 5000,
+                .edx_reset          = 0,
+                .cpuid_model        = 0,
+                .cyrix_id           = 0,
+                .cpu_flags          = 0,
+                .mem_read_cycles    = 0,
+                .mem_write_cycles   = 0,
+                .cache_read_cycles  = 0,
+                .cache_write_cycles = 0,
+                .atclk_div          = 1
             },
             { .name = "", 0 }
         }

@@ -44,6 +44,8 @@
 #include <86box/network.h>
 #include <86box/machine.h>
 
+static const uint32_t olivetti_prodest_pc1_ram[] = { 256, 512, 640, 0 };
+
 const machine_filter_t machine_types[] = {
     { "None",                             MACHINE_TYPE_NONE        },
     { "[1979] 8088",                      MACHINE_TYPE_8088        },
@@ -2707,6 +2709,105 @@ const machine_t machines[] = {
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "" }
+    },
+    /* The V40 uses BluMach's V20 execution core and a dedicated first-phase
+       model for its system registers, clock control and SCU relocation. */
+    {
+        .name              = "[NEC V40] Olivetti Prodest PC 1 (experimental)",
+        .internal_name     = "olivetti_prodest_pc1",
+        .type              = MACHINE_TYPE_8086,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_xt_olivetti_prodest_pc1_init,
+        .p1_handler        = NULL,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_V40,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 4772728,
+            .max_bus     = 8000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 1,
+            .max_multi   = 1
+        },
+        .bus_flags = MACHINE_PC,
+        .flags     = MACHINE_VIDEO_FIXED | MACHINE_KEYBOARD | MACHINE_FDC |
+                     MACHINE_LPT_PRI | MACHINE_UART_PRI,
+        .ram       = {
+            .min   = 256,
+            .max   = 640,
+            .step  = 128,
+            .valid = olivetti_prodest_pc1_ram
+        },
+        .nvrmask                  = 0,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_xtclone_device,
+        .kbc_params               = 0x00000000,
+        .nvr_device               = NULL,
+        .nvr_params               = 0x00000000,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0xff,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &prodest_pc1_device,
+        .kbd_device               = &keyboard_pc_xt_device,
+        .fdc_device               = NULL,
+        .vid_device               = &v6355d_prodest_pc1_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Prodest PC1", "Olivetti PC 1", "" }
+    },
+    {
+        .name              = "[NEC V40] Olivetti Prodest PC 1 HD (experimental)",
+        .internal_name     = "olivetti_prodest_pc1hd",
+        .type              = MACHINE_TYPE_8086,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_xt_olivetti_prodest_pc1hd_init,
+        .p1_handler        = NULL,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_V40,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 4772728,
+            .max_bus     = 8000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 1,
+            .max_multi   = 1
+        },
+        .bus_flags = MACHINE_PC,
+        .flags     = MACHINE_VIDEO_FIXED | MACHINE_KEYBOARD | MACHINE_FDC |
+                     MACHINE_XTA | MACHINE_LPT_PRI | MACHINE_UART_PRI,
+        .ram       = {
+            .min  = 640,
+            .max  = 640,
+            .step = 640
+        },
+        .nvrmask                  = 0,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_xtclone_device,
+        .kbc_params               = 0x00000000,
+        .nvr_device               = NULL,
+        .nvr_params               = 0x00000000,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0xff,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &prodest_pc1hd_device,
+        .kbd_device               = &keyboard_pc_xt_device,
+        .fdc_device               = NULL,
+        .vid_device               = &v6355d_prodest_pc1_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Prodest PC1 HD", "Olivetti PC 1 HD", "" }
     },
     {
         .name              = "[8086] Amstrad PC2086",
