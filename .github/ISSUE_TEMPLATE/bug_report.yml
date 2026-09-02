@@ -1,19 +1,23 @@
-name: Bug Report
-description: File a bug report
-title: "Title"
+name: BluMach bug report
+description: Report a problem in a BluMach source build
+title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        ## Thanks for taking the time to fill out this bug report!
+        ## Thanks for helping improve BluMach.
+
+        Do not attach ROMs, proprietary software or other restricted files.
   - type: checkboxes
     attributes:
       label: Checklist
       options:
-        - label: I **have searched** the issue tracker and **was unable** to find an [open](https://github.com/86Box/86Box/issues?q=is%3Aissue+is%3Aopen) or [closed](https://github.com/86Box/86Box/issues?q=is%3Aissue+is%3Aclosed) issue matching what I'm seeing. 
+        - label: I **have searched** the BluMach issue tracker and found no matching report.
           required: true
-        - label: I **have verified** that the issue is happening in the **[latest nightly build](https://ci.86box.net/job/86Box/lastSuccessfulBuild/artifact/)**, or the latest commit, if building from source.
+        - label: I reproduced the issue with a build from the current BluMach `master` branch.
+          required: true
+        - label: I will not attach ROMs, proprietary software or other restricted files.
           required: true
   - type: textarea
     attributes:
@@ -25,7 +29,7 @@ body:
   - type: textarea
     attributes:
       label: Configuration file
-      description: Please copy and paste your machine configuration file (`86box.cfg`). This will be automatically formatted into code, so no need for backticks.
+      description: Paste the machine configuration after removing personal paths or other private data. It will be formatted automatically.
       render: ini
     validations:
       required: true
@@ -38,30 +42,30 @@ body:
       required: true
   - type: input
     attributes:
-      label: 86Box version
-      description: What version of 86Box are you running? (Please ensure you have updated to the [latest build](https://ci.86box.net/job/86Box/lastSuccessfulBuild/artifact/) before reporting. Merely saying "Latest from Jenkins" is not helpful.)
-      placeholder: e.g. v4.0 build 5000
+      label: BluMach commit
+      description: Enter the full Git commit used to build BluMach.
+      placeholder: e.g. a9a72cb5da9ee2081dd91befe07cd7b3dc74db46
     validations:
       required: true
   - type: dropdown
     attributes:
       label: Build architecture
-      description: 86Box for what architecture are you using?
+      description: Which BluMach host build are you using?
       options: 
-        - Windows - x64 (64-bit) 
-        - macOS - Universal (Intel and Apple Silicon) 
-        - Linux - x64 (64-bit) 
-        - Linux - ARM (64-bit) 
+          - Windows - x64 (64-bit)
+          - macOS - Universal (Intel and Apple Silicon)
+          - Linux - x64 (64-bit)
+          - Linux - ARM (64-bit)
     validations:
       required: true
   - type: checkboxes
     attributes:
       label: Build type
-      description: What type of build are you using?
+      description: What type of BluMach build are you using?
       options:
         - label: New recompiler
         - label: Debug build
   - type: textarea
     attributes:
       label: Additional context
-      description: Is there anything else you want to tell us? If you build 86Box from source, please post your build configuration here.
+      description: Add logs, build options or other context. Remove private paths and do not attach restricted files.

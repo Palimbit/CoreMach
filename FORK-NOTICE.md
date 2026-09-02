@@ -3,7 +3,7 @@
 BluMach is a modified distribution of 86Box, an x86 systems emulator.
 
 - Upstream project: https://github.com/86Box/86Box
-- BluMach source: https://github.com/BluMachOrg/86Box
+- BluMach source: https://github.com/BluMach/86Box
 - License: GNU General Public License, version 2 or later
 - License text: `COPYING`
 

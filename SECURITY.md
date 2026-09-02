@@ -1,18 +1,19 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-| Version   | Supported          |
-| --------- | ------------------ |
-| >= master | :white_check_mark: |
-|  < master | :x:                |
+BluMach is in active development and has no stable binary releases. Security
+fixes target the current `master` branch.
 
-Each version is supported in the form of patch releases until the next version is merged into master.
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+Do not publish confidential vulnerability details in a pull request, commit or
+machine configuration.
 
-To report a vulnerability, either open an issue here on GitHub or join our Discord server. If it is
-accepted, that means we have begun working on it and it will be fixed if it is at all possible. If it
-is declined, then that means we have either determined it to not actually be a vulnerability or we
-have determined it is not feasible to fix it. On GitHub, we are going to notify you when a decision
-taken, and if accepted, when it is fixed. On Discord, you get live updates.
+BluMach does not currently advertise a private vulnerability-reporting channel.
+Contact the repository maintainers through GitHub without including technical
+details and request a private channel before sharing a BluMach-specific report.
+
+If the problem is reproducible in an unmodified 86Box build, follow the
+[upstream 86Box security policy](https://github.com/86Box/86Box/security/policy)
+instead. Make it clear which project and commit were tested.

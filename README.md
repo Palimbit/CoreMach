@@ -1,116 +1,131 @@
-(We need help in developing this emulator! See https://github.com/86Box/86Box/issues/7386 for details. Any and all help is appreciated.)
-
 # BluMach
 
-**BluMach** is a preservation-focused fork of
-[86Box](https://github.com/86Box/86Box). It retains the accurate, low-level x86
-emulation developed by the 86Box contributors and extends it with carefully
-documented historical machines, firmware mappings and reproducible validation.
+**Documented preservation and emulation of distinctive historical PCs.**
 
-This project is independent from the upstream 86Box project. Existing source
-copyright notices and authorship are preserved. See [FORK-NOTICE.md](FORK-NOTICE.md)
-for provenance and redistribution information.
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](COPYING)
+![Project status: active development](https://img.shields.io/badge/status-active%20development-orange.svg)
 
-[![Build Status](https://ci.86box.net/job/86Box/badge/icon)](https://ci.86box.net/job/86Box/)
-[![License](https://img.shields.io/github/license/86Box/86Box)](COPYING)
-[![Latest release](https://img.shields.io/github/release/86Box/86Box.svg)](https://github.com/86Box/86Box/releases)
-[![Downloads](https://img.shields.io/github/downloads/86Box/86Box/total.svg)](https://github.com/86Box/86Box/releases)
-[![Translation status](https://weblate.86box.net/widget/86box/86box/language-badge.svg)](https://weblate.86box.net/engage/86box/)
+BluMach is a preservation-focused fork of
+[86Box](https://github.com/86Box/86Box). It combines 86Box's accurate,
+low-level x86 emulation with a curated historical catalogue, explicit evidence
+and reproducible machine configurations.
 
-BluMach is a low-level x86 emulator that runs older operating systems and
-software designed for IBM PC systems and compatibles from 1981 through fairly
-recent systems based on the PCI bus.
+BluMach is an independent project and is not an official 86Box build. Existing
+86Box copyright notices and authorship are preserved. See
+[FORK-NOTICE.md](FORK-NOTICE.md) for provenance and redistribution details.
 
-Preserved machine families
---------------------------
+> [!IMPORTANT]
+> BluMach began as a personal preservation fork maintained by rtzor and is
+> developed in public so its research, documentation and emulator improvements
+> can be reviewed, reused and extended by others.
+>
+> The project is under active development and is provided as-is, without warranty,
+> under the terms of the GPL-2.0-or-later license. Official binary releases are
+> planned once the emulator and its user experience are sufficiently mature; no
+> release date has been announced.
+>
+> BluMach does not distribute ROMs, operating systems or other proprietary
+> machine software.
 
-The first documented BluMach collection is the
-[Olivetti PCS family](doc/machines/olivetti-pcs-family.md), with individual
-implementation and validation notes for the PCS 86, PCS 286 and PCS 386SX.
-These pages distinguish documented hardware, current emulation, verified
-behaviour and remaining approximations.
+## What makes BluMach different
 
-Features
---------
+- A built-in **Collection** organised by manufacturer and family.
+- Historical sheets that separate known hardware from the current emulator
+  implementation.
+- Visible preservation states and evidence, including known approximations and
+  unresolved questions.
+- Reproducible profiles for machines that have enough firmware and validation
+  evidence to be created safely.
+- A unified Qt manager for exploring the catalogue and running local machines.
+- Continued access to the broad processor, bus and peripheral emulation inherited
+  from 86Box.
 
-* Easy to use interface inspired by mainstream hypervisor software
-* Low level emulation of 8086-based processors up to the Mendocino-era Celeron with focus on accuracy
-* Great range of customizability of virtual machines
-* Many available systems, such as the very first IBM PC 5150 from 1981, or the more obscure IBM PS/2 line of systems based on the Micro Channel Architecture
-* Lots of supported peripherals including video adapters, sound cards, network adapters, hard disk controllers, and SCSI adapters
-* MIDI output to Windows built-in MIDI support, FluidSynth, or emulated Roland synthesizers
-* Supports running MS-DOS, older Windows versions, OS/2, many Linux distributions, or vintage systems such as BeOS or NEXTSTEP, and applications for these systems
+Catalogue illustrations are editorial concept images or board recreations, not
+documentary photographs. Their purpose and provenance are recorded in the
+[asset notes](src/qt/catalog/images/README.md).
 
-Minimum system requirements and recommendations
------------------------------------------------
+## Historical collection
 
-* 64-bit Intel Core 2, AMD Athlon 64 or ARMv8 processor or newer
-* 4 GB of RAM or higher
-* **Windows version:** Windows 7 Service Pack 1 or newer on Intel/AMD systems; Windows 11 or newer on ARM systems
-* **Linux version:** Ubuntu 16.04, Debian 9.0 or other distributions from 2016 onwards
-* **macOS version:** macOS 10.14 Mojave or newer
+The current catalogue contains 21 product entries across six families from
+three manufacturers:
 
-Performance may vary depending on host and guest configuration. Most emulation logic is executed in a single thread. Therefore, systems with greater IPC (instructions per clock) capacity should be able to emulate higher clock speeds.
+| Manufacturer | Families | Public machine notes |
+| --- | --- | --- |
+| Olivetti | Prodest, PCS, M300 and PCS 4x/C | [Prodest PC 1](doc/machines/olivetti-prodest-pc1.md), [PCS family](doc/machines/olivetti-pcs-family.md), [M300 family](doc/machines/olivetti-m300-family.md), [PCS 46/C](doc/machines/olivetti-pcs46c.md) |
+| Triumph-Adler | Dario | Catalogue research in progress |
+| TriGem | SX386 | [SX386M](doc/machines/trigem-sx386m.md) |
 
-For easier handling of multiple virtual machines, use a manager application:
+Every catalogue entry carries one of these preservation states:
 
-* [Avalonia 86](https://github.com/notBald/Avalonia86) by [notBald](https://github.com/notBald) (Windows and Linux)
-* [86Box Manager](https://github.com/86Box/86BoxManager) by [Overdoze](https://github.com/daviunic) (Windows only)
-* [86Box Manager X](https://github.com/RetBox/86BoxManagerX) by [xafero](https://github.com/xafero) (Cross platform Port of 86Box Manager using Avalonia)
-* [sl86](https://github.com/DDXofficial/sl86) by [DDX](https://github.com/DDXofficial) (Command-line 86Box machine manager written in Python)
-* [Linbox-qt5](https://github.com/Dungeonseeker/linbox-qt5) by [Dungeonseeker](https://github.com/Dungeonseeker/) (Linux focused, should work on Windows though untested)
-* [MacBox for 86Box](https://github.com/Moonif/MacBox) by [Moonif](https://github.com/Moonif) (MacOS only)
+| State | Meaning |
+| --- | --- |
+| **Validated** | A documented configuration has passed the project's current validation checks. |
+| **Partial** | The machine is usable, with known approximations or incomplete validation. |
+| **Experimental** | An early implementation exists but needs more evidence or testing. |
+| **Research** | The historical record is being developed and no usable profile is offered. |
+| **Not bootable** | The product is identified, but BluMach cannot currently boot it faithfully. |
 
-To use 86Box on its own, use the `--vmpath`/`-P` command line option.
+The state applies to the current BluMach implementation, not to the historical
+importance or completeness of the surviving physical machine.
 
-Getting started
----------------
+## Evidence and fidelity
 
-See [our documentation](https://86box.readthedocs.io/en/latest/index.html) for an overview of the emulator's features and user interface.
+BluMach distinguishes between claims that are:
 
-Community
----------
+- **documented** in contemporary or manufacturer material;
+- **observed** in hardware, firmware or a repeatable emulator test;
+- **inferred** from related systems or incomplete evidence; or
+- **hypothetical** and retained only as a research lead.
 
-We operate an IRC channel and a Discord server for discussing 86Box, its development, and anything related to retro computing. We look forward to hearing from you!
+Machine notes describe the latest known result and remaining approximations.
+They should not present a plausible inference as verified hardware fact.
 
-[![Visit our IRC channel](https://kiwiirc.com/buttons/irc.ringoflightning.net/86Box.png)](https://kiwiirc.com/client/irc.ringoflightning.net/?nick=86box|?#86Box)
+## Building and running
 
-[![Visit our Discord server](https://discordapp.com/api/guilds/262614059009048590/embed.png)](https://discord.gg/QXK9XTv)
+BluMach currently targets source builds. It retains the CMake build system and
+dependencies of 86Box; the repository workflows provide the exact configurations
+used for [Windows/MSYS2](.github/workflows/cmake_windows_msys2.yml),
+[Linux](.github/workflows/cmake_linux.yml) and
+[macOS](.github/workflows/cmake_macos.yml).
 
-[Forum: SoftHistory](https://forum.softhistory.org/)
+The [upstream 86Box build guide](https://86box.readthedocs.io/en/latest/dev/buildguide.html)
+is a useful dependency reference, but its release paths, branding and support
+channels do not describe BluMach.
 
-[Wiki: SoftHistory](https://wiki.softhistory.org/)
+To run an emulated machine, provide a local ROM directory containing firmware
+you are legally entitled to use. Firmware availability in a preservation record
+does not imply permission to redistribute it.
 
-[Twitter: @86BoxEmulator](https://twitter.com/86BoxEmulator)
+## Contributing
 
-[YouTube: 86Box](https://youtube.com/c/86Box)
+Contributions are welcome through pull requests. Historical-machine changes
+must cite their evidence, state their limitations and keep firmware or other
+restricted assets out of Git. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+project checklist.
 
-Contributions
--------------
+## Compatibility with 86Box
 
-We welcome all contributions to the project, as long as the [contribution guidelines](CONTRIBUTING.md) are followed.
+Internal executable names, configuration files, machine identifiers and source
+paths may continue to use `86Box` where changing them would break compatibility.
+This is an implementation detail and does not imply endorsement by the upstream
+project.
 
-Building
----------
-For instructions on how to build 86Box from source, see the [build guide](https://86box.readthedocs.io/en/latest/dev/buildguide.html).
+Where a problem is reproducible in an unmodified 86Box build, consult the
+[upstream project](https://github.com/86Box/86Box). BluMach-specific changes
+should be discussed in a BluMach pull request until a dedicated public support
+channel is established.
 
-Licensing
----------
+## License and provenance
 
-BluMach is distributed under the [GNU General Public License, version 2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) or later, consistently with its 86Box base. For more information, see `COPYING` and `FORK-NOTICE.md` in the repository root.
+BluMach is distributed under the
+[GNU General Public License, version 2 or later](COPYING), consistently with its
+86Box base. Optional third-party components remain under their respective
+licenses.
 
-The emulator can also optionally make use of [munt](https://github.com/munt/munt), [FluidSynth](https://www.fluidsynth.org/), [Ghostscript](https://www.ghostscript.com/) and [Discord Game SDK](https://discord.com/developers/docs/game-sdk/sdk-starter-guide), which are distributed under their respective licenses.
+The GPL covers the emulator source and the BluMach-authored assets explicitly
+distributed under it. ROM images, operating systems, proprietary documentation
+and reference photographs are separate works and are not automatically covered
+by the emulator's license.
 
-Donations
----------
-
-We do not charge you for the emulator but donations are still welcome:
-<https://paypal.me/86Box>.
-You can also support the project on Patreon:
-<https://www.patreon.com/86box>.
-
-Acknowledgments
----------------
-
-### Powered by
-[![JetBrains logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSource)
+See [FORK-NOTICE.md](FORK-NOTICE.md) and the source-file headers for authorship
+and redistribution information.

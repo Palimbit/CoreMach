@@ -1,23 +1,51 @@
-# Contribution guidelines
-The 86Box project welcomes contributions from anyone, as long as some basic guidelines are followed.
+# Contributing to BluMach
 
-## Emulated hardware
-In order to accept new emulated hardware or a request thereof, the following criteria must be met:
+BluMach welcomes complete, reviewable pull requests that improve historical
+research, machine fidelity, validation, documentation or the user interface.
 
-* A ROM must be available and be added to [our ROM repository](https://github.com/86Box/roms)
-* Documentation must be available or it must be feasible to reverse engineer with a reasonable amount of time and effort
-* It must be feasible to implement with a reasonable amount of time and effort
-* It has to fall inside the project's scope
-* The build guide must be updated on any changes to the project's dependencies
+## Historical machines
 
-## Minimum requirements for a code pull request to be merged
+A machine addition or correction should:
 
-* The author must understand what it actually does and while using AI to assist with coding is fine, pull requests written solely by AI are more likely than not to be rejected
-* Our coding style must be followed
-* The code must either work well enough right away under the most common reasonable conditions and/or the author be willing to fix any reported bugs
-* The code must not introduce any new warnings produced during compilation
-* The implementation must be finished, ie. no pull requesting half-done stuff and expecting us to finish it for you
-* The code must be technically correct, getting the correct output is not enough - it must be achieved the correct way if at all humanly possible
+- identify the manufacturer, family and exact product variant;
+- cite manufacturer material, contemporary publications, observed hardware or
+  other relevant evidence;
+- distinguish documented, observed, inferred and hypothetical claims;
+- describe current approximations and unresolved questions;
+- include a usable emulator configuration only when firmware and implementation
+  evidence support it;
+- keep the catalogue, generated configuration and Configure dialog consistent;
+- update English and Spanish catalogue text when user-visible content changes;
+  and
+- include repeatable validation results for any claimed working behaviour.
 
-## Questions
-If you're unsure about any aspect of contributing, don't hesitate to get in touch via any of our official communities linked in our [readme](README.md#community) or [GitHub Discussions](https://github.com/86Box/86Box/discussions).
+Do not commit ROMs, operating systems, proprietary software, restricted
+documents or reference photographs. A locally preserved asset is not necessarily
+licensed for public redistribution.
+
+## Code and interface changes
+
+- Preserve existing source-file copyright and authorship notices.
+- Follow the repository's formatting and established implementation patterns.
+- Avoid product-specific GUI behaviour when the same result can be represented
+  declaratively in the catalogue.
+- Keep new interface text translatable.
+- Test light and dark palettes where appearance changes.
+- Do not introduce new compiler warnings.
+- Submit finished functionality rather than asking maintainers to complete it.
+
+## Pull requests
+
+Write the pull request in English and include:
+
+- a concise summary of the change;
+- the evidence or design rationale;
+- the exact configurations and platforms tested;
+- known limitations or failed tests;
+- confirmation that no restricted firmware or local-only material is included;
+  and
+- links to related documentation or prior work.
+
+If a change also applies to unmodified 86Box, say so explicitly. Upstreamable
+changes can then be evaluated separately without presenting BluMach as an
+official upstream build.
