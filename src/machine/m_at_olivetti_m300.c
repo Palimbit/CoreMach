@@ -486,6 +486,33 @@ machine_at_olivetti_ba013_init(const machine_t *model)
 }
 
 int
+machine_at_olivetti_m290sp_init(const machine_t *model)
+{
+    int ret;
+
+    ret = bios_load_linear("roms/machines/m290sp/BIOS-1.08.ROM",
+                           0x000e0000, 131072, 0);
+
+    if (bios_only || !ret)
+        return ret;
+
+    machine_at_common_ide_init(model);
+    device_add(&vlsi_topcat_device);
+    device_add(&port_6x_topcat_device);
+    device_add_params(machine_get_kbc_device(machine),
+                      (void *) model->kbc_params);
+    device_add(&pc87310_device);
+    io_sethandler(0x0378, 1, NULL, NULL, NULL,
+                  ba013_diag_write, NULL, NULL, NULL);
+
+    /* BA08-specific WD90C11 power-on state and embedded font. */
+    if (gfxcard[0] == VID_INTERNAL)
+        device_add(&paradise_wd90c11_m290sp_device);
+
+    return ret;
+}
+
+int
 machine_at_olivetti_m30002_init(const machine_t *model)
 {
     return machine_at_olivetti_ba013_init(model);

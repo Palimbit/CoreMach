@@ -44,6 +44,10 @@ add_library(mch OBJECT
     m_at_trigem_sx386m.c
     m_at_olivetti_m300.c
     m_at_olivetti_m300_if378.c
+    m_at_olivetti_m240.c
+    m_at_olivetti_m250.c
+    m_at_olivetti_m211v.c
+    m_at_olivetti_m380.c
     m_at_286.c
     m_at_386sx.c
     m_at_m6117.c

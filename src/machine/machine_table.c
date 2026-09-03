@@ -45,6 +45,12 @@
 #include <86box/machine.h>
 
 static const uint32_t olivetti_prodest_pc1_ram[] = { 256, 512, 640, 0 };
+static const uint32_t olivetti_m250_ram[] = { 1024, 2048, 0 };
+static const uint32_t olivetti_m250e_ram[] = { 1024, 2048, 4096, 0 };
+static const uint32_t olivetti_m211v_ram[] = { 1024, 5120, 0 };
+static const uint32_t olivetti_m280_ram[] = { 1024, 2048, 3072, 0 };
+static const uint32_t olivetti_m290sp_ram[] = { 1024, 3072, 5120, 9216, 17408, 0 };
+static const uint32_t olivetti_m380_ram[] = { 1024, 2048, 4096, 8192, 16384, 32768, 49152, 0 };
 
 const machine_filter_t machine_types[] = {
     { "None",                             MACHINE_TYPE_NONE        },
@@ -25543,6 +25549,488 @@ const machine_t machines[] = {
         .kbd_device               = NULL,
         .fdc_device               = NULL,
         .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m240. */
+    {
+        .name              = "[OMEGA 4] Olivetti M240",
+        .internal_name     = "olivetti_m240",
+        .type              = MACHINE_TYPE_8086,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_xt_olivetti_m240_init,
+        .p1_handler        = NULL,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_8086,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 10000000,
+            .max_bus     = 10000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_PC,
+        .flags     = MACHINE_KEYBOARD | MACHINE_VIDEO | MACHINE_MFM,
+        .ram       = {
+            .min  = 128,
+            .max  = 640,
+            .step = 128
+        },
+        .nvrmask                  = 255, /* 256 bytes. Phoenix v1.42 on
+                                              the M240 writes to CMOS
+                                              addresses beyond 0x7F
+                                              (0x93, 0xB7-0xBF, etc.)
+                                              which 128 bytes silently
+                                              drops, causing the
+                                              "first boot" SETUP on
+                                              every reboot. Same
+                                              rationale as the M250. */
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = NULL,  /* KBC is allocated inside
+                                              machine_xt_olivetti_m240_init
+                                              (M24-family 8041/8742,
+                                              ID 0x10) because the
+                                              86Box kbc_xt_olivetti_device
+                                              (KBD_TYPE_OLIVETTI) only
+                                              supports the M19 command
+                                              set and not the M240's. */
+        .kbc_params               = 0x00000000,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0xff,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &olivetti_m240_omega4_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &ogc_m24_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m250. */
+    {
+        .name              = "[80C206] Olivetti M250",
+        .internal_name     = "olivetti_m250",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_at_olivetti_m250_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 8000000,
+            .max_bus     = 8000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_PS2,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO,
+        .ram       = {
+            .min   = 1024,
+            .max   = 2048,
+            .step  = 1024,
+            .valid = olivetti_m250_ram
+        },
+        .nvrmask                  = 255, /* 256 bytes. The Phoenix v1.42
+                                              on the M250 writes to CMOS
+                                              addresses beyond 0x7F
+                                              (0x93, 0xB7-0xBF, etc.)
+                                              which 128 bytes silently
+                                              drops, causing the
+                                              "first boot" SETUP on
+                                              every reboot. */
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,  /* Phoenix v1.42 sends
+                                              Olivetti-specific KBC commands
+                                              (0x80/0x82/0x84/0x85/0xCF) even
+                                              though cap6 lists the chip as
+                                              stock 8742. */
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = NULL,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &paradise_pvga1a_pc3086_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Olivetti BA227", "Olivetti BA233", "Olivetti BA239", "Olivetti BA240", "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m250e. */
+    {
+        .name              = "[82C206] Olivetti M250 E",
+        .internal_name     = "olivetti_m250e",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_at_olivetti_m250e_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 12000000,
+            .max_bus     = 12000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_PS2,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO,
+        .ram       = {
+            .min   = 1024,
+            .max   = 4096,
+            .step  = 1024,
+            .valid = olivetti_m250e_ram
+        },
+        .nvrmask                  = 255, /* Same as the stock M250 —
+                                              Phoenix v1.42 accesses
+                                              the full 256 bytes. */
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,  /* Phoenix v1.42 sends
+                                              Olivetti-specific KBC commands
+                                              (0x80/0x82/0x84/0x85/0xCF) even
+                                              though cap6 lists the chip as
+                                              stock 8742. */
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = NULL,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &paradise_pvga1a_pc3086_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Olivetti BA241", "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m28. */
+    {
+        .name              = "[Olivetti FE2000] Olivetti M28",
+        .internal_name     = "olivetti_m28",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_at_olivetti_m28_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 8000000,
+            .max_bus     = 8000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 1,
+            .max_multi   = 1
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_VIDEO,
+        .ram       = {
+            .min  = 512,
+            .max  = 1024,
+            .step = 512
+        },
+        .nvrmask                  = 63,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT_ZERO_DEFAULT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &olivetti_m28_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &ogc_m24_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "AT&T PC 6310", "Olivetti BA802", "Olivetti BA816", "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m280. */
+    {
+        .name              = "[Olivetti FE2000] Olivetti M280",
+        .internal_name     = "olivetti_m280",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_at_olivetti_m280_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 12000000,
+            .max_bus     = 12000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 1,
+            .max_multi   = 1
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_FLAGS_NONE,
+        .ram       = {
+            .min   = 1024,
+            .max   = 3072,
+            .step  = 1024,
+            .valid = olivetti_m280_ram
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT_ZERO_DEFAULT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &olivetti_m280_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Olivetti BA817", "Olivetti BA824", "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m290sp. */
+    {
+        .name              = "[VLSI TOPCAT] Olivetti M290 SP",
+        .internal_name     = "olivetti_m290sp",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_VLSI_TOPCAT,
+        .init              = machine_at_olivetti_m290sp_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 20000000,
+            .max_bus     = 20000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 1,
+            .max_multi   = 1
+        },
+        .bus_flags = MACHINE_PS2,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO,
+        .ram       = {
+            .min   = 1024,
+            .max   = 17408,
+            .step  = 1024,
+            .valid = olivetti_m290sp_ram
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT_ZERO_DEFAULT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = NULL,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &paradise_wd90c11_m290sp_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Olivetti M290-25", "Olivetti BA08", "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m211v. */
+    {
+        .name              = "[CS8223 LeAPset] Olivetti M211V (experimental)",
+        .internal_name     = "olivetti_m211v",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_NEAT,
+        .init              = machine_at_olivetti_m211v_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 16000000,
+            .max_bus     = 16000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 1,
+            .max_multi   = 1
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO,
+        .ram       = {
+            .min   = 1024,
+            .max   = 5120,
+            .step  = 4096,
+            .valid = olivetti_m211v_ram
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = NULL,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &gd5401_onboard_m211v_device,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "Olivetti XP1023V", "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_m380. */
+    {
+        .name              = "[Olivetti] Olivetti M380 / M380 C",
+        .internal_name     = "olivetti_m380",
+        .type              = MACHINE_TYPE_386DX,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_at_olivetti_m380_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_386DX,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 16000000,
+            .max_bus     = 16000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 1,
+            .max_multi   = 1
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_FLAGS_NONE,
+        .ram       = {
+            .min   = 1024,
+            .max   = 49152,
+            .step  = 1024,
+            .valid = olivetti_m380_ram
+        },
+        .nvrmask                  = 63,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = NULL,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "" }
+    },
+
+/* Preserved from the Mavis recovery branch: olivetti_ba2142. */
+    {
+        .name              = "[UMC 82C491] Olivetti BA2142 (Experimental)",
+        .internal_name     = "olivetti_ba2142",
+        .type              = MACHINE_TYPE_SOCKET1,
+        .chipset           = MACHINE_CHIPSET_UMC_UM82C491,
+        .init              = machine_at_olivetti_ba2142_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_SOCKET1,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 25000000,
+            .max_bus     = 33333333,
+            .min_voltage = 5000,
+            .max_voltage = 5000,
+            .min_multi   = 1,
+            .max_multi   = 3
+        },
+        .bus_flags = MACHINE_PS2_VLB,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO | MACHINE_APM,
+        .ram       = {
+            .min  = 4096,
+            .max  = 65536,
+            .step = 4096
+        },
+        .nvrmask                  = 127,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_OLIVETTI,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        /* BA2142 uses the normal Olivetti board-strap pattern.  The former
+           0cf0 value was inherited from an unrelated AST profile and makes
+           the firmware see a different motherboard-jumper combination. */
+        .kbc_p1                   = 0x000004f0,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = NULL,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = &gd5424_onboard_device,
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "" }

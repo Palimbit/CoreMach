@@ -13,6 +13,8 @@
  *
  *          Copyright 2016-2025 Miran Grca.
  *          Copyright 2020-2025 EngiNerd.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdarg.h>
 #include <stdint.h>
@@ -515,6 +517,187 @@ machine_at_pc8_init(const machine_t *model)
 
     return ret;
 }
+
+static const device_config_t olivetti_m28_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "v212",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "PBUX/PBUY 2.09 (1986)",
+                .internal_name = "v209",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 2,
+                .local         = 0,
+                .size          = 32768,
+                /* PBUY is even/low; PBUX is odd/high. */
+                .files         = { "roms/machines/olivetti_m28/m28_pbuy_2.09_even.bin",
+                                   "roms/machines/olivetti_m28/m28_pbux_2.09_odd.bin", "" }
+            },
+            {
+                .name          = "PBU6/PBU7 2.12 (1986)",
+                .internal_name = "v212",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 2,
+                .local         = 0,
+                .size          = 32768,
+                /* PBU7 is even/low; PBU6 is odd/high. */
+                .files         = { "roms/machines/olivetti_m28/m28_pbu7_2.12_even.bin",
+                                   "roms/machines/olivetti_m28/m28_pbu6_2.12_odd.bin", "" }
+            },
+            { .files_no = 0 }
+        },
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t olivetti_m28_device = {
+    .name          = "Olivetti M28",
+    .internal_name = "olivetti_m28",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = olivetti_m28_config
+};
+
+int
+machine_at_olivetti_m28_init(const machine_t *model)
+{
+    int         ret;
+    const char *bios;
+    const char *fn[2];
+
+    device_context(model->device);
+    bios  = device_get_config_bios("bios");
+    fn[0] = device_get_bios_file(model->device, bios, 0);
+    fn[1] = device_get_bios_file(model->device, bios, 1);
+    /* The 32 KiB EPROM pair is decoded twice across F0000h-FFFFFh. POST
+       sums the lower copy, while the reset vector executes in the upper. */
+    ret   = bios_load_interleavedr(fn[0], fn[1], 0x000f8000, 65536, 0);
+    device_context_restore();
+
+    if (bios_only || !ret)
+        return ret;
+
+    /* BA802/807/808/809/815/816 use Olivetti's FE2000 logic, an 8742
+       keyboard controller and an MC146818 RTC. The generic AT core plus
+       Olivetti's port 60h/61h glue is the closest existing implementation. */
+    machine_at_common_init(model);
+
+    /* With 1 MiB installed, the FE2000 relocates the 384 KiB hidden by the
+       A0000h-FFFFFh adapter/ROM area to 100000h-15FFFFh. The M28 resident
+       diagnostics test this first word at 100000h and report 384 KiB of
+       extended memory. */
+    mem_remap_top(384);
+
+    device_add(&port_6x_olivetti_device);
+
+    if (fdc_current[0] == FDC_INTERNAL)
+        device_add(&fdc_at_device);
+
+    device_add_params(machine_get_kbc_device(machine), (void *) model->kbc_params);
+
+    if (gfxcard[0] == VID_INTERNAL)
+        device_add(&ogc_m24_device);
+
+    return ret;
+}
+
+static const device_config_t olivetti_m280_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "v216",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "Resident Diagnostics 2.16 (09/23/87)",
+                .internal_name = "v216",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 2,
+                .local         = 0,
+                .size          = 65536,
+                /* PBVT supplies even/low bytes; PBVS supplies odd/high bytes. */
+                .files         = { "roms/machines/olivetti_m280/m280_pbvt_2.16_even.bin",
+                                   "roms/machines/olivetti_m280/m280_pbvs_2.16_odd.bin", "" }
+            },
+            { .files_no = 0 }
+        },
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t olivetti_m280_device = {
+    .name          = "Olivetti M280",
+    .internal_name = "olivetti_m280",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = olivetti_m280_config
+};
+
+int
+machine_at_olivetti_m280_init(const machine_t *model)
+{
+    int         ret;
+    const char *bios;
+    const char *fn[2];
+
+    device_context(model->device);
+    bios  = device_get_config_bios("bios");
+    fn[0] = device_get_bios_file(model->device, bios, 0);
+    fn[1] = device_get_bios_file(model->device, bios, 1);
+    ret   = bios_load_interleaved(fn[0], fn[1], 0x000f0000, 65536, 0);
+    device_context_restore();
+
+    if (bios_only || !ret)
+        return ret;
+
+    /* The original BA817/BA824 CPU board uses Olivetti's FE2000 gate
+       array. Until that controller is modelled, the generic AT core
+       supplies the timers, DMA and interrupt controllers. */
+    machine_at_common_init(model);
+
+    /* Preserve all installed RAM around the 384 KiB adapter/ROM hole. With
+       the base 1 MiB configuration this exposes 640 KiB conventional plus
+       384 KiB extended, matching the FE2000 layout used by the M28/M280. */
+    mem_remap_top(384);
+
+    device_add(&port_6x_olivetti_device);
+
+    if (fdc_current[0] == FDC_INTERNAL)
+        device_add(&fdc_at_device);
+
+    device_add_params(machine_get_kbc_device(machine), (void *) model->kbc_params);
+
+    return ret;
+}
+
+
 
 int
 machine_at_m290_init(const machine_t *model)

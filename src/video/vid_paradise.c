@@ -974,6 +974,80 @@ paradise_wd90c11_ba013_init(const device_t *info)
     return paradise_init(info, 512);
 }
 
+static void
+paradise_wd90c11_m290sp_power_on(paradise_t *paradise)
+{
+    static const uint8_t seq[]  = { 0x03, 0x00, 0x03, 0x00, 0x02 };
+    static const uint8_t gdc[]  = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0e, 0x00, 0xff };
+    static const uint8_t attr[] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x0c, 0x00, 0x0f, 0x08, 0x00
+    };
+    static const uint8_t crtc_10_18[] = {
+        0x9c, 0x0e, 0x8f, 0x28, 0x1f, 0x96, 0xb9, 0xa3, 0xff
+    };
+    svga_t *svga = &paradise->svga;
+    FILE   *font;
+
+    /*
+     * The BA08 resident diagnostics only programs the 6845-compatible half
+     * of the WD90C11.  The real on-board controller supplies the remaining
+     * VGA text-mode state at power-on; a zeroed svga_t leaves the display
+     * disabled and every DAC entry black.
+     */
+    for (uint8_t i = 0; i < sizeof(seq); i++) {
+        paradise_out(0x3c4, i, paradise);
+        paradise_out(0x3c5, seq[i], paradise);
+    }
+
+    for (uint8_t i = 0; i < sizeof(gdc); i++) {
+        paradise_out(0x3ce, i, paradise);
+        paradise_out(0x3cf, gdc[i], paradise);
+    }
+
+    for (uint8_t i = 0; i < sizeof(attr); i++) {
+        svga->attrff = 0;
+        paradise_out(0x3c0, i, paradise);
+        paradise_out(0x3c0, attr[i], paradise);
+    }
+    svga->attrff = 0;
+    paradise_out(0x3c0, 0x20, paradise);
+
+    memcpy(&svga->crtc[0x10], crtc_10_18, sizeof(crtc_10_18));
+    for (uint8_t i = 0; i < 16; i++) {
+        svga->vgapal[i]  = cgapal[i + 16];
+        svga->pallook[i] = makecol32(video_6to8[svga->vgapal[i].r],
+                                     video_6to8[svga->vgapal[i].g],
+                                     video_6to8[svga->vgapal[i].b]);
+    }
+
+    /* The BA08 BIOS stores its 256-character 8x16 font at offset 1739h. */
+    font = rom_fopen("roms/machines/m290sp/BIOS-1.08.ROM", "rb");
+    if (font) {
+        fseek(font, 0x1739, SEEK_SET);
+        for (uint16_t chr = 0; chr < 256; chr++)
+            for (uint8_t row = 0; row < 16; row++)
+                svga->vram[svga->charseta + (chr * 128) + (row * 4)] =
+                    fgetc(font) & 0xff;
+        fclose(font);
+    }
+
+    svga->fullchange = svga->monitor->mon_changeframecount;
+    svga_recalctimings(svga);
+}
+
+static void *
+paradise_wd90c11_m290sp_init(const device_t *info)
+{
+    paradise_t *paradise = paradise_init(info, 512);
+
+    if (paradise)
+        paradise_wd90c11_m290sp_power_on(paradise);
+
+    return paradise;
+}
+
 static int
 paradise_wd90c11_standalone_available(void)
 {
@@ -1218,6 +1292,22 @@ const device_t paradise_wd90c11_ba013_device = {
     .machine       = "Olivetti BA013",
     .config        = NULL
 };
+
+const device_t paradise_wd90c11_m290sp_device = {
+    .name          = "Western Digital WD90C11 On-Board (Olivetti M290 SP)",
+    .internal_name = "wd90c11_m290sp",
+    .flags         = 0,
+    .local         = WD90C11,
+    .init          = paradise_wd90c11_m290sp_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Olivetti M290 SP",
+    .config        = NULL
+};
+
 
 static const device_config_t paradise_wd90c30_config[] = {
   // clang-format off

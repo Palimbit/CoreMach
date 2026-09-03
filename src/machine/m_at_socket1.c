@@ -396,6 +396,31 @@ machine_at_advantage40xxd_init(const machine_t *model)
 }
 
 /* Symphony SL82C460 */
+/* Olivetti BA2142 / M4-4x2 / PCS42P preservation model. */
+int
+machine_at_olivetti_ba2142_init(const machine_t *model)
+{
+    int ret;
+
+    ret = bios_load_linear("roms/machines/olivetti_ba2142/PDKK.BIN",
+                           0x000e0000, 131072, 0);
+    if (bios_only || !ret)
+        return ret;
+
+    machine_at_common_init(model);
+    device_add(&opti493_device);
+    device_add(&port_6x_vlsi_refresh_device);
+    device_add_params(machine_get_kbc_device(machine), (void *) model->kbc_params);
+    device_add_params(&fdc37c6xx_device, (void *) (FDC37C651 | FDC37C6XX_IDE_PRI));
+
+    if (gfxcard[0] == VID_INTERNAL)
+        device_add(machine_get_vid_device(machine));
+
+    /* Flash write/recovery behaviour will be restored during the audit;
+       the preservation branch deliberately keeps the firmware read-only. */
+    return ret;
+}
+
 int
 machine_at_dtk461_init(const machine_t *model)
 {
