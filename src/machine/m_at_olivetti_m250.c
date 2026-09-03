@@ -33,9 +33,9 @@
  *            - BDA 0x410 must be 0x20 (80x25 color, 1 FDD) at boot
  *            - NVR factory defaults must match (handled in nvr_at.c)
  *
- * Authors: <rauto>
+ * Authors: rtzor
  *
- *          Copyright 2026 <rauto>.
+ *          Copyright 2026 rtzor.
  */
 #include <stdarg.h>
 #include <stdint.h>

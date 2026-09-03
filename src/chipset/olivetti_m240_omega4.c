@@ -63,9 +63,9 @@
  *          not as raw switch positions, and the BIOS reads what the
  *          hardware would present.
  *
- * Authors: <rauto>
+ * Authors: rtzor
  *
- *          Copyright 2026 <rauto>.
+ *          Copyright 2026 rtzor.
  */
 #include <stdarg.h>
 #include <stdint.h>

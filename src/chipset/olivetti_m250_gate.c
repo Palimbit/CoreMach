@@ -25,7 +25,7 @@
  * Author: rtzor
  * Project: BluMach
  *
- *          Copyright 2026 <rauto>.
+ *          Copyright 2026 rtzor.
  */
 #include <stdarg.h>
 #include <stdint.h>

@@ -39,9 +39,9 @@
  *          so the BDA-vs-NVR diagnostic compare passes and the
  *          SET-UP menu does not reappear on every reboot.
  *
- * Authors: <rauto>
+ * Authors: rtzor
  *
- *          Copyright 2026 <rauto>.
+ *          Copyright 2026 rtzor.
  */
 #include <stdarg.h>
 #include <stdint.h>
