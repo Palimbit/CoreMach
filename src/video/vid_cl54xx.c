@@ -46,6 +46,7 @@
 
 #define BIOS_GD5401_PATH                "roms/video/cirruslogic/avga1.rom"
 #define BIOS_GD5401_ONBOARD_PATH        "roms/machines/drsm35286/qpaw01-6658237d5e3c2611427518.bin"
+#define BIOS_GD5401_M211V_PATH          "roms/machines/olivetti_m211v/pvga_103_stingray_48k.bin"
 #define BIOS_GD5402_PATH                "roms/video/cirruslogic/avga2.rom"
 #define BIOS_GD5402_ONBOARD_PATH        "roms/machines/cmdsl386sx25/c000.rom"
 #define BIOS_GD5420_PATH                "roms/video/cirruslogic/5420.vbi"
@@ -5080,6 +5081,10 @@ gd54xx_init(const device_t *info)
         local = device_get_bios_local(info, device_get_config_bios("bios"));
     int         id     = local & 0xff;
     int         vram;
+    uint32_t    rombase = 0x000c0000;
+    int         romsz   = 0x8000;
+    int         rommask = 0x7fff;
+    int         romoff  = 0;
     const char *romfn  = NULL;
     const char *romfn1 = NULL;
     const char *romfn2 = NULL;
@@ -5106,7 +5111,12 @@ gd54xx_init(const device_t *info)
 
     switch (id) {
         case CIRRUS_ID_CLGD5401:
-        if (local & 0x100)
+            if (local & 0x400) {
+                romfn   = BIOS_GD5401_M211V_PATH;
+                rombase = 0x000e0000;
+                romsz   = 0xc000;
+                rommask = 0xffff;
+            } else if (local & 0x100)
                 romfn = BIOS_GD5401_ONBOARD_PATH;
             else
 				romfn = BIOS_GD5401_PATH;
@@ -5296,7 +5306,7 @@ gd54xx_init(const device_t *info)
     gd54xx->vram_mask = gd54xx->vram_size - 1;
 
     if (romfn)
-        rom_init(&gd54xx->bios_rom, romfn, 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
+        rom_init(&gd54xx->bios_rom, romfn, rombase, romsz, rommask, romoff, MEM_MAPPING_EXTERNAL);
     else if (romfn1 && romfn2)
         rom_init_interleaved(&gd54xx->bios_rom, BIOS_GD5422_BOCA_ISA_PATH_1, BIOS_GD5422_BOCA_ISA_PATH_2, 0xc0000,
                              0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
@@ -6173,6 +6183,21 @@ const device_t gd5401_onboard_device = {
     .speed_changed = gd54xx_speed_changed,
     .force_redraw  = gd54xx_force_redraw,
     .alias         = "ACUMOS AVGA1",
+    .config        = NULL
+};
+
+const device_t gd5401_onboard_m211v_device = {
+    .name          = "Cirrus Logic GD-610/620 compatible (M211V)",
+    .internal_name = "cl_gd5401_onboard_m211v",
+    .flags         = DEVICE_ISA16,
+    .local         = CIRRUS_ID_CLGD5401 | 0x400,
+    .init          = gd54xx_init,
+    .close         = gd54xx_close,
+    .reset         = gd54xx_reset,
+    .available     = NULL,
+    .speed_changed = gd54xx_speed_changed,
+    .force_redraw  = gd54xx_force_redraw,
+    .alias         = "Cirrus Logic Stingray mobile VGA (compatibility model)",
     .config        = NULL
 };
 

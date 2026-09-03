@@ -553,6 +553,12 @@ extern int             machine_at_olivetti_pcs33_init(const machine_t *);
 extern int             machine_at_olivetti_m30008_init(const machine_t *);
 extern int             machine_at_olivetti_m30015_init(const machine_t *);
 extern int             machine_at_olivetti_m30030_init(const machine_t *);
+extern int             machine_at_olivetti_m290sp_init(const machine_t *);
+extern int             machine_at_olivetti_m380_init(const machine_t *);
+extern int             machine_at_olivetti_m250_init(const machine_t *);
+extern int             machine_at_olivetti_m250e_init(const machine_t *);
+extern int             machine_xt_olivetti_m240_init(const machine_t *);
+extern int             machine_at_olivetti_m211v_init(const machine_t *);
 
 /* m_at_olivetti_m300_if378.c */
 extern int             machine_at_olivetti_m300_if378_init(const machine_t *);
@@ -578,6 +584,12 @@ extern const device_t  pc900_device;
 #endif
 extern int             machine_at_mr286_init(const machine_t *);
 extern int             machine_at_pc8_init(const machine_t *);
+#ifdef EMU_DEVICE_H
+extern const device_t  olivetti_m28_device;
+extern const device_t  olivetti_m280_device;
+#endif
+extern int             machine_at_olivetti_m28_init(const machine_t *);
+extern int             machine_at_olivetti_m280_init(const machine_t *);
 extern int             machine_at_m290_init(const machine_t *);
 extern int             machine_at_pxat_init(const machine_t *);
 extern int             machine_at_quadtat_init(const machine_t *);
@@ -792,6 +804,7 @@ extern int             machine_at_av4_init(const machine_t *);
 
 /* SiS 471 */
 extern int             machine_at_advantage40xxd_init(const machine_t *);
+extern int             machine_at_olivetti_ba2142_init(const machine_t *);
 
 /* Symphony SL42C460 */
 extern int             machine_at_dtk461_init(const machine_t *);

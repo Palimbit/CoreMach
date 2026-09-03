@@ -398,6 +398,7 @@ extern const device_t chips_69000_onboard_device;
 /* Cirrus Logic GD54xx */
 extern const device_t gd5401_isa_device;
 extern const device_t gd5401_onboard_device;
+extern const device_t gd5401_onboard_m211v_device;
 extern const device_t gd5402_isa_device;
 extern const device_t gd5402_onboard_device;
 extern const device_t gd5402_onboard_commodore_device;
@@ -535,6 +536,7 @@ extern const device_t paradise_pvga1a_device;
 extern const device_t paradise_wd90c11_megapc_device;
 extern const device_t paradise_wd90c11_device;
 extern const device_t paradise_wd90c11_ba013_device;
+extern const device_t paradise_wd90c11_m290sp_device;
 extern const device_t paradise_wd90c30_device;
 extern const device_t paradise_wd90c31_m30030_device;
 
