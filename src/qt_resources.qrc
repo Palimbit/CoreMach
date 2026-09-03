@@ -143,6 +143,8 @@
         <file alias="settings@2x.png">qt/assets/blumach-icons/settings@2x.png</file>
         <file alias="new-machine.png">qt/assets/blumach-icons/new-machine.png</file>
         <file alias="new-machine@2x.png">qt/assets/blumach-icons/new-machine@2x.png</file>
+        <file alias="machine-default.png">qt/assets/blumach-machine-icon.png</file>
+        <file alias="machine-default.svg">qt/assets/blumach-machine-icon.svg</file>
     </qresource>
     <qresource prefix="/">
         <file alias="/texture_vert.spv">qt/texture_vert.spv</file>

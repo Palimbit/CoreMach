@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  BluMach generic historical-machine icon.
+  Author: rtzor
+  Copyright 2026 rtzor.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 256 256">
+  <title>BluMach provisional Linea historical computer</title>
+  <desc>A provisional low-profile machine fallback pending the definitive family icon system.</desc>
+
+  <path d="m38 173 81 47 106-61-81-47Z" fill="#173b5e" opacity=".14"/>
+  <path d="m30 91 112-61 84 46-112 62Z" fill="#f8f5ed"/>
+  <path d="m30 91 84 47v70l-84-47Z" fill="#557a9f"/>
+  <path d="m114 138 112-62v70l-112 62Z" fill="#dedbd4"/>
+
+  <path d="m30 91 84 47 112-62M30 161l84 47 112-62" fill="none"
+        stroke="#173b5e" stroke-width="4" stroke-linejoin="round"/>
+  <path d="m48 122 45 25" fill="none" stroke="#e6e2db" stroke-width="7"
+        stroke-linecap="round"/>
+  <path d="m136 141 64-29" fill="none" stroke="#557a9f" stroke-width="7"
+        stroke-linecap="round"/>
+  <path d="m136 162 42-19" fill="none" stroke="#b8b8b4" stroke-width="6"
+        stroke-linecap="round"/>
+  <path d="m203 113 16-7v18l-16 7Z" fill="#b14a3a"/>
+</svg>
