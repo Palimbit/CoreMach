@@ -154,6 +154,32 @@ typedef struct atkbc_t {
 kbc_at_port_t  *kbc_at_ports[2] = { NULL, NULL };
 
 static void (*kbc_at_do_poll)(atkbc_t *dev);
+static void kbc_at_queue_reset(atkbc_t *dev);
+
+/*
+ * The M250 firmware immediately starts its keyboard reset transaction after
+ * Ctrl+Alt+Del.  Do not let the make/break bytes that caused the reset leak
+ * into that transaction: unlike the generic AT BIOS, it does not drain the
+ * controller before checking the keyboard's FA/AA reply sequence.
+ */
+static void
+kbc_at_olivetti_m250_clear_warm_reset_input(atkbc_t *dev)
+{
+    if ((machines[machine].init != machine_at_olivetti_m250_init) &&
+        (machines[machine].init != machine_at_olivetti_m250e_init))
+        return;
+
+    kbc_at_queue_reset(dev);
+    dev->sc_or   = 0;
+    dev->ob      = 0;
+    dev->status &= ~STAT_OFULL;
+
+    if ((dev->ports[0] != NULL) && (dev->ports[0]->priv != NULL)) {
+        dev->ports[0]->out_new = -1;
+        dev->ports[0]->wantcmd = 0;
+        kbc_at_dev_queue_reset((atkbc_dev_t *) dev->ports[0]->priv, 1);
+    }
+}
 
 /* Non-translated to translated scan codes. */
 static const uint8_t nont_to_t[256] = {
@@ -816,6 +842,7 @@ write_p2(atkbc_t *dev, uint8_t val)
         if (!(val & 0x01)) {  /* Pin 0 selected. */
             /* Pin 0 selected. */
             kbc_at_log("write_p2(): Pulse reset!\n");
+            kbc_at_olivetti_m250_clear_warm_reset_input(dev);
             softresetx86(); /* Pulse reset! */
             cpu_set_edx();
             flushmmucache();
@@ -2055,11 +2082,16 @@ write_cmd_olivetti(void *priv, uint8_t val)
              * bit 2: keyboard fuse present
              * bits 0-1: ???
              */
-            /* Phoenix 1.42 on the PCS 286 uses command 80h as an exact
-               read-back of the P2 value previously written with 84h.
-               Other Olivetti machines retain the generic fuse/status reply. */
-            if (machines[machine].init == machine_at_olivetti_pcs286_init)
+            /* Phoenix 1.42 on the PCS 286 and M250 uses command 80h as an
+               exact read-back of the P2 value previously written with 84h.
+               The M250 E uses the same path but reports its mandatory ISA
+               bus adapter on bit 7. Other Olivetti machines retain their
+               machine-specific status reply. */
+            if ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
+                (machines[machine].init == machine_at_olivetti_m250_init))
                 kbc_delay_to_ob(dev, dev->p2, 0, 0x00);
+            else if (machines[machine].init == machine_at_olivetti_m250e_init)
+                kbc_delay_to_ob(dev, dev->p2 | 0x80, 0, 0x00);
             else if (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)
                 /* PCS 286S BIOS 2.06 probes the manufacturing jumper with
                    commands 8Bh/80h.  Bit 5 high is the normal production
@@ -2079,9 +2111,11 @@ write_cmd_olivetti(void *priv, uint8_t val)
             ret = 0;
             break;
 
-        case 0x84: /* PCS 286: write output port P2 */
+        case 0x84: /* Olivetti: write output port P2 */
             if ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
-                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)) {
+                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init) ||
+                (machines[machine].init == machine_at_olivetti_m250_init) ||
+                (machines[machine].init == machine_at_olivetti_m250e_init)) {
                 dev->wantdata = 1;
                 dev->state    = STATE_KBC_PARAM;
                 dev->command  = 0x84;
@@ -2094,10 +2128,19 @@ write_cmd_olivetti(void *priv, uint8_t val)
                 ret = 0;
             break;
 
-        case 0xcf: /* PCS 286 Phoenix POST separator/no-op */
+        case 0xcf: /* Phoenix POST separator/no-op */
             if ((machines[machine].init == machine_at_olivetti_pcs286_init) ||
-                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init))
+                (machines[machine].init == machine_at_olivetti_pcs286s_ti_init) ||
+                (machines[machine].init == machine_at_olivetti_m250_init) ||
+                (machines[machine].init == machine_at_olivetti_m250e_init))
                 ret = 0;
+            break;
+
+        case 0x82: /* M250 Phoenix: read input port P1 */
+            if (machines[machine].init == machine_at_olivetti_m250_init) {
+                kbc_delay_to_ob(dev, dev->p1, 0, 0x00);
+                ret = 0;
+            }
             break;
     }
 
@@ -2111,11 +2154,14 @@ write_cmd_data_olivetti(void *priv, uint8_t val)
     uint8_t  ret = 1;
 
     if (((machines[machine].init == machine_at_olivetti_pcs286_init) ||
-         (machines[machine].init == machine_at_olivetti_pcs286s_ti_init)) &&
+         (machines[machine].init == machine_at_olivetti_pcs286s_ti_init) ||
+         (machines[machine].init == machine_at_olivetti_m250_init) ||
+         (machines[machine].init == machine_at_olivetti_m250e_init)) &&
         (dev->command == 0x84)) {
         /* Command 84h latches P2 but, unlike standard D1h, does not pulse
-           reset when bit 0 is clear. The POST verifies the value via 80h. */
-        kbc_at_log("ATkbc: Olivetti PCS 286 write P2: %02X\n", val);
+           reset when bit 0 is clear. Phoenix test 6 verifies the exact value
+           through command 80h. */
+        kbc_at_log("ATkbc: Olivetti write P2: %02X\n", val);
         dev->p2 = val;
         ret     = 0;
     }
