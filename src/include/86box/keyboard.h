@@ -196,6 +196,7 @@ extern const device_t kbc_xt_t1x00_device;
 extern const device_t kbc_tandy_device;
 extern const device_t kbc_xt_lxt3_device;
 extern const device_t kbc_xt_olivetti_device;
+extern const device_t kbc_xt_m15_device;
 extern const device_t kbc_xt_zenith_device;
 extern const device_t kbc_xt_hyundai_device;
 extern const device_t kbc_xt_fe2010_device;

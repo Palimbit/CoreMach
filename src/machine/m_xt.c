@@ -2205,6 +2205,86 @@ machine_xt_z184_init(const machine_t *model)
     return ret;
 }
 
+/*
+ * Olivetti M15 experimental platform.
+ *
+ * The CPU, V6355D video interface, 16 KiB B800h VRAM, 765-compatible floppy
+ * path, COM1/LPT1 addresses and BIOS layout are evidenced. The XT core, XT
+ * keyboard controller, UART and FDC are compatibility approximations. The RTC
+ * has a functional MSM6242 model; Hitachi logic and exact keyboard behaviour
+ * remain pending.
+ */
+/*
+ * The resident BIOS contains its 8x8 system character bitmap at F000:FA6E.
+ * The V6355D's physical character-ROM connection is not documented, but using
+ * the mapped BIOS bytes preserves the observed M15 ASCII glyphs without
+ * introducing a duplicate font asset. Codes 80h-FFh remain the generic CP437
+ * fallback: the M15 Keyboard Drivers disk changes those national glyphs with
+ * MS-DOS GRAFTABL/NORDIC/PORTUGAL support.
+ */
+#define M15_BIOS_FONT_ADDRESS   0x000ffa6e
+#define M15_BIOS_FONT_GLYPHS    128
+#define M15_BIOS_FONT_SCANLINES 8
+
+static void
+m15_load_bios_font(void)
+{
+    uint16_t glyph;
+    uint8_t  scanline;
+
+    for (glyph = 0; glyph < M15_BIOS_FONT_GLYPHS; glyph++) {
+        for (scanline = 0; scanline < M15_BIOS_FONT_SCANLINES; scanline++)
+            fontdat[glyph][scanline] = mem_readb_phys(M15_BIOS_FONT_ADDRESS +
+                                                       (glyph * M15_BIOS_FONT_SCANLINES) + scanline);
+    }
+}
+
+int
+machine_xt_olivetti_m15_init(const machine_t *model)
+{
+    lpt_t *lpt;
+    int    ret;
+
+    ret = bios_load_linear("roms/machines/olivetti_m15/OLIV_M15.BIN",
+                           0x000f0000, 65536, 0);
+
+    if (bios_only || !ret)
+        return ret;
+
+    device_add(&kbc_xt_m15_device);
+    machine_xt_common_init(model, 1);
+
+    /* The resident BIOS timer test shows that the 8253 is clocked at roughly
+       CPU/3 rather than the IBM PC/XT rate. With the available NMOS 8088 core,
+       a 97/128 XT-period ratio keeps all three BIOS counter measurements in
+       their documented acceptance windows; this remains a calibrated 80C88
+       timing approximation pending a dedicated CMOS core or hardware trace. */
+    pit_set_clock_period_ratio(pit_devs[0].data, 97, 128);
+
+    lpt = device_add_inst(&lpt_port_device, 1);
+    lpt_port_remove(lpt);
+    lpt_port_setup(lpt, LPT1_ADDR);
+    lpt_set_next_inst(255);
+
+    device_add(&ns8250_device);
+    serial_set_next_inst(SERIAL_MAX - 1);
+
+    /* The mainboard's OKI MSM6242 is decoded directly at 0100h-010fh.
+       Its HOLD/BUSY handshake is required before the BIOS can leave its
+       post-floppy clock read and transfer control to the boot sector. */
+    device_add(&oki_m6242_m15_device);
+
+    /* The internal LCD is fixed, but must follow the normal internal-video
+       selection path so that the catalogue profile and Configure dialog
+       initialise the same device. */
+    if (gfxcard[0] == VID_INTERNAL) {
+        device_add(machine_get_vid_device(machine));
+        m15_load_bios_font();
+    }
+
+    return ret;
+}
+
 /* GC100A */
 int
 machine_xt_p3120_init(const machine_t *model)

@@ -64,6 +64,7 @@ extern const device_t ibmps2m30_rtc_device;
 extern void           ibmps2m30_rtc_inform(void *, uint8_t *);
 
 extern const device_t rp5c01a_zenith_device;
+extern const device_t oki_m6242_m15_device;
 
 #ifdef __cplusplus
 }

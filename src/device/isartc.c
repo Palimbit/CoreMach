@@ -1414,6 +1414,212 @@ ibmps2m30_rtc_inform(void *priv, uint8_t *a1_mask)
     dev->irq_mask = a1_mask;
 }
 
+/*
+ * OKI MSM6242 RTC used by the Olivetti M15.
+ *
+ * The M15 maps the chip directly at ports 0100h-010fh.  Registers 0-C
+ * contain one BCD digit each; register D supplies HOLD in bit 0 and BUSY in
+ * bit 1.  I/O operations in the emulator are atomic, so BUSY can remain
+ * deasserted while HOLD is active.
+ */
+enum M6242_REGS {
+    M6242_SECOND1 = 0x00,
+    M6242_SECOND10,
+    M6242_MINUTE1,
+    M6242_MINUTE10,
+    M6242_HOUR1,
+    M6242_HOUR10,
+    M6242_DAY1,
+    M6242_DAY10,
+    M6242_MONTH1,
+    M6242_MONTH10,
+    M6242_YEAR1,
+    M6242_YEAR10,
+    M6242_WEEKDAY,
+    M6242_CONTROL_D,
+    M6242_CONTROL_E,
+    M6242_CONTROL_F
+};
+
+#define M6242_HOLD       0x01
+#define M6242_BUSY       0x02
+#define M6242_24H        0x04
+#define M6242_STOP       0x02
+#define M6242_REGISTER_COUNT 16
+
+typedef struct m6242_t {
+    nvr_t nvr;
+} m6242_t;
+
+static void
+m6242_time_set(nvr_t *nvr, const struct tm *clk)
+{
+    uint8_t *regs = nvr->regs;
+    int      hour = clk->tm_hour;
+    int      year = (clk->tm_year + 1900) % 100;
+
+    regs[M6242_SECOND1]  = (clk->tm_sec % 10);
+    regs[M6242_SECOND10] = (clk->tm_sec / 10);
+    regs[M6242_MINUTE1]  = (clk->tm_min % 10);
+    regs[M6242_MINUTE10] = (clk->tm_min / 10);
+
+    if (!(regs[M6242_CONTROL_F] & M6242_24H)) {
+        const int pm = (hour >= 12);
+        hour %= 12;
+        if (hour == 0)
+            hour = 12;
+        regs[M6242_HOUR10] = (hour / 10) | (pm ? 0x04 : 0x00);
+    } else
+        regs[M6242_HOUR10] = (hour / 10);
+    regs[M6242_HOUR1] = (hour % 10);
+
+    regs[M6242_DAY1]    = (clk->tm_mday % 10);
+    regs[M6242_DAY10]   = (clk->tm_mday / 10);
+    regs[M6242_MONTH1]  = ((clk->tm_mon + 1) % 10);
+    regs[M6242_MONTH10] = ((clk->tm_mon + 1) / 10);
+    regs[M6242_YEAR1]   = (year % 10);
+    regs[M6242_YEAR10]  = (year / 10);
+    regs[M6242_WEEKDAY] = (clk->tm_wday % 7);
+}
+
+static void
+m6242_time_get(const nvr_t *nvr, struct tm *clk)
+{
+    const uint8_t *regs = nvr->regs;
+    int            hour;
+    int            year;
+
+    memset(clk, 0x00, sizeof(*clk));
+    clk->tm_sec = regs[M6242_SECOND1] + (10 * regs[M6242_SECOND10]);
+    clk->tm_min = regs[M6242_MINUTE1] + (10 * regs[M6242_MINUTE10]);
+    hour        = regs[M6242_HOUR1] + (10 * (regs[M6242_HOUR10] & 0x03));
+    if (!(regs[M6242_CONTROL_F] & M6242_24H)) {
+        hour %= 12;
+        if (regs[M6242_HOUR10] & 0x04)
+            hour += 12;
+    }
+    clk->tm_hour = hour;
+    clk->tm_wday = (regs[M6242_WEEKDAY] % 7);
+    clk->tm_mday = regs[M6242_DAY1] + (10 * regs[M6242_DAY10]);
+    clk->tm_mon  = regs[M6242_MONTH1] + (10 * regs[M6242_MONTH10]) - 1;
+    year         = regs[M6242_YEAR1] + (10 * regs[M6242_YEAR10]);
+    clk->tm_year = year + ((year < 80) ? 100 : 0);
+}
+
+static void
+m6242_tick(nvr_t *nvr)
+{
+    struct tm clk;
+
+    if ((nvr->regs[M6242_CONTROL_D] & M6242_HOLD) ||
+        (nvr->regs[M6242_CONTROL_F] & M6242_STOP))
+        return;
+
+    nvr_time_get(&clk);
+    m6242_time_set(nvr, &clk);
+}
+
+static void
+m6242_start(nvr_t *nvr)
+{
+    struct tm clk;
+
+    if (time_sync & TIME_SYNC_ENABLED) {
+        nvr_time_get(&clk);
+        m6242_time_set(nvr, &clk);
+    } else {
+        m6242_time_get(nvr, &clk);
+        nvr_time_set(&clk);
+    }
+}
+
+static void
+m6242_reset(nvr_t *nvr)
+{
+    memset(nvr->regs, 0x00, nvr->size);
+    nvr->regs[M6242_DAY1]     = 0x01;
+    nvr->regs[M6242_MONTH1]   = 0x01;
+    nvr->regs[M6242_YEAR10]   = 0x08;
+    nvr->regs[M6242_CONTROL_F] = M6242_24H;
+}
+
+static uint8_t
+m6242_read(uint16_t addr, void *priv)
+{
+    const nvr_t *nvr = (nvr_t *) priv;
+    uint8_t      reg = (uint8_t) (addr & 0x0f);
+
+    if (reg == M6242_CONTROL_D)
+        return nvr->regs[reg] & (uint8_t) ~M6242_BUSY;
+
+    return nvr->regs[reg] & 0x0f;
+}
+
+static void
+m6242_write(uint16_t addr, uint8_t val, void *priv)
+{
+    nvr_t * nvr = (nvr_t *) priv;
+    uint8_t reg = (uint8_t) (addr & 0x0f);
+    uint8_t old_hold;
+
+    val &= 0x0f;
+    old_hold = nvr->regs[M6242_CONTROL_D] & M6242_HOLD;
+    nvr->regs[reg] = val;
+
+    if ((reg == M6242_CONTROL_D) && old_hold && !(val & M6242_HOLD) &&
+        !(time_sync & TIME_SYNC_ENABLED)) {
+        struct tm clk;
+        m6242_time_get(nvr, &clk);
+        nvr_time_set(&clk);
+    }
+
+    if (!(time_sync & TIME_SYNC_ENABLED))
+        nvr_dosave = 1;
+}
+
+static void
+m6242_close(void *priv)
+{
+    m6242_t *dev = (m6242_t *) priv;
+
+    nvr_dosave = 1;
+    nvr_save();
+    free(dev);
+}
+
+static void *
+m6242_init(const device_t *info)
+{
+    m6242_t *dev = (m6242_t *) calloc(1, sizeof(m6242_t));
+
+    dev->nvr.size  = M6242_REGISTER_COUNT;
+    dev->nvr.irq   = -1;
+    dev->nvr.reset = m6242_reset;
+    dev->nvr.start = m6242_start;
+    dev->nvr.tick  = m6242_tick;
+    nvr_init(&dev->nvr);
+
+    io_sethandler(0x0100, M6242_REGISTER_COUNT,
+                  m6242_read, NULL, NULL,
+                  m6242_write, NULL, NULL, &dev->nvr);
+
+    return dev;
+}
+
+const device_t oki_m6242_m15_device = {
+    .name          = "OKI MSM6242 RTC (Olivetti M15)",
+    .internal_name = "oki_m6242_m15_rtc",
+    .flags         = DEVICE_ISA,
+    .local         = 0,
+    .init          = m6242_init,
+    .close         = m6242_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
 typedef struct rp5c01a_t
 {
     nvr_t nvr;

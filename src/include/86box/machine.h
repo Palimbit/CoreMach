@@ -1739,6 +1739,7 @@ extern int             machine_xt_znic_init(const machine_t *);
 extern int             machine_xt_z151_init(const machine_t *);
 extern int             machine_xt_z159_init(const machine_t *);
 extern int             machine_xt_z184_init(const machine_t *);
+extern int             machine_xt_olivetti_m15_init(const machine_t *);
 
 /* GC100A */
 extern int             machine_xt_p3120_init(const machine_t *);
