@@ -46,12 +46,12 @@ documentary photographs. Their purpose and provenance are recorded in the
 
 ## Historical collection
 
-The current catalogue contains 21 product entries across six families from
+The current catalogue contains 22 product entries across seven families from
 three manufacturers:
 
 | Manufacturer | Families | Public machine notes |
 | --- | --- | --- |
-| Olivetti | Prodest, PCS, M300 and PCS 4x/C | [Prodest PC 1](doc/machines/olivetti-prodest-pc1.md), [PCS family](doc/machines/olivetti-pcs-family.md), [M300 family](doc/machines/olivetti-m300-family.md), [PCS 46/C](doc/machines/olivetti-pcs46c.md) |
+| Olivetti | M15, Prodest, PCS, M300 and PCS 4x/C | [M15](doc/machines/olivetti-m15.md), [Prodest PC 1](doc/machines/olivetti-prodest-pc1.md), [PCS family](doc/machines/olivetti-pcs-family.md), [M300 family](doc/machines/olivetti-m300-family.md), [PCS 46/C](doc/machines/olivetti-pcs46c.md) |
 | Triumph-Adler | Dario | Catalogue research in progress |
 | TriGem | SX386 | [SX386M](doc/machines/trigem-sx386m.md) |
 
