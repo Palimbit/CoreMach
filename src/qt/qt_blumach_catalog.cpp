@@ -66,6 +66,13 @@ BluMachCatalog::load(QString *errorMessage)
                                  object.value(QStringLiteral("description_key")).toString(),
                                  object.value(QStringLiteral("history_key")).toString(),
                                  object.value(QStringLiteral("history_source_url")).toString() });
+        for (const auto &entry : object.value(QStringLiteral("history_references")).toArray()) {
+            const auto reference = entry.toObject();
+            m_manufacturers.last().historyReferences.append({
+                reference.value(QStringLiteral("title")).toString(),
+                reference.value(QStringLiteral("publisher")).toString(),
+                reference.value(QStringLiteral("url")).toString() });
+        }
     }
     for (const auto &value : root.value(QStringLiteral("families")).toArray()) {
         const auto object = value.toObject();

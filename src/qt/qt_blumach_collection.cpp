@@ -598,7 +598,20 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
                 m_overviewLayout->addWidget(makeSectionHeading(tr("History"), m_overviewScroll));
                 m_overviewLayout->addWidget(makeWrappedLabel(m_catalog.text(manufacturer->historyKey), m_overviewScroll));
             }
-            if (!manufacturer->historySourceUrl.isEmpty()) {
+            if (!manufacturer->historyReferences.isEmpty()) {
+                m_overviewLayout->addWidget(makeSectionHeading(m_catalog.text(QStringLiteral("manufacturer.history.references")), m_overviewScroll));
+                for (const auto &reference : manufacturer->historyReferences) {
+                    auto *label = makeWrappedLabel({}, m_overviewScroll);
+                    label->setTextFormat(Qt::RichText);
+                    label->setTextInteractionFlags(Qt::TextBrowserInteraction);
+                    label->setText(QStringLiteral("%1 — <a href=\"%2\">%3</a>")
+                                       .arg(reference.publisher.toHtmlEscaped(), reference.url.toHtmlEscaped(), reference.title.toHtmlEscaped()));
+                    connect(label, &QLabel::linkActivated, this, [this](const QString &url) {
+                        openTechnicalLink(QUrl(url));
+                    });
+                    m_overviewLayout->addWidget(label);
+                }
+            } else if (!manufacturer->historySourceUrl.isEmpty()) {
                 auto *source = new QToolButton(m_overviewScroll);
                 source->setText(m_catalog.text(QStringLiteral("manufacturer.history.source")));
                 source->setAutoRaise(true);
