@@ -16,12 +16,19 @@
 #include <QStringList>
 #include <QVector>
 
+struct BluMachHistoryReference {
+    QString title;
+    QString publisher;
+    QString url;
+};
+
 struct BluMachManufacturer {
     QString id;
     QString name;
     QString descriptionKey;
     QString historyKey;
     QString historySourceUrl;
+    QVector<BluMachHistoryReference> historyReferences;
 };
 
 struct BluMachFamily {
