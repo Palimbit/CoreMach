@@ -60,6 +60,7 @@ static const struct {
     { &xtide_acculogic_device               },
     { &st506_xt_dtc5150x_device             },
     { &st506_xt_xebec_device                },
+    { &st506_xt_pc1512_compat_device        },
     { &xtide_device                         },
     { &jride_device                         },
     { &st506_xt_st11_m_device               },

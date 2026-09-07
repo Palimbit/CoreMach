@@ -1026,7 +1026,6 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
     const QDir machineDirectory(QDir(vmm_path).filePath(directoryName));
     if (!machineDirectory.exists())
         return;
-
     const auto generateFiles = [this, &machineDirectory](const QJsonArray &files) {
         for (const auto &fileValue : files) {
             const auto fileDefinition = fileValue.toObject();

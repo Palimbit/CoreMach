@@ -2,6 +2,11 @@
   "schema": "blumach-catalog-v2",
   "manufacturers": [
     {
+      "id": "amstrad",
+      "name": "Amstrad",
+      "description_key": "manufacturer.amstrad.description"
+    },
+    {
       "id": "olivetti",
       "name": "Olivetti",
       "description_key": "manufacturer.olivetti.description",
@@ -101,6 +106,13 @@
   ],
   "families": [
     {
+      "id": "amstrad-pc1512",
+      "manufacturer_id": "amstrad",
+      "parent_family_id": "",
+      "name": "PC1512",
+      "description_key": "family.amstrad-pc1512.description"
+    },
+    {
       "id": "olivetti-pcs",
       "manufacturer_id": "olivetti",
       "parent_family_id": "",
@@ -179,6 +191,11 @@
     }
   ],
   "platforms": [
+    {
+      "id": "amstrad-pc1512-platform",
+      "emulator_machine_id": "pc1512",
+      "architecture": "8086"
+    },
     {
       "id": "olivetti-pcs86-platform",
       "emulator_machine_id": "olivetti_pcs86",
@@ -306,6 +323,217 @@
     }
   ],
   "products": [
+    {
+      "id": "amstrad-pc1512",
+      "manufacturer_id": "amstrad",
+      "family_id": "amstrad-pc1512",
+      "platform_id": "amstrad-pc1512-platform",
+      "name": "Amstrad PC1512",
+      "summary_key": "product.amstrad-pc1512.summary",
+      "history_key": "product.amstrad-pc1512.history",
+      "warning_key": "product.amstrad-pc1512.warning",
+      "status": "partial",
+      "period": "1986–1987",
+      "aliases": ["PC1512 SD", "PC1512 DD", "PC1512 HD10", "PC1512 HD20"],
+      "tags": ["8086", "XT", "AMS40041", "640×200×16", "360 KB", "desktop"],
+      "hardware": {
+        "cpu": "Intel 8086-2 at 8 MHz, maximum mode; optional 8087-2",
+        "memory": "512 KB parity RAM on the main board; expansion to 640 KB in 32 KB blocks",
+        "video": "Integrated Amstrad planar VDU: 40/80-column text, CGA-compatible modes and proprietary 640×200×16",
+        "floppy": "One or two internal 5.25-inch 360 KB drives according to SD/DD configuration",
+        "rtc": "HD146818 RTC/NVR at 70h/71h, IRQ 2",
+        "expansion": "Three 8-bit expansion slots",
+        "interfaces": "Onboard 8250 serial, Centronics parallel, proprietary keyboard, quadrature mouse and light-pen header"
+      },
+      "firmware": {
+        "known_sets": ["Version 1 (1986)", "Version 2", "Version 3", "Legacy v1 ROS with 40078 character ROM"],
+        "required": true,
+        "identity_note": "BluMach distributes no firmware bytes. The locally available legacy combination boots but mixes the v1 ROS with the later 40078 character ROM."
+      },
+      "storage": {
+        "bus": "Internal uPD765 floppy; optional external hard-disk adapter on HD10/HD20 packages",
+        "official_drives": ["SD: one 360 KB floppy", "DD: two 360 KB floppies", "HD10: one floppy and 10 MB hard disk", "HD20: one floppy and 20 MB hard disk"]
+      },
+      "relationships": {
+        "commercial_variants": ["PC1512 SD", "PC1512 DD", "PC1512 HD10", "PC1512 HD20"],
+        "related_models": ["Amstrad PC1640"]
+      },
+      "creation": {
+        "status": "experimental",
+        "directory_prefix": "amstrad-pc1512",
+        "facts": [],
+        "fields": [
+          {
+            "id": "commercial_model",
+            "label_key": "creation.label.commercial_model",
+            "default": "sd",
+            "choices": [
+              {
+                "id": "sd",
+                "label_key": "product.amstrad-pc1512.creation.variant.sd",
+                "status": "validated",
+                "set": [
+                  {"section": "Floppy and CD-ROM drives", "key": "fdd_01_type", "value": "525_2dd"},
+                  {"section": "Floppy and CD-ROM drives", "key": "fdd_02_type", "value": "none"},
+                  {"section": "Storage controllers", "key": "hdc_1", "value": "none"}
+                ]
+              },
+              {
+                "id": "dd",
+                "label_key": "product.amstrad-pc1512.creation.variant.dd",
+                "status": "validated",
+                "set": [
+                  {"section": "Floppy and CD-ROM drives", "key": "fdd_01_type", "value": "525_2dd"},
+                  {"section": "Floppy and CD-ROM drives", "key": "fdd_02_type", "value": "525_2dd"},
+                  {"section": "Storage controllers", "key": "hdc_1", "value": "none"}
+                ]
+              },
+              {
+                "id": "hd10-compatible",
+                "label_key": "product.amstrad-pc1512.creation.variant.hd10",
+                "status": "experimental",
+                "set": [
+                  {"section": "Floppy and CD-ROM drives", "key": "fdd_01_type", "value": "525_2dd"},
+                  {"section": "Floppy and CD-ROM drives", "key": "fdd_02_type", "value": "none"},
+                  {"section": "Storage controllers", "key": "hdc_1", "value": "st506_xt_pc1512_compat"},
+                  {"section": "Hard disks", "key": "hdd_01_fn", "value": "pc1512-hd10-compatible.img"},
+                  {"section": "Hard disks", "key": "hdd_01_parameters", "value": "17, 4, 306, 0, mfm"},
+                  {"section": "Hard disks", "key": "hdd_01_mfm_channel", "value": 0},
+                  {"section": "Hard disks", "key": "hdd_01_speed", "value": "1989_3500rpm"}
+                ],
+                "generated_files": [
+                  {"path": "pc1512-hd10-compatible.img", "size": 10653696}
+                ]
+              },
+              {
+                "id": "hd20",
+                "label_key": "product.amstrad-pc1512.creation.variant.hd20",
+                "status": "unavailable",
+                "set": []
+              }
+            ]
+          },
+          {
+            "id": "memory",
+            "label_key": "creation.label.memory",
+            "default": "512",
+            "choices": [
+              {"id": "512", "label_key": "product.amstrad-pc1512.creation.memory.512", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 512}]},
+              {"id": "544", "label_key": "product.amstrad-pc1512.creation.memory.544", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 544}]},
+              {"id": "576", "label_key": "product.amstrad-pc1512.creation.memory.576", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 576}]},
+              {"id": "608", "label_key": "product.amstrad-pc1512.creation.memory.608", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 608}]},
+              {"id": "640", "label_key": "product.amstrad-pc1512.creation.memory.640", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 640}]}
+            ]
+          },
+          {
+            "id": "firmware",
+            "label_key": "creation.label.firmware",
+            "default": "legacy_v1_40078",
+            "choices": [
+              {"id": "legacy_v1_40078", "label_key": "product.amstrad-pc1512.creation.firmware.legacy", "status": "experimental", "set": [{"section": "Amstrad PC1512", "key": "bios", "value": "legacy_v1_40078"}]},
+              {"id": "v1", "label_key": "product.amstrad-pc1512.creation.firmware.v1", "status": "unavailable", "set": [{"section": "Amstrad PC1512", "key": "bios", "value": "v1"}]},
+              {"id": "v2", "label_key": "product.amstrad-pc1512.creation.firmware.v2", "status": "unavailable", "set": [{"section": "Amstrad PC1512", "key": "bios", "value": "v2"}]},
+              {"id": "v3", "label_key": "product.amstrad-pc1512.creation.firmware.v3", "status": "unavailable", "set": [{"section": "Amstrad PC1512", "key": "bios", "value": "v3"}]}
+            ]
+          },
+          {
+            "id": "bios_language",
+            "label_key": "creation.label.bios_language",
+            "default": "english",
+            "choices": [
+              {"id": "english", "label_key": "product.amstrad-pc1512.creation.language.english", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 7}]},
+              {"id": "german", "label_key": "product.amstrad-pc1512.creation.language.german", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 6}]},
+              {"id": "french", "label_key": "product.amstrad-pc1512.creation.language.french", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 5}]},
+              {"id": "spanish", "label_key": "product.amstrad-pc1512.creation.language.spanish", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 4}]},
+              {"id": "danish", "label_key": "product.amstrad-pc1512.creation.language.danish", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 3}]},
+              {"id": "swedish", "label_key": "product.amstrad-pc1512.creation.language.swedish", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 2}]},
+              {"id": "italian", "label_key": "product.amstrad-pc1512.creation.language.italian", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 1}]},
+              {"id": "diagnostic", "label_key": "product.amstrad-pc1512.creation.language.diagnostic", "status": "documented", "set": [{"section": "Amstrad PC1512", "key": "language", "value": 0}]}
+            ]
+          },
+          {
+            "id": "character_rom",
+            "label_key": "creation.label.character_rom",
+            "default": "us",
+            "choices": [
+              {"id": "us", "label_key": "product.amstrad-pc1512.creation.character.us", "status": "documented", "set": [{"section": "Amstrad PC1512 (Video)", "key": "codepage", "value": 3}]},
+              {"id": "danish", "label_key": "product.amstrad-pc1512.creation.character.danish", "status": "documented", "set": [{"section": "Amstrad PC1512 (Video)", "key": "codepage", "value": 1}]},
+              {"id": "greek", "label_key": "product.amstrad-pc1512.creation.character.greek", "status": "documented", "set": [{"section": "Amstrad PC1512 (Video)", "key": "codepage", "value": 0}]}
+            ]
+          },
+          {
+            "id": "monitor",
+            "label_key": "creation.label.monitor",
+            "default": "pc-cm",
+            "choices": [
+              {"id": "pc-cm", "label_key": "product.amstrad-pc1512.creation.monitor.color", "status": "validated", "set": [{"section": "Amstrad PC1512 (Video)", "key": "display_type", "value": 0}]},
+              {"id": "pc-mm", "label_key": "product.amstrad-pc1512.creation.monitor.mono", "status": "documented", "set": [{"section": "Amstrad PC1512 (Video)", "key": "display_type", "value": 3}]}
+            ]
+          }
+        ],
+        "note_keys": ["product.amstrad-pc1512.creation.note", "product.amstrad-pc1512.creation.hdnote"],
+        "configuration": [
+          {"section": "General", "values": {"vid_renderer": "qt_software", "time_sync": "disabled"}},
+          {"section": "Machine", "values": {"cpu_family": "8086", "cpu_speed": 8000000, "cpu_multi": 1, "cpu_use_dynarec": 0, "mem_size": 512}},
+          {"section": "Amstrad PC1512", "values": {"bios": "legacy_v1_40078", "language": 7}},
+          {"section": "Amstrad PC1512 (Video)", "values": {"display_type": 0, "codepage": 3, "double_type": 0}},
+          {"section": "Video", "values": {"gfxcard": "internal"}},
+          {"section": "Input devices", "values": {"keyboard_type": "internal", "mouse_type": "internal", "tablet_type": "none"}},
+          {"section": "Floppy and CD-ROM drives", "values": {"fdd_01_type": "525_2dd", "fdd_02_type": "none"}},
+          {"section": "Storage controllers", "values": {"hdc_1": "none"}}
+        ],
+        "generated_files": []
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.commercial",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.commercial_configurations", "value_key": "product.amstrad-pc1512.technical.commercial"},
+            {"label_key": "technical.label.accessories", "value_key": "product.amstrad-pc1512.technical.accessories"}
+          ]
+        },
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.cpu_bus", "value_key": "product.amstrad-pc1512.technical.cpu"},
+            {"label_key": "technical.label.memory_map", "value_key": "product.amstrad-pc1512.technical.memory"},
+            {"label_key": "technical.label.video", "value_key": "product.amstrad-pc1512.technical.video"},
+            {"label_key": "technical.label.floppy", "value_key": "product.amstrad-pc1512.technical.floppy"},
+            {"label_key": "technical.label.hard_disk", "value_key": "product.amstrad-pc1512.technical.storage"},
+            {"label_key": "technical.label.serial_parallel", "value_key": "product.amstrad-pc1512.technical.interfaces"},
+            {"label_key": "technical.label.rtc", "value_key": "product.amstrad-pc1512.technical.rtc"}
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {"label_key": "technical.label.bios_revision", "value_key": "product.amstrad-pc1512.technical.firmware"},
+            {"label_key": "technical.label.jumpers", "value_key": "product.amstrad-pc1512.technical.jumpers"}
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "evidence_key": "technical.evidence.implementation",
+          "entries": [
+            {"label_key": "technical.label.current_state", "value_key": "product.amstrad-pc1512.technical.emulation_status"},
+            {"label_key": "technical.label.implementation_lineage", "value_key": "product.amstrad-pc1512.technical.lineage"},
+            {"label_key": "technical.label.blumach_changes", "value_key": "product.amstrad-pc1512.technical.blumach_changes"},
+            {"label_key": "technical.label.limitations", "value_key": "product.amstrad-pc1512.technical.limitations"}
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "evidence_key": "technical.evidence.traceable",
+          "entries": [
+            {"label_key": "technical.label.manual", "value_key": "product.amstrad-pc1512.technical.reference", "url": "https://www.seasip.info/AmstradXT/1512tech/section1.html"},
+            {"label_key": "technical.label.manual", "value_key": "product.amstrad-pc1512.technical.service", "url": "https://ctrl-alt-rees.com/downloads/amstrad/Amstrad_PC1512_PC-MM_PC-CM_Service_Manual.pdf"}
+          ]
+        }
+      ]
+    },
     {
       "id": "olivetti-prodest-pc1",
       "manufacturer_id": "olivetti",

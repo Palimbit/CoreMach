@@ -26,6 +26,7 @@ extern "C" {
 #include <wchar.h>
 #define HAVE_STDARG_H
 #include <86box/86box.h>
+#include <86box/machine.h>
 #include <86box/timer.h>
 #include <86box/fdd.h>
 #include <86box/cdrom.h>
@@ -149,9 +150,10 @@ SettingsFloppyCDROM::SettingsFloppyCDROM(QWidget *parent)
     model->setHeaderData(1, Qt::Horizontal, tr("Turbo"));
     model->setHeaderData(2, Qt::Horizontal, tr("Check BPB"));
 
-    model->insertRows(0, FDD_NUM);
+    floppyDriveCount = machine_get_max_fdd(machine);
+    model->insertRows(0, floppyDriveCount);
     /* Floppy drives category */
-    for (int i = 0; i < FDD_NUM; i++) {
+    for (int i = 0; i < floppyDriveCount; i++) {
         auto idx  = model->index(i, 0);
         int  type = fdd_get_type(i);
         setFloppyType(model, idx, type);
@@ -279,7 +281,7 @@ SettingsFloppyCDROM::changed()
     int soft_changed = 0;
 
     auto *model = ui->treeViewFloppy->model();
-    for (int i = 0; i < FDD_NUM; i++) {
+    for (int i = 0; i < floppyDriveCount; i++) {
         has_changed  |= (fdd_get_type(i)          != model->index(i, 0).data(Qt::UserRole).toInt());
         has_changed  |= (fdd_get_turbo(i)         != (model->index(i, 1).data() == tr("On") ? 1 : 0));
         has_changed  |= (fdd_get_check_bpb(i)     != (model->index(i, 2).data() == tr("On") ? 1 : 0));
@@ -287,6 +289,8 @@ SettingsFloppyCDROM::changed()
         has_changed  |= (fdd_get_audio_profile(i) != (int) (uint32_t) ifa[i]);
 #endif
     }
+    for (int i = floppyDriveCount; i < FDD_NUM; i++)
+        has_changed |= (fdd_get_type(i) != 0);
 
     /* Removable devices category */
     model = ui->treeViewCDROM->model();
@@ -317,12 +321,20 @@ SettingsFloppyCDROM::save(int soft)
     }
 
     auto *model = ui->treeViewFloppy->model();
-    for (int i = 0; i < FDD_NUM; i++) {
+    for (int i = 0; i < floppyDriveCount; i++) {
         fdd_set_type(i, model->index(i, 0).data(Qt::UserRole).toInt());
         fdd_set_turbo(i, model->index(i, 1).data() == tr("On") ? 1 : 0);
         fdd_set_check_bpb(i, model->index(i, 2).data() == tr("On") ? 1 : 0);
 #ifndef DISABLE_FDD_AUDIO
         fdd_set_audio_profile(i, ifa[i]);
+#endif
+    }
+    for (int i = floppyDriveCount; i < FDD_NUM; i++) {
+        fdd_set_type(i, 0);
+        fdd_set_turbo(i, 0);
+        fdd_set_check_bpb(i, 0);
+#ifndef DISABLE_FDD_AUDIO
+        fdd_set_audio_profile(i, 0);
 #endif
     }
 

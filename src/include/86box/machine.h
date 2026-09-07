@@ -357,6 +357,7 @@ typedef struct _machine_ {
     uintptr_t              flags;
     const machine_memory_t ram;
     int                    ram_granularity;
+    uint8_t                max_fdd;
     int                    nvrmask;
     int                    jumpered_ecp_dma;
     int                    default_jumpered_ecp_dma;
@@ -443,6 +444,7 @@ extern int             machine_get_min_ram(int m);
 extern int             machine_get_max_ram(int m);
 extern int             machine_get_ram_granularity(int m);
 extern int             machine_get_valid_ram(int m, int requested);
+extern int             machine_get_max_fdd(int m);
 extern int             machine_get_type(int m);
 extern int             machine_get_chipset(int m);
 extern void            machine_close(void);
@@ -482,9 +484,12 @@ extern void            machine_common_init(const machine_t *);
 
 /* m_amstrad.c */
 #ifdef EMU_DEVICE_H
+extern const device_t  pc1512_device;
 extern const device_t  vid_1512_device;
 #endif
 extern int             machine_pc1512_init(const machine_t *);
+extern void            machine_pc1512_ram_parity_error(void);
+extern void            machine_pc1512_iochck_set(int asserted);
 #ifdef EMU_DEVICE_H
 extern const device_t  vid_1640_device;
 #endif

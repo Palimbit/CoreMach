@@ -140,6 +140,17 @@ fdc_card_available(int card)
     return 1;
 }
 
+static void
+fdc_set_drq(fdc_t *fdc, int state)
+{
+    fdc->drq = !!state;
+
+    if ((fdc->flags & FDC_FLAG_PC1512) && !(fdc->dor & 0x08))
+        state = 0;
+
+    dma_set_drq(fdc->dma_ch, state);
+}
+
 const device_t *
 fdc_card_getdevice(int card)
 {
@@ -311,7 +322,7 @@ fdc_request_next_sector_id(fdc_t *fdc)
         fdc->stat = 0xf0;
     else {
         fdc_log("FDC command %02X: Raise DRQ on request next sector ID\n", fdc->processed_cmd);
-        dma_set_drq(fdc->dma_ch, 1);
+        fdc_set_drq(fdc, 1);
         fdc->stat = 0x50;
     }
 }
@@ -783,7 +794,7 @@ fdc_io_command_phase1(fdc_t *fdc, int out)
             fdc->stat |= 0x80;
     } else {
         fdc_log("FDC command %02X: Raise DRQ on command phase 1\n", fdc->processed_cmd);
-        dma_set_drq(fdc->dma_ch, 1);
+        fdc_set_drq(fdc, 1);
     }
 }
 
@@ -946,14 +957,19 @@ fdc_write(uint16_t addr, uint8_t val, void *priv)
                         drive_num = real_drive(fdc, i);
                         if ((!fdd_get_flags(drive_num)) || (drive_num >= FDD_NUM))
                             val &= ~(0x10 << drive_num);
-                        else
+                        else if (!(fdc->flags & FDC_FLAG_PC1512) ||
+                                 (((val & 0x03) == drive_num) && (drive_num < 2)))
                             fdd_set_motor_enable(i, (val & (0x10 << drive_num)));
+                        else
+                            fdd_set_motor_enable(i, 0);
                     }
                     drive_num     = real_drive(fdc, val & 0x03);
                     current_drive = drive_num;
                     fdc->st0      = (fdc->st0 & 0xf8) | (val & 0x03) | (fdd_get_head(drive_num) ? 4 : 0);
                 }
                 fdc->dor = val;
+                if (fdc->flags & FDC_FLAG_PC1512)
+                    dma_set_drq(fdc->dma_ch, fdc->drq && (fdc->dor & 0x08));
                 return;
             case 3: /* TDR */
                 if (fdc->enh_mode) {
@@ -1281,7 +1297,7 @@ fdc_write(uint16_t addr, uint8_t val, void *priv)
                                 fdc->dma        = (fdc->specify[1] & 1) ^ 1;
                                 if (!fdc->dma) {
                                     fdc_log("FDC command %02X: Lower DRQ on DMA mode disable\n", fdc->processed_cmd);
-                                    dma_set_drq(fdc->dma_ch, 0);
+                                    fdc_set_drq(fdc, 0);
                                 }
                                 break;
                             case 0x04: /*Sense drive status*/
@@ -1772,7 +1788,7 @@ fdc_poll_common_finish(fdc_t *fdc, int compare, int st5)
     ui_sb_update_icon_write(SB_FLOPPY | real_drive(fdc, fdc->drive), 0);
     fdc->paramstogo = 7;
     fdc_log("FDC command %02X: Lower DRQ on finish\n", fdc->processed_cmd);
-    dma_set_drq(fdc->dma_ch, 0);
+    fdc_set_drq(fdc, 0);
 }
 
 static void
@@ -1850,23 +1866,30 @@ fdc_callback(void *priv)
                     fdc->stat = 0x70;
                 else {
                     fdc_log("FDC command %02X: Raise DRQ on callback\n", fdc->processed_cmd);
-                    dma_set_drq(fdc->dma_ch, 1);
+                    fdc_set_drq(fdc, 1);
                     fdc->stat = 0x50;
                 }
             }
             return;
         case 0x04: /* Sense drive status */
-            fdc->res[10] = (fdc->params[0] & 7) | 0x20;
-            if (fdd_is_double_sided(real_drive(fdc, fdc->drive)))
-                fdc->res[10] |= 0x08;
-            if ((real_drive(fdc, fdc->drive) != 1) || fdc->drv2en) {
-                if (fdd_track0(real_drive(fdc, fdc->drive)))
-                    fdc->res[10] |= 0x10;
+            /* The PC1512 decodes only drive-select values 0 and 1.  Values
+             * 2 and 3 select no connector, so the controller must not expose
+             * any state from a configured global FDD slot. */
+            fdc->res[10] = fdc->params[0] & 7;
+            if (!((fdc->flags & FDC_FLAG_PC1512) &&
+                  ((fdc->dor & 0x03) >= 2))) {
+                fdc->res[10] |= 0x20;
+                if (fdd_is_double_sided(real_drive(fdc, fdc->drive)))
+                    fdc->res[10] |= 0x08;
+                if ((real_drive(fdc, fdc->drive) != 1) || fdc->drv2en) {
+                    if (fdd_track0(real_drive(fdc, fdc->drive)))
+                        fdc->res[10] |= 0x10;
+                }
+                if (writeprot[fdc->drive])
+                    fdc->res[10] |= 0x40;
+                if ((fdc->flags & FDC_FLAG_5550) && drive_empty[fdc->drive]) // IBM 5550
+                    fdc->res[10] &= 0xdf; /* Set Not Ready */
             }
-            if (writeprot[fdc->drive])
-                fdc->res[10] |= 0x40;
-            if ((fdc->flags & FDC_FLAG_5550) && drive_empty[fdc->drive])//IBM 5550
-                fdc->res[10] &= 0xdf; /* Set Not Ready */
 
             fdc->stat       = (fdc->stat & 0xf) | 0xd0;
             fdc->paramstogo = 1;
@@ -1981,7 +2004,7 @@ fdc_callback(void *priv)
                     else {
                         if (fifo_get_empty(fdc->fifo_p)) {
                             fdc_log("FDC command %02X: Raise DRQ on callback\n", fdc->processed_cmd);
-                            dma_set_drq(fdc->dma_ch, 1);
+                            fdc_set_drq(fdc, 1);
                         }
                         fdc->stat = 0x10;
                     }
@@ -1995,7 +2018,7 @@ fdc_callback(void *priv)
                     else {
                         if (fifo_get_empty(fdc->fifo_p)) {
                             fdc_log("FDC command %02X: Raise DRQ on callback\n", fdc->processed_cmd);
-                            dma_set_drq(fdc->dma_ch, 1);
+                            fdc_set_drq(fdc, 1);
                         }
                        fdc->stat = 0x50;
                     }
@@ -2009,7 +2032,7 @@ fdc_callback(void *priv)
                     else {
                         if (fifo_get_empty(fdc->fifo_p)) {
                             fdc_log("FDC command %02X: Raise DRQ on callback\n", fdc->processed_cmd);
-                            dma_set_drq(fdc->dma_ch, 1);
+                            fdc_set_drq(fdc, 1);
                         }
                         fdc->stat = 0x10;
                     }
@@ -2141,7 +2164,7 @@ void
 fdc_error(fdc_t *fdc, int st5, int st6)
 {
     fdc_log("FDC command %02X: Lower DRQ on error\n", fdc->processed_cmd);
-    dma_set_drq(fdc->dma_ch, 0);
+    fdc_set_drq(fdc, 0);
     timer_disable(&fdc->timer);
 
     fdc_int(fdc, 1);
@@ -2240,19 +2263,19 @@ fdc_data(fdc_t *fdc, uint8_t data, int last)
             fdc->data_ready = 1;
             fdc->stat       = 0x50;
             fdc_log("FDC command %02X: Raise DRQ on data read from drive without FIFO\n", fdc->processed_cmd);
-            dma_set_drq(fdc->dma_ch, 1);
+            fdc_set_drq(fdc, 1);
 
             fdc->dat = data;
             result = dma_channel_write(fdc->dma_ch, data);
 
             if (result & DMA_OVER) {
                 fdc_log("FDC command %02X: Lower DRQ on data read from drive without FIFO #1\n", fdc->processed_cmd);
-                dma_set_drq(fdc->dma_ch, 0);
+                fdc_set_drq(fdc, 0);
                 fdc->tc = 1;
                 return -1;
             }
             fdc_log("FDC command %02X: Lower DRQ on data read from drive without FIFO #2\n", fdc->processed_cmd);
-            dma_set_drq(fdc->dma_ch, 0);
+            fdc_set_drq(fdc, 0);
         } else {
             /* FIFO enabled */
             fifo_write(data, fdc->fifo_p);
@@ -2261,20 +2284,20 @@ fdc_data(fdc_t *fdc, uint8_t data, int last)
                 fdc->data_ready = 1;
                 fdc->stat       = 0x50;
                 fdc_log("FDC command %02X: Raise DRQ on data read from drive with FIFO\n", fdc->processed_cmd);
-                dma_set_drq(fdc->dma_ch, 1);
+                fdc_set_drq(fdc, 1);
 
                 while (!fifo_get_empty(fdc->fifo_p)) {
                     result = dma_channel_write(fdc->dma_ch, fifo_read(fdc->fifo_p));
 
                     if (result & DMA_OVER) {
                         fdc_log("FDC command %02X: Lower DRQ on data read from drive with FIFO #1\n", fdc->processed_cmd);
-                        dma_set_drq(fdc->dma_ch, 0);
+                        fdc_set_drq(fdc, 0);
                         fdc->tc = 1;
                         return -1;
                     }
                 }
                 fdc_log("FDC command %02X: Lower DRQ on data read from drive with FIFO #2\n", fdc->processed_cmd);
-                dma_set_drq(fdc->dma_ch, 0);
+                fdc_set_drq(fdc, 0);
             }
         }
     }
@@ -2395,14 +2418,14 @@ fdc_getdata(fdc_t *fdc, int last)
         if (!fdc->fifo || (fdc->tfifo < 1)) {
             data = dma_channel_read(fdc->dma_ch);
             fdc_log("FDC command %02X: Lower DRQ on data write to drive without FIFO\n", fdc->processed_cmd);
-            dma_set_drq(fdc->dma_ch, 0);
+            fdc_set_drq(fdc, 0);
 
             if (data & DMA_OVER)
                 fdc->tc = 1;
 
             if (!last) {
                 fdc_log("FDC command %02X: Raise DRQ on data write to drive without FIFO\n", fdc->processed_cmd);
-                dma_set_drq(fdc->dma_ch, 1);
+                fdc_set_drq(fdc, 1);
                 fdc->stat = 0x10;
             }
         } else {
@@ -2416,7 +2439,7 @@ fdc_getdata(fdc_t *fdc, int last)
 
                     if (data & DMA_OVER) {
                         fdc_log("FDC command %02X: Lower DRQ on data write to drive with FIFO #1\n", fdc->processed_cmd);
-                        dma_set_drq(fdc->dma_ch, 0);
+                        fdc_set_drq(fdc, 0);
                         fdc->tc = 1;
                         break;
                     }
@@ -2424,7 +2447,7 @@ fdc_getdata(fdc_t *fdc, int last)
 
                 if (dma_get_drq(fdc->dma_ch)) {
                     fdc_log("FDC command %02X: Lower DRQ on data write to drive with FIFO #2\n", fdc->processed_cmd);
-                    dma_set_drq(fdc->dma_ch, 0);
+                    fdc_set_drq(fdc, 0);
                 }
             }
 
@@ -2433,7 +2456,7 @@ fdc_getdata(fdc_t *fdc, int last)
 
             if (!last && fifo_get_empty(fdc->fifo_p)) {
                 fdc_log("FDC command %02X: Raise DRQ on data write to drive with FIFO\n", fdc->processed_cmd);
-                dma_set_drq(fdc->dma_ch, 1);
+                fdc_set_drq(fdc, 1);
                 fdc->stat = 0x10;
             }
         }
@@ -2457,7 +2480,7 @@ fdc_sectorid(fdc_t *fdc, uint8_t track, uint8_t side, uint8_t sector, uint8_t si
     ui_sb_update_icon(SB_FLOPPY | real_drive(fdc, fdc->drive), 0);
     fdc->paramstogo = 7;
     fdc_log("FDC command %02X: Lower DRQ on returning sector ID\n", fdc->processed_cmd);
-    dma_set_drq(fdc->dma_ch, 0);
+    fdc_set_drq(fdc, 0);
 }
 
 uint8_t
@@ -2600,6 +2623,13 @@ fdc_reset(void *priv)
     uint8_t default_rwc;
 
     fdc_t *fdc = (fdc_t *) priv;
+
+    if (fdc->flags & FDC_FLAG_PC1512) {
+        fdc->dor = 0x00;
+        fdc_set_drq(fdc, 0);
+        for (uint8_t i = 0; i < FDD_NUM; i++)
+            fdd_set_motor_enable(i, 0);
+    }
 
     /* Reset boot status to POST on controller reset */
     fdd_boot_status_reset();
@@ -2773,6 +2803,20 @@ const device_t fdc_xt_device = {
     .internal_name = "fdc_xt",
     .flags         = DEVICE_ISA,
     .local         = 0,
+    .init          = fdc_init,
+    .close         = fdc_close,
+    .reset         = fdc_reset,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t fdc_xt_pc1512_device = {
+    .name          = "Amstrad PC1512 FDC",
+    .internal_name = "fdc_xt_pc1512",
+    .flags         = DEVICE_SOFTRESET,
+    .local         = FDC_FLAG_PC1512,
     .init          = fdc_init,
     .close         = fdc_close,
     .reset         = fdc_reset,

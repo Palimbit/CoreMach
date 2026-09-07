@@ -326,7 +326,7 @@ extern void    video_force_resize_set_monitor(uint8_t res, int monitor_index);
 extern void    video_update_timing(void);
 
 #define LOAD_FONT_NO_OFFSET       0
-extern void     video_load_font(char *fn, int format, int offset);
+extern void     video_load_font(const char *fn, int format, int offset);
 extern uint32_t video_color_transform(uint32_t color);
 
 extern void     video_clamp_vram(uint64_t bios_flags, int *vram);

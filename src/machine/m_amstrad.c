@@ -62,6 +62,7 @@
 #include <86box/mouse.h>
 #include <86box/gameport.h>
 #include <86box/lpt.h>
+#include <86box/serial.h>
 #include <86box/fdd.h>
 #include <86box/fdc.h>
 #include <86box/hdc.h>
@@ -110,6 +111,7 @@ typedef struct amsvid_t {
     uint8_t    cgacol;
     uint8_t    cgamode;
     uint8_t    status;
+    uint8_t    lp_strobe;
     uint8_t    plane_write; /* 1512/200 */
     uint8_t    plane_read;  /* 1512/200 */
     uint8_t    border;      /* 1512/200 */
@@ -154,18 +156,30 @@ typedef struct amstrad_t {
     uint8_t    pa;
     uint8_t    pb;
     pc_timer_t send_delay_timer;
+    pc_timer_t keyboard_reset_timer;
+    uint8_t    keyboard_reset_asserted;
+
+    /* PC1512 parity/NMI sources. */
+    uint8_t ram_parity_latch;
+    uint8_t iochck_input;
+    uint8_t iochck_latch;
 
     /* Mouse stuff. */
-    int oldb;
+    int     oldb;
+    uint8_t mouse_x;
+    uint8_t mouse_y;
 
     /* Video stuff. */
     amsvid_t *vid;
 
     fdc_t *fdc;
     lpt_t *lpt;
+    serial_t *uart;
 } amstrad_t;
 
 uint32_t amstrad_latch;
+
+static amstrad_t *pc1512_mainboard;
 
 static uint8_t key_queue[16];
 static int     key_queue_start = 0;
@@ -229,6 +243,45 @@ amstrad_log(const char *fmt, ...)
 #endif
 
 static void
+pc1512_set_fixed_crtc(amsvid_t *vid)
+{
+    const int graphics = !!(vid->cgamode & CGA_MODE_FLAG_GRAPHICS);
+    const int columns80 = !graphics && !!(vid->cgamode & CGA_MODE_FLAG_HIGHRES);
+
+    /* These 6845-compatible registers are hard-wired in the PC1512 VDU. */
+    vid->crtc[0] = columns80 ? 113 : 56;
+    vid->crtc[2] = columns80 ? 90 : 45;
+    vid->crtc[3] = 10;
+    vid->crtc[4] = graphics ? 127 : 31;
+    vid->crtc[5] = 6;
+    vid->crtc[7] = graphics ? 112 : 28;
+    vid->crtc[8] = 2;
+
+    /* R1 and R6 are blanking switches: their non-zero magnitude is ignored. */
+    if (vid->crtc[1])
+        vid->crtc[1] = columns80 ? 80 : 40;
+    if (vid->crtc[6])
+        vid->crtc[6] = graphics ? 100 : 25;
+}
+
+static void
+pc1512_lightpen_latch(amsvid_t *vid)
+{
+    const int      graphics = !!(vid->cgamode & CGA_MODE_FLAG_GRAPHICS);
+    const int      columns80 = !graphics && !!(vid->cgamode & CGA_MODE_FLAG_HIGHRES);
+    const uint16_t address_mask = graphics ? 0x0fff : 0x1fff;
+    const uint16_t pipeline_offset = columns80 ? 3 : 1;
+    const uint16_t latch = (vid->memaddr + pipeline_offset) & address_mask;
+
+    /* The PC1512 reference specifies M+1/M+2 in graphics and alpha-40,
+     * and M+3/M+4 in alpha-80.  The line-oriented renderer cannot expose
+     * the sub-character phase, so use the earlier documented phase rather
+     * than introduce a random result. */
+    vid->crtc[16] = latch >> 8;
+    vid->crtc[17] = latch & 0xff;
+}
+
+static void
 recalc_timings_1512(amsvid_t *vid)
 {
     double _dispontime;
@@ -242,6 +295,48 @@ recalc_timings_1512(amsvid_t *vid)
     _dispofftime *= CGACONST;
     vid->dispontime  = (uint64_t) (int64_t) _dispontime;
     vid->dispofftime = (uint64_t) (int64_t) _dispofftime;
+}
+
+static void
+vid_reset_1512(void *priv)
+{
+    amsvid_t *vid = (amsvid_t *) priv;
+    const uint8_t lp_msb = vid->crtc[16];
+    const uint8_t lp_lsb = vid->crtc[17];
+
+    /* The PC1512 resets the VDU control registers, but not display RAM or
+     * the light-pen latch and its captured R16/R17 position. */
+    memset(vid->crtc, 0, sizeof(vid->crtc));
+    vid->crtc[1]  = 40;
+    vid->crtc[6]  = 25;
+    vid->crtc[9]  = 7;
+    vid->crtc[10] = 6;
+    vid->crtc[11] = 7;
+    vid->crtc[16] = lp_msb;
+    vid->crtc[17] = lp_lsb;
+
+    vid->crtcreg    = 0;
+    vid->cgamode    = 0;
+    vid->cgacol     = 0;
+    vid->plane_write = 0x0f;
+    vid->plane_read = 0;
+    vid->border     = 0;
+    vid->status     = 0;
+    vid->memaddr    = 0;
+    vid->memaddr_backup = 0;
+    vid->linepos    = 0;
+    vid->displine   = 0;
+    vid->scanline   = 0;
+    vid->vc         = 0;
+    vid->cgadispon  = 0;
+    vid->cursorvisible = 0;
+    vid->cursoron   = 0;
+    vid->vsynctime  = 0;
+    vid->vadj       = 0;
+    vid->dispon     = 0;
+
+    pc1512_set_fixed_crtc(vid);
+    recalc_timings_1512(vid);
 }
 
 static void
@@ -259,9 +354,30 @@ vid_out_1512(uint16_t addr, uint8_t val, void *priv)
             return;
 
         case 0x03d5:
-            old                     = vid->crtc[vid->crtcreg];
-            vid->crtc[vid->crtcreg] = val & crtc_mask[vid->crtcreg];
-            if (old != val) {
+            old = vid->crtc[vid->crtcreg];
+            switch (vid->crtcreg) {
+                case 1:
+                    vid->crtc[1] = !!val;
+                    pc1512_set_fixed_crtc(vid);
+                    break;
+                case 6:
+                    vid->crtc[6] = !!val;
+                    pc1512_set_fixed_crtc(vid);
+                    break;
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                case 13:
+                case 14:
+                case 15:
+                    vid->crtc[vid->crtcreg] = val & crtc_mask[vid->crtcreg];
+                    break;
+                default:
+                    /* R0, R2-R5 and R7-R8 are fixed; R16-R17 are read-only. */
+                    break;
+            }
+            if (old != vid->crtc[vid->crtcreg]) {
                 if (vid->crtcreg < 0xe || vid->crtcreg > 0x10) {
                     vid->fullchange = changeframecount;
                     recalc_timings_1512(vid);
@@ -270,27 +386,46 @@ vid_out_1512(uint16_t addr, uint8_t val, void *priv)
             return;
 
         case 0x03d8:
-            if ((val & 0x12) == 0x12 && (vid->cgamode & 0x12) != 0x12) {
+            if ((val & 0x12) != 0x12) {
                 vid->plane_write = 0xf;
                 vid->plane_read  = 0;
+            } else if ((vid->cgamode & 0x12) != 0x12) {
+                vid->plane_write = 0xf;
+                vid->plane_read  = 0;
+                vid->border      = 0;
             }
-            vid->cgamode = val;
+            vid->cgamode = val & 0x3f;
+            pc1512_set_fixed_crtc(vid);
             return;
 
         case 0x03d9:
-            vid->cgacol = val;
+            vid->cgacol = val & 0x3f;
+            return;
+
+        case 0x03db:
+            vid->lp_strobe = 0;
+            return;
+
+        case 0x03dc:
+            if (!vid->lp_strobe) {
+                vid->lp_strobe = 1;
+                pc1512_lightpen_latch(vid);
+            }
             return;
 
         case 0x03dd:
-            vid->plane_write = val;
+            if ((vid->cgamode & 0x12) == 0x12)
+                vid->plane_write = val & 0x0f;
             return;
 
         case 0x03de:
-            vid->plane_read = val & 3;
+            if ((vid->cgamode & 0x12) == 0x12)
+                vid->plane_read = val & 3;
             return;
 
         case 0x03df:
-            vid->border = val;
+            if ((vid->cgamode & 0x12) == 0x12)
+                vid->border = val & 0x0f;
             return;
 
         default:
@@ -301,8 +436,8 @@ vid_out_1512(uint16_t addr, uint8_t val, void *priv)
 static uint8_t
 vid_in_1512(uint16_t addr, void *priv)
 {
-    const amsvid_t *vid = (amsvid_t *) priv;
-    uint8_t         ret = 0xff;
+    amsvid_t *vid = (amsvid_t *) priv;
+    uint8_t   ret = 0xff;
 
     if ((addr >= 0x3d0) && (addr <= 0x3d7))
         addr = (addr & 0xff9) | 0x004;
@@ -317,7 +452,9 @@ vid_in_1512(uint16_t addr, void *priv)
             break;
 
         case 0x03da:
-            ret = vid->status;
+            ret = vid->status | (vid->lp_strobe ? 0x02 : 0x00) |
+                  ((!cga_lightpen_enabled || !tablet_get_buttons_ex()) ? 0x04 : 0x00);
+            vid->status ^= 1;
             break;
 
         default:
@@ -335,15 +472,24 @@ vid_write_1512(uint32_t addr, uint8_t val, void *priv)
     cycles -= 12;
     addr &= 0x3fff;
 
-    if ((vid->cgamode & 0x12) == 0x12) {
-        if (vid->plane_write & 1)
-            vid->vram[addr] = val;
-        if (vid->plane_write & 2)
+    if (vid->cgamode & CGA_MODE_FLAG_GRAPHICS) {
+        if (vid->cgamode & CGA_MODE_FLAG_HIGHRES_GRAPHICS) {
+            if (vid->plane_write & 1)
+                vid->vram[addr] = val;
+            if (vid->plane_write & 2)
+                vid->vram[addr | 0x4000] = val;
+            if (vid->plane_write & 4)
+                vid->vram[addr | 0x8000] = val;
+            if (vid->plane_write & 8)
+                vid->vram[addr | 0xc000] = val;
+        } else {
+            /* Graphics mode 1 broadcasts CPU writes to all four physical
+             * planes even though reads and display fetches use plane 0. */
+            vid->vram[addr]          = val;
             vid->vram[addr | 0x4000] = val;
-        if (vid->plane_write & 4)
             vid->vram[addr | 0x8000] = val;
-        if (vid->plane_write & 8)
             vid->vram[addr | 0xc000] = val;
+        }
     } else
         vid->vram[addr] = val;
 }
@@ -514,10 +660,9 @@ vid_poll_1512(void *priv)
 
     if (!vid->linepos) {
         timer_advance_u64(&vid->timer, vid->dispofftime);
-        vid->status |= 1;
         vid->linepos = 1;
         scanline_old = vid->scanline;
-        if (vid->dispon) {
+        if (vid->dispon && vid->crtc[1] && vid->crtc[6]) {
             if (vid->displine < vid->firstline) {
                 vid->firstline = vid->displine;
                 video_wait_for_buffer();
@@ -577,8 +722,6 @@ vid_poll_1512(void *priv)
         timer_advance_u64(&vid->timer, vid->dispontime);
         if ((vid->lastline - vid->firstline) == 199)
             vid->dispon = 0; /*Amstrad PC1512 always displays 200 lines, regardless of CRTC settings*/
-        if (vid->dispon)
-            vid->status &= ~1;
         vid->linepos = 0;
         if (vid->vsynctime) {
             vid->vsynctime--;
@@ -687,11 +830,10 @@ vid_init_1512(amstrad_t *ams)
     video_inform(VIDEO_FLAG_TYPE_CGA, &timing_pc1512);
 
     vid->vram    = calloc(1, 0x10000);
-    vid->cgacol  = 7;
-    vid->cgamode = 0x12;
+    vid_reset_1512(vid);
 
     timer_add(&vid->timer, vid_poll_1512, vid, 1);
-    mem_mapping_add(&vid->cga.mapping, 0xb8000, 0x08000,
+    mem_mapping_add(&vid->cga.mapping, 0xb8000, 0x04000,
                     vid_read_1512, NULL, NULL, vid_write_1512, NULL, NULL,
                     NULL, 0, vid);
     io_sethandler(0x03d0, 16,
@@ -732,7 +874,7 @@ const device_config_t vid_1512_config[] = {
     // clang-format off
     {
         .name           = "display_type",
-        .description    = "Display type",
+        .description    = "Monitor type",
         .type           = CONFIG_SELECTION,
         .default_string = NULL,
         .default_int    = 0,
@@ -764,7 +906,7 @@ const device_config_t vid_1512_config[] = {
     },
     {
         .name           = "codepage",
-        .description    = "Hardware font",
+        .description    = "Character ROM selection (LK6-LK7)",
         .type           = CONFIG_SELECTION,
         .default_string = NULL,
         .default_int    = 3,
@@ -778,9 +920,64 @@ const device_config_t vid_1512_config[] = {
         },
         .bios           = { { 0 } }
     },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+static const device_config_t pc1512_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "legacy_v1_40078",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "Version 1 ROS with 40078 font (legacy approximation)",
+                .internal_name = "legacy_v1_40078",
+                .bios_type     = BIOS_INTERLEAVED,
+                .files_no      = 3,
+                .local         = 0,
+                .size          = 16384,
+                .files         = { "roms/machines/pc1512/40044", "roms/machines/pc1512/40043", "roms/machines/pc1512/40078", "" }
+            },
+            {
+                .name          = "Version 1 (1986)",
+                .internal_name = "v1",
+                .bios_type     = BIOS_INTERLEAVED,
+                .files_no      = 3,
+                .local         = 0,
+                .size          = 16384,
+                .files         = { "roms/machines/pc1512/40044", "roms/machines/pc1512/40043", "roms/machines/pc1512/40045", "" }
+            },
+            {
+                .name          = "Version 2",
+                .internal_name = "v2",
+                .bios_type     = BIOS_INTERLEAVED,
+                .files_no      = 3,
+                .local         = 0,
+                .size          = 16384,
+                .files         = { "roms/machines/pc1512/40044v2", "roms/machines/pc1512/40043v2", "roms/machines/pc1512/40078", "" }
+            },
+            {
+                .name          = "Version 3",
+                .internal_name = "v3",
+                .bios_type     = BIOS_INTERLEAVED,
+                .files_no      = 3,
+                .local         = 0,
+                .size          = 16384,
+                .files         = { "roms/machines/pc1512/40044-2", "roms/machines/pc1512/40043-2", "roms/machines/pc1512/40078", "" }
+            },
+            { .files_no = 0 }
+        }
+    },
     {
         .name           = "language",
-        .description    = "BIOS Language",
+        .description    = "BIOS Language (LK1-LK3)",
         .type           = CONFIG_SELECTION,
         .default_string = NULL,
         .default_int    = 7,
@@ -803,14 +1000,46 @@ const device_config_t vid_1512_config[] = {
     // clang-format on
 };
 
-const device_t vid_1512_device = {
-    .name          = "Amstrad PC1512 (Video)",
-    .internal_name = "vid_1512",
+static void pc1512_board_reset(void *priv);
+static void pc1512_board_close(void *priv);
+static void pc1512_nmi_mask_changed(int enabled, void *priv);
+
+static const device_t pc1512_board_device = {
+    .name          = "Amstrad PC1512 Mainboard",
+    .internal_name = "pc1512_mainboard",
+    .flags         = DEVICE_SOFTRESET,
+    .local         = 0,
+    .init          = NULL,
+    .close         = pc1512_board_close,
+    .reset         = pc1512_board_reset,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t pc1512_device = {
+    .name          = "Amstrad PC1512",
+    .internal_name = "pc1512",
     .flags         = 0,
     .local         = 0,
     .init          = NULL,
-    .close         = vid_close_1512,
+    .close         = NULL,
     .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = pc1512_config
+};
+
+const device_t vid_1512_device = {
+    .name          = "Amstrad PC1512 (Video)",
+    .internal_name = "vid_1512",
+    .flags         = DEVICE_SOFTRESET,
+    .local         = 0,
+    .init          = NULL,
+    .close         = vid_close_1512,
+    .reset         = vid_reset_1512,
     .available     = NULL,
     .speed_changed = vid_speed_change_1512,
     .force_redraw  = NULL,
@@ -2123,31 +2352,50 @@ const device_t vid_pc3086_device = {
 };
 
 static void
-ms_write(uint16_t addr, UNUSED(uint8_t val), UNUSED(void *priv))
+ms_update_motion(amstrad_t *ams)
 {
-    if ((addr == 0x78) || (addr == 0x79))
-        mouse_clear_x();
-    else
-        mouse_clear_y();
+    int delta;
+    int overflow;
+
+    /* The board contains free-running 8-bit counters, not signed saturating
+     * host accumulators. Drain every pending host increment and let uint8_t
+     * arithmetic reproduce the documented positive-to-negative wrap. */
+    do {
+        delta = overflow = 0;
+        mouse_subtract_x(&delta, &overflow, -32768, 32767, 0);
+        ams->mouse_x += (uint8_t) delta;
+    } while (overflow);
+
+    do {
+        delta = overflow = 0;
+        mouse_subtract_y(&delta, &overflow, -32768, 32767, 1, 0);
+        ams->mouse_y += (uint8_t) delta;
+    } while (overflow);
+}
+
+static void
+ms_write(uint16_t addr, UNUSED(uint8_t val), void *priv)
+{
+    amstrad_t *ams = (amstrad_t *) priv;
+
+    /* Account for motion which occurred before this I/O cycle, then clear
+     * only the selected physical counter. */
+    ms_update_motion(ams);
+    if (addr == 0x78)
+        ams->mouse_x = 0;
+    else if (addr == 0x7a)
+        ams->mouse_y = 0;
 }
 
 static uint8_t
-ms_read(uint16_t addr, UNUSED(void *priv))
+ms_read(uint16_t addr, void *priv)
 {
-    uint8_t ret;
-    int     delta = 0;
+    amstrad_t *ams = (amstrad_t *) priv;
 
-    if ((addr == 0x78) || (addr == 0x79)) {
-        mouse_subtract_x(&delta, NULL, -128, 127, 0);
-        mouse_clear_x();
-    } else {
-        mouse_subtract_y(&delta, NULL, -128, 127, 1, 0);
-        mouse_clear_y();
-    }
-
-    ret = (uint8_t) (int8_t) delta;
-
-    return ret;
+    /* Reads are non-destructive. Amstrad's driver performs a separate write
+     * after its read, normally every 18 ms. */
+    ms_update_motion(ams);
+    return (addr == 0x78) ? ams->mouse_x : ams->mouse_y;
 }
 
 static int
@@ -2155,6 +2403,8 @@ ms_poll(void *priv)
 {
     amstrad_t *ams = (amstrad_t *) priv;
     int        b   = mouse_get_buttons_ex();
+
+    ms_update_motion(ams);
 
     if ((b & 1) && !(ams->oldb & 1))
         keyboard_send(0x7e);
@@ -2185,6 +2435,99 @@ kbd_adddata_ex(uint16_t val)
 }
 
 static void
+pc1512_keyboard_reset(void *priv)
+{
+    amstrad_t *ams = (amstrad_t *) priv;
+
+    /* KBCLK must remain low for at least 10 ms before the keyboard MCU is
+     * reset.  Keep it in reset until PB6 releases the clock line. */
+    if (!(ams->pb & 0x40)) {
+        ams->keyboard_reset_asserted = 1;
+        ams->pa                      = 0;
+        ams->wantirq                 = 0;
+        key_queue_start = key_queue_end = 0;
+        picintc(2);
+    }
+}
+
+static void
+pc1512_board_reset(void *priv)
+{
+    amstrad_t *ams = (amstrad_t *) priv;
+
+    /* System reset restores the board control paths and disables NMI. */
+    nmi_mask = 0;
+    ams->pa = ams->pb = 0;
+    ppi.pb = 0;
+    ams->wantirq = 0;
+    ams->key_waiting = 0;
+    ams->ram_parity_latch = 0;
+    ams->iochck_input     = 0;
+    ams->iochck_latch     = 0;
+    key_queue_start = key_queue_end = 0;
+    picintc(2);
+
+    ams->keyboard_reset_asserted = 0;
+    timer_disable(&ams->keyboard_reset_timer);
+    timer_set_delay_u64(&ams->keyboard_reset_timer, 10000 * TIMER_USEC);
+}
+
+static void
+pc1512_board_close(void *priv)
+{
+    if (pc1512_mainboard == priv) {
+        nmi_set_mask_callback(NULL, NULL);
+        pc1512_mainboard = NULL;
+    }
+}
+
+static void
+pc1512_nmi_mask_changed(int enabled, void *priv)
+{
+    const amstrad_t *ams = (const amstrad_t *) priv;
+
+    if (enabled &&
+        ((ams->ram_parity_latch && !(ams->pb & 0x10)) ||
+         (ams->iochck_latch && !(ams->pb & 0x20))))
+        nmi_raise();
+}
+
+void
+machine_pc1512_ram_parity_error(void)
+{
+    amstrad_t *ams = pc1512_mainboard;
+
+    if ((ams == NULL) || (ams->type != AMS_PC1512) || (ams->pb & 0x10))
+        return;
+
+    /* This is a deterministic hardware input. Normal RAM traffic never
+     * invents a parity fault; a diagnostic or a parity-aware memory model
+     * must report an actual mismatch through this entry point. */
+    if (!ams->ram_parity_latch) {
+        ams->ram_parity_latch = 1;
+        if (nmi_mask)
+            nmi_raise();
+    }
+}
+
+void
+machine_pc1512_iochck_set(int asserted)
+{
+    amstrad_t *ams = pc1512_mainboard;
+
+    if ((ams == NULL) || (ams->type != AMS_PC1512))
+        return;
+
+    asserted = !!asserted;
+    if (asserted && !ams->iochck_input && !(ams->pb & 0x20)) {
+        ams->iochck_latch = 1;
+        if (nmi_mask)
+            nmi_raise();
+    }
+    ams->iochck_input = asserted;
+}
+
+static void
 kbd_write(uint16_t port, uint8_t val, void *priv)
 {
     amstrad_t *ams = (amstrad_t *) priv;
@@ -2206,9 +2549,37 @@ kbd_write(uint16_t port, uint8_t val, void *priv)
              *  0   8253 GATE 2 (Speaker Modulate).
              *
              * This register is controlled by BIOS and/or ROS.
-             */
+            */
             amstrad_log("AMSkb: write PB %02x (%02x)\n", val, ams->pb);
-            if (!(ams->pb & 0x40) && (val & 0x40)) { /*Reset keyboard*/
+            if (ams->type == AMS_PC1512) {
+                /* On PC/XT-class parity logic, asserting the inhibit inputs
+                 * releases their error latches. The Amstrad manual documents
+                 * the masks and live-vs-latched PC6 mux but not the latch-clear
+                 * gate itself, so this reset edge is an explicit inference. */
+                if (!(ams->pb & 0x10) && (val & 0x10))
+                    ams->ram_parity_latch = 0;
+                if (!(ams->pb & 0x20) && (val & 0x20))
+                    ams->iochck_latch = 0;
+                else if ((ams->pb & 0x20) && !(val & 0x20) &&
+                         ams->iochck_input) {
+                    ams->iochck_latch = 1;
+                    if (nmi_mask)
+                        nmi_raise();
+                }
+
+                if ((ams->pb & 0x40) && !(val & 0x40)) {
+                    ams->keyboard_reset_asserted = 0;
+                    timer_set_delay_u64(&ams->keyboard_reset_timer,
+                                        10000 * TIMER_USEC);
+                } else if (!(ams->pb & 0x40) && (val & 0x40)) {
+                    timer_disable(&ams->keyboard_reset_timer);
+                    if (ams->keyboard_reset_asserted) {
+                        amstrad_log("AMSkb: release keyboard reset\n");
+                        ams->keyboard_reset_asserted = 0;
+                        kbd_adddata(0xaa);
+                    }
+                }
+            } else if (!(ams->pb & 0x40) && (val & 0x40)) {
                 amstrad_log("AMSkb: reset keyboard\n");
                 kbd_adddata(0xaa);
             }
@@ -2223,8 +2594,12 @@ kbd_write(uint16_t port, uint8_t val, void *priv)
             pit_devs[0].set_gate(pit_devs[0].data, 2, val & 0x01);
 
             if (val & 0x80) {
-                /* Keyboard enabled, so enable PA reading. */
+                /* Status-1 selection disables keyboard data and IRQ1. */
                 ams->pa = 0x00;
+                if (ams->type == AMS_PC1512) {
+                    ams->wantirq = 0;
+                    picintc(2);
+                }
             }
             break;
 
@@ -2240,7 +2615,12 @@ kbd_write(uint16_t port, uint8_t val, void *priv)
             break;
 
         case 0x66:
-            softresetx86();
+            /* A PC1512 system reset also pulses RESET on the expansion bus.
+             * hardresetx86() resets the DMA and every registered device while
+             * preserving system RAM, matching the externally visible result.
+             * The physical 512 us pulse width is not time-resolved here. */
+            nmi_mask = 0;
+            hardresetx86();
             break;
 
         default:
@@ -2282,6 +2662,13 @@ kbd_read(uint16_t port, void *priv)
                 ret = (ams->stat1 | 0x0d) & 0x7f;
             } else {
                 ret = ams->pa;
+                if (ams->type == AMS_PC1512) {
+                    /* Reading the receive latch clears IRQ1 and releases the
+                     * KBDATA acknowledgement so the keyboard may transmit the
+                     * next code. */
+                    ams->pa = 0;
+                    picintc(2);
+                }
                 if (key_queue_start == key_queue_end)
                     ams->wantirq = 0;
                 else {
@@ -2327,7 +2714,11 @@ kbd_read(uint16_t port, void *priv)
             else
                 ret = ams->stat2 >> 4;
             ret |= (ppispeakon ? 0x20 : 0);
-            if (nmi)
+
+            if (!(ams->pb & 0x10) && ams->ram_parity_latch)
+                ret |= 0x80;
+            if (((ams->pb & 0x20) && ams->iochck_input) ||
+                (!(ams->pb & 0x20) && ams->iochck_latch))
                 ret |= 0x40;
             break;
 
@@ -2344,6 +2735,10 @@ kbd_poll(void *priv)
     amstrad_t *ams = (amstrad_t *) priv;
 
     timer_advance_u64(&ams->send_delay_timer, 1000 * TIMER_USEC);
+
+    if ((ams->type == AMS_PC1512) &&
+        (!(ams->pb & 0x40) || (ams->pb & 0x80)))
+        return;
 
     if (ams->wantirq) {
         ams->wantirq = 0;
@@ -2995,10 +3390,22 @@ machine_amstrad_init(const machine_t *model, int type)
 
     nmi_init();
 
+    if (type == AMS_PC1512) {
+        pc1512_mainboard = ams;
+        nmi_set_mask_callback(pc1512_nmi_mask_changed, ams);
+        device_add_ex(&pc1512_board_device, ams);
+    }
+
     ams->lpt = device_add_inst(&lpt_port_device, 1);
 
     lpt1_remove_ams(ams->lpt);
     lpt_set_next_inst(255);
+
+    /* The PC1512 has one board-mounted INS8250-compatible COM1.  Adding the
+     * named device here consumes serial instance zero, so the later common
+     * serial pass begins at COM2 and cannot duplicate the onboard UART. */
+    if (type == AMS_PC1512)
+        ams->uart = device_add(&ns8250_pc1512_device);
 
     io_sethandler(0x0378, 3,
                   ams_read, NULL, NULL, ams_write, NULL, NULL, ams);
@@ -3007,6 +3414,9 @@ machine_amstrad_init(const machine_t *model, int type)
 
     switch (type) {
         case AMS_PC1512:
+            ams->fdc = device_add(&fdc_xt_pc1512_device);
+            break;
+
         case AMS_PC1640:
         case AMS_PC200:
         case AMS_PPC512:
@@ -3023,15 +3433,18 @@ machine_amstrad_init(const machine_t *model, int type)
     }
 
     ams->language = 7;
+    if (type == AMS_PC1512) {
+        device_context(&pc1512_device);
+        ams->language = device_get_config_int("language");
+        device_context_restore();
+    }
 
     video_reset(gfxcard[0]);
 
     if (gfxcard[0] == VID_INTERNAL)
         switch (type) {
             case AMS_PC1512:
-                video_load_font("roms/machines/pc1512/40078", FONT_FORMAT_PC1512_T1000, LOAD_FONT_NO_OFFSET);
                 device_context(&vid_1512_device);
-                ams->language = device_get_config_int("language");
                 vid_init_1512(ams);
                 device_context_restore();
                 device_add_ex(&vid_1512_device, ams->vid);
@@ -3091,6 +3504,10 @@ machine_amstrad_init(const machine_t *model, int type)
     io_sethandler(0x0060, 7,
                   kbd_read, NULL, NULL, kbd_write, NULL, NULL, ams);
     timer_add(&ams->send_delay_timer, kbd_poll, ams, 1);
+    if (type == AMS_PC1512) {
+        timer_add(&ams->keyboard_reset_timer, pc1512_keyboard_reset, ams, 0);
+        timer_set_delay_u64(&ams->keyboard_reset_timer, 10000 * TIMER_USEC);
+    }
     if (type == AMS_PC1512)
         keyboard_set_table(scancode_xt);
     else
@@ -3099,9 +3516,9 @@ machine_amstrad_init(const machine_t *model, int type)
     keyboard_scan = 1;
     keyboard_set_is_amstrad(((type == AMS_PC1512) || (type == AMS_PC1640)) ? 0 : 1);
 
-    io_sethandler(0x0078, 2,
+    io_sethandler(0x0078, 1,
                   ms_read, NULL, NULL, ms_write, NULL, NULL, ams);
-    io_sethandler(0x007a, 2,
+    io_sethandler(0x007a, 1,
                   ms_read, NULL, NULL, ms_write, NULL, NULL, ams);
 
     if (mouse_type == MOUSE_TYPE_INTERNAL) {
@@ -3117,16 +3534,22 @@ machine_amstrad_init(const machine_t *model, int type)
 int
 machine_pc1512_init(const machine_t *model)
 {
-    int ret;
+    const char *font;
+    const char *rom[2];
+    int         ret;
 
-    ret = bios_load_interleaved("roms/machines/pc1512/40044",
-                                "roms/machines/pc1512/40043",
-                                0x000fc000, 16384, 0);
-    ret &= rom_present("roms/machines/pc1512/40078");
+    device_context(model->device);
+    rom[0] = device_get_bios_file(model->device, device_get_config_bios("bios"), 0);
+    rom[1] = device_get_bios_file(model->device, device_get_config_bios("bios"), 1);
+    font   = device_get_bios_file(model->device, device_get_config_bios("bios"), 2);
+    ret    = bios_load_interleaved(rom[0], rom[1], 0x000fc000, 16384, 0);
+    ret   &= rom_present(font);
+    device_context_restore();
 
     if (bios_only || !ret)
         return ret;
 
+    video_load_font(font, FONT_FORMAT_PC1512_T1000, LOAD_FONT_NO_OFFSET);
     machine_amstrad_init(model, AMS_PC1512);
 
     return ret;

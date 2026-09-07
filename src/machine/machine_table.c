@@ -2603,21 +2603,22 @@ const machine_t machines[] = {
         .ram       = {
             .min  = 512,
             .max  = 640,
-            .step = 128
+            .step = 32
         },
+        .max_fdd                  = 2,
         .nvrmask                  = 63,
         .jumpered_ecp_dma         = 0,
         .default_jumpered_ecp_dma = -1,
         .kbc_device               = NULL /* TODO: No specific kbd_device yet */,
         .kbc_params               = 0x00000000,
         .nvr_device               = &nvr_at_device,
-        .nvr_params               = NVR_AMSTRAD,
+        .nvr_params               = NVR_PC1512,
         .sio_device               = NULL,
         .sio_params               = 0x00000000,
         .kbc_p1                   = 0xff,
         .gpio                     = 0xffffffff,
         .gpio_acpi                = 0xffffffff,
-        .device                   = NULL,
+        .device                   = &pc1512_device,
         .kbd_device               = NULL,
         .fdc_device               = NULL,
         .vid_device               = &vid_1512_device,
@@ -26492,6 +26493,12 @@ int
 machine_get_ram_granularity(int m)
 {
     return (machines[m].ram.step);
+}
+
+int
+machine_get_max_fdd(int m)
+{
+    return machines[m].max_fdd ? MIN(machines[m].max_fdd, FDD_NUM) : FDD_NUM;
 }
 
 int

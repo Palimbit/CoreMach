@@ -2317,6 +2317,25 @@ const device_t st506_xt_xebec_device = {
     .config        = NULL
 };
 
+/* Compatibility profile for the PC1512 HD configurations.  Surviving HD10
+ * evidence identifies a Xebec ISA-to-SASI host adapter rather than this IBM
+ * ST-506 card, and the original option ROM has not been recovered.  Keep a
+ * distinct configuration identity so the approximation is never mistaken for
+ * the historical controller while reusing the closest available 1985 device. */
+const device_t st506_xt_pc1512_compat_device = {
+    .name          = "Amstrad PC1512 compatible HDD (IBM/Xebec MFM approximation)",
+    .internal_name = "st506_xt_pc1512_compat",
+    .flags         = DEVICE_ISA,
+    .local         = (HDD_BUS_MFM << 8) | ST506_XT_TYPE_XEBEC,
+    .init          = st506_init,
+    .close         = st506_close,
+    .reset         = NULL,
+    .available     = xebec_available,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
 const device_t st506_xt_wdxt_gen_device = {
     .name          = "WDXT-GEN (MFM)",
     .internal_name = "st506_xt_gen",
