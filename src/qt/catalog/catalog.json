@@ -102,11 +102,6 @@
       "description_key": "manufacturer.trigem.description",
       "history_key": "manufacturer.trigem.history",
       "history_source_url": "https://trigem.co.kr/company/company_history.jsp"
-    },
-    {
-      "id": "amstrad",
-      "name": "Amstrad",
-      "description_key": "manufacturer.amstrad.description"
     }
   ],
   "families": [
