@@ -1,4 +1,5 @@
 #
+# BluMach modifications: rtzor, Project BluMach, 2026.
 # 86Box    A hypervisor and IBM PC system emulator that specializes in
 #          running old operating systems and software designed for IBM
 #          PC systems and compatibles from 1981 through fairly recent
@@ -295,6 +296,26 @@ add_subdirectory(osd)
 
 if (QT)
     add_subdirectory(qt)
+    if(WIN32 AND USE_QT6 AND NOT STATIC_BUILD)
+            # BluMach development builds are expected to run directly from
+            # the build tree. Deploy Qt, its Windows platform plug-in and the
+            # MinGW runtime whenever the executable is relinked, instead of
+            # requiring a separate install step first.
+            get_filename_component(BLUMACH_TOOLCHAIN_RUNTIME_DIR
+                                   "${CMAKE_CXX_COMPILER}" DIRECTORY)
+            add_custom_command(TARGET 86Box POST_BUILD
+                COMMAND $<TARGET_FILE:Qt${QT_MAJOR}::windeployqt>
+                        --no-translations
+                        --compiler-runtime
+                        "$<TARGET_FILE:86Box>"
+                COMMAND ${CMAKE_COMMAND}
+                        -DBLUMACH_EXECUTABLE=$<TARGET_FILE:86Box>
+                        -DBLUMACH_RUNTIME_SEARCH_DIR=${BLUMACH_TOOLCHAIN_RUNTIME_DIR}
+                        -P ${PROJECT_SOURCE_DIR}/cmake/DeployBluMachRuntime.cmake
+                COMMENT "Deploying the BluMach Qt runtime"
+                VERBATIM)
+
+    endif()
 else()
     add_compile_definitions(USE_SDL_UI)
     add_subdirectory(unix)

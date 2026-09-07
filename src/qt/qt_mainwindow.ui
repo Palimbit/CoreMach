@@ -95,6 +95,9 @@
     <addaction name="actionCtrl_Alt_Del"/>
     <addaction name="separator"/>
     <addaction name="actionCtrl_Alt_Esc"/>
+    <addaction name="actionCtrl_Alt_S"/>
+    <addaction name="actionSend_F1"/>
+    <addaction name="actionSend_F2"/>
     <addaction name="actionNon_maskable_interrupt"/>
     <addaction name="separator"/>
     <addaction name="actionACPI_Shutdown"/>
@@ -369,6 +372,30 @@
    </property>
    <property name="toolTip">
     <string>Non-maskable interrupt</string>
+   </property>
+  </action>
+  <action name="actionCtrl_Alt_S">
+   <property name="text">
+    <string>Ctrl+Alt+S</string>
+   </property>
+   <property name="toolTip">
+    <string>Send Ctrl+Alt+S to the emulated keyboard</string>
+   </property>
+  </action>
+  <action name="actionSend_F2">
+   <property name="text">
+    <string>Send F2</string>
+   </property>
+   <property name="toolTip">
+    <string>Send F2 to the emulated keyboard</string>
+   </property>
+  </action>
+  <action name="actionSend_F1">
+   <property name="text">
+    <string>Send F1</string>
+   </property>
+   <property name="toolTip">
+    <string>Send F1 to the emulated keyboard</string>
    </property>
   </action>
   <action name="actionPause">

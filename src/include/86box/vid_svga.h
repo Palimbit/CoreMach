@@ -162,8 +162,12 @@ typedef struct svga_t {
     uint32_t  vram_mask;
     uint32_t  charseta;
     uint32_t  charsetb;
+    /* Optional device-specific text font fetch; NULL uses VGA addressing. */
+    uint8_t (*text_glyph)(struct svga_t *svga, uint8_t chr);
     uint32_t  adv_flags;
     uint32_t  memaddr_latch;
+    /* Fine row increment in internal display-address units. */
+    uint32_t  rowoffset_extra;
     uint32_t  ca_adj;
     uint32_t  memaddr;
     uint32_t  memaddr_backup;
@@ -224,6 +228,8 @@ typedef struct svga_t {
     uint32_t (*readl)(uint32_t addr, void *priv);
 
     void (*ven_write)(struct svga_t *svga, uint8_t val, uint32_t addr);
+    /* Optional plane-write override after address validation; nonzero handles it. */
+    int (*plane_write)(struct svga_t *svga, uint32_t addr, uint8_t val, uint8_t mask);
     float (*getclock)(int clock, void *priv);
     float (*getclock8514)(int clock, void *priv);
 
@@ -336,6 +342,13 @@ typedef struct svga_t {
 
     void *     local;
 } svga_t;
+
+static inline uint32_t
+svga_display_row_step(const svga_t *svga)
+{
+    return ((svga->adv_flags & FLAG_NO_SHIFT3) ? svga->rowoffset :
+            (svga->rowoffset << 3)) + svga->rowoffset_extra;
+}
 
 extern void     ibm8514_set_poll(svga_t *svga);
 extern void     ibm8514_poll(void *priv);

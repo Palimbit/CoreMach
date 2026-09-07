@@ -207,7 +207,8 @@ svga_render_text_40(svga_t *svga)
                 }
             }
 
-            dat = svga->vram[charaddr + (svga->scanline << 2)];
+            dat = svga->text_glyph ? svga->text_glyph(svga, chr) :
+                  svga->vram[charaddr + (svga->scanline << 2)];
             if (svga->seqregs[1] & 1) {
                 for (xx = 0; xx < 16; xx += 2)
                     p[xx] = p[xx + 1] = (dat & (0x80 >> (xx >> 1))) ? fg : bg;
@@ -293,7 +294,8 @@ svga_render_text_80(svga_t *svga)
                 }
             }
 
-            dat = svga->vram[charaddr + (svga->scanline << 2)];
+            dat = svga->text_glyph ? svga->text_glyph(svga, chr) :
+                  svga->vram[charaddr + (svga->scanline << 2)];
 
             if (svga->attrregs[0x10] & 0x40) {
                 if (svga->seqregs[1] & 1) {

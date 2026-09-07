@@ -896,6 +896,10 @@ set_global_EMS_state(scat_t *dev, int state)
 
         if (i >= 24)
             base_addr += 0x30000;
+
+        if ((base_addr >= 0x000a0000) && (base_addr < 0x00100000))
+            mem_set_mem_state(base_addr, 0x00004000, MEM_READ_EXTANY | MEM_WRITE_EXTANY);
+
         if (state && (dev->page[i].regs_2x9 & 0x80)) {
             virt_addr = get_addr(dev, base_addr, &dev->page[i]);
             if (i < 24)
@@ -908,6 +912,9 @@ set_global_EMS_state(scat_t *dev, int state)
                 mem_mapping_set_exec(&dev->ems_mapping[i], ram + virt_addr);
             else
                 mem_mapping_set_exec(&dev->ems_mapping[i], NULL);
+
+            if ((base_addr >= 0x000a0000) && (base_addr < 0x00100000))
+                mem_set_mem_state(base_addr, 0x00004000, MEM_READ_INTERNAL | MEM_WRITE_INTERNAL);
         } else {
             mem_mapping_set_exec(&dev->ems_mapping[i], ram + base_addr);
             mem_mapping_disable(&dev->ems_mapping[i]);
@@ -1048,8 +1055,11 @@ scat_out(uint16_t port, uint8_t val, void *priv)
                         else
                             io_sethandler(0x0208, 3, scat_in, NULL, NULL, scat_out, NULL, NULL, dev);
                     }
+
+                    /* get_addr() consults this register while rebuilding the
+                       EMS mappings, so publish the new value first. */
+                    dev->regs[SCAT_EMS_CONTROL] = val;
                     set_global_EMS_state(dev, val & 0x80);
-                    reg_valid = 1;
                     break;
 
                 case SCAT_POWER_MANAGEMENT:

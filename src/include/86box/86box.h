@@ -302,6 +302,8 @@ extern void pc_reset_hard(void);
 extern void pc_full_speed(void);
 extern void pc_speed_changed(void);
 extern void pc_send_cad(void);
+/* BluMach: expose the existing Ctrl+Alt sequence sender for Setup shortcuts. */
+extern void pc_send_ca(uint16_t sc);
 extern void pc_send_cae(void);
 extern void pc_send_cab(void);
 extern void pc_run(void);

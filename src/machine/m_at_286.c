@@ -1,4 +1,5 @@
 /*
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  * 86Box    A hypervisor and IBM PC system emulator that specializes in
  *          running old operating systems and software designed for IBM
  *          PC systems and compatibles from 1981 through fairly recent
@@ -21,6 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
+#include <zlib.h>
 #define HAVE_STDARG_H
 #include <86box/86box.h>
 #include "cpu.h"
@@ -1201,6 +1203,50 @@ machine_at_scat_init(const machine_t *model, int is_v4, int is_ami)
         device_add(&scat_device);
 }
 
+static const device_config_t pc5286_config[] = {
+    {
+        .name = "serial_irq", .description = "Serial port IRQ",
+        .type = CONFIG_SELECTION, .default_int = 4,
+        .selection = { { .description = "IRQ 4", .value = 4 },
+                       { .description = "IRQ 3", .value = 3 }, { .description = "" } }
+    },
+    {
+        .name = "lpt_irq", .description = "Parallel port IRQ",
+        .type = CONFIG_SELECTION, .default_int = 7,
+        .selection = { { .description = "IRQ 7", .value = 7 },
+                       { .description = "IRQ 5", .value = 5 }, { .description = "" } }
+    },
+    {
+        .name = "pc5286_bios_checksum", .description = "Known PC5286 BIOS checksum workaround",
+        .type = CONFIG_BINARY, .default_int = 1
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+};
+
+const device_t pc5286_device = {
+    /* Keep the existing configuration section: the actual UPC device also
+       reads its IRQ settings here. This descriptor is configuration-only. */
+    .name = "F82C710 UPC Super I/O",
+    .internal_name = "pc5286",
+    .config = pc5286_config
+};
+
+/* Compatibility workaround, not a verified repair of the original hardware.
+   Known 64 KiB AM52V004 dump SHA-256:
+   be7b6a2b03e03d1b733d26ad4dd6c64d903d03ce24e56ca4d317b25f6b9d5781.
+   CRC32 identifies the whole loaded image; only its in-memory copy is changed.
+   Return 0 when disabled, -1 for an unrecognized image, 1 when applied. */
+static int
+pc5286_bios_checksum(uint8_t *image, int enabled)
+{
+    if (!enabled)
+        return 0;
+    if ((image[0xffff] != 0x2c) || (crc32(0L, image, 65536) != 0xe33a1151UL))
+        return -1;
+    image[0xffff] = 0x2b;
+    return 1;
+}
+
 int
 machine_at_pc5286_init(const machine_t *model)
 {
@@ -1212,15 +1258,27 @@ machine_at_pc5286_init(const machine_t *model)
     if (bios_only || !ret)
         return ret;
 
-    /* Patch the checksum to avoid checksum error. */
-    if (rom[0xffff] == 0x2c)
-        rom[0xffff] = 0x2b;
+    switch (pc5286_bios_checksum(rom, machine_get_config_int("pc5286_bios_checksum"))) {
+        case 1:
+            pclog("PC5286: known AM52V004 checksum workaround applied in RAM (FFFF: 2C -> 2B).\n");
+            break;
+        case 0:
+            pclog("PC5286: BIOS checksum workaround disabled; image unchanged.\n");
+            break;
+        default:
+            pclog("PC5286: unrecognized BIOS image; checksum workaround skipped.\n");
+            break;
+    }
 
     machine_at_scat_init(model, 1, 0);
 
     device_add(&f82c710_device);
 
     device_add(&ide_isa_device);
+
+    /* LK1 fitted: internal VGA. An external video selection removes LK1. */
+    if (gfxcard[0] == VID_INTERNAL)
+        device_add(machine_get_vid_device(machine));
 
     return ret;
 }

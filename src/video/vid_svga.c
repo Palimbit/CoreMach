@@ -822,6 +822,7 @@ svga_recalctimings(svga_t *svga)
     svga->htotal += 5; /*+5 is required for Tyrian*/
 
     svga->rowoffset = svga->crtc[0x13];
+    svga->rowoffset_extra = 0;
 
     svga->clock = (svga->vidclock) ? VGACONST2 : VGACONST1;
 
@@ -1569,9 +1570,9 @@ svga_poll(void *priv)
                 svga->linecountff = 0;
                 svga->scanline          = 0;
 
-                svga->memaddr_backup += (svga->adv_flags & FLAG_NO_SHIFT3) ? svga->rowoffset : (svga->rowoffset << 3);
+                svga->memaddr_backup += svga_display_row_step(svga);
                 if (svga->interlace)
-                    svga->memaddr_backup += (svga->adv_flags & FLAG_NO_SHIFT3) ? svga->rowoffset : (svga->rowoffset << 3);
+                    svga->memaddr_backup += svga_display_row_step(svga);
 
                 svga->memaddr_backup &= svga->vram_display_mask;
                 svga->memaddr = svga->memaddr_backup;
@@ -1605,6 +1606,9 @@ svga_poll(void *priv)
 
                 svga->memaddr     = (svga->memaddr << 2);
                 svga->memaddr_backup = (svga->memaddr_backup << 2);
+
+                if (svga->interlace && svga->oddeven)
+                    svga->memaddr = svga->memaddr_backup += svga->rowoffset_extra;
 
                 svga->scanline = 0;
                 if (svga->attrregs[0x10] & 0x20) {
@@ -1691,6 +1695,9 @@ svga_poll(void *priv)
             }
             svga->cursoraddr     = (svga->cursoraddr << 2);
 
+            if (svga->interlace && svga->oddeven)
+                svga->memaddr = svga->memaddr_backup += svga->rowoffset_extra;
+
             if (svga->vsync_callback)
                 svga->vsync_callback(svga);
 
@@ -1771,6 +1778,9 @@ svga_init(const device_t *info, svga_t *svga, void *priv, int memsize,
           void (*overlay_draw)(struct svga_t *svga, int displine))
 {
     svga->priv          = priv;
+    svga->text_glyph    = NULL;
+    svga->plane_write   = NULL;
+    svga->rowoffset_extra = 0;
     svga->monitor_index = monitor_index_global;
     svga->monitor       = &monitors[svga->monitor_index];
 
@@ -1992,6 +2002,9 @@ svga_write_common(uint32_t addr, uint8_t val, uint8_t linear, void *priv)
 #endif
 
     orig_i = i;
+
+    if (svga->plane_write && svga->plane_write(svga, addr, val, writemask2))
+        return;
 
     /* Undocumented Cirrus Logic behavior: The datasheet says that, with EXT_WRITE and FLAG_ADDR_BY8, the write mask only
        changes meaning in write modes 4 and 5, as well as write mode 1. In reality, however, all other write modes are also
