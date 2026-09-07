@@ -99,6 +99,7 @@
 #define ST506_XT_TYPE_WD1004A_27X        26
 #define ST506_XT_TYPE_VICTOR_V86P        27
 #define ST506_XT_TYPE_TOSHIBA_T1200      28
+#define ST506_XT_TYPE_TOSHIBA_T3200      29
 
 #define XEBEC_BIOS_FILE                  "roms/hdd/st506/ibm_xebec_62x0822_1985.bin"
 #define WDXT_GEN_BIOS_FILE               "roms/hdd/st506/wdxt-gen/62-000128-000.bin"
@@ -365,12 +366,36 @@ st506_error(hdc_t *dev, uint8_t err)
     dev->error = err;
 }
 
+/* BluMach, Copyright 2026 rtzor. T3200 BIOS 4.61 resets via 1F1h and
+   selects six-byte commands via 1F2h (F000:0BB0, A44E). The internal
+   Z80-compatible firmware and mechanical auto-park are not emulated. */
+static void
+t3200_hdc_reset(void *priv)
+{
+    hdc_t *dev = priv;
+    timer_disable(&dev->timer);
+    picintc(1 << dev->irq);
+    if (dev->irq_dma & DMA_ENA)
+        dma_set_drq(dev->dma, 0);
+    dev->state = STATE_IDLE;
+    dev->status = dev->irq_dma = dev->error = dev->compl = 0;
+    dev->buff_pos = dev->buff_cnt = dev->count = 0;
+    memset(dev->command, 0, sizeof(dev->command));
+}
+
 static int
 get_sector(hdc_t *dev, drive_t *drive, off64_t *addr)
 {
     if (!drive->present) {
         /* No need to log this. */
         dev->error = dev->nr_err;
+        return 0;
+    }
+
+    if (dev->type == ST506_XT_TYPE_TOSHIBA_T3200 &&
+        ((dev->cylinder >= drive->cfg_cyl) || (dev->cylinder >= drive->tracks) ||
+         (dev->head >= drive->hpc) || (dev->sector >= drive->spt))) {
+        dev->error = ERR_ILLEGAL_ADDR;
         return 0;
     }
 
@@ -412,6 +437,10 @@ next_sector(hdc_t *dev, drive_t *drive)
         if (++dev->head >= drive->cfg_hpc) {
             dev->head = 0;
             if (++drive->cylinder >= drive->cfg_cyl) {
+                if (dev->type == ST506_XT_TYPE_TOSHIBA_T3200) {
+                    dev->cylinder++;
+                    return; /* Next transfer reports an address error. */
+                }
                 /*
                  * This really is an error, we cannot move
                  * past the end of the drive, which should
@@ -1315,6 +1344,8 @@ st506_read(uint16_t port, void *priv)
 
     switch (port & 3) {
         case 0: /* read data */
+            if (dev->type == ST506_XT_TYPE_TOSHIBA_T3200)
+                picintc(1 << dev->irq);
             dev->status &= ~STAT_IRQ;
             switch (dev->state) {
                 case STATE_COMPLETION_BYTE:
@@ -1398,6 +1429,10 @@ st506_write(uint16_t port, uint8_t val, void *priv)
             break;
 
         case 1: /* controller reset */
+            if (dev->type == ST506_XT_TYPE_TOSHIBA_T3200) {
+                t3200_hdc_reset(dev);
+                break;
+            }
             dev->status = 0x00;
             break;
 
@@ -1809,6 +1844,16 @@ st506_init(const device_t *info)
             dev->switches = 0x0c;
             break;
 
+        case ST506_XT_TYPE_TOSHIBA_T3200:
+            fn            = NULL;
+            dev->base     = 0x01f0;
+            dev->irq      = 14;
+            dev->bios_addr = 0;
+            /* Undecoded option readback: deterministic zero, not T1200
+               drive switches. In particular, never echo the AT probe. */
+            dev->switches = 0;
+            break;
+
         default:
             break;
     }
@@ -1864,10 +1909,14 @@ st506_close(void *priv)
     hdc_t         *dev = (hdc_t *) priv;
     const drive_t *drive;
 
+    if (dev->type == ST506_XT_TYPE_TOSHIBA_T3200)
+        t3200_hdc_reset(dev);
+
     for (uint8_t d = 0; d < MFM_NUM; d++) {
         drive = &dev->drives[d];
 
-        hdd_image_close(drive->hdd_num);
+        if (drive->present || dev->type != ST506_XT_TYPE_TOSHIBA_T3200)
+            hdd_image_close(drive->hdd_num);
     }
 
     if (dev->bios_rom.rom != NULL) {
@@ -2502,4 +2551,14 @@ const device_t st506_xt_toshiba_t1200_device = {
     .speed_changed = NULL,
     .force_redraw  = NULL,
     .config        = NULL
+};
+
+const device_t st506_xt_toshiba_t3200_device = {
+    .name          = "Toshiba T3200 experimental MFM Fixed Disk Adapter",
+    .internal_name = "st506_xt_toshiba_t3200",
+    .flags         = DEVICE_ISA16,
+    .local         = (HDD_BUS_MFM << 8) | ST506_XT_TYPE_TOSHIBA_T3200,
+    .init          = st506_init,
+    .close         = st506_close,
+    .reset         = t3200_hdc_reset
 };

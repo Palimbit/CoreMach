@@ -2,6 +2,11 @@
   "schema": "blumach-catalog-v2",
   "manufacturers": [
     {
+      "id": "toshiba",
+      "name": "Toshiba",
+      "description_key": "manufacturer.toshiba.description"
+    },
+    {
       "id": "amstrad",
       "name": "Amstrad",
       "description_key": "manufacturer.amstrad.description"
@@ -106,6 +111,13 @@
   ],
   "families": [
     {
+      "id": "toshiba-t-series",
+      "manufacturer_id": "toshiba",
+      "parent_family_id": "",
+      "name": "T-series",
+      "description_key": "family.toshiba-t-series.description"
+    },
+    {
       "id": "amstrad-pc1512",
       "manufacturer_id": "amstrad",
       "parent_family_id": "",
@@ -191,6 +203,11 @@
     }
   ],
   "platforms": [
+    {
+      "id": "toshiba-t3200-platform",
+      "emulator_machine_id": "t3200",
+      "architecture": "80286"
+    },
     {
       "id": "amstrad-pc1512-platform",
       "emulator_machine_id": "pc1512",
@@ -323,6 +340,289 @@
     }
   ],
   "products": [
+    {
+      "id": "toshiba-t3200",
+      "manufacturer_id": "toshiba",
+      "family_id": "toshiba-t-series",
+      "platform_id": "toshiba-t3200-platform",
+      "name": "Toshiba T3200",
+      "summary_key": "product.toshiba-t3200.summary",
+      "history_key": "product.toshiba-t3200.history",
+      "warning_key": "product.toshiba-t3200.warning",
+      "status": "experimental",
+      "period": "1980s",
+      "aliases": [],
+      "tags": [
+        "80286",
+        "EGA",
+        "AGS",
+        "plasma",
+        "MFM"
+      ],
+      "hardware": {
+        "cpu": "Intel 80286, 12/6 MHz; pilot fixed at 12 MHz",
+        "memory": "1 MB base or 4 MB with experimental 3 MB card: EMS-only, or 3 MB extended plus 384 KB EMS",
+        "video": "PEGA2/AGS, 256 KB VRAM, 2 KB SRAM; EGA approximation",
+        "floppy": "One internal 3.5-inch drive: early 720 KB or later 1.44 MB; BIOS 4.61 supports both. Default 1.44 MB.",
+        "interfaces": "AT-compatible serial/parallel; Toshiba keyboard behavior incomplete"
+      },
+      "firmware": {
+        "known_sets": [
+          "System BIOS 4.61 (pilot)",
+          "System BIOS 4.20B (preserved)",
+          "AGS IC8 035C"
+        ],
+        "required": true,
+        "identity_note": "Original T3200 ROMs required; filenames, sizes and SHA-256 only are distributed."
+      },
+      "storage": {
+        "bus": "Experimental native ST506 XT-compatible MFM at 1F0h/IRQ14; byte PIO validated with BIOS 4.61",
+        "official_drives": [
+          "Fujitsu M2227DT, 615 cylinders, 8 heads"
+        ]
+      },
+      "creation": {
+        "status": "experimental",
+        "directory_prefix": "toshiba-t3200",
+        "facts": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.toshiba-t3200.creation.fact0"
+          },
+          {
+            "label_key": "creation.label.memory",
+            "value_key": "product.toshiba-t3200.creation.fact1"
+          },
+          {
+            "label_key": "creation.label.floppy_drives",
+            "value_key": "product.toshiba-t3200.creation.fact2"
+          }
+        ],
+        "fields": [
+          {
+            "id": "memory",
+            "label_key": "creation.label.memory",
+            "default": "1mb",
+            "choices": [
+              {
+                "id": "1mb",
+                "label_key": "product.toshiba-t3200.creation.1mb",
+                "status": "experimental",
+                "set": [
+                  {
+                    "section": "Machine",
+                    "key": "mem_size",
+                    "value": 1024
+                  }
+                ]
+              },
+              {
+                "id": "4mb-ems",
+                "label_key": "product.toshiba-t3200.creation.4mb-ems",
+                "status": "experimental",
+                "set": [
+                  {
+                    "section": "Machine",
+                    "key": "mem_size",
+                    "value": 4096
+                  },
+                  {
+                    "section": "Toshiba T3200",
+                    "key": "memory_card_mode",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "id": "4mb-extended",
+                "label_key": "product.toshiba-t3200.creation.4mb-extended",
+                "status": "experimental",
+                "set": [
+                  {
+                    "section": "Machine",
+                    "key": "mem_size",
+                    "value": 4096
+                  },
+                  {
+                    "section": "Toshiba T3200",
+                    "key": "memory_card_mode",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "floppy",
+            "label_key": "creation.label.floppy_drives",
+            "default": "1440k",
+            "choices": [
+              {
+                "id": "1440k",
+                "label_key": "product.toshiba-t3200.creation.1440k",
+                "status": "experimental",
+                "set": [
+                  {
+                    "section": "Floppy and CD-ROM drives",
+                    "key": "fdd_01_type",
+                    "value": "35_2hd"
+                  }
+                ]
+              },
+              {
+                "id": "720k",
+                "label_key": "product.toshiba-t3200.creation.720k",
+                "status": "experimental",
+                "set": [
+                  {
+                    "section": "Floppy and CD-ROM drives",
+                    "key": "fdd_01_type",
+                    "value": "35_2dd"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "note_keys": [
+          "product.toshiba-t3200.creation.note"
+        ],
+        "generated_files": [],
+        "configuration": [
+          {
+            "section": "General",
+            "values": {
+              "vid_renderer": "qt_software",
+              "time_sync": "disabled"
+            }
+          },
+          {
+            "section": "Machine",
+            "values": {
+              "cpu_family": "286",
+              "cpu_speed": 12000000,
+              "cpu_multi": 1,
+              "cpu_use_dynarec": 0,
+              "fpu_type": "none",
+              "mem_size": 1024
+            }
+          },
+          {
+            "section": "Toshiba T3200",
+            "values": {
+              "bios": "v461",
+              "trace": 0,
+              "provisional_display": 1,
+              "provisional_50": 1,
+              "provisional_plasma": 1
+            }
+          },
+          {
+            "section": "Video",
+            "values": {
+              "gfxcard": "internal"
+            }
+          },
+          {
+            "section": "Input devices",
+            "values": {
+              "keyboard_type": "keyboard_at",
+              "mouse_type": "none"
+            }
+          },
+          {
+            "section": "Storage controllers",
+            "values": {
+              "hdc": "none",
+              "fdc": "internal"
+            }
+          },
+          {
+            "section": "Floppy and CD-ROM drives",
+            "values": {
+              "fdd_01_type": "35_2hd",
+              "fdd_02_type": "none"
+            }
+          }
+        ]
+      },
+      "technical": [
+        {
+          "title_key": "technical.section.commercial",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {
+              "label_key": "technical.label.market",
+              "value_key": "product.toshiba-t3200.technical.market"
+            },
+            {
+              "label_key": "technical.label.commercial_configurations",
+              "value_key": "product.toshiba-t3200.technical.commercial_configurations"
+            },
+            {
+              "label_key": "technical.label.accessories",
+              "value_key": "product.toshiba-t3200.technical.accessories"
+            }
+          ]
+        },
+        {
+          "title_key": "technical.section.architecture",
+          "evidence_key": "technical.evidence.documented",
+          "entries": [
+            {
+              "label_key": "technical.label.memory_map",
+              "value_key": "product.toshiba-t3200.technical.memory"
+            },
+            {
+              "label_key": "technical.label.video",
+              "value_key": "product.toshiba-t3200.technical.video"
+            },
+            {
+              "label_key": "technical.label.storage",
+              "value_key": "product.toshiba-t3200.technical.storage"
+            }
+          ]
+        },
+        {
+          "title_key": "technical.section.firmware",
+          "entries": [
+            {
+              "label_key": "technical.label.bios_revision",
+              "value_key": "product.toshiba-t3200.technical.firmware"
+            }
+          ]
+        },
+        {
+          "title_key": "technical.section.emulation",
+          "entries": [
+            {
+              "label_key": "technical.label.limitations",
+              "value_key": "product.toshiba-t3200.technical.validation"
+            }
+          ]
+        },
+        {
+          "title_key": "technical.section.research_material",
+          "entries": [
+            {
+              "label_key": "technical.label.manual",
+              "value_key": "product.toshiba-t3200.technical.manual",
+              "url": "https://www.minuszerodegrees.net/manuals/Toshiba/Other/Toshiba%20T3200%20-%20Maintenance%20Manual.pdf"
+            },
+            {
+              "label_key": "product.toshiba-t3200.source.brochure",
+              "value_key": "product.toshiba-t3200.technical.brochure",
+              "url": "https://macdat.net/files/pdf/toshiba/brochures/t3200.pdf"
+            },
+            {
+              "label_key": "product.toshiba-t3200.source.techaccess",
+              "value_key": "product.toshiba-t3200.technical.techaccess",
+              "url": "https://conventionalmemories.com/Toshiba/TECHaccess/tech3wog.htm"
+            }
+          ]
+        }
+      ]
+    },
     {
       "id": "amstrad-pc1512",
       "manufacturer_id": "amstrad",

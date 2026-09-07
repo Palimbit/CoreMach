@@ -15,6 +15,7 @@
  *          Copyright 2008-2019 Sarah Walker.
  *          Copyright 2015-2019 Miran Grca.
  *          Copyright 2017-2019 Fred N. van Kempen.
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdarg.h>
 #include <stdio.h>
@@ -303,6 +304,8 @@ keyboard_input(int down, uint16_t scan)
                            means we then use the scan code as is, and need to
                            make sure we do not accidentally strip that upper byte */
 
+    if (t3200_display_hotkey(down, scan))
+        return;
     if (recv_key[scan & 0x1ff] ^ down) {
         if (down) {
             switch (scan & 0x1ff) {

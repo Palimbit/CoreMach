@@ -14,6 +14,8 @@
  *
  *          Copyright 2008-2019 Sarah Walker.
  *          Copyright 2016-2019 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <stdbool.h>
 #include <stdio.h>
@@ -132,7 +134,7 @@ ega_out(uint16_t addr, uint8_t val, void *priv)
                     if (o != val)
                         ega_recalctimings(ega);
                 } else if (ega->attraddr == 0x11) {
-                    ega->overscan_color = ega->vres ? pallook16[val & 0x0f] : pallook64[val & 0x3f];
+                    ega->overscan_color = ega->pallook[val & (ega->vres ? 0x0f : 0x3f)];
                     if (o != val)
                         ega_recalctimings(ega);
                 } else if (ega->attraddr == 0x12)
@@ -145,11 +147,11 @@ ega_out(uint16_t addr, uint8_t val, void *priv)
             o                   = ega->miscout;
             egaswitchread       = (val & 0xc) >> 2;
             ega->vres           = !(val & 0x80);
-            ega->pallook        = ega->vres ? pallook16 : pallook64;
+            ega->pallook        = ega->vres ? (ega->output_palette16 ? ega->output_palette16 : pallook16) :
+                                            (ega->output_palette64 ? ega->output_palette64 : pallook64);
             ega->vidclock       = val & 4;
             ega->miscout        = val;
-            ega->overscan_color = ega->vres ? pallook16[ega->attrregs[0x11] & 0x0f] :
-                                              pallook64[ega->attrregs[0x11] & 0x3f];
+            ega->overscan_color = ega->pallook[ega->attrregs[0x11] & (ega->vres ? 0x0f : 0x3f)];
 
             uint16_t base_addr = 0x03a0;
 #ifdef EGA_ALT_ADDR_SUPPORT
@@ -601,6 +603,9 @@ ega_recalctimings(ega_t *ega)
     ega->linedbl  = ega->crtc[9] & 0x80;
     ega->rowcount = ega->crtc[9] & 0x1f;
 
+    if (ega->timing_override)
+        ega->timing_override(ega);
+
     if (ega->actual_type == EGA_SUPEREGA) {
         switch ((ega->miscout >> 2) & 0x03) {
             case 0x00:
@@ -927,7 +932,7 @@ ega_poll(void *priv)
                 ega->memaddr          = ega->memaddr_backup;
                 ega->cca          = ega->memaddr_backup;
             }
-            if (ega->scanline == (ega->crtc[9] & 31)) {
+            if (ega->scanline == ega->rowcount) {
                 ega->linecountff = 0;
                 ega->scanline          = 0;
 

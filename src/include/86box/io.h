@@ -20,6 +20,12 @@
 
 extern void io_init(void);
 
+/* BluMach: sequence of dispatched CPU I/O accesses, including unclaimed ports.
+   Devices can use this to recognize consecutive accesses without intercepting
+   unrelated devices or changing open-bus timing. Width is in bytes. */
+extern uint64_t io_access_sequence;
+extern uint8_t  io_access_width;
+
 extern void io_sethandler_common(uint16_t base, uint16_t size,
                                  uint8_t (*inb)(uint16_t port, void *priv),
                                  uint16_t (*inw)(uint16_t port, void *priv),

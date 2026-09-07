@@ -14,6 +14,8 @@
  *
  *          Copyright 2008-2020 Sarah Walker.
  *          Copyright 2016-2020 Miran Grca.
+ *
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #ifndef VIDEO_EGA_H
 #define VIDEO_EGA_H
@@ -125,6 +127,9 @@ typedef struct ega_t {
     uint32_t cca;
 
     uint32_t *pallook;
+    /* Optional device-owned output palettes; NULL retains standard EGA RGB. */
+    uint32_t *output_palette16;
+    uint32_t *output_palette64;
 
     uint64_t   dispontime;
     uint64_t   dispofftime;
@@ -140,6 +145,12 @@ typedef struct ega_t {
 
     uint32_t   (*remap_func)(struct ega_t *ega, uint32_t in_addr);
     void       (*render)(struct ega_t *svga);
+
+    /* Optional platform timing adjustment, before renderer and overscan setup. */
+    void       (*timing_override)(struct ega_t *ega);
+
+    /* Optional platform cursor scanline visibility; registers remain intact. */
+    int        (*cursor_scanline)(struct ega_t *ega);
 
     /* If set then another device is driving the monitor output and the EGA
       card should not attempt to display anything. */
@@ -215,7 +226,8 @@ enum {
   EGA_SUPEREGA,
   EGA_ATI800P,
   EGA_ISKRA,
-  EGA_TSENG
+  EGA_TSENG,
+  EGA_TOSHIBA /* BluMach: generic readable EGA registers, PEGA2 pilot only. */
 };
 
 enum {
