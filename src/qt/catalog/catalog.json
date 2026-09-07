@@ -518,7 +518,9 @@
           "title_key": "technical.section.emulation",
           "evidence_key": "technical.evidence.implementation",
           "entries": [
-            {"label_key": "technical.label.verified", "value_key": "product.amstrad-pc1512.technical.verified"},
+            {"label_key": "technical.label.current_state", "value_key": "product.amstrad-pc1512.technical.emulation_status"},
+            {"label_key": "technical.label.implementation_lineage", "value_key": "product.amstrad-pc1512.technical.lineage"},
+            {"label_key": "technical.label.blumach_changes", "value_key": "product.amstrad-pc1512.technical.blumach_changes"},
             {"label_key": "technical.label.limitations", "value_key": "product.amstrad-pc1512.technical.limitations"}
           ]
         },
