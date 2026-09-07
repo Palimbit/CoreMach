@@ -1,4 +1,5 @@
 #
+# BluMach modifications: rtzor, Project BluMach, 2026.
 # 86Box    A hypervisor and IBM PC system emulator that specializes in
 #          running old operating systems and software designed for IBM
 #          PC systems and compatibles from 1981 through fairly recent
@@ -90,6 +91,7 @@ add_library(vid OBJECT
     vid_jega.c
 
     # (Real IBM) VGA 
+    vid_chips_452.c
     vid_vga.c
     vid_mcga.c
 

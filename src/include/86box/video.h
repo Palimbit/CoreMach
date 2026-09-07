@@ -1,4 +1,5 @@
 /*
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  * 86Box    A hypervisor and IBM PC system emulator that specializes in
  *          running old operating systems and software designed for IBM
  *          PC systems and compatibles from 1981 through fairly recent
@@ -633,6 +634,9 @@ extern const device_t velocity_200_agp_device;
 
 /* Wyse 700 */
 extern const device_t wy700_device;
+
+/* C&T 82C452 */
+extern const device_t chips452_pc5286_device;
 
 /* Yamaha V6355 */
 extern const device_t v6355d_device;

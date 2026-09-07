@@ -1,4 +1,5 @@
 /*
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  * 86Box    A hypervisor and IBM PC system emulator that specializes in
  *          running old operating systems and software designed for IBM
  *          PC systems and compatibles from 1981 through fairly recent
@@ -44,6 +45,8 @@
 #include <86box/network.h>
 #include <86box/machine.h>
 
+/* PC5086/PC5286 User Manual, PC Guide 8-9/8-10: paired SIMMs. */
+static const uint32_t amstrad_pc5286_ram[] = { 512, 1024, 2048, 4096, 0 };
 static const uint32_t olivetti_prodest_pc1_ram[] = { 256, 512, 640, 0 };
 static const uint32_t olivetti_m250_ram[] = { 1024, 2048, 0 };
 static const uint32_t olivetti_m250e_ram[] = { 1024, 2048, 4096, 0 };
@@ -5523,11 +5526,12 @@ const machine_t machines[] = {
             .max_multi   = 0
         },
         .bus_flags = MACHINE_AT | MACHINE_BUS_PS2,
-        .flags     = MACHINE_IDE,
+        .flags     = MACHINE_IDE | MACHINE_VIDEO,
         .ram       = {
-            .min  = 1024, /* soldered amount(?) */
+            .min  = 512,
             .max  = 4096,
-            .step = 128
+            .step = 512,
+            .valid = amstrad_pc5286_ram
         },
         .nvrmask                  = 127,
         .jumpered_ecp_dma         = 0,
@@ -5541,10 +5545,10 @@ const machine_t machines[] = {
         .kbc_p1                   = 0x000004f0,
         .gpio                     = 0xffffffff,
         .gpio_acpi                = 0xffffffff,
-        .device                   = &f82c710_device,
+        .device                   = &pc5286_device,
         .kbd_device               = NULL,
         .fdc_device               = NULL,
-        .vid_device               = NULL,
+        .vid_device               = &chips452_pc5286_device,
         .snd_device               = NULL,
         .net_device               = NULL,
         .aliases                  = { "" }

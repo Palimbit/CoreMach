@@ -17,6 +17,7 @@
  *          Copyright 2021-2022 Cacodemon345
  *          Copyright 2021-2022 Teemu Korhonen
  *          Copyright 2022 dob205
+ *          BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include <QDebug>
 
@@ -1338,6 +1339,43 @@ void
 MainWindow::on_actionCtrl_Alt_Esc_triggered()
 {
     pc_send_cae();
+}
+
+void
+MainWindow::on_actionCtrl_Alt_S_triggered()
+{
+    /* AT set-1 S; use the same keyboard path as the existing CAD/CAE actions. */
+    pc_send_ca(0x1f);
+}
+
+void
+MainWindow::on_actionSend_F1_triggered()
+{
+    /* Bypass host capture requirements, but deliver the key through the
+       emulated keyboard and controller. */
+    if (keyboard_get_in_reset())
+        return;
+    keyboard_toggle_override();
+    keyboard_input(1, 0x3b);
+    QThread::msleep(50);
+    if (!keyboard_get_in_reset())
+        keyboard_input(0, 0x3b);
+    keyboard_toggle_override();
+}
+
+void
+MainWindow::on_actionSend_F2_triggered()
+{
+    /* Like the existing Ctrl+Alt actions, bypass host capture requirements,
+       but deliver the key through the emulated keyboard and controller. */
+    if (keyboard_get_in_reset())
+        return;
+    keyboard_toggle_override();
+    keyboard_input(1, 0x3c);
+    QThread::msleep(50);
+    if (!keyboard_get_in_reset())
+        keyboard_input(0, 0x3c);
+    keyboard_toggle_override();
 }
 
 void

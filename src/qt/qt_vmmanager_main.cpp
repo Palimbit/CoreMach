@@ -55,6 +55,51 @@
 #include "qt_vmmanager_model.hpp"
 #include "qt_vmmanager_addmachine.hpp"
 #include "qt_util.hpp"
+#include "qt_cmos_reset.hpp"
+
+extern "C" {
+#include <86box/device.h>
+#include <86box/machine.h>
+#include <86box/timer.h>
+#include <86box/nvr.h>
+}
+
+/* Resolve from the selected VM, never the emulator's global current machine.
+   Restrict the action to the standard AT RTC whose filename contract is known. */
+static QString
+motherboardCmosName(const VMManagerSystem *system)
+{
+    const auto id = system->getCategory("Machine").value("machine");
+    const int index = machine_get_machine_from_internal_name(id.toUtf8().constData());
+    if (index < 0 || id != machines[index].internal_name ||
+        machines[index].nvr_device != &nvr_at_device || machines[index].nvrmask == 0)
+        return {};
+    QString name = id;
+    const device_t *device = machines[index].device;
+    for (const device_config_t *cfg = device ? device->config : nullptr;
+         cfg && cfg->type != CONFIG_END; ++cfg) {
+        if (cfg->type == CONFIG_BIOS && QString::fromUtf8(cfg->name) == "bios") {
+            const auto bios = system->getCategory(device->name).value(
+                "bios", QString::fromUtf8(cfg->default_string ? cfg->default_string : ""));
+            if (bios.isEmpty())
+                break;
+            bool known = false;
+            for (const auto &choice : cfg->bios) {
+                if (!choice.files_no)
+                    break;
+                if (bios == choice.internal_name) {
+                    known = true;
+                    break;
+                }
+            }
+            if (!known)
+                return {};
+            name = bios;
+            break;
+        }
+    }
+    return name;
+}
 
 extern VMManagerMainWindow *vmm_main_window;
 
@@ -341,6 +386,37 @@ illegal_chars:
                 }
             });
             killIcon.setEnabled(selected_sysconfig->process->state() == QProcess::Running);
+
+            QAction clearCmos(tr("Reset motherboard CMOS…"));
+            contextMenu.addAction(&clearCmos);
+            clearCmos.setEnabled(selected_sysconfig->process->state() == QProcess::NotRunning &&
+                                 !motherboardCmosName(selected_sysconfig).isEmpty());
+            connect(&clearCmos, &QAction::triggered, [this, parent] {
+                auto *system = selected_sysconfig;
+                if (system->process->state() != QProcess::NotRunning)
+                    return;
+                system->reloadConfig();
+                const auto name = motherboardCmosName(system);
+                if (name.isEmpty())
+                    return;
+                if (QMessageBox::question(parent, tr("Reset motherboard CMOS"),
+                    tr("Reset the motherboard CMOS of \"%1\"? You will need to configure its BIOS again. "
+                       "The previous state will be kept as a backup; expansion-card state will be preserved.").arg(system->displayName),
+                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+                    return;
+                /* Recheck after the modal dialog, which runs an event loop. */
+                if (system->process->state() != QProcess::NotRunning)
+                    return;
+                const auto result = blumach::resetMotherboardCmos(system->config_dir, name);
+                if (!result.ok)
+                    QMessageBox::critical(parent, tr("Reset motherboard CMOS"), result.error);
+                else if (result.backup.isEmpty())
+                    QMessageBox::information(parent, tr("Reset motherboard CMOS"), tr("No saved motherboard CMOS was found. The next start will use a fresh state."));
+                else
+                    QMessageBox::information(parent, tr("Reset motherboard CMOS"),
+                        tr("Motherboard CMOS reset. Backup: %1\n\nTo restore it while the VM is stopped, move any new CMOS file aside and rename this backup to %2.nvr.")
+                            .arg(QDir::toNativeSeparators(result.backup), name));
+            });
 
             QAction clrNvram(tr("&Wipe NVRAM"));
             contextMenu.addAction(&clrNvram);
@@ -917,11 +993,13 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
     }
     setConfig(QStringLiteral("Machine"), QStringLiteral("machine"), machineId);
 
+    QVector<QJsonObject> selectedChoices;
     for (const auto &field : fields) {
         const int choiceIndex = field.widget->currentData().toInt();
         if (choiceIndex < 0 || choiceIndex >= field.choices.size())
             continue;
         const auto choice = field.choices.at(choiceIndex).toObject();
+        selectedChoices.append(choice);
         for (const auto &settingValue : choice.value(QStringLiteral("set")).toArray()) {
             const auto setting = settingValue.toObject();
             setConfig(setting.value(QStringLiteral("section")).toString(),
@@ -948,22 +1026,32 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
     const QDir machineDirectory(QDir(vmm_path).filePath(directoryName));
     if (!machineDirectory.exists())
         return;
-    for (const auto &fileValue : creation.value(QStringLiteral("generated_files")).toArray()) {
-        const auto fileDefinition = fileValue.toObject();
-        const auto relativePath = fileDefinition.value(QStringLiteral("path")).toString();
-        const auto size = static_cast<qint64>(fileDefinition.value(QStringLiteral("size")).toDouble());
-        if (relativePath.isEmpty() || size <= 0)
-            continue;
-        const QString path = machineDirectory.filePath(relativePath);
-        if (QFileInfo::exists(path))
-            continue;
-        QFile generatedFile(path);
-        if (!generatedFile.open(QIODevice::WriteOnly) || !generatedFile.resize(size)) {
-            QMessageBox::critical(this, tr("Hard disk creation failed"),
-                                  tr("The historical machine was created, but its hard disk image could not be created."));
-            break;
+
+    const auto generateFiles = [this, &machineDirectory](const QJsonArray &files) {
+        for (const auto &fileValue : files) {
+            const auto fileDefinition = fileValue.toObject();
+            const auto relativePath = fileDefinition.value(QStringLiteral("path")).toString();
+            const auto size = static_cast<qint64>(fileDefinition.value(QStringLiteral("size")).toDouble());
+            if (relativePath.isEmpty() || size <= 0)
+                continue;
+            const QString path = machineDirectory.filePath(relativePath);
+            if (QFileInfo::exists(path))
+                continue;
+            QFile generatedFile(path);
+            if (!generatedFile.open(QIODevice::WriteOnly) || !generatedFile.resize(size)) {
+                QMessageBox::critical(this, tr("Hard disk creation failed"),
+                                      tr("The historical machine was created, but its hard disk image could not be created."));
+                return false;
+            }
         }
-    }
+        return true;
+    };
+
+    if (!generateFiles(creation.value(QStringLiteral("generated_files")).toArray()))
+        return;
+    for (const auto &choice : selectedChoices)
+        if (!generateFiles(choice.value(QStringLiteral("generated_files")).toArray()))
+            return;
 }
 
 void
