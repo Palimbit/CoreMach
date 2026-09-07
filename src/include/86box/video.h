@@ -136,6 +136,8 @@ typedef struct monitor_t {
     int                      mon_ysize;
     int                      mon_scrnsz_x;
     int                      mon_scrnsz_y;
+    /* Physical pixel height / width; zero retains legacy square-pixel sizing. */
+    double                   mon_pixel_height_ratio;
     int                      mon_efscrnsz_y;
     int                      mon_unscaled_size_x;
     int                      mon_unscaled_size_y;

@@ -217,6 +217,24 @@ MainWindow::MainWindow(QWidget *parent)
     extern MainWindow *main_window;
     main_window = this;
     ui->setupUi(this);
+    auto displayMenu = ui->menuView->addMenu(tr("T3200 display"));
+    auto plasmaAction = displayMenu->addAction(tr("Internal plasma (Fn + Home / Right Ctrl + Home)"));
+    auto crtAction = displayMenu->addAction(tr("External RGB (Fn + End / Right Ctrl + End)"));
+    auto extendAction = displayMenu->addAction(tr("Toggle 350/400 lines (Fn + Down / Right Ctrl + Down)"));
+    connect(extendAction, &QAction::triggered, this, [] { t3200_display_extend(); });
+    plasmaAction->setCheckable(true);
+    crtAction->setCheckable(true);
+    connect(plasmaAction, &QAction::triggered, this, [] { t3200_display_request(0); });
+    connect(crtAction, &QAction::triggered, this, [] { t3200_display_request(1); });
+    auto displayTimer = new QTimer(this);
+    connect(displayTimer, &QTimer::timeout, this, [displayMenu, plasmaAction, crtAction] {
+        const int active = t3200_display_get();
+        displayMenu->menuAction()->setVisible(active >= 0);
+        plasmaAction->setChecked(active == 0);
+        crtAction->setChecked(active == 1);
+    });
+    displayMenu->menuAction()->setVisible(false);
+    displayTimer->start(200);
     status->setSoundMenu(ui->menuSound);
     ui->actionMute_Unmute->setText(sound_muted ? tr("&Unmute") : tr("&Mute"));
     ui->stackedWidget->setMouseTracking(true);

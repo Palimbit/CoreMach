@@ -2142,7 +2142,10 @@ set_screen_size_monitor(int x, int y, int monitor_index)
                 dy = (dx / 4.0) * 3.0;
         }
         monitors[monitor_index].mon_unscaled_size_y = (int) dy;
-    } else
+    } else if (monitors[monitor_index].mon_pixel_height_ratio > 0.0)
+        monitors[monitor_index].mon_unscaled_size_y =
+            (int) (monitors[monitor_index].mon_efscrnsz_y * monitors[monitor_index].mon_pixel_height_ratio + 0.5);
+    else
         monitors[monitor_index].mon_unscaled_size_y = monitors[monitor_index].mon_efscrnsz_y;
 
     switch (scale) {

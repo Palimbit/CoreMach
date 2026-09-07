@@ -59,6 +59,10 @@ uint8_t initialized = 0;
 io_t   *io[NPORTS];
 io_t   *io_last[NPORTS];
 
+/* BluMach modifications: rtzor, Project BluMach, 2026. */
+uint64_t io_access_sequence;
+uint8_t  io_access_width;
+
 #ifdef ENABLE_IO_LOG
 uint8_t io_do_log = ENABLE_IO_LOG;
 
@@ -340,6 +344,8 @@ inb(uint16_t port)
     uint8_t qfound = 0;
 #endif
 
+    ++io_access_sequence;
+    io_access_width = 1;
     io_port = port;
 
 #ifdef USE_DEBUG_REGS_486
@@ -406,6 +412,8 @@ outb(uint16_t port, uint8_t val)
     uint8_t qfound = 0;
 #endif
 
+    ++io_access_sequence;
+    io_access_width = 1;
     io_port = port;
     io_val  = val;
 
@@ -465,6 +473,8 @@ inw(uint16_t port)
 #endif
     uint8_t  ret8[2];
 
+    ++io_access_sequence;
+    io_access_width = 2;
     io_port = port;
 
 #ifdef USE_DEBUG_REGS_486
@@ -543,6 +553,8 @@ outw(uint16_t port, uint16_t val)
     uint8_t qfound = 0;
 #endif
 
+    ++io_access_sequence;
+    io_access_width = 2;
     io_port = port;
     io_val  = val;
 
@@ -618,6 +630,8 @@ inl(uint16_t port)
     uint8_t  qfound = 0;
 #endif
 
+    ++io_access_sequence;
+    io_access_width = 4;
     io_port = port;
 
 #ifdef USE_DEBUG_REGS_486
@@ -727,6 +741,8 @@ outl(uint16_t port, uint32_t val)
     uint8_t qfound = 0;
 #endif
 
+    ++io_access_sequence;
+    io_access_width = 4;
     io_port = port;
     io_val  = val;
 

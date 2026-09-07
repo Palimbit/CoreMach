@@ -35,6 +35,7 @@ add_library(mch OBJECT
     m_tandy.c
     m_v86p.c
     m_at_t3100e.c
+    m_at_t3200.c
     m_ps1.c
     m_ps2_isa.c
     m_ps2_mca.c

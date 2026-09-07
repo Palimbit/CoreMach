@@ -13,6 +13,7 @@
  *
  *          Copyright 2008-2019 Sarah Walker.
  *          Copyright 2016-2019 Miran Grca.
+ *          Copyright 2026 rtzor, Project BluMach (platform cursor hook).
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -149,7 +150,7 @@ ega_render_text(ega_t *ega)
         for (int x = 0; x < (ega->hdisp + ega->scrollcache); x += charwidth) {
             uint32_t addr = ega->remap_func(ega, ega->memaddr) & ega->vrammask;
 
-            int drawcursor = ((ega->memaddr == ega->cursoraddr) && ega->cursorvisible && ega->cursoron);
+            int drawcursor = ((ega->memaddr == ega->cursoraddr) && (ega->cursor_scanline ? ega->cursor_scanline(ega) : ega->cursorvisible) && ega->cursoron);
 
             uint32_t chr;
             uint32_t attr;

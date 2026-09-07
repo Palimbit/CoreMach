@@ -11,6 +11,7 @@
  * Authors: Joakim L. Gilje <jgilje@jgilje.net>
  *
  *          Copyright 2021 Joakim L. Gilje
+ * BluMach modifications: rtzor, Project BluMach, 2026.
  */
 #include "qt_renderercommon.hpp"
 #include "qt_mainwindow.hpp"
@@ -131,7 +132,8 @@ RendererCommon::onResize(int width, int height)
     width  = round(pixelRatio * width);
     height = round(pixelRatio * height);
 
-    if (is_fs && (video_fullscreen_scale_maximized ? (parent_max && main_is_max) : 1) && !(force_43 && vid_resize))
+    const double physicalPixelHeight = monitors[r_monitor_index].mon_pixel_height_ratio;
+    if (physicalPixelHeight <= 0.0 && is_fs && (video_fullscreen_scale_maximized ? (parent_max && main_is_max) : 1) && !(force_43 && vid_resize))
         destination.setRect(0, 0, width, height);
     else {
         auto   temp_fullscreen_scale = video_fullscreen_scale;
@@ -145,9 +147,13 @@ RendererCommon::onResize(int width, int height)
         double hh  = height;
         double gw  = source.width();
         double gh  = source.height();
+        if (physicalPixelHeight > 0.0)
+            gh *= physicalPixelHeight;
         double hsr = hw / hh;
         double r43 = 4.0 / 3.0;
 
+        if (physicalPixelHeight > 0.0 && is_fs && !force_43)
+            temp_fullscreen_scale = FULLSCR_SCALE_KEEPRATIO;
         if (force_43 && is_fs && vid_resize) {
             if (!video_fullscreen_scale_maximized || (video_fullscreen_scale_maximized && parent_max && main_is_max))
                 temp_fullscreen_scale = FULLSCR_SCALE_43;

@@ -4779,6 +4779,54 @@ const machine_t machines[] = {
         .net_device               = NULL,
         .aliases                  = { "" }
     },
+    /* BluMach experimental T3200: B4 status on the AT KBC; EGA approximation. */
+    {
+        .name              = "[ISA] Toshiba T3200 (experimental)",
+        .internal_name     = "t3200",
+        .type              = MACHINE_TYPE_286,
+        .chipset           = MACHINE_CHIPSET_PROPRIETARY,
+        .init              = machine_at_t3200_init,
+        .p1_handler        = machine_generic_p1_handler,
+        .gpio_handler      = NULL,
+        .available_flag    = MACHINE_AVAILABLE,
+        .gpio_acpi_handler = NULL,
+        .cpu               = {
+            .package     = CPU_PKG_286,
+            .block       = CPU_BLOCK_NONE,
+            .min_bus     = 12000000,
+            .max_bus     = 12000000,
+            .min_voltage = 0,
+            .max_voltage = 0,
+            .min_multi   = 0,
+            .max_multi   = 0
+        },
+        .bus_flags = MACHINE_AT,
+        .flags     = MACHINE_MFM | MACHINE_FDC | MACHINE_VIDEO_FIXED | MACHINE_KEYBOARD,
+        .ram       = {
+            .min  = 1024,
+            .max  = 4096,
+            .step = 3072
+        },
+        .nvrmask                  = 63,
+        .jumpered_ecp_dma         = 0,
+        .default_jumpered_ecp_dma = -1,
+        .kbc_device               = &kbc_at_device,
+        .kbc_params               = KBC_VEN_TOSHIBA_T3200,
+        .nvr_device               = &nvr_at_device,
+        .nvr_params               = NVR_AT,
+        .sio_device               = NULL,
+        .sio_params               = 0x00000000,
+        .kbc_p1                   = 0x0000bfff,
+        .gpio                     = 0xffffffff,
+        .gpio_acpi                = 0xffffffff,
+        .device                   = &t3200_device,
+        .kbd_device               = NULL,
+        .fdc_device               = NULL,
+        .vid_device               = NULL,
+        .snd_device               = NULL,
+        .net_device               = NULL,
+        .aliases                  = { "" }
+    },
     /* AMIBIOS for a chipset-less machine, most likely has AMI 'F' KBC firmware. */
     {
         .name              = "[ISA] Trangg Bow Unknown 286",

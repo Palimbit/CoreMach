@@ -2234,6 +2234,40 @@ write_cmd_data_toshiba(void *priv, uint8_t val)
 }
 
 static uint8_t
+write_cmd_toshiba_t3200(void *priv, uint8_t val)
+{
+    atkbc_t *dev = (atkbc_t *) priv;
+
+    if (val == 0xb2 || val == 0xb3) {
+        t3200_display_commit(val == 0xb2);
+        return 0;
+    }
+    if (val == 0xbc) return 0; /* BIOS notification acknowledgement */
+
+    if (val != 0xb4)
+        return 1;
+
+    /* Original T3200 maintenance manual, section 3.4 (H/W status):
+       plasma, 12 MHz, keypad off, one internal 2DD drive as A:, no external
+       FDD. The unused 2HD strap is open (1.6 MB unformatted): 10011101b.
+       BIOS 4.61 F000:60D5 requests this byte through 8064h/8060h; bit 0
+       selects the 720 KiB drive parameters at F000:6046. Use the real KBC
+       output state machine, without importing T3100e display/EMS state.
+       For a 3.5-inch HD drive, clear bit 0 (2HD) and bit 4 (2 MB
+       unformatted). BIOS 4.61 then selects CMOS type 4 and 500 kbps.
+       Derive these straps from Configure's drive A selection so there is
+       no separate machine option that can disagree with the actual FDD.
+       External drives and A/B routing remain outside this model. */
+    uint8_t status = (!fdd_is_525(0) && fdd_is_hd(0) && !fdd_is_ed(0)) ? 0x8c : 0x9d;
+    if (t3200_display_get() == 1) status &= 0x7f;
+    kbc_delay_to_ob(dev, status, 0, 0x00);
+    if (machine_get_config_int("trace"))
+        pclog("T3200 KBC B4 status=%02X (internal A: %s KiB)\n",
+              status, (status == 0x8c) ? "1440" : "720");
+    return 0;
+}
+
+static uint8_t
 write_cmd_toshiba(void *priv, uint8_t val)
 {
     atkbc_t *dev = (atkbc_t *) priv;
@@ -3182,6 +3216,10 @@ kbc_at_init(const device_t *info)
         case KBC_VEN_TOSHIBA:
             dev->write_cmd_data_ven = write_cmd_data_toshiba;
             dev->write_cmd_ven = write_cmd_toshiba;
+            break;
+
+        case KBC_VEN_TOSHIBA_T3200:
+            dev->write_cmd_ven = write_cmd_toshiba_t3200;
             break;
     }
 
