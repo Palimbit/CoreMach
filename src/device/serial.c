@@ -1202,6 +1202,20 @@ const device_t ns8250_device = {
     .config        = NULL
 };
 
+const device_t ns8250_pc1512_device = {
+    .name          = "Amstrad PC1512 Onboard 8250 UART",
+    .internal_name = "ns8250_pc1512",
+    .flags         = DEVICE_SOFTRESET,
+    .local         = SERIAL_8250,
+    .init          = serial_init,
+    .close         = serial_close,
+    .reset         = serial_reset,
+    .available     = NULL,
+    .speed_changed = serial_speed_changed,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
 const device_t ns8250_pcjr_3f8_device = {
     .name          = "National Semiconductor 8250(-compatible) UART for PCjr (0x3f8)",
     .internal_name = "ns8250_pcjr_3f8",

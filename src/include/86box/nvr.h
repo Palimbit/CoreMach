@@ -97,6 +97,7 @@
 
 #define NVR_IRQ_STANDARD        (0x08ULL << 40)
 #define NVR_IRQ_AMSTRAD         (0x01ULL << 40)
+#define NVR_IRQ_PC1512          (0x02ULL << 40)
 #define NVR_IRQ_CONFIG          (0x7eULL << 40)
 #define NVR_IRQ_NONE            (0x7fULL << 40)
 
@@ -113,6 +114,7 @@
 #define NVR_PS                  (NVR_AT_STANDARD_ZERO | NVR_CENTURY_PS)
 #define NVR_PS_NO_NMI           (NVR_PS | FLAG_NO_NMI)
 #define NVR_AMSTRAD             (NVR_IRQ_AMSTRAD | NVR_ADDR_STANDARD | NVR_CENTURY_AT)
+#define NVR_PC1512              (NVR_IRQ_PC1512 | NVR_ADDR_STANDARD | NVR_CENTURY_AT)
 #define NVR_AMSTRAD_NO_NMI      (NVR_AMSTRAD | FLAG_NO_NMI)
 #define NVR_PIIX4               (NVR_AT_MA_ZERO | FLAG_PIIX4)
 #define NVR_AMI_1992            (NVR_AT_ZERO_DEFAULT | FLAG_AMI_1992_HACK)

@@ -54,6 +54,7 @@ private:
 
     SettingsCompleter *scFloppyType;
     SettingsCompleter *scCDROMType;
+    int                floppyDriveCount;
 };
 
 #endif // QT_SETTINGSFLOPPYCDROM_HPP

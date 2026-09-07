@@ -61,6 +61,7 @@
 #define FDC_FLAG_SMC661         0x100000 /* SM(s)C FDC37C661 - different TDR enhanced mode */
 #define FDC_FLAG_5550           0x200000 /* IBM Multistation 5550 */
 #define FDC_FLAG_NO_TDR         0x400000 /* Has no tape drive register */
+#define FDC_FLAG_PC1512         0x800000 /* Amstrad PC1512 external drive-select latch */
 
 typedef struct sector_id_fields_t {
     uint8_t c;
@@ -131,6 +132,7 @@ typedef struct fdc_t {
 
     uint8_t fintr;
     uint8_t rw_drive;
+    uint8_t drq;
 
     uint8_t lock;
     uint8_t dsr;
@@ -270,6 +272,7 @@ extern void    fdc_diskchange_interrupt(fdc_t *fdc, int drive);
 
 #ifdef EMU_DEVICE_H
 extern const device_t fdc_xt_device;
+extern const device_t fdc_xt_pc1512_device;
 extern const device_t fdc_xt_sec_device;
 extern const device_t fdc_xt_ter_device;
 extern const device_t fdc_xt_qua_device;

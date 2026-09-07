@@ -5,6 +5,10 @@
 #define EMU_NMI_H
 
 extern int nmi_mask;
+
+typedef void (*nmi_mask_callback_t)(int enabled, void *priv);
+
+extern void nmi_set_mask_callback(nmi_mask_callback_t callback, void *priv);
 extern int nmi;
 extern int nmi_auto_clear;
 

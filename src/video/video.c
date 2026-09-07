@@ -954,7 +954,7 @@ video_force_resize_set_monitor(uint8_t res, int monitor_index)
 }
 
 void
-video_load_font(char *fn, int format, int offset)
+video_load_font(const char *fn, int format, int offset)
 {
     FILE *fp;
 

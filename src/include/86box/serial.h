@@ -165,6 +165,7 @@ extern int       serial_get_ri(serial_t *dev);
 extern uint8_t   serial_get_shadow(serial_t *dev);
 
 extern const device_t ns8250_device;
+extern const device_t ns8250_pc1512_device;
 extern const device_t ns8250_pcjr_3f8_device;
 extern const device_t ns8250_pcjr_2f8_device;
 extern const device_t ns16450_device;
