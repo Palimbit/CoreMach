@@ -57,6 +57,7 @@ BluMachCatalog::load(QString *errorMessage)
     m_families.clear();
     m_platforms.clear();
     m_products.clear();
+    m_filterFacets.clear();
 
     const auto root = document.object();
     for (const auto &value : root.value(QStringLiteral("manufacturers")).toArray()) {
@@ -88,6 +89,18 @@ BluMachCatalog::load(QString *errorMessage)
                              object.value(QStringLiteral("emulator_machine_id")).toString(),
                              object.value(QStringLiteral("architecture")).toString() });
     }
+    for (const auto &value : root.value(QStringLiteral("filter_facets")).toArray()) {
+        const auto object = value.toObject();
+        BluMachFilterFacet facet;
+        facet.id       = object.value(QStringLiteral("id")).toString();
+        facet.labelKey = object.value(QStringLiteral("label_key")).toString();
+        for (const auto &entry : object.value(QStringLiteral("values")).toArray()) {
+            const auto option = entry.toObject();
+            facet.values.append({ option.value(QStringLiteral("id")).toString(),
+                                  option.value(QStringLiteral("label_key")).toString() });
+        }
+        m_filterFacets.append(facet);
+    }
     for (const auto &value : root.value(QStringLiteral("products")).toArray()) {
         const auto object = value.toObject();
         BluMachProduct product;
@@ -103,6 +116,8 @@ BluMachCatalog::load(QString *errorMessage)
         product.period             = object.value(QStringLiteral("period")).toString();
         product.aliases            = stringArray(object.value(QStringLiteral("aliases")));
         product.tags               = stringArray(object.value(QStringLiteral("tags")));
+        product.facets             = object.value(QStringLiteral("facets")).toObject();
+        product.filterProfiles     = object.value(QStringLiteral("filter_profiles")).toArray();
         product.hardware           = object.value(QStringLiteral("hardware")).toObject();
         product.firmware           = object.value(QStringLiteral("firmware")).toObject();
         product.storage            = object.value(QStringLiteral("storage")).toObject();
@@ -150,6 +165,7 @@ const QVector<BluMachManufacturer> &BluMachCatalog::manufacturers() const { retu
 const QVector<BluMachFamily> &BluMachCatalog::families() const { return m_families; }
 const QVector<BluMachPlatform> &BluMachCatalog::platforms() const { return m_platforms; }
 const QVector<BluMachProduct> &BluMachCatalog::products() const { return m_products; }
+const QVector<BluMachFilterFacet> &BluMachCatalog::filterFacets() const { return m_filterFacets; }
 
 QString
 BluMachCatalog::text(const QString &key) const
@@ -165,6 +181,28 @@ QString
 BluMachCatalog::statusText(const QString &status) const
 {
     return text(QStringLiteral("status.%1").arg(status));
+}
+
+QString
+BluMachCatalog::facetLabel(const QString &facetId) const
+{
+    for (const auto &facet : m_filterFacets)
+        if (facet.id == facetId)
+            return text(facet.labelKey);
+    return facetId;
+}
+
+QString
+BluMachCatalog::facetValueText(const QString &facetId, const QString &valueId) const
+{
+    for (const auto &facet : m_filterFacets) {
+        if (facet.id != facetId)
+            continue;
+        for (const auto &value : facet.values)
+            if (value.id == valueId)
+                return text(value.labelKey);
+    }
+    return valueId;
 }
 
 const BluMachManufacturer *

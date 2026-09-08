@@ -1,0 +1,81 @@
+{
+  "order": 10,
+  "manufacturer": {
+    "id": "olivetti",
+    "name": "Olivetti",
+    "description_key": "manufacturer.olivetti.description",
+    "history_key": "manufacturer.olivetti.history",
+    "history_references": [
+      {
+        "title": "Ivrea, industrial city of the 20th century",
+        "publisher": "UNESCO",
+        "url": "https://whc.unesco.org/en/list/1538/"
+      },
+      {
+        "title": "Calcolatore elettronico Elea 9003",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/immagine/816/"
+      },
+      {
+        "title": "Alla conquista dell’America: l’operazione Underwood",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/78-alla-conquista-dellamerica-loperazione-underwoo/"
+      },
+      {
+        "title": "Cronologia Olivetti 1908–1977",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/68-cronologia-olivetti-1908-1977/"
+      },
+      {
+        "title": "Alle origini del personal computer: l’Olivetti Programma 101",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/87-alle-origini-del-personal-computer-lolivetti-pr/"
+      },
+      {
+        "title": "Large Calculator…or Small Computer?",
+        "publisher": "Computer History Museum",
+        "url": "https://www.computerhistory.org/revolution/story/62"
+      },
+      {
+        "title": "Sviluppo dei sistemi modulari in Olivetti negli anni '70",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/31-sviluppo-dei-sistemi-modulari-in-olivetti-negli/"
+      },
+      {
+        "title": "La lunga marcia verso il PC: il percorso della tecnologia",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/27-la-lunga-marcia-verso-il-pc-il-percorso-della-t/"
+      },
+      {
+        "title": "Un computer su ogni scrivania: la Olivetti e i PC",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/65-un-computer-su-ogni-scrivania-la-olivetti-e-i-p/"
+      },
+      {
+        "title": "Cronologia Olivetti 1978–2009",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/69-cronologia-olivetti-1978-2009/"
+      },
+      {
+        "title": "Olivetti M24",
+        "publisher": "HomeComputerMuseum",
+        "url": "https://www.homecomputermuseum.nl/en/collectie/olivetti/olivetti-m24/"
+      },
+      {
+        "title": "La breve, intensa vita di un centro di ricerca avanzata",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/22-la-breve-intensa-vita-di-un-centro-di-ricerca-a/"
+      },
+      {
+        "title": "Timeline of Computer History — Computers (1987: Acorn Archimedes is released)",
+        "publisher": "Computer History Museum",
+        "url": "https://www.computerhistory.org/timeline/computers/"
+      },
+      {
+        "title": "Lavorare dovunque: i computer portatili Olivetti",
+        "publisher": "Associazione Archivio Storico Olivetti",
+        "url": "https://www.storiaolivetti.it/articolo/96-lavorare-dovunque-i-computer-portatili-olivetti/"
+      }
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "product.olivetti-pcs286s16.summary": "Modelo comercial de 16 MHz documentado, pero no arrancable en BluMach porque todavía no se dispone de una BIOS verificada.",
+  "product.olivetti-pcs286s16.history": "El folleto Olivetti de 1991 documenta un 80286 a 16 MHz sin estados de espera, 1 MB de serie, hasta 8 MB en placa, 16 MB en el sistema y discos de 40, 80 y 120 MB. Se conserva como modelo histórico separado de la placa TI/OLIMCU16 de 12 MHz; sin una BIOS propia no es posible confirmar si ambos nombres llegaron a compartir alguna revisión de placa.",
+  "product.olivetti-pcs286s16.warning": "NO ARRANCABLE: no se dispone de una BIOS verificada para el PCS 286S comercial de 16 MHz. La BIOS 1.42 pertenece al PCS 286 normal y la BIOS 2.06 a la placa TI/OLIMCU16 de 12 MHz; ninguna debe presentarse como firmware confirmado de este modelo."
+}

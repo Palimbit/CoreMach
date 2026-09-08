@@ -1,0 +1,237 @@
+{
+  "order": 60,
+  "machine": {
+    "id": "olivetti-pcs286s",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-pcs",
+    "platform_id": "olivetti-pcs286s-ti-platform",
+    "name": "Olivetti PCS 286/S (TI/OLIMCU16, 12 MHz)",
+    "summary_key": "product.olivetti-pcs286s.summary",
+    "history_key": "product.olivetti-pcs286s.history",
+    "warning_key": "product.olivetti-pcs286s.warning",
+    "status": "validated",
+    "period": "1991",
+    "aliases": [
+      "PCS 286/S",
+      "PCS286/S",
+      "PCS 286 TI"
+    ],
+    "tags": [
+      "80286",
+      "12 MHz",
+      "AT",
+      "VGA",
+      "IDE",
+      "desktop",
+      "80287",
+      "TACT82300",
+      "OLIMCU16"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286 at 12 MHz; TI BIOS modes 6/6, 12/6 and 12/12 MHz",
+      "memory": "1, 2 and 4 MB validated on the TI/OLIMCU16 board. Experimental generic ISA/AT expansion profiles also boot with 8 and 16 MB total; they prove a workable emulation path, not the existence of a specific Olivetti expansion card",
+      "video": "Integrated VGA",
+      "floppy": "3.5 in, 1.44 MB",
+      "chipset": "Texas Instruments TACT82300 family + Olivetti OLIMCU16 ASIC",
+      "rtc": "AT-compatible CMOS RTC with separate motherboard battery; exact chip unidentified",
+      "coprocessor": "Intel 80287 optional",
+      "expansion": "2 × 16-bit AT + 1 × 8-bit XT full-size slots",
+      "interfaces": "RS-232C, bidirectional parallel, mouse, AT keyboard",
+      "dimensions": "360 × 312 × 100 mm; 7.6 kg"
+    },
+    "firmware": {
+      "known_sets": [
+        "Olivetti BIOS / Resident Diagnostics 2.06 (1991-05-20)"
+      ],
+      "required": true,
+      "identity_note": "Authentic 2 × 64 KiB LOW/HIGH EPROM dump; verified against the supplied 128 KiB interleaved image"
+    },
+    "storage": {
+      "bus": "IDE/ATA",
+      "official_drives": [
+        "40 MB",
+        "80 MB",
+        "120 MB"
+      ],
+      "emulated_limit": "40 MB CP346 geometry (805 cylinders, 4 heads, 26 sectors) validated with BIOS 2.06 and MS-DOS 6.22; certified profiles cover 1/2/4 MB on-board and hypothetical generic ISA expansion to 8/16 MB"
+    },
+    "relationships": {
+      "derived_from": [
+        "olivetti-pcs286"
+      ],
+      "distinct_from": [
+        "olivetti-pcs286",
+        "olivetti-pcs286s-16"
+      ]
+    },
+    "creation": {
+      "status": "validated",
+      "directory_prefix": "olivetti-pcs286s-ti",
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "286",
+            "cpu_speed": 12000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 1024
+          }
+        },
+        {
+          "section": "Olivetti PCS 286S (TI)",
+          "values": {
+            "bios": "v206"
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "olivetti-pcs286s-40mb.img",
+            "hdd_01_parameters": "26, 4, 805, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "1989_3500rpm"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "olivetti-pcs286s-40mb.img",
+          "size": 42864640
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-pcs286s.technical.cpu_bus"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-pcs286s.technical.memory"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-pcs286s.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-pcs286s.technical.bios_revision"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-pcs286s.technical.video_validation"
+          },
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-pcs286s.technical.frequency_validation"
+          },
+          {
+            "label_key": "technical.label.headland_ports",
+            "value_key": "product.olivetti-pcs286s.technical.olimcu_ports"
+          },
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-pcs286s.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-pcs286s.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.sources",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.olivetti-pcs286s.technical.brochure",
+            "url": "https://olivrea.de/prospekte-personal-computer/"
+          },
+          {
+            "label_key": "technical.label.credits",
+            "value_key": "product.olivetti-pcs286s.technical.credits",
+            "url": "https://groups.google.com/g/it.comp.retrocomputing/c/FqQJY7JQb8c"
+          },
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-pcs286s.technical.board_evidence",
+            "url": "https://groups.google.com/g/it.comp.retrocomputing/c/FqQJY7JQb8c"
+          },
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-pcs286s.technical.reference_branch",
+            "url": "https://github.com/EngiNerd89/86Box/tree/Olivetti-PCS"
+          },
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-pcs286s.technical.olimcu_branch",
+            "url": "https://github.com/EngiNerd89/86Box/tree/Olivetti-OLIMCU"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 60,
+  "platform": {
+    "id": "olivetti-pcs286s-ti-platform",
+    "emulator_machine_id": "olivetti_pcs286s",
+    "architecture": "80286"
+  }
+}

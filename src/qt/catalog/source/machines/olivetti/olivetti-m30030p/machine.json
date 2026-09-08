@@ -1,0 +1,147 @@
+{
+  "order": 180,
+  "machine": {
+    "id": "olivetti-m30030p",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m300",
+    "platform_id": "olivetti-m30030p-platform",
+    "name": "Olivetti M300-30P",
+    "summary_key": "product.olivetti-m30030p.summary",
+    "history_key": "product.olivetti-m30030p.history",
+    "status": "partial",
+    "period": "1992–1993",
+    "aliases": [],
+    "tags": [
+      "i486DX2",
+      "50 MHz",
+      "VLSI VL82C486",
+      "WD90C31"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_486"
+      ],
+      "video": [
+        "vga"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel i486DX2/50; 25 MHz external bus",
+      "memory": "4/8/12/20/24/36 MB",
+      "chipset": "VLSI VL82C486",
+      "video": "Integrated Western Digital WD90C31, 1 MB",
+      "io": "PC87311/87312 family; separate Olivetti 8042"
+    },
+    "firmware": {
+      "known_sets": [
+        "BIOS 1.09 / Diagnostics 1.03",
+        "BIOS 1.09 / Diagnostics 1.04",
+        "BIOS 1.09 / Diagnostics 2.00"
+      ],
+      "required": true
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-m30030p",
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i486dx2",
+            "cpu_speed": 50000000,
+            "cpu_multi": 2,
+            "cpu_use_dynarec": 1,
+            "mem_size": 4096
+          }
+        },
+        {
+          "section": "Olivetti M300-30 / M300-30P",
+          "values": {
+            "bios": "diag104"
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "olivetti-m30030p-100mb.img",
+            "hdd_01_parameters": "33, 8, 776, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "CP3104"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "olivetti-m30030p-100mb.img",
+          "size": 104890368
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-m30030p.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-m30030p.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.sources",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-m30030p.technical.manual",
+            "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap36.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 220,
+  "platform": {
+    "id": "olivetti-m30030p-platform",
+    "emulator_machine_id": "olivetti_m30030p",
+    "architecture": "i486DX2"
+  }
+}

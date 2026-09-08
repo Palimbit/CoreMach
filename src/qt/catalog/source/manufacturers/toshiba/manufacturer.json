@@ -1,0 +1,8 @@
+{
+  "order": 50,
+  "manufacturer": {
+    "id": "toshiba",
+    "name": "Toshiba",
+    "description_key": "manufacturer.toshiba.description"
+  }
+}

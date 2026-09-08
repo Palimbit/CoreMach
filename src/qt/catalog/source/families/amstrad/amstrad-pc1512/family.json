@@ -1,0 +1,10 @@
+{
+  "order": 10,
+  "family": {
+    "id": "amstrad-pc1512",
+    "manufacturer_id": "amstrad",
+    "parent_family_id": "",
+    "name": "PC1512",
+    "description_key": "family.amstrad-pc1512.description"
+  }
+}

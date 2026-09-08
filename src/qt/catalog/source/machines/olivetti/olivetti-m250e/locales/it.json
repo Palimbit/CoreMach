@@ -1,0 +1,22 @@
+{
+  "product.olivetti-m250e.summary": "Scheda 80286 a 12 MHz distinta della famiglia M250, con logica 82C206 e firmware proprio.",
+  "product.olivetti-m250e.history": "M250 E è documentato con M250 nel materiale di servizio Olivetti, ma ha temporizzazione 12 MHz, CHIPS 82C206, logica GA80/GA99 e firmware PDSF/PDSD propri. Configurazione commerciale e data restano ignote.",
+  "product.olivetti-m250e.warning": "SPERIMENTALE: M250 E ha BIOS e modello di scheda propri, ma POST, Setup e System Test visivi sono ancora da validare. La scheda non inventa disco, bundle memoria o data dal M250.",
+  "product.olivetti-m250e.creation.model": "Identità tecnica documentata: scheda M250 E 80286 a 12 MHz con 82C206 e firmware PDSF/PDSD distinto",
+  "product.olivetti-m250e.creation.memory.1024": "1 MB (profilo di avvio isolato attuale)",
+  "product.olivetti-m250e.creation.memory.2048": "2 MB (popolazione documentata)",
+  "product.olivetti-m250e.creation.memory.4096": "4 MB (popolazione documentata)",
+  "product.olivetti-m250e.creation.note": "Il profilo esprime scheda e popolazioni memoria documentate, non un bundle commerciale recuperato. Nessun disco è creato finché una fonte non ne identifica uno per M250 E.",
+  "product.olivetti-m250e.technical.market": "Derivato della famiglia M250 di fine anni ottanta; posizionamento, data e bundle regionali restano aperti.",
+  "product.olivetti-m250e.technical.commercial_configurations": "Il manuale documenta scheda 12 MHz e popolazioni 2/4 MB. Non è stata trovata matrice commerciale primaria M250 E; la brochure M250 1989 è solo contesto familiare.",
+  "product.olivetti-m250e.technical.cpu": "Intel 80286 a 12 MHz, documentato separatamente dal M250 a 8 MHz.",
+  "product.olivetti-m250e.technical.memory": "Il manuale documenta 2 MB con due SIMM 512 KB e 4 MB con due 512 KB più due 1 MB. Il predefinito 1 MB è profilo emulazione, non vendita affermata.",
+  "product.olivetti-m250e.technical.chipset": "CHIPS 82C206 con logica GA80/GA99 e porta 6Bh M250 E. BluMach usa il percorso AT condiviso quando il comportamento 82C206 non è documentato.",
+  "product.olivetti-m250e.technical.firmware": "Set locali osservati: BIOS sistema PDSF 1.06 e video PDSD 1.06, distinti da M250 e locali.",
+  "product.olivetti-m250e.technical.verified": "Inizializzazione locale isolata a 12 MHz/1 MB senza errore ROM; non è prova visiva di POST o diagnostica.",
+  "product.olivetti-m250e.technical.limitations": "POST, Setup, System Test, reset, RTC, OS e tutte le popolazioni memoria restano aperti. 82C206 è una distinzione hardware documentata, non ancora una distinzione emulativa verificata.",
+  "product.olivetti-m250e.technical.service_manual": "Olivetti Pocket Service Guide, sezioni scheda, memoria e controller M250 E",
+  "product.olivetti-m250e.technical.brochure": "Brochure M250 1989 conservata solo come contesto familiare; non prova un bundle commerciale M250 E",
+  "product.olivetti-m250e.technical.storage": "Adattatore AT/RLL integrato a 1F0h-1F7h e IRQ14. P6 seleziona interleave, P10 presenza disco; BIOS 1.07 aggiunge CP3044 (635/4/33).",
+  "product.olivetti-m250e.technical.jumpers": "P1/P2 scelgono 1/2/4 MB; P6 disco, P8 batteria, P9 floppy, P10 presenza disco, P11 seriale, P12 VGA e P15/P20 temporizzazione. Sono controlli fisici documentati ma non modellati."
+}

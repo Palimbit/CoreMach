@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30015.summary": "386SX 25 MHz avec OPTi 82C283, 82C206 séparé et vidéo OAK OTI-067 intégrée.",
+  "product.olivetti-m30015.history": "BA320 est d'abord documentée avec un Intel 386SX à 25 MHz; l'AMD 80386SX-25 est une alternative ultérieure sans changement de carte. Bus AT 8,33 MHz; mémoire 4/8/10/14/16 Mo.",
+  "product.olivetti-m30015.technical.verified": "POST, Calendar PASS, disquette et amorçage MS-DOS 3.30a sont validés.",
+  "product.olivetti-m30015.technical.limitations": "Émulation partielle amorçable. Le 82C283 est modélisé avec bus AT à 8,33 MHz; des dispositifs compatibles représentent le 82C206 et les contrôleurs discrets. IDE et davantage de logiciels restent à valider."
+}

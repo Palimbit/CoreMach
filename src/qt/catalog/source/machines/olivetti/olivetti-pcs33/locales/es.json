@@ -1,0 +1,6 @@
+{
+  "product.olivetti-pcs33.summary": "Sobremesa de oficina 386SX a 25 MHz de la serie PCS de 1992.",
+  "product.olivetti-pcs33.history": "PCS 33 se comercializó como un equipo de oficina distinto, con 2 MB y discos IDE de 40 a 120 MB. Su BIOS 6.03 conservada permite reutilizar provisionalmente BA013/25 sin convertir PCS 11, PCS 33 y M300-02F en alias.",
+  "product.olivetti-pcs33.technical.verified": "El volcado PCS 33 6.03 identificado por su procedencia dispone de una máquina propia de 25 MHz y utiliza el núcleo TOPCAT BA013/25 recuperado.",
+  "product.olivetti-pcs33.technical.limitations": "Ficha de producto independiente. La asignación exacta de placa y las diferencias externas del PCS 33 aún requieren manual o inspección física específica; la implementación compartida debe considerarse provisional y parcial."
+}

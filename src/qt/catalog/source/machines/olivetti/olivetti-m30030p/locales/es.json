@@ -1,0 +1,7 @@
+{
+  "product.olivetti-m30030p.summary": "Variante de rendimiento i486DX2 a 50 MHz del M300-30, con bus externo de 25 MHz.",
+  "product.olivetti-m30030p.history": "M300-30P conserva la plataforma del M300-30, pero su CPU DX2/50 justifica una identidad de máquina y configuración separadas.",
+  "product.olivetti-m30030p.technical.verified": "BIOS 1.09/Diagnósticos 2.00 completa los diagnósticos residentes con 4 MB y muestra 640 KB base + 3072 KB extendida + 384 KB dedicada = 4096 KB.",
+  "product.olivetti-m30030p.technical.limitations": "Emulación parcial arrancable con los mismos límites de chipset, vídeo y Super I/O del M300-30. Diagnósticos 2.00 identifica el DX2/50 configurado como DX2-66. Ctrl+Alt+Supr puede detenerse durante la inicialización temprana del firmware, tras el recuento de memoria o con el cursor parpadeando; por ahora debe usarse un reinicio duro. Quedan pendientes la identificación de velocidad, las demás poblaciones de RAM y más software.",
+  "product.olivetti-m30030p.technical.manual": "Capítulo 36 de la guía de servicio Olivetti; fuente primaria para M300-30 y M300-30P."
+}

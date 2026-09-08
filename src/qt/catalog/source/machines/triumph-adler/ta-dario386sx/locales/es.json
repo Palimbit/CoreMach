@@ -1,0 +1,12 @@
+{
+  "product.ta-dario386sx.summary": "Versión Triumph-Adler de la plataforma PCS 386SX a 16 MHz, con sus ROM originales conservadas",
+  "product.ta-dario386sx.history": "Triumph-Adler vendió el miembro 80386SX de esta plataforma común como Dario 386SX o P45. La comparación de las ROM 1.14 demuestra que el firmware ejecutable de vídeo y sistema es idéntico al Olivetti PCS 386SX; solo cambia el relleno sin usar de las EPROM.",
+  "product.ta-dario386sx.technical.identity": "00000h–05FFFh (OVC 1.06) y 10000h–1FFFFh (Phoenix 1.14) son idénticos byte a byte al PCS 386SX. Los 40.959 bytes diferentes están solo en el relleno 06000h–0FFFFh: casi todo FFh en Dario y 00h en Olivetti.",
+  "product.ta-dario386sx.technical.rom_layout": "Los volcados LOW y HIGH originales de 64 KB se entrelazan exactamente para formar FULL de 128 KB. BluMach carga los originales Dario y conserva el estado FFh del área borrada.",
+  "product.ta-dario386sx.technical.bios_revision": "BIOS de sistema Phoenix 1.14 de 30 de octubre de 1991, con BIOS de vídeo OVC 1.06 de 24 KB, Resident Diagnostics y tablas.",
+  "product.ta-dario386sx.technical.chipset": "Comparte la placa del PCS 386SX: Headland HT101SX + HT113 + GC102-PC, IOC02, TL16C451FN para serie/paralelo, WD37C65CJM para disquete y PVGA1A integrada.",
+  "product.ta-dario386sx.technical.verified": "La reconstrucción de las ROM y la identidad del código ejecutable están demostradas. El Dario usa la misma implementación corregida HT101SX + HT113 + GC102-PC que el PCS 386SX y arranca BIOS, Built-In Setup y MS-DOS con memoria y discos IDE configurados; por ello queda en el mismo nivel parcial utilizable.",
+  "product.ta-dario386sx.technical.limitations": "Parcial y arrancable, con los mismos límites del PCS 386SX: el reparto interno del chipset está reconstruido sin documentación exacta del HT101SX/HT113, falta la ROM del M5L8042, quedan por validar EMS y la paridad del GC102-PC y todavía no se ha probado un conjunto amplio de software. Tampoco se han validado de forma independiente posibles diferencias externas específicas de la marca más allá de la diferencia demostrada en el relleno de las ROM.",
+  "product.ta-dario386sx.document.olivetti": "Ficha Olivetti PCS 386SX de la plataforma equivalente",
+  "product.ta-dario386sx.document.firmware": "Volcados LOW/HIGH/FULL 1.14 conservados de TA Dario y Olivetti PCS 386SX y comparación byte a byte"
+}

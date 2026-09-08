@@ -1,0 +1,23 @@
+{
+  "product.olivetti-m380.summary": "Familia de sobremesa 80386DX a 16 MHz, con lógica Olivetti propietaria, controladoras externas y firmware local 1.09.",
+  "product.olivetti-m380.history": "El M380 (BA806) y el M380 C compacto (BA818) comparten la plataforma 80386DX a 16 MHz documentada. El M380 C NEW añade las opciones GO723 y VGA GO470/481; no se sustituyen silenciosamente por dispositivos genéricos.",
+  "product.olivetti-m380.warning": "EMULACIÓN PARCIAL: constan como superados POST, vídeo, arranque por disquete e inicialización RTC. Quedan pendientes el checksum CMOS/NVR propietario y el reinicio en caliente. PVGA1A, disquetera y servicios AT actuales son aproximaciones de compatibilidad, no modelos del backplane, IF614, GO717/GO720 ni GO723.",
+  "product.olivetti-m380.creation.model": "Perfil de referencia M380 80386DX a 16 MHz: 4 MB, PVGA1A externo y una disquetera de 3,5 pulgadas y 1,44 MB",
+  "product.olivetti-m380.creation.variant.m380": "M380 (sobremesa BA806; perfil de referencia actual)",
+  "product.olivetti-m380.creation.variant.m380c": "M380 C (compacto BA818; plataforma compartida)",
+  "product.olivetti-m380.creation.variant.m380c-new": "M380 C NEW (GO723 + GO470/481; no disponible)",
+  "product.olivetti-m380.creation.memory.1024": "1 MB (placa ME908/ME916/ME919 documentada)",
+  "product.olivetti-m380.creation.memory.4096": "4 MB (placa ME912/ME927 documentada; aproximación de RAM lineal)",
+  "product.olivetti-m380.creation.memory.16384": "16 MB (placa ME923 documentada; aproximación de RAM lineal)",
+  "product.olivetti-m380.creation.memory.49152": "48 MB (máximo documentado; sin verificar)",
+  "product.olivetti-m380.creation.note": "M380 y M380 C comparten la plataforma seleccionable. M380 C NEW se muestra desactivado porque aún no se modelan su controladora combinada GO723 ni el vídeo GO470/481. No se crea imagen de disco.",
+  "product.olivetti-m380.technical.commercial_configurations": "M380 es el sobremesa BA806 y M380 C el compacto BA818. El M380 C NEW documenta almacenamiento/disquetera GO723 y VGA GO470/481. Es una matriz de opciones de la guía de servicio, no una lista de precios recuperada.",
+  "product.olivetti-m380.technical.cpu": "Intel 80386DX a 16 MHz con lógica PAL propietaria BA806/BA818; no es la plataforma Headland del PCS 386SX.",
+  "product.olivetti-m380.technical.memory": "Toda la memoria reside en tarjetas de expansión: ME908/ME916/ME919 son de 1 MB, ME912/ME927 de 4 MB y ME923 de 16 MB. Resident Diagnostics informa el perfil de 4 MB como 640 KB base más 3072 KB extendidos (3712 KB): esa aritmética es correcta, pero BluMach sustituye todavía la lógica de tarjeta/backplane por RAM lineal.",
+  "product.olivetti-m380.technical.video": "M380/M380 C emplean adaptadores EGA o monocromos externos. El VGA GO470/481 del M380 C NEW está documentado pero no disponible; el PVGA1A seleccionable es una aproximación explícita.",
+  "product.olivetti-m380.technical.storage": "M380/M380 C documentan controladoras externas GO717 MFM o GO720 ESDI. La GO723 combinada RLL/disquetera pertenece solo al M380 C NEW y no está modelada.",
+  "product.olivetti-m380.technical.firmware": "PBUQ/PBUZ 1.09 local es una pareja intercalada de 64 KiB verificada. La guía documenta las parejas 1.13 y 1.14, aún no preservadas localmente.",
+  "product.olivetti-m380.technical.verified": "Resultado parcial registrado: POST, vídeo, arranque por disquete e inicialización RTC con firmware local 1.09 y perfil de referencia 4 MB/PVGA1A.",
+  "product.olivetti-m380.technical.limitations": "La memoria/backplane propietario, ruta de disquete IF614, controladoras de almacenamiento, checksum CMOS/NVR y reinicio en caliente requieren validación o implementación. CAP7 documenta LPT1 en 378h/IRQ7 y LPT2 en 278h/IRQ5; el inicializador actual los omite y Resident Diagnostics informa Internal Parallel Port Failure. También falta el disco Customer/System Test exacto del M380.",
+  "product.olivetti-m380.technical.service_manual": "Olivetti Pocket Service Guide CAP7: M380, M380 C y M380 C NEW."
+}

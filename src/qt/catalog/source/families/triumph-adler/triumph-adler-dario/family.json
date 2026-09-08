@@ -1,0 +1,10 @@
+{
+  "order": 100,
+  "family": {
+    "id": "triumph-adler-dario",
+    "manufacturer_id": "triumph-adler",
+    "parent_family_id": "",
+    "name": "Dario",
+    "description_key": "family.triumph-adler-dario.description"
+  }
+}

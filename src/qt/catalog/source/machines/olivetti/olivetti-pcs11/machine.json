@@ -1,0 +1,137 @@
+{
+  "order": 130,
+  "machine": {
+    "id": "olivetti-pcs11",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-pcs",
+    "platform_id": "olivetti-pcs11-platform",
+    "name": "Olivetti PCS 11",
+    "summary_key": "product.olivetti-pcs11.summary",
+    "history_key": "product.olivetti-pcs11.history",
+    "status": "partial",
+    "period": "1992–1993",
+    "aliases": [
+      "PCS11"
+    ],
+    "tags": [
+      "80386SX",
+      "16 MHz",
+      "VLSI TOPCAT",
+      "WD90C11",
+      "booksize"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_386sx"
+      ],
+      "video": [
+        "vga"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80386SX 16 MHz",
+      "memory": "2 MB standard; up to 10 MB",
+      "chipset": "VLSI TOPCAT VL82C320/VL82C331",
+      "video": "Integrated Western Digital WD90C11",
+      "enclosure": "Compact A4-footprint booksize unit"
+    },
+    "firmware": {
+      "known_sets": [
+        "2.04/2.07 verified dumps (16 MHz)"
+      ],
+      "required": true
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-pcs11",
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i386sx",
+            "cpu_speed": 16000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 1,
+            "mem_size": 2048
+          }
+        },
+        {
+          "section": "Olivetti PCS 11 (BA013/16)",
+          "values": {
+            "keylock_locked": 0
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "olivetti-pcs11-40mb.img",
+            "hdd_01_parameters": "26, 4, 805, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "1989_3500rpm"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "olivetti-pcs11-40mb.img",
+          "size": 42864640
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-pcs11.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-pcs11.technical.limitations"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 170,
+  "platform": {
+    "id": "olivetti-pcs11-platform",
+    "emulator_machine_id": "olivetti_pcs11",
+    "architecture": "80386SX"
+  }
+}

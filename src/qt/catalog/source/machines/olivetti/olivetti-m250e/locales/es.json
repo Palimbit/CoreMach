@@ -1,0 +1,22 @@
+{
+  "product.olivetti-m250e.summary": "Placa 80286 de 12 MHz de la familia M250, distinta, con lógica 82C206 e identidad de firmware propia.",
+  "product.olivetti-m250e.history": "El M250 E se documenta junto al M250 en material de servicio Olivetti, pero posee temporización propia a 12 MHz, CHIPS 82C206, lógica GA80/GA99 y firmware PDSF/PDSD. Su Setup documenta tipos Conner de 20, 40 y 100 MB; aún faltan una configuración comercial autónoma y fecha de salida.",
+  "product.olivetti-m250e.warning": "EXPERIMENTAL: el M250 E tiene BIOS y modelo de placa propios, pero POST, Setup y System Test visuales siguen pendientes. Su controlador AT/RLL y jumpers documentados aún no se modelan; la ruta IDE genérica solo es una aproximación de compatibilidad.",
+  "product.olivetti-m250e.creation.model": "Identidad técnica documentada: placa M250 E 80286 a 12 MHz con 82C206 y firmware PDSF/PDSD separado",
+  "product.olivetti-m250e.creation.memory.1024": "1 MB (perfil de inicio aislado actual)",
+  "product.olivetti-m250e.creation.memory.2048": "2 MB (población documentada)",
+  "product.olivetti-m250e.creation.memory.4096": "4 MB (población documentada)",
+  "product.olivetti-m250e.creation.note": "La guía identifica el controlador AT/RLL integrado y tipos de disco Setup, pero BluMach usa IDE genérico y no modela aún P6/P10. No se genera disco.",
+  "product.olivetti-m250e.technical.market": "Derivado de la familia M250 de finales de los años ochenta. Quedan pendientes su posición comercial, fecha y paquetes regionales.",
+  "product.olivetti-m250e.technical.commercial_configurations": "El material de servicio documenta placa a 12 MHz, poblaciones de 2/4 MB y tipos Setup CP3022 20 MB, CP3142/CP346 40 MB, CP3044 40 MB (BIOS 1.07+) y CP3106 100 MB. No se ha localizado matriz de ventas primaria.",
+  "product.olivetti-m250e.technical.cpu": "Intel 80286 a 12 MHz, documentado aparte del diseño M250 a 8 MHz.",
+  "product.olivetti-m250e.technical.memory": "El material de servicio documenta 2 MB con dos SIMM de 512 KB y 4 MB con dos de 512 KB más dos de 1 MB. El valor 1 MB es un perfil actual de emulación, no una configuración comercial afirmada.",
+  "product.olivetti-m250e.technical.chipset": "Controlador periférico CHIPS 82C206 con lógica GA80/GA99 y puerto 6Bh exclusivo del M250 E. BluMach usa hoy la ruta AT común cuando no se documenta un comportamiento específico del 82C206.",
+  "product.olivetti-m250e.technical.storage": "El adaptador AT/RLL integrado ocupa 1F0h-1F7h e IRQ14. P6 elige interleave HDU 1:1 o 1:3; P10 declara disco ausente/presente. BIOS 1.07 añade tipo 7 para Conner CP3044 (635/4/33).",
+  "product.olivetti-m250e.technical.jumpers": "P1/P2 eligen RAM 1/2/4 MB. P6 elige interleave de disco, P8 batería, P9 modo disquetera 16 MHz/1,2 MB, P10 presencia de disco, P11 serie, P12 VGA y P15/P20 temporización analógica. Son controles físicos documentados pero aún no modelados.",
+  "product.olivetti-m250e.technical.firmware": "Los conjuntos locales observados son BIOS de sistema PDSF 1.06 y BIOS de vídeo PVGA1A PDSD 1.06. Son distintos de los M250 y permanecen locales.",
+  "product.olivetti-m250e.technical.verified": "La inicialización local aislada a 12 MHz/1 MB creó NVR sin error de carga de ROM. No es evidencia visual de POST ni de diagnóstico.",
+  "product.olivetti-m250e.technical.limitations": "Quedan pendientes POST, Setup y System Test visuales, reinicio software, RTC, SO y todas las poblaciones de memoria anunciadas. El 82C206 y los controles AT/RLL/P6/P10/P9 son diferencias de hardware documentadas, aún no diferencias de emulación plenamente verificadas.",
+  "product.olivetti-m250e.technical.service_manual": "Pocket Service Guide Olivetti, secciones de placa, memoria y controlador M250 E",
+  "product.olivetti-m250e.technical.brochure": "Folleto M250 de 1989 conservado solo como contexto de familia; no prueba un paquete comercial M250 E"
+}

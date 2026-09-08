@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m300-if378.summary": "M300 modulare 386SX a 16 MHz con scheda IF378 e controllo memoria Intel 82335.",
+  "product.olivetti-m300-if378.history": "Il M300 modulare originale combina IF378, bus IN108 e scheda multifunzione GO477; non è la scheda madre dei successivi M300 numerati.",
+  "product.olivetti-m300-if378.technical.verified": "Sono stati osservati Resident Diagnostics e avvio di MS-DOS 3.30a con NVR conservata.",
+  "product.olivetti-m300-if378.technical.limitations": "Emulazione parziale avviabile: il 82335 è modellato, mentre le funzioni 82230/82231 e GO477 usano dispositivi AT compatibili; GO481 richiede ancora una VGA esterna. IDE e altro software restano da validare; le attese diagnostiche sono approssimazioni."
+}

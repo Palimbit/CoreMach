@@ -51,8 +51,12 @@ private:
     enum ItemType { ManufacturerItem = 1, FamilyItem, ProductItem };
 
     void rebuildTree();
+    void rebuildFacetFilters();
+    void rebuildFilterLayout();
     void updateDetails(QTreeWidgetItem *item);
     void applyFilter();
+    bool matchesFacetFilters(const BluMachProduct &product) const;
+    bool matchesFacetFilters(const QJsonObject &commonFacets, const QJsonObject &profileFacets) const;
     void setDetailTabsAvailable(bool researchAvailable, bool sourcesAvailable);
     void populateOverview(const BluMachProduct &product);
     void populateTechnicalPage(const BluMachProduct &product, bool sourcesPage);
@@ -67,6 +71,8 @@ private:
     QLabel         *m_intro = nullptr;
     QLineEdit      *m_search = nullptr;
     QComboBox      *m_statusFilter = nullptr;
+    QHash<QString, QComboBox *> m_facetFilters;
+    QHash<QString, QString>     m_facetSelections;
     QLabel         *m_resultsLabel = nullptr;
     QGridLayout    *m_filterLayout = nullptr;
     QSplitter      *m_splitter = nullptr;

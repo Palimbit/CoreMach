@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m300-if378.summary": "Modular 16 MHz 386SX M300 with an IF378 CPU card and Intel 82335 memory control.",
+  "product.olivetti-m300-if378.history": "The original modular M300 combines the IF378 CPU card, IN108 bus and GO477 multifunction board. It is not the same motherboard as later numbered M300 desktops.",
+  "product.olivetti-m300-if378.technical.verified": "Resident Diagnostics and MS-DOS 3.30a boot have been observed with saved NVR state.",
+  "product.olivetti-m300-if378.technical.limitations": "Bootable partial emulation: 82335 is modelled, while 82230/82231 and GO477 functions are composed from compatible AT devices; GO481 still requires external VGA. IDE and broader software need validation, and diagnostic wait-state helpers are functional approximations."
+}

@@ -1,0 +1,282 @@
+{
+  "order": 80,
+  "machine": {
+    "id": "olivetti-pcs386sx",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-pcs",
+    "platform_id": "olivetti-pcs386sx-platform",
+    "name": "Olivetti PCS 386SX",
+    "summary_key": "product.olivetti-pcs386sx.summary",
+    "history_key": "product.olivetti-pcs386sx.history",
+    "status": "partial",
+    "period": "1991",
+    "aliases": [
+      "PCS386SX",
+      "PCS 386 SX"
+    ],
+    "tags": [
+      "80386SX",
+      "AT",
+      "VGA",
+      "IDE",
+      "desktop",
+      "80387SX"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_386sx"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80386SX 16 MHz",
+      "memory": "1 MB standard; up to 8 MB on-board and 16 MB system; LIM 4.0/EMS",
+      "chipset": "Headland HT101SX + HT113 + GC102-PC",
+      "video": "Paradise PVGA1A integrated, 256 KB",
+      "floppy": "3.5 in, 1.44 MB",
+      "rtc": "128-byte CMOS RTC",
+      "coprocessor": "Intel 80387SX 16 MHz optional",
+      "expansion": "2 × 16-bit AT + 1 × 8-bit XT full-size slots",
+      "interfaces": "RS-232C, bidirectional parallel, PS/2 mouse, AT keyboard",
+      "dimensions": "360 × 312 × 100 mm; 7.6 kg"
+    },
+    "firmware": {
+      "known_sets": [
+        "1.14 with embedded OVC 1.06"
+      ],
+      "required": true
+    },
+    "storage": {
+      "bus": "IDE/ATA",
+      "official_drives": [
+        "20 MB",
+        "40 MB",
+        "100 MB"
+      ]
+    },
+    "relationships": {},
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-pcs386sx",
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i386sx",
+            "cpu_speed": 16000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 1,
+            "mem_size": 4096,
+            "fpu_type": "none"
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "conner-cp3104-100mb.img",
+            "hdd_01_parameters": "33, 8, 776, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "CP3104"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "conner-cp3104-100mb.img",
+          "size": 104890368
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-pcs386sx.technical.cpu_bus"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-pcs386sx.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-pcs386sx.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-pcs386sx.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.chipset",
+        "evidence_key": "technical.evidence.documented_and_modeled",
+        "entries": [
+          {
+            "label_key": "technical.label.chipset",
+            "value_key": "product.olivetti-pcs386sx.technical.chipset"
+          },
+          {
+            "label_key": "technical.label.chipset_functions",
+            "value_key": "product.olivetti-pcs386sx.technical.chipset_functions"
+          },
+          {
+            "label_key": "technical.label.headland_ports",
+            "value_key": "product.olivetti-pcs386sx.technical.headland_ports"
+          },
+          {
+            "label_key": "technical.label.serial_parallel",
+            "value_key": "product.olivetti-pcs386sx.technical.serial_parallel"
+          },
+          {
+            "label_key": "hardware.floppy",
+            "value_key": "product.olivetti-pcs386sx.technical.floppy_controller"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.observed",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-pcs386sx.technical.bios_revision"
+          },
+          {
+            "label_key": "technical.label.setup",
+            "value_key": "product.olivetti-pcs386sx.technical.setup"
+          },
+          {
+            "label_key": "technical.label.diagnostics",
+            "value_key": "product.olivetti-pcs386sx.technical.diagnostics"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.bios_reverse",
+        "evidence_key": "technical.evidence.reverse_engineered",
+        "entries": [
+          {
+            "label_key": "technical.label.rom_layout",
+            "value_key": "product.olivetti-pcs386sx.technical.rom_layout"
+          },
+          {
+            "label_key": "technical.label.kbc_handshake",
+            "value_key": "product.olivetti-pcs386sx.technical.kbc_handshake"
+          },
+          {
+            "label_key": "technical.label.ioc02",
+            "value_key": "product.olivetti-pcs386sx.technical.ioc02"
+          },
+          {
+            "label_key": "technical.label.memory_controller_test",
+            "value_key": "product.olivetti-pcs386sx.technical.memory_controller_test"
+          },
+          {
+            "label_key": "technical.label.cmos_bda",
+            "value_key": "product.olivetti-pcs386sx.technical.cmos_bda"
+          },
+          {
+            "label_key": "technical.label.video_firmware",
+            "value_key": "product.olivetti-pcs386sx.technical.video_firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-pcs386sx.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-pcs386sx.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.olivetti-pcs386sx.technical.brochure",
+            "url": "https://olivrea.de/olivetti-pcs-386sx/"
+          },
+          {
+            "label_key": "technical.label.chipset",
+            "value_key": "product.olivetti-pcs386sx.technical.physical_board_evidence",
+            "url": "https://www.jonathandupre.fr/articles/33-ordinateurs-old-school/315-olivetti-pcs-386sx/"
+          },
+          {
+            "label_key": "technical.label.serial_parallel",
+            "value_key": "product.olivetti-pcs386sx.technical.tl16c451_datasheet",
+            "url": "https://www.ti.com/lit/ds/symlink/tl16c451.pdf"
+          },
+          {
+            "label_key": "technical.label.firmware_evidence",
+            "value_key": "product.olivetti-pcs386sx.technical.ht101sx_peer_bios",
+            "url": "https://www.vogons.org/viewtopic.php?t=86204"
+          },
+          {
+            "label_key": "technical.label.firmware_evidence",
+            "value_key": "product.olivetti-pcs386sx.technical.firmware_evidence"
+          },
+          {
+            "label_key": "technical.label.diagnostic_media",
+            "value_key": "product.olivetti-pcs386sx.technical.diagnostic_media"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 120,
+  "platform": {
+    "id": "olivetti-pcs386sx-platform",
+    "emulator_machine_id": "olivetti_pcs386sx",
+    "architecture": "80386SX"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "order": 80,
+  "family": {
+    "id": "olivetti-prodest",
+    "manufacturer_id": "olivetti",
+    "parent_family_id": "",
+    "name": "Prodest",
+    "description_key": "family.olivetti-prodest.description"
+  }
+}

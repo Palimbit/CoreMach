@@ -1,0 +1,10 @@
+{
+  "order": 90,
+  "family": {
+    "id": "olivetti-pcs-4xc",
+    "manufacturer_id": "olivetti",
+    "parent_family_id": "olivetti-pcs",
+    "name": "PCS 4x/C",
+    "description_key": "family.olivetti-pcs-4xc.description"
+  }
+}

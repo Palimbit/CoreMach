@@ -53,6 +53,34 @@ set(CMAKE_FIND_PACKAGE_PREFER_CONFIG OFF)
 find_package(Threads REQUIRED)
 find_package(Qt${QT_MAJOR} COMPONENTS Core Widgets Network OpenGL Gui REQUIRED)
 find_package(Qt${QT_MAJOR}LinguistTools REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(BLUMACH_CATALOG_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/catalog/source")
+set(BLUMACH_CATALOG_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/catalog")
+set(BLUMACH_CATALOG_QRC "${BLUMACH_CATALOG_BUILD_DIR}/blumach_catalog.qrc")
+file(GLOB_RECURSE BLUMACH_CATALOG_SOURCE_FILES CONFIGURE_DEPENDS
+    "${BLUMACH_CATALOG_SOURCE_DIR}/*.json")
+
+# Materialize the generated QRC during configuration so AUTORCC can discover
+# its inputs. Changes to existing shards and changes to the glob both trigger a
+# CMake reconfiguration, while no-op builds leave the generated resource alone.
+file(MAKE_DIRECTORY "${BLUMACH_CATALOG_BUILD_DIR}")
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_SOURCE_DIR}/tools/catalog_builder.py"
+            build --source "${BLUMACH_CATALOG_SOURCE_DIR}"
+            --output "${BLUMACH_CATALOG_BUILD_DIR}"
+    RESULT_VARIABLE BLUMACH_CATALOG_RESULT
+    OUTPUT_VARIABLE BLUMACH_CATALOG_OUTPUT
+    ERROR_VARIABLE BLUMACH_CATALOG_ERROR
+)
+if(NOT BLUMACH_CATALOG_RESULT EQUAL 0)
+    message(FATAL_ERROR "Unable to generate the BluMach catalogue:\n${BLUMACH_CATALOG_ERROR}")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/tools/catalog_builder.py"
+    "${CMAKE_SOURCE_DIR}/tools/catalog_audit.py"
+    ${BLUMACH_CATALOG_SOURCE_FILES}
+)
 
 if(APPLE AND MOLTENVK)
     include(CheckCXXSourceCompiles)
@@ -289,6 +317,7 @@ add_library(ui STATIC
     qt_vmmanager_mainwindow.ui
 
     ../qt_resources.qrc
+    ${BLUMACH_CATALOG_QRC}
     ./qdarkstyle/dark/darkstyle.qrc
 
     qt_openglshadermanagerdialog.hpp

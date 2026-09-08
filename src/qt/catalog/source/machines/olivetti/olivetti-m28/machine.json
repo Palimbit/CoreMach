@@ -1,0 +1,274 @@
+{
+  "order": 230,
+  "machine": {
+    "id": "olivetti-m28",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m28",
+    "platform_id": "olivetti-m28-fe2000-platform",
+    "name": "Olivetti M28",
+    "summary_key": "product.olivetti-m28.summary",
+    "history_key": "product.olivetti-m28.history",
+    "warning_key": "product.olivetti-m28.warning",
+    "status": "partial",
+    "period": "1986–1987",
+    "aliases": [
+      "Olivetti CPU 2801"
+    ],
+    "tags": [
+      "80286",
+      "8 MHz",
+      "FE2000",
+      "OGC",
+      "MFM",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "ogc"
+      ],
+      "storage_interface": [
+        "floppy",
+        "mfm"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286, 8 MHz",
+      "memory": "512 KB standard; 1 MB on-board documented",
+      "chipset": "Olivetti FE2000 proprietary logic",
+      "video": "Olivetti indigenous OGC display controller",
+      "floppy": "One 5.25-inch 1.2 MB drive in the documented CPU 2801 configuration",
+      "hard_disk": "20 MB slim hard-disk unit (Olivetti Setup type 2); controller at primary 1F0h / IRQ14",
+      "rtc": "MC146818-compatible calendar/CMOS with battery backup",
+      "expansion": "Seven bus positions; ME903/MEM2852 memory expansion remains unmodelled"
+    },
+    "firmware": {
+      "known_sets": [
+        "PBUY/PBUX 2.09",
+        "PBU6/PBU7 2.12"
+      ],
+      "required": true,
+      "identity_note": "Two 16 KiB interleaved EPROMs per revision. BluMach does not distribute their bytes; the profile defaults to 2.12 because it is the most recently validated local set."
+    },
+    "storage": {
+      "bus": "Documented Olivetti controller at 1F0h/IRQ14; current profile uses a WD1003 MFM-compatible approximation",
+      "official_drives": [
+        "20 MB slim hard-disk unit",
+        "40 MB full-height hard-disk unit"
+      ]
+    },
+    "relationships": {
+      "board_codes": [
+        "BA802",
+        "BA807",
+        "BA808",
+        "BA809",
+        "BA815",
+        "BA816"
+      ],
+      "commercial_configurations": [
+        "CPU 2801: 512 KB, one 1.2 MB floppy, one 20 MB hard disk"
+      ]
+    },
+    "creation": {
+      "status": "partial",
+      "directory_prefix": "olivetti-m28",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-m28.creation.model"
+        },
+        {
+          "label_key": "creation.label.hard_disk",
+          "value_key": "product.olivetti-m28.creation.hard_disk"
+        }
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "512",
+          "choices": [
+            {
+              "id": "512",
+              "label_key": "product.olivetti-m28.creation.memory.512",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 512
+                }
+              ]
+            },
+            {
+              "id": "1024",
+              "label_key": "product.olivetti-m28.creation.memory.1024",
+              "status": "partial",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 1024
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.olivetti-m28.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "bios": "v212",
+            "cpu_family": "286",
+            "cpu_speed": 8000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 512
+          }
+        },
+        {
+          "section": "Olivetti M28",
+          "values": {
+            "bios": "v212"
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Storage controllers",
+          "values": {
+            "hdc_1": "st506_at"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "olivetti-m28-20mb.img",
+            "hdd_01_parameters": "17, 4, 615, 0, mfm",
+            "hdd_01_mfm_channel": 0,
+            "hdd_01_speed": "ST225"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "olivetti-m28-20mb.img",
+          "size": 21411840
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-m28.technical.cpu"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-m28.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-m28.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-m28.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.observed",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-m28.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-m28.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-m28.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-m28.technical.service_manual",
+            "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap3.pdf"
+          },
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-m28.technical.service_manual_extended",
+            "url": "https://olivrea.de/handbuecher/"
+          },
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.olivetti-m28.technical.brochure",
+            "url": "https://classic.technology/wp-content/uploads/2021/12/olivettim28nl.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 70,
+  "platform": {
+    "id": "olivetti-m28-fe2000-platform",
+    "emulator_machine_id": "olivetti_m28",
+    "architecture": "80286"
+  }
+}

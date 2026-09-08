@@ -1,0 +1,20 @@
+{
+  "product.olivetti-m280.summary": "Experimental 12 MHz 80286 desktop with an 8 MHz bus, FE2000 logic, external OEC/PGC video, and locally preserved BIOS 2.16.",
+  "product.olivetti-m280.history": "The M280 service guide records BA817 and BA824 system boards, an IF622 bus adapter, ME903 memory expansion, OEC/PGC monitor adapters, and GO714 MFM or GO723 RLL storage controllers. It is a service options record, not a recovered sales-price matrix.",
+  "product.olivetti-m280.warning": "EXPERIMENTAL: the platform starts with local BIOS 2.16, but visual POST, video, keyboard, Setup persistence and boot are not yet confirmed. FE2000, the original console boards, OEC/PGC video and GO714/GO723 storage are not individually modelled; external PVGA1A is only a compatibility approximation.",
+  "product.olivetti-m280.creation.model": "Documented base platform: 12 MHz 80286 / 8 MHz bus, 1 MB RAM, external display adapter and no asserted disk bundle",
+  "product.olivetti-m280.creation.memory.1024": "1 MB base system (current experimental profile)",
+  "product.olivetti-m280.creation.memory.2048": "2 MB total (ME903 relation is documented, but this total is unvalidated)",
+  "product.olivetti-m280.creation.memory.3072": "3 MB (inferred 1 MB base plus the documented 2 MB ME903 maximum)",
+  "product.olivetti-m280.creation.note": "The service guide identifies GO714 MFM and GO723 RLL controller options but does not recover a sales bundle, drive geometry or disk image. Creation therefore adds no hard disk. PVGA1A is an external compatibility video choice, not an Olivetti OEC/PGC model.",
+  "product.olivetti-m280.technical.commercial_configurations": "The guide documents a 1 MB base system, ME903 memory expansion up to 2 MB, OEC EGA-compatible or PGC monitor adapters, and GO714 MFM or GO723 RLL controller options. It does not establish which combinations were commercial bundles or their prices; the 3 MB selectable total is an explicit inference.",
+  "product.olivetti-m280.technical.cpu": "Intel 80286 at 12 MHz with an 8 MHz bus, 100 ns RAM access and one wait state.",
+  "product.olivetti-m280.technical.memory": "The service guide lists 1 MB minimum RAM and ME903 expansion up to 2 MB. The selectable 3 MB total is inferred from those two documented facts and remains experimental, despite emulator support.",
+  "product.olivetti-m280.technical.video": "OEC GO451/GO467 is EGA-compatible and PGC GO423 is a positive-monitor adapter. Neither original board is modelled; PVGA1A is used only as an external compatibility display for the creation profile.",
+  "product.olivetti-m280.technical.storage": "GO714 is ST506/MFM and GO723 is ST506/RLL. BIOS 2.16 expands the hard-disk table and adds a 62 MB RLL disk option, but current BluMach creation does not claim a controller or disk geometry.",
+  "product.olivetti-m280.technical.jumpers": "JU1 selects 512 KB or 1 MB RAM and serial/parallel enablement; JU2/JU6/JU7 select system and 80287 clocks; JU3 selects burn-in, monitor, and 32 MHz clock; JU8/JU9 control RTC/NVR clocks. Default positions are documented, but these physical controls are not modelled individually.",
+  "product.olivetti-m280.technical.firmware": "Documented BIOS pairs are PBVW/PBVV 2.14 and PBVS/PBVT 2.16, with a 2.16.1 update. The local PBVT/PBVS 2.16 pair is preserved as local-only interleaved firmware.",
+  "product.olivetti-m280.technical.verified": "Only build/runtime smoke testing and local BIOS loading are recorded. They are not visual evidence of POST, keyboard, Setup, video or boot.",
+  "product.olivetti-m280.technical.limitations": "Visual POST, video, keyboard, Setup save and boot remain pending. FE2000, console, OEC/PGC, GO714/GO723, jumpers and the exact memory-board mapping require modelling or validation; generic AT services and PVGA1A are explicit compatibility approximations.",
+  "product.olivetti-m280.technical.service_manual": "Olivetti Personal Computer - Pocket Service Guide, CAP4 M280, pages 4-1 to 4-4 (local preservation copy)."
+}

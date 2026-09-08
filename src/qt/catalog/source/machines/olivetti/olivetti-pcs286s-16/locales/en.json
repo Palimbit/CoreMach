@@ -1,0 +1,5 @@
+{
+  "product.olivetti-pcs286s16.summary": "Documented commercial 16 MHz model, but not bootable in BluMach because no verified BIOS is currently available.",
+  "product.olivetti-pcs286s16.history": "A 1991 Olivetti brochure documents a zero-wait-state 16 MHz 80286, 1 MB standard RAM, up to 8 MB on the system board, 16 MB in the system and 40, 80 or 120 MB disks. It is preserved as a historical model separate from the 12 MHz TI/OLIMCU16 board; without its own BIOS, it is not possible to establish whether the two names ever shared a board revision.",
+  "product.olivetti-pcs286s16.warning": "NOT BOOTABLE: no verified BIOS is available for the commercial 16 MHz PCS 286S. BIOS 1.42 belongs to the ordinary PCS 286, while BIOS 2.06 belongs to the 12 MHz TI/OLIMCU16 board; neither should be presented as confirmed firmware for this model."
+}

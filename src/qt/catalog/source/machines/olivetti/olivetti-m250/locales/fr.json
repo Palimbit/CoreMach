@@ -1,0 +1,23 @@
+{
+  "product.olivetti-m250.summary": "Bureau 80286 à 8 MHz de 1989, avec vidéo Paradise compatible VGA intégrée et 1 Mo de mémoire standard.",
+  "product.olivetti-m250.history": "La brochure M250 de 1989 place ce 80286 à 8 MHz sans attente dans le segment professionnel d’entrée de gamme. Elle indique 1 Mo, lecteur 3,5 pouces, graphisme VGA compatible, bus AT 16 bits et souris/vidéo intégrées ; un inventaire de préservation mentionne des disques de 20 et 40 Mo.",
+  "product.olivetti-m250.warning": "ÉMULATION PARTIELLE : le M250 démarre à froid avec le firmware local et le test du 2026-09-03 a observé un redémarrage logiciel sans Keyboard Error 6 avec une NVR nouvellement créée. Le contrôle avec l’ancienne NVR, POST/Setup/System Test visuels, RTC et stockage restent ouverts.",
+  "product.olivetti-m250.creation.model": "Base documentée de 1989 : 80286 à 8 MHz, 1 Mo, vidéo VGA compatible intégrée et lecteur 3,5 pouces",
+  "product.olivetti-m250.creation.memory.1024": "1 Mo (standard documenté ; profil partiellement validé)",
+  "product.olivetti-m250.creation.memory.2048": "2 Mo (maximum documenté)",
+  "product.olivetti-m250.creation.note": "Aucun disque dur n’est créé : les sources commerciales citent des capacités sans identifier contrôleur ni géométrie. Ajoutez un stockage dans Configurer uniquement avec une configuration documentée.",
+  "product.olivetti-m250.technical.market": "Segment professionnel d’entrée de gamme, 1989 ; la brochure cite MS-DOS et MS OS/2.",
+  "product.olivetti-m250.technical.commercial_configurations": "La brochure documente 8 MHz, 1 Mo, lecteur 3,5 pouces, graphisme VGA compatible et bus AT 16 bits. Un inventaire de 1989 décrit une unité XP1530 avec lecteur 1,44 Mo et disques 20 ou 40 Mo ; ce n’est pas une matrice de vente récupérée.",
+  "product.olivetti-m250.technical.physical": "Brochure constructeur : unité de base 412 × 109 × 393 mm, 9 kg ; clavier 2 kg. Moniteur monochrome 340 × 315 × 300 mm / 6 kg et couleur 370 × 360 × 380 mm / 16 kg.",
+  "product.olivetti-m250.technical.cpu": "Intel 80286 à 8 MHz sans état d’attente, selon la brochure de 1989.",
+  "product.olivetti-m250.technical.memory": "La brochure fixe 1 Mo de base et le guide de service documente 2 Mo comme limite M250. Seul le profil 1 Mo a l’observation isolée de démarrage/redémarrage.",
+  "product.olivetti-m250.technical.video": "Paradise PVGA1A/OVC intégré, commercialisé comme VGA compatible ; le jeu local emploie une image vidéo PERC 1.06 distincte.",
+  "product.olivetti-m250.technical.firmware": "Jeux locaux observés : BIOS système PERB 1.03 et BIOS vidéo PERC 1.06 ; leurs octets restent locaux.",
+  "product.olivetti-m250.technical.verified": "Initialisation locale isolée à 8 MHz/1 Mo ; redémarrage sans Keyboard Error 6 observé le 2026-09-03 avec une NVR neuve. Les archives signalent aussi POST, Setup et démarrage System Test du M250.",
+  "product.olivetti-m250.technical.limitations": "Répéter le redémarrage avec l’ancienne NVR et revalider visuellement POST, Setup et System Test. RTC, OS, contrôleur/géométrie disque et profil 2 Mo restent ouverts.",
+  "product.olivetti-m250.technical.brochure": "Brochure commerciale Olivetti M250, 1989 (notice de préservation à accès restreint)",
+  "product.olivetti-m250.technical.service_manual": "Olivetti Pocket Service Guide, sections M250/M250 E",
+  "product.olivetti-m250.technical.collection": "Inventaire de préservation ISER d’une unité M250 XP1530 (source secondaire)",
+  "product.olivetti-m250.technical.storage": "Adaptateur AT/RLL intégré à 1F0h-1F7h et IRQ14 : CP3022 20 Mo (615/4/17), CP3142/CP346 40 Mo (805/4/26), CP3024 40 Mo (635/4/17). P6 sélectionne l’entrelacement RLL 1:1 ou 3:1.",
+  "product.olivetti-m250.technical.jumpers": "P1/P2 sélectionnent 512 Ko, 1 Mo ou 2 Mo de DRAM ; P6 le disque et P8 la batterie. Ces réglages physiques documentés ne sont pas encore modélisés."
+}

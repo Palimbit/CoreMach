@@ -1,0 +1,20 @@
+{
+  "product.olivetti-m28.summary": "Sistema 80286 a 8 MHz con logica FE2000, video OGC Olivetti e una configurazione commerciale documentata da 20 MB.",
+  "product.olivetti-m28.history": "L'M28 del 1986 combinava un 80286 a 8 MHz con la logica FE2000 Olivetti, 512 KB di memoria standard, un'unità floppy da 1,2 MB e un disco rigido Slim da 20 MB nella configurazione CPU 2801. Le espansioni successive comprendevano 1 MB sulla scheda madre e la scheda memoria ME903/MEM2852.",
+  "product.olivetti-m28.warning": "EMULAZIONE PARZIALE: POST, RTC, CMOS, avvio da floppy e 1 MB sulla scheda madre risultano superati. Il profilo commerciale 512 KB/20 MB usa un controller compatibile WD1003 e geometria ST-225 come approssimazione esplicita; controller e unità Olivetti reali restano da verificare. ME903, reset a caldo e due diagnostiche interattive sono in sospeso.",
+  "product.olivetti-m28.creation.model": "Configurazione commerciale CPU 2801: 512 KB, un floppy da 1,2 MB e disco rigido da 20 MB",
+  "product.olivetti-m28.creation.hard_disk": "Disco standard Olivetti di tipo 2 da 20 MB — approssimazione compatibile WD1003/MFM",
+  "product.olivetti-m28.creation.memory.512": "512 KB sulla scheda madre (configurazione CPU 2801 documentata)",
+  "product.olivetti-m28.creation.memory.1024": "1 MB sulla scheda madre (diagnostica registrata come superata)",
+  "product.olivetti-m28.creation.note": "Il profilo rappresenta il disco Olivetti standard da 20 MB, tipo 2 nel Setup. L'immagine MFM vuota usa 615/4/17 e il controller WD1003 solo per compatibilità; non identificano l'hardware Olivetti originale e non sostituiscono l'impostazione CMOS del Setup.",
+  "product.olivetti-m28.technical.cpu": "Intel 80286 con bus a 8 MHz e logica di sistema proprietaria Olivetti FE2000.",
+  "product.olivetti-m28.technical.memory": "CPU 2801 documenta 512 KB, espandibili a 1 MB sulla scheda madre. Con 1 MB installato, la diagnostica registrata osserva 640 KB convenzionali più 384 KB estesi rimappati. La scheda ME903/MEM2852 è documentata ma non modellata.",
+  "product.olivetti-m28.technical.video": "Controller OGC proprietario Olivetti, condiviso con sistemi correlati. Il modello attuale espone gli alias usati da Customer Test; una verifica interattiva resta in sospeso.",
+  "product.olivetti-m28.technical.storage": "Il manuale di servizio documenta un disco Slim da 20 MB o un disco full-height da 40 MB, e controller a 1F0h primario, IRQ14 e DMA3. BluMach sostituisce per ora un percorso MFM WD1003 generico con geometria 615/4/17 per il profilo da 20 MB.",
+  "product.olivetti-m28.technical.firmware": "Le coppie BIOS da 32 KB note sono PBUY/PBUX 2.09 e PBU6/PBU7 2.12. La 2.12 è selezionata perché è l'ultima validata localmente; la BIOS di vendita CPU 2801 resta da stabilire.",
+  "product.olivetti-m28.technical.verified": "La validazione registrata conferma POST a freddo, RTC/CMOS, avvio da floppy e 1 MB di memoria. Il profilo di catalogo usa la base commerciale documentata di 512 KB e si avvia senza supporti proprietari.",
+  "product.olivetti-m28.technical.limitations": "L'espansione memoria ME903 è assente. Reset a caldo, un sottotest interattivo della tastiera e un test interattivo degli alias video restano aperti. Il controller disco è un'approssimazione WD1003 compatibile, non un modello della scheda Olivetti originale.",
+  "product.olivetti-m28.technical.service_manual": "Guida di servizio Olivetti CAP3.",
+  "product.olivetti-m28.technical.service_manual_extended": "Manuali di installazione/uso e di servizio elencati dalla fonte di preservazione.",
+  "product.olivetti-m28.technical.brochure": "Opuscolo commerciale olandese che documenta la configurazione M28/20."
+}

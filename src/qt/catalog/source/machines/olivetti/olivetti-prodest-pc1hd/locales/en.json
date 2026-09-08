@@ -1,0 +1,16 @@
+{
+  "product.olivetti-prodest-pc1hd.summary": "Distinct 640 KB Prodest model with NEC V40, integrated V6355 video and a factory 20 MB hard disk.",
+  "product.olivetti-prodest-pc1hd.history": "The PC 1 HD was sold as a separate member of the Prodest PC 1 family rather than merely as a user-selected disk option. Period Italian advertising documents the 20 MB configuration; surviving board photographs show BIOS 1.21 and a dedicated internal 40-pin disk connection.",
+  "product.olivetti-prodest-pc1hd.warning": "INITIAL PARTIAL EMULATION: BIOS 1.21, 640 KB, video, floppy and the factory 20 MB XTA path work; FDISK, FORMAT /S and autonomous hard-disk boot are validated. The controller reuses BluMach's common XTA engine and translates V40 DMAU channel 2 to a generic 8237 channel. The exact 40 MB selector geometry and native V40 peripherals remain unresolved.",
+  "product.olivetti-prodest-pc1hd.technical.cpu": "NEC V40 with 8-bit external bus and BIOS-controlled 4.77/8 MHz operation; the current model uses the dedicated BluMach V40 register device over its V20 instruction core.",
+  "product.olivetti-prodest-pc1hd.technical.memory": "640 KB are visible to software. A technical guide documents 768 KB physically populated on the PC1HD board; the additional 128 KB are not mapped as conventional memory.",
+  "product.olivetti-prodest-pc1hd.technical.video": "Integrated Yamaha V6355D with 16 KB physical VRAM mirrored at B0000h, B4000h, B8000h and BC000h. BluMach reproduces the aliases and their BIOS-controlled visibility.",
+  "product.olivetti-prodest-pc1hd.technical.storage": "One internal 720 KB floppy and an onboard 8-bit XTA controller at 0320h-0323h, IRQ 5, without an option ROM. The initial profile uses the BIOS 1.21 table geometry 667 cylinders, 2 heads and 32 sectors (20.84 MiB).",
+  "product.olivetti-prodest-pc1hd.technical.firmware": "Dedicated 16 KB system BIOS 1.21, SHA-256 A2C03DC2E8752EA1632B910B4CE46AF7AB5FC6D4B352D8E21703B2ABB5791F96. ROM bytes are not distributed with BluMach.",
+  "product.olivetti-prodest-pc1hd.technical.verified": "A traced UCRT64 build passes Resident Diagnostics 1.21 for CPU, ROM, DMA, interrupts, timer and 640 KB RAM. With Spanish MS-DOS 3.20, FDISK creates the partition, FORMAT /S completes and the machine boots autonomously from the 20 MB disk. BIOS normal/4.77 MHz selection works and survives Ctrl+Alt+Del.",
+  "product.olivetti-prodest-pc1hd.technical.limitations": "The XTA command engine is shared and the V40 DMAU path is an explicit translation layer, not a native integrated DMA implementation. Cold reset, PC1HD turbo-state preservation, sustained disk I/O, broader software and the documented 40 MB alternative still require validation.",
+  "product.olivetti-prodest-pc1hd.technical.vogons": "Owner observations, board photographs and modern hardware tests for PC 1 and PC 1 HD.",
+  "product.olivetti-prodest-pc1hd.technical.cfguide": "Technical guide to a modern CompactFlash modification; useful for board evidence, but not the factory controller design.",
+  "product.olivetti-prodest-pc1hd.creation.model": "PC 1 HD with 640 KB, one 720 KB drive and the 20 MB factory disk",
+  "product.olivetti-prodest-pc1hd.creation.note": "The 20 MB profile boots from hard disk. The documented 40 MB alternative remains unavailable until its selector and geometry are established."
+}

@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30008.summary": "386SX a 20 MHz con OPTi 82C283, 82C206 separato e video OAK OTI-067 integrato.",
+  "product.olivetti-m30008.history": "Il M300-08 BA319/BA324/BA325 è distinto da IF378 e TOPCAT. Il manuale indica bus AT a 10 MHz e memoria 2/4/8/10/14/16 MB; 6 e 12 MB non sono possibili.",
+  "product.olivetti-m30008.technical.verified": "Convalidati POST, Setup, cambio d'anno, floppy da 1,44 MB e avvio MS-DOS 3.30a.",
+  "product.olivetti-m30008.technical.limitations": "Emulazione parziale avviabile. Il 82C283 è modellato con bus AT a 10 MHz; le funzioni AT comuni rappresentano il 82C206. IDE e temporizzazione RTC restano da validare."
+}

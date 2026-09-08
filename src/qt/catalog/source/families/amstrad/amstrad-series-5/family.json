@@ -1,0 +1,10 @@
+{
+  "order": 120,
+  "family": {
+    "id": "amstrad-series-5",
+    "manufacturer_id": "amstrad",
+    "parent_family_id": "",
+    "name": "Series 5",
+    "description_key": "family.amstrad-series-5.description"
+  }
+}
