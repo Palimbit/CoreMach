@@ -923,6 +923,19 @@ paradise_pvga1a_pcs386sx_init(const device_t *info)
 }
 
 static void *
+paradise_pvga1a_t5200_init(const device_t *info)
+{
+    paradise_t *paradise = paradise_init(info, 256);
+
+    if (paradise)
+        /* Award V1.xx is documented to require the original 24 KiB VGA ROM. */
+        rom_init(&paradise->bios_rom, "roms/machines/t5200/t5200-vga-1988.bin",
+                 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
+
+    return paradise;
+}
+
+static void *
 paradise_pvga1a_standalone_init(const device_t *info)
 {
     paradise_t *paradise;
@@ -1196,6 +1209,21 @@ const device_t paradise_pvga1a_pcs386sx_device = {
     .speed_changed = paradise_speed_changed,
     .force_redraw  = paradise_force_redraw,
     .machine       = "Olivetti PCS 386SX",
+    .config        = NULL
+};
+
+const device_t paradise_pvga1a_t5200_device = {
+    .name          = "Paradise PVGA1A On-Board (Toshiba T5200)",
+    .internal_name = "pvga1a_t5200",
+    .flags         = 0,
+    .local         = PVGA1A,
+    .init          = paradise_pvga1a_t5200_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Toshiba T5200",
     .config        = NULL
 };
 
