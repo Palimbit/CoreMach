@@ -1,0 +1,222 @@
+{
+  "order": 30,
+  "machine": {
+    "id": "olivetti-prodest-pc1hd",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-prodest",
+    "platform_id": "olivetti-prodest-pc1hd-platform",
+    "name": "Olivetti Prodest PC 1 HD",
+    "summary_key": "product.olivetti-prodest-pc1hd.summary",
+    "history_key": "product.olivetti-prodest-pc1hd.history",
+    "warning_key": "product.olivetti-prodest-pc1hd.warning",
+    "status": "partial",
+    "period": "1989",
+    "aliases": [
+      "Prodest PC1 HD",
+      "Olivetti PC 1 HD"
+    ],
+    "tags": [
+      "NEC V40",
+      "XT",
+      "V6355",
+      "XTA",
+      "20 MB",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_8086"
+      ],
+      "storage_interface": [
+        "floppy",
+        "xta"
+      ]
+    },
+    "hardware": {
+      "cpu": "NEC V40, switchable 4.77/8 MHz",
+      "memory": "640 KB visible; 768 KB physically populated according to the technical guide",
+      "video": "Integrated Yamaha V6355-compatible display logic with 16 KB mirrored VRAM",
+      "floppy": "One internal 3.5-inch 720 KB drive",
+      "hard_disk": "Internal 8-bit XTA interface at 0320h-0323h, IRQ 5; 20 MB factory configuration",
+      "interfaces": "Serial, parallel, audio, RGB/mono and quadrature mouse/joystick"
+    },
+    "firmware": {
+      "known_sets": [
+        "System BIOS 1.21",
+        "Character ROM 1.01",
+        "Italian character ROM 1.02"
+      ],
+      "required": true,
+      "identity_note": "Firmware is identified by filename, size and SHA-256 metadata only; no ROM data is distributed with BluMach"
+    },
+    "storage": {
+      "bus": "Internal 8-bit XTA without an option ROM",
+      "official_drives": [
+        "20 MB hard disk",
+        "40 MB hard disk documented as supported; exact selector geometry remains unresolved"
+      ]
+    },
+    "relationships": {
+      "commercial_variants": [
+        "PC 1 HD"
+      ],
+      "related_models": [
+        "Olivetti Prodest PC 1"
+      ]
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-prodest-pc1hd",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-prodest-pc1hd.creation.model"
+        },
+        {
+          "label_key": "creation.label.hard_disk",
+          "value_key": "creation.option.hard_disk.20mb"
+        }
+      ],
+      "fields": [],
+      "note_keys": [
+        "product.olivetti-prodest-pc1hd.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "bios": "v121",
+            "cpu_family": "necv40",
+            "cpu_speed": 8000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 640
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_pc_xt",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2dd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Storage controllers",
+          "values": {
+            "hdc_1": "internal"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "pc1hd-20mb.img",
+            "hdd_01_parameters": "32, 2, 667, 0, xta",
+            "hdd_01_xta_channel": 0
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "pc1hd-20mb.img",
+          "size": 21856256
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.cpu"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.vogons",
+            "url": "https://www.vogons.org/viewtopic.php?t=109593"
+          },
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-prodest-pc1hd.technical.cfguide",
+            "url": "https://www.ti99iuc.it/web/_upload/image/PC1-OnePage/Docs/GuidaCFModPC1HD/pc1CF-IDE-Guide.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 40,
+  "platform": {
+    "id": "olivetti-prodest-pc1hd-platform",
+    "emulator_machine_id": "olivetti_prodest_pc1hd",
+    "architecture": "NEC V40"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "order": 130,
+  "family": {
+    "id": "toshiba-t-series",
+    "manufacturer_id": "toshiba",
+    "parent_family_id": "",
+    "name": "T-series",
+    "description_key": "family.toshiba-t-series.description"
+  }
+}

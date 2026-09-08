@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30008.summary": "386SX a 20 MHz com OPTi 82C283, 82C206 separado e vídeo OAK OTI-067 integrado.",
+  "product.olivetti-m30008.history": "O M300-08 BA319/BA324/BA325 é distinto de IF378 e TOPCAT. O manual indica barramento AT a 10 MHz e memória 2/4/8/10/14/16 MB; 6 e 12 MB não são possíveis.",
+  "product.olivetti-m30008.technical.verified": "Validados POST, Setup, mudança de ano, disquete de 1,44 MB e arranque do MS-DOS 3.30a.",
+  "product.olivetti-m30008.technical.limitations": "Emulação parcial arrancável. O 82C283 está modelado com barramento AT a 10 MHz; as funções AT comuns representam o 82C206. IDE e temporização RTC precisam de validação."
+}

@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30002.summary": "Primer M300 BA013/16 con 386SX a 16 MHz, TOPCAT y WD90C11 integrado.",
+  "product.olivetti-m30002.history": "M300-02 es el producto profesional BA013 de 16 MHz. Tiene BIOS e identidad de máquina propias, separadas del M300-02F más rápido y de los productos PCS físicamente diferentes.",
+  "product.olivetti-m30002.technical.verified": "El volcado exacto R1.02 de 128 KB está identificado, verificado por hash y conectado a una máquina propia de 16 MHz que comparte el núcleo BA013.",
+  "product.olivetti-m30002.technical.limitations": "Implementada pero aún sin validar su arranque. Falta la BIOS de servicio R1.03 posterior y TOPCAT y la lógica multifunción siguen siendo modelos funcionales parciales."
+}

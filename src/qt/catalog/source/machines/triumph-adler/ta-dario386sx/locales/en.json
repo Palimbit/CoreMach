@@ -1,0 +1,12 @@
+{
+  "product.ta-dario386sx.summary": "Triumph-Adler badge of the 16 MHz PCS 386SX platform, with preserved original ROMs",
+  "product.ta-dario386sx.history": "Triumph-Adler sold the 80386SX member of this common platform as Dario 386SX or P45. Comparison of surviving version 1.14 ROMs proves that its executable video and system firmware is identical to the Olivetti PCS 386SX; only unused EPROM padding differs.",
+  "product.ta-dario386sx.technical.identity": "Offsets 00000h–05FFFh (OVC 1.06) and 10000h–1FFFFh (Phoenix 1.14) are byte-identical to PCS 386SX. All 40,959 differing bytes lie in unused 06000h–0FFFFh padding: mostly FFh on Dario and 00h on Olivetti.",
+  "product.ta-dario386sx.technical.rom_layout": "Original 64 KB LOW and HIGH dumps interleave exactly into the 128 KB FULL image. BluMach loads the Dario originals, preserving their FFh erased-area state rather than normalizing it to the Olivetti image.",
+  "product.ta-dario386sx.technical.bios_revision": "Phoenix system BIOS 1.14 dated 30 October 1991 with 24 KB OVC video BIOS 1.06, Resident Diagnostics and tables.",
+  "product.ta-dario386sx.technical.chipset": "Shares the PCS 386SX board model: Headland HT101SX + HT113 + GC102-PC, IOC02, discrete TL16C451FN serial/parallel and WD37C65CJM floppy control, plus integrated PVGA1A.",
+  "product.ta-dario386sx.technical.verified": "ROM reconstruction and executable identity are proven. The Dario uses the same corrected HT101SX + HT113 + GC102-PC implementation as the PCS 386SX and boots BIOS, Built-In Setup and MS-DOS with configured memory and IDE disks; its status is therefore the same usable partial level.",
+  "product.ta-dario386sx.technical.limitations": "Partial and bootable, with the same boundaries as the PCS 386SX: chipset ownership is reconstructed without exact HT101SX/HT113 documentation, the M5L8042 ROM is missing, EMS and GC102-PC parity need validation, and broad software compatibility has not yet been tested. Brand-specific external hardware differences beyond the proven firmware/padding distinction have not been independently validated.",
+  "product.ta-dario386sx.document.olivetti": "Olivetti PCS 386SX product sheet for the badge-equivalent platform",
+  "product.ta-dario386sx.document.firmware": "Preserved TA Dario and Olivetti PCS 386SX version 1.14 LOW/HIGH/FULL dumps and byte-level comparison"
+}

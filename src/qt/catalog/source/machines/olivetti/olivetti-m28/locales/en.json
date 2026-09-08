@@ -1,0 +1,20 @@
+{
+  "product.olivetti-m28.summary": "Eight-megahertz 80286 system with FE2000 logic, Olivetti OGC video and a documented 20 MB commercial configuration.",
+  "product.olivetti-m28.history": "The 1986 M28 combined an 80286 at 8 MHz with Olivetti's FE2000 logic, 512 KB of standard memory, a 1.2 MB floppy drive and a 20 MB slim hard disk in the CPU 2801 configuration. Its indigenous display controller supported Olivetti monochrome and colour displays. Later expansion included 1 MB on-board memory and the ME903/MEM2852 memory board.",
+  "product.olivetti-m28.warning": "PARTIAL EMULATION: POST, RTC, CMOS, floppy boot and 1 MB on-board memory are recorded as passing. The commercial 512 KB/20 MB profile uses a WD1003 MFM-compatible controller and ST-225 geometry as an explicit compatibility approximation; the actual Olivetti controller and drive identity remain to be verified. ME903 expansion, warm reset and two interactive diagnostics are pending.",
+  "product.olivetti-m28.creation.model": "CPU 2801 commercial configuration: 512 KB, one 1.2 MB floppy drive and 20 MB hard disk",
+  "product.olivetti-m28.creation.hard_disk": "Standard 20 MB Olivetti type 2 disk — WD1003/MFM-compatible approximation",
+  "product.olivetti-m28.creation.memory.512": "512 KB on-board (documented CPU 2801 configuration)",
+  "product.olivetti-m28.creation.memory.1024": "1 MB on-board (diagnostics recorded as passing)",
+  "product.olivetti-m28.creation.note": "The profile represents the standard 20 MB Olivetti disk, type 2 in Setup. The blank MFM image uses 615/4/17 and the WD1003 controller only for compatibility; they neither identify the original Olivetti hardware nor replace the Setup CMOS setting.",
+  "product.olivetti-m28.technical.cpu": "Intel 80286 at an 8 MHz bus, with Olivetti FE2000 proprietary system logic.",
+  "product.olivetti-m28.technical.memory": "512 KB was documented for CPU 2801 and can be expanded to 1 MB on-board. With 1 MB installed, the recorded diagnostics observe 640 KB conventional plus 384 KB remapped extended memory. The ME903/MEM2852 expansion board is documented but not modelled.",
+  "product.olivetti-m28.technical.video": "Olivetti indigenous OGC controller, shared with related Olivetti systems. The current model exposes the aliases used by Customer Test, while an interactive alias retest remains pending.",
+  "product.olivetti-m28.technical.storage": "The service manual documents a 20 MB slim or 40 MB full-height hard-disk unit and a controller at primary 1F0h, IRQ14 and DMA3. BluMach currently substitutes a generic WD1003 MFM path with 615/4/17 geometry for the 20 MB profile.",
+  "product.olivetti-m28.technical.firmware": "Known 32 KiB BIOS pairs are PBUY/PBUX 2.09 and PBU6/PBU7 2.12. The 2.12 pair is the default because it is the latest locally validated set; the shipping BIOS for CPU 2801 is not yet established.",
+  "product.olivetti-m28.technical.verified": "Recorded validation confirms cold POST, RTC/CMOS, floppy boot and 1 MB memory. The catalogue profile uses the documented 512 KB commercial baseline and launches without proprietary media.",
+  "product.olivetti-m28.technical.limitations": "ME903 memory expansion is absent. Warm reset, an interactive keyboard subtest and an interactive video-alias retest remain open. The hard-disk controller is a compatible WD1003 approximation, not a model of the original Olivetti board.",
+  "product.olivetti-m28.technical.service_manual": "Olivetti CAP3 service guide.",
+  "product.olivetti-m28.technical.service_manual_extended": "Installation/operation and service manuals listed by the preservation source.",
+  "product.olivetti-m28.technical.brochure": "Dutch commercial brochure documenting the M28/20 configuration."
+}

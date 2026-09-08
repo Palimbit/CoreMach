@@ -1,0 +1,332 @@
+{
+  "order": 40,
+  "machine": {
+    "id": "olivetti-pcs86",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-pcs",
+    "platform_id": "olivetti-pcs86-platform",
+    "name": "Olivetti PCS 86",
+    "summary_key": "product.olivetti-pcs86.summary",
+    "history_key": "product.olivetti-pcs86.history",
+    "status": "validated",
+    "period": "1989–1990",
+    "aliases": [
+      "PCS 86"
+    ],
+    "tags": [
+      "V30",
+      "8086",
+      "XT",
+      "VGA",
+      "XTA",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_8086"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy",
+        "xta"
+      ]
+    },
+    "hardware": {
+      "cpu": "NEC V30 10 MHz, 0 wait states",
+      "memory": "640 KB; expansion to 2.5 MB, LIM 4.0/EMS",
+      "video": "Paradise VGA integrated",
+      "floppy": "3.5 in, 720 KB",
+      "rtc": "MM58167",
+      "coprocessor": "Intel 8087 optional",
+      "expansion": "3 × 8-bit full-size slots",
+      "interfaces": "RS-232C, bidirectional parallel, mouse, AT keyboard",
+      "dimensions": "360 × 312 × 100 mm; 7.6 kg"
+    },
+    "firmware": {
+      "known_sets": [
+        "1.09"
+      ],
+      "required": true
+    },
+    "storage": {
+      "bus": "XTA",
+      "official_drives": [
+        "Conner CP3026 20 MB"
+      ]
+    },
+    "relationships": {},
+    "creation": {
+      "status": "validated",
+      "directory_prefix": "olivetti-pcs86",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-pcs86.creation.model"
+        },
+        {
+          "label_key": "creation.label.hard_disk",
+          "value_key": "creation.option.hard_disk.20mb"
+        }
+      ],
+      "fields": [
+        {
+          "id": "ems",
+          "label_key": "creation.label.ems",
+          "default": "1920",
+          "choices": [
+            {
+              "id": "none",
+              "label_key": "creation.option.ems.none",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "ems_size",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "id": "384",
+              "label_key": "creation.option.ems.384kb",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "ems_size",
+                  "value": 384
+                }
+              ]
+            },
+            {
+              "id": "1920",
+              "label_key": "creation.option.ems.1920kb",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "ems_size",
+                  "value": 1920
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.olivetti-pcs86.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "necv30",
+            "cpu_speed": 9545456,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 640,
+            "ems_size": 1920,
+            "keylock_locked": 0,
+            "fdd0_jumpers": -1,
+            "fdd1_jumpers": -1,
+            "hdd_jumper": -1
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_pc_xt",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Ports (COM & LPT)",
+          "values": {
+            "serial2_enabled": 0
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "conner-cp3026-20mb.img",
+            "hdd_01_parameters": "17, 4, 615, 0, xta",
+            "hdd_01_xta_channel": 0
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "conner-cp3026-20mb.img",
+          "size": 21411840
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-pcs86.technical.cpu_bus"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-pcs86.technical.memory_map"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-pcs86.technical.video"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.reverse_engineered",
+        "entries": [
+          {
+            "label_key": "technical.label.rom_layout",
+            "value_key": "product.olivetti-pcs86.technical.rom_layout"
+          },
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-pcs86.technical.bios_revision"
+          },
+          {
+            "label_key": "technical.label.bios_identity",
+            "value_key": "product.olivetti-pcs86.technical.bios_identity"
+          },
+          {
+            "label_key": "technical.label.diagnostics",
+            "value_key": "product.olivetti-pcs86.technical.diagnostics"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.io_map",
+        "evidence_key": "technical.evidence.mixed",
+        "description_key": "product.olivetti-pcs86.technical.io_intro",
+        "entries": [
+          {
+            "label_key": "technical.label.board_control",
+            "value_key": "product.olivetti-pcs86.technical.board_control"
+          },
+          {
+            "label_key": "technical.label.keyboard_mouse",
+            "value_key": "product.olivetti-pcs86.technical.keyboard_mouse"
+          },
+          {
+            "label_key": "technical.label.rtc",
+            "value_key": "product.olivetti-pcs86.technical.rtc"
+          },
+          {
+            "label_key": "technical.label.floppy",
+            "value_key": "product.olivetti-pcs86.technical.floppy"
+          },
+          {
+            "label_key": "technical.label.hard_disk",
+            "value_key": "product.olivetti-pcs86.technical.hard_disk"
+          },
+          {
+            "label_key": "technical.label.serial_parallel",
+            "value_key": "product.olivetti-pcs86.technical.serial_parallel"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-pcs86.technical.video_ports"
+          },
+          {
+            "label_key": "technical.label.ems",
+            "value_key": "product.olivetti-pcs86.technical.ems"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.configuration",
+        "evidence_key": "technical.evidence.reverse_engineered",
+        "entries": [
+          {
+            "label_key": "technical.label.jumpers",
+            "value_key": "product.olivetti-pcs86.technical.jumpers"
+          },
+          {
+            "label_key": "technical.label.key_lock",
+            "value_key": "product.olivetti-pcs86.technical.key_lock"
+          },
+          {
+            "label_key": "technical.label.gui_behavior",
+            "value_key": "product.olivetti-pcs86.technical.gui_behavior"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-pcs86.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-pcs86.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.sources",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.olivetti-pcs86.technical.brochure",
+            "url": "https://olivrea.de/prospekte-personal-computer/"
+          },
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-pcs86.technical.source_seasip",
+            "url": "https://www.seasip.info/VintagePC/pcs86.html"
+          },
+          {
+            "label_key": "technical.label.source_firmware",
+            "value_key": "product.olivetti-pcs86.technical.source_firmware"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 20,
+  "platform": {
+    "id": "olivetti-pcs86-platform",
+    "emulator_machine_id": "olivetti_pcs86",
+    "architecture": "8086"
+  }
+}

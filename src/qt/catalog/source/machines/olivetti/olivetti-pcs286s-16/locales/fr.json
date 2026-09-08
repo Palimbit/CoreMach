@@ -1,0 +1,5 @@
+{
+  "product.olivetti-pcs286s16.summary": "PCS 286S commercial à 16 MHz documenté, non encore émulable faute de BIOS correct.",
+  "product.olivetti-pcs286s16.history": "La brochure Olivetti de 1991 confirme un 80286 à 16 MHz sans état d'attente, 1 Mo standard, jusqu'à 8 Mo sur la carte, 16 Mo dans le système et des disques de 40, 80 et 120 Mo. Il est catalogué séparément de la carte TI/OLIMCU16 à 12 MHz.",
+  "product.olivetti-pcs286s16.warning": "ÉMULATION INDISPONIBLE : aucun BIOS vérifié du PCS 286S commercial à 16 MHz n'est préservé. Le BIOS TI/OLIMCU16 2.06 n'est pas réutilisé car ses modes correspondent à 12 MHz."
+}

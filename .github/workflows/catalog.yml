@@ -1,0 +1,35 @@
+name: Catalogue validation
+
+on:
+  push:
+    paths:
+      - src/qt/catalog/**
+      - src/qt/CMakeLists.txt
+      - src/qt_resources.qrc
+      - tools/catalog_audit.py
+      - tools/catalog_builder.py
+      - tools/tests/test_catalog_*.py
+      - .github/workflows/catalog.yml
+  pull_request:
+    paths:
+      - src/qt/catalog/**
+      - src/qt/CMakeLists.txt
+      - src/qt_resources.qrc
+      - tools/catalog_audit.py
+      - tools/catalog_builder.py
+      - tools/tests/test_catalog_*.py
+      - .github/workflows/catalog.yml
+
+jobs:
+  audit:
+    name: Audit catalogue and translations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate catalogue
+        run: python3 -B tools/catalog_builder.py check
+
+      - name: Test catalogue auditor
+        run: python3 -B -m unittest discover -s tools/tests -p "test_catalog_*.py"

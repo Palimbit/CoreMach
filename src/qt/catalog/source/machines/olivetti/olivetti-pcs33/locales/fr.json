@@ -1,0 +1,6 @@
+{
+  "product.olivetti-pcs33.summary": "Ordinateur de bureau 386SX 25 MHz de la gamme PCS 1992.",
+  "product.olivetti-pcs33.history": "Le PCS 33 fut commercialisé comme système de bureau distinct avec 2 Mo et disques IDE de 40 à 120 Mo. Son BIOS 6.03 conservé permet de réutiliser provisoirement BA013/25 sans confondre PCS 11, PCS 33 et M300-02F.",
+  "product.olivetti-pcs33.technical.verified": "Le dump PCS 33 6.03 identifié par sa provenance dispose d'une machine 25 MHz propre et utilise le cœur TOPCAT BA013/25 récupéré.",
+  "product.olivetti-pcs33.technical.limitations": "Fiche produit indépendante. L'affectation exacte de la carte et les différences externes exigent encore un manuel propre au modèle ou une inspection physique; l'implémentation commune reste provisoire et partielle."
+}

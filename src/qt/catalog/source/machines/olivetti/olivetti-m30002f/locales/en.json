@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30002f.summary": "Professional M300 with BA013/25, a 25 MHz 386SX, TOPCAT and integrated WD90C11.",
+  "product.olivetti-m30002f.history": "M300-02F is the professional BA013/25-based product. It shares a technical platform with later PCS members while retaining its own commercial identity and product record.",
+  "product.olivetti-m30002f.technical.verified": "Cold POST, firmware memory paths, EMS programming and boot have been observed with the recovered model.",
+  "product.olivetti-m30002f.technical.limitations": "Bootable partial emulation. Warm Ctrl+Alt+Del and an independent DOS EMM driver remain pending. TOPCAT is an initial register model; PC87310 and common IDE provisionally aggregate the real 87C310, Acer FDC and MSI logic."
+}

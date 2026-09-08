@@ -1,0 +1,23 @@
+{
+  "product.olivetti-m250.summary": "Desktop 80286 a 8 MHz del 1989, con video Paradise VGA compatibile integrato e 1 MB di memoria standard.",
+  "product.olivetti-m250.history": "La brochure M250 del 1989 colloca questo 80286 a 8 MHz senza wait state nel segmento professionale di base. Indica 1 MB, floppy da 3,5 pollici, grafica VGA compatibile, bus AT a 16 bit e mouse/video integrati; un inventario di preservazione cita dischi da 20 e 40 MB.",
+  "product.olivetti-m250.warning": "EMULAZIONE PARZIALE: M250 avvia a freddo con firmware locale e il test del 2026-09-03 ha osservato un reset software senza Keyboard Error 6 con NVR nuova. Restano aperti controllo con NVR storica, POST/Setup/System Test visivi, RTC e disco.",
+  "product.olivetti-m250.creation.model": "Base documentata 1989: 80286 a 8 MHz, 1 MB, video VGA compatibile integrato e floppy da 3,5 pollici",
+  "product.olivetti-m250.creation.memory.1024": "1 MB (standard documentato; profilo parzialmente validato)",
+  "product.olivetti-m250.creation.memory.2048": "2 MB (massimo documentato)",
+  "product.olivetti-m250.creation.note": "Non viene creato un disco: le fonti commerciali citano capacità ma non controller o geometria. Aggiungere lo storage in Configura solo con una configurazione documentata.",
+  "product.olivetti-m250.technical.market": "Segmento professionale di base, 1989; la brochure cita MS-DOS e MS OS/2.",
+  "product.olivetti-m250.technical.commercial_configurations": "La brochure documenta 8 MHz, 1 MB, floppy 3,5 pollici, grafica VGA compatibile e bus AT 16 bit. Un inventario 1989 descrive XP1530 con floppy 1,44 MB e dischi 20/40 MB; non è una matrice commerciale recuperata.",
+  "product.olivetti-m250.technical.physical": "Brochure del produttore: unità base 412 × 109 × 393 mm, 9 kg; tastiera 2 kg. Monitor monocromatico 340 × 315 × 300 mm / 6 kg e colore 370 × 360 × 380 mm / 16 kg.",
+  "product.olivetti-m250.technical.cpu": "Intel 80286 a 8 MHz senza wait state, secondo la brochure 1989.",
+  "product.olivetti-m250.technical.memory": "La brochure fissa 1 MB e il manuale di servizio documenta 2 MB come limite M250. Solo il profilo 1 MB ha osservazione isolata di avvio/reset.",
+  "product.olivetti-m250.technical.video": "Paradise PVGA1A/OVC integrato, commercializzato come VGA compatibile; il set locale usa ROM video PERC 1.06 separata.",
+  "product.olivetti-m250.technical.firmware": "Set locali osservati: BIOS sistema PERB 1.03 e BIOS video PERC 1.06; i byte restano locali.",
+  "product.olivetti-m250.technical.verified": "Inizializzazione locale isolata a 8 MHz/1 MB; reset senza Keyboard Error 6 osservato il 2026-09-03 con NVR nuova. Gli archivi riportano anche POST, Setup e System Test M250.",
+  "product.olivetti-m250.technical.limitations": "Ripetere il reset con NVR preesistente e rivalidare POST, Setup e System Test. RTC, OS, controller/geometria disco e profilo 2 MB restano aperti.",
+  "product.olivetti-m250.technical.brochure": "Brochure commerciale Olivetti M250, 1989 (elenco di preservazione ad accesso limitato)",
+  "product.olivetti-m250.technical.service_manual": "Olivetti Pocket Service Guide, sezioni M250/M250 E",
+  "product.olivetti-m250.technical.collection": "Inventario di preservazione ISER di un’unità M250 XP1530 (fonte secondaria)",
+  "product.olivetti-m250.technical.storage": "Adattatore AT/RLL integrato a 1F0h-1F7h e IRQ14: CP3022 20 MB (615/4/17), CP3142/CP346 40 MB (805/4/26), CP3024 40 MB (635/4/17). P6 seleziona interleave RLL 1:1 o 3:1.",
+  "product.olivetti-m250.technical.jumpers": "P1/P2 scelgono 512 KB, 1 MB o 2 MB DRAM; P6 il disco e P8 la batteria. Queste selezioni fisiche documentate non sono ancora modellate."
+}

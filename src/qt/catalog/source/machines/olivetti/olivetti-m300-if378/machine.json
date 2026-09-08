@@ -1,0 +1,131 @@
+{
+  "order": 100,
+  "machine": {
+    "id": "olivetti-m300-if378",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m300",
+    "platform_id": "olivetti-m300-if378-platform",
+    "name": "Olivetti M300 (IF378)",
+    "summary_key": "product.olivetti-m300-if378.summary",
+    "history_key": "product.olivetti-m300-if378.history",
+    "status": "partial",
+    "period": "1990",
+    "aliases": [
+      "M300 UC.112/113"
+    ],
+    "tags": [
+      "80386SX",
+      "16 MHz",
+      "Intel 82335",
+      "modular",
+      "IDE"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_386sx"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80386SX 16 MHz on IF378",
+      "memory": "1–12 MB",
+      "chipset": "Intel 82230/82231/82335",
+      "expansion": "IN108 system bus; GO477 multifunction board"
+    },
+    "firmware": {
+      "known_sets": [
+        "PEQX Resident Diagnostics 1.09"
+      ],
+      "required": true
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-m300-if378",
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i386sx",
+            "cpu_speed": 16000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 1,
+            "mem_size": 2048
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "pvga1a"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "olivetti-m300-40mb.img",
+            "hdd_01_parameters": "26, 4, 805, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "1989_3500rpm"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "olivetti-m300-40mb.img",
+          "size": 42864640
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-m300-if378.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-m300-if378.technical.limitations"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 140,
+  "platform": {
+    "id": "olivetti-m300-if378-platform",
+    "emulator_machine_id": "olivetti_m300_if378",
+    "architecture": "80386SX"
+  }
+}

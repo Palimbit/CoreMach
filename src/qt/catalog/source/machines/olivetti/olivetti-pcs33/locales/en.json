@@ -1,0 +1,6 @@
+{
+  "product.olivetti-pcs33.summary": "25 MHz 386SX office desktop in Olivetti's 1992 PCS range.",
+  "product.olivetti-pcs33.history": "PCS 33 was marketed as a distinct office system with 2 MB and 40–120 MB IDE disks. Its preserved 6.03 firmware supports provisional reuse of BA013/25 without treating PCS 11, PCS 33 and M300-02F as aliases.",
+  "product.olivetti-pcs33.technical.verified": "The source-identified PCS 33 6.03 dump has its own 25 MHz machine identity and uses the recovered BA013/25 TOPCAT core.",
+  "product.olivetti-pcs33.technical.limitations": "Independent product record. Exact board assignment and PCS 33 external differences still need a model-specific manual or physical inspection; the shared implementation remains provisional and partial."
+}

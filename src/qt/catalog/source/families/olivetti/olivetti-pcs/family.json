@@ -1,0 +1,10 @@
+{
+  "order": 20,
+  "family": {
+    "id": "olivetti-pcs",
+    "manufacturer_id": "olivetti",
+    "parent_family_id": "",
+    "name": "PCS",
+    "description_key": "family.olivetti-pcs.description"
+  }
+}

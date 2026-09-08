@@ -1,0 +1,20 @@
+{
+  "product.olivetti-m280.summary": "Sobremesa 80286 experimental a 12 MHz, con bus a 8 MHz, lógica FE2000, vídeo externo OEC/PGC y BIOS 2.16 preservada localmente.",
+  "product.olivetti-m280.history": "La guía de servicio del M280 registra placas de sistema BA817 y BA824, adaptador de bus IF622, ampliación de memoria ME903, adaptadores de monitor OEC/PGC y controladoras GO714 MFM o GO723 RLL. Es un registro de opciones de servicio, no una matriz de precios recuperada.",
+  "product.olivetti-m280.warning": "EXPERIMENTAL: la plataforma inicia con BIOS 2.16 local, pero aún no se confirman visualmente POST, vídeo, teclado, persistencia de Setup ni arranque. FE2000, las placas de consola originales, el vídeo OEC/PGC y el almacenamiento GO714/GO723 no se modelan individualmente; PVGA1A externo es solo una aproximación de compatibilidad.",
+  "product.olivetti-m280.creation.model": "Plataforma base documentada: 80286 a 12 MHz / bus a 8 MHz, 1 MB de RAM, adaptador de pantalla externo y sin paquete de disco afirmado",
+  "product.olivetti-m280.creation.memory.1024": "Sistema base de 1 MB (perfil experimental actual)",
+  "product.olivetti-m280.creation.memory.2048": "2 MB totales (la relación con ME903 está documentada, pero este total no está validado)",
+  "product.olivetti-m280.creation.memory.3072": "3 MB (inferencia: 1 MB base más el máximo ME903 documentado de 2 MB)",
+  "product.olivetti-m280.creation.note": "La guía identifica las opciones de controladora GO714 MFM y GO723 RLL, pero no recupera paquete de venta, geometría ni imagen de disco. Por ello la creación no añade disco duro. PVGA1A es una opción externa de compatibilidad, no un modelo de OEC/PGC Olivetti.",
+  "product.olivetti-m280.technical.commercial_configurations": "La guía documenta un sistema base de 1 MB, ampliación ME903 de hasta 2 MB, adaptadores OEC EGA-compatible o PGC y controladoras GO714 MFM o GO723 RLL. No establece qué combinaciones fueron paquetes comerciales ni sus precios; el total seleccionable de 3 MB es una inferencia explícita.",
+  "product.olivetti-m280.technical.cpu": "Intel 80286 a 12 MHz, con bus a 8 MHz, acceso RAM de 100 ns y un estado de espera.",
+  "product.olivetti-m280.technical.memory": "La guía enumera 1 MB de RAM mínima y ampliación ME903 de hasta 2 MB. El total seleccionable de 3 MB se infiere de esas dos evidencias y sigue siendo experimental, aunque el emulador lo admita.",
+  "product.olivetti-m280.technical.video": "OEC GO451/GO467 es compatible EGA y PGC GO423 es un adaptador para monitor positivo. Ninguna placa original se modela; PVGA1A se usa solo como pantalla externa de compatibilidad para el perfil de creación.",
+  "product.olivetti-m280.technical.storage": "GO714 es ST506/MFM y GO723 es ST506/RLL. BIOS 2.16 amplía la tabla de discos y añade una opción RLL de 62 MB, pero la creación actual no afirma una controladora ni geometría de disco.",
+  "product.olivetti-m280.technical.jumpers": "JU1 selecciona 512 KB o 1 MB de RAM y la activación serie/paralelo; JU2/JU6/JU7 seleccionan relojes de sistema y 80287; JU3 selecciona burn-in, monitor y reloj de 32 MHz; JU8/JU9 controlan relojes RTC/NVR. Las posiciones por defecto se documentan, pero los controles físicos no se modelan individualmente.",
+  "product.olivetti-m280.technical.firmware": "Las parejas BIOS documentadas son PBVW/PBVV 2.14 y PBVS/PBVT 2.16, con actualización 2.16.1. La pareja local PBVT/PBVS 2.16 se conserva como firmware intercalado solo local.",
+  "product.olivetti-m280.technical.verified": "Solo constan pruebas de compilación/ejecución y carga de BIOS local. No son evidencia visual de POST, teclado, Setup, vídeo ni arranque.",
+  "product.olivetti-m280.technical.limitations": "Quedan pendientes POST, vídeo, teclado, guardado de Setup y arranque visuales. FE2000, consola, OEC/PGC, GO714/GO723, jumpers y el mapeo exacto de memoria requieren modelado o validación; los servicios AT genéricos y PVGA1A son aproximaciones explícitas.",
+  "product.olivetti-m280.technical.service_manual": "Olivetti Personal Computer - Pocket Service Guide, CAP4 M280, páginas 4-1 a 4-4 (copia local preservada)."
+}

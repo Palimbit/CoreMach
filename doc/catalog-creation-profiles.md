@@ -2,8 +2,9 @@
 
 BluMach uses one common creation dialog for every runnable historical-machine
 sheet. The dialogue is data-driven: model-specific choices and defaults belong
-in the product's `creation` object in `src/qt/catalog/catalog.json`, not in C++
-conditionals keyed by product ID.
+in the product's `creation` object in its
+`src/qt/catalog/source/machines/<manufacturer>/<machine>/machine.json` bundle,
+not in C++ conditionals keyed by product ID.
 
 ## Fallback behaviour
 

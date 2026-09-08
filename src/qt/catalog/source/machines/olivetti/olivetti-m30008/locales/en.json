@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30008.summary": "20 MHz 386SX desktop with OPTi 82C283, separate 82C206 and integrated OAK OTI-067 video.",
+  "product.olivetti-m30008.history": "The BA319/BA324/BA325 M300-08 is a later compact platform, distinct from IF378 and TOPCAT. Its manual documents a 10 MHz AT bus and 2/4/8/10/14/16 MB memory; 6 and 12 MB are impossible.",
+  "product.olivetti-m30008.technical.verified": "POST, Setup, calendar rollover, 1.44 MB floppy access and MS-DOS 3.30a boot are validated.",
+  "product.olivetti-m30008.technical.limitations": "Bootable partial emulation. 82C283 is modelled and the AT bus is fixed at 10 MHz; common AT functions represent the 82C206. IDE needs a documented-disk test and RTC timing remains an approximation."
+}

@@ -45,6 +45,17 @@ struct BluMachPlatform {
     QString architecture;
 };
 
+struct BluMachFacetValue {
+    QString id;
+    QString labelKey;
+};
+
+struct BluMachFilterFacet {
+    QString                     id;
+    QString                     labelKey;
+    QVector<BluMachFacetValue> values;
+};
+
 struct BluMachProduct {
     QString     id;
     QString     manufacturerId;
@@ -58,6 +69,8 @@ struct BluMachProduct {
     QString     period;
     QStringList aliases;
     QStringList tags;
+    QJsonObject facets;
+    QJsonArray  filterProfiles;
     QJsonObject hardware;
     QJsonObject firmware;
     QJsonObject storage;
@@ -75,10 +88,13 @@ public:
     const QVector<BluMachFamily>       &families() const;
     const QVector<BluMachPlatform>     &platforms() const;
     const QVector<BluMachProduct>      &products() const;
+    const QVector<BluMachFilterFacet>  &filterFacets() const;
 
     QString text(const QString &key) const;
     QString localeCode() const;
     QString statusText(const QString &status) const;
+    QString facetLabel(const QString &facetId) const;
+    QString facetValueText(const QString &facetId, const QString &valueId) const;
 
     const BluMachManufacturer *manufacturer(const QString &id) const;
     const BluMachFamily       *family(const QString &id) const;
@@ -92,6 +108,7 @@ private:
     QVector<BluMachFamily>       m_families;
     QVector<BluMachPlatform>     m_platforms;
     QVector<BluMachProduct>      m_products;
+    QVector<BluMachFilterFacet>  m_filterFacets;
     QHash<QString, QString>      m_english;
     QHash<QString, QString>      m_localized;
     QString                      m_localeCode;

@@ -1,0 +1,23 @@
+{
+  "product.olivetti-m250.summary": "1989 8 MHz 80286 desktop with integrated Paradise VGA-compatible video and 1 MB standard memory.",
+  "product.olivetti-m250.history": "The April 1989 M250 brochure positions this 8 MHz, zero-wait-state 80286 as a lower-professional system. It specifies 1 MB memory, integrated 1.44 MB 3.5-inch floppy, 20/40 MB disks, optional 40 MB streaming tape, VGA-compatible graphics, three 8/16-bit XT/AT slots and integrated mouse/video.",
+  "product.olivetti-m250.warning": "PARTIAL EMULATION: the preserved M250 cold-starts with local firmware and the 2026-09-03 test visually observed a software reset without Keyboard Error 6 in a newly-created NVR profile. Recheck with the historical NVR, visual POST/Setup/System Test and storage/RTC testing remain pending. The catalogue does not claim an original disk controller or geometry.",
+  "product.olivetti-m250.creation.model": "Documented April 1989 baseline: 8 MHz 80286, 1 MB, integrated VGA-compatible video and 1.44 MB 3.5-inch floppy",
+  "product.olivetti-m250.creation.memory.1024": "1 MB (documented standard; partial validation profile)",
+  "product.olivetti-m250.creation.memory.2048": "2 MB (documented maximum)",
+  "product.olivetti-m250.creation.note": "The manual identifies the on-board AT/RLL controller and drive geometries, but BluMach currently supplies a generic IDE compatibility path. No disk is generated until that controller and its jumpers are modelled.",
+  "product.olivetti-m250.technical.market": "Lower-professional market, 1989. The manufacturer brochure names MS-DOS and MS OS/2 compatibility.",
+  "product.olivetti-m250.technical.commercial_configurations": "The brochure documents 8 MHz, 1 MB, 3.5-inch floppy, VGA-compatible graphics and a 16-bit AT bus. The service guide identifies the on-board AT/RLL options: Conner CP3022 20 MB, CP3142 or CP346 40 MB, and CP3024 40 MB.",
+  "product.olivetti-m250.technical.physical": "Manufacturer brochure: base unit 412 × 109 × 393 mm, 9 kg; keyboard 2 kg. It also lists 340 × 315 × 300 mm / 6 kg monochrome and 370 × 360 × 380 mm / 16 kg colour monitors.",
+  "product.olivetti-m250.technical.cpu": "Intel 80286 at 8 MHz with zero wait states, as stated by the 1989 product brochure.",
+  "product.olivetti-m250.technical.memory": "1 MB is the brochure baseline and 2 MB is documented by the service material as the M250 limit. The catalogue offers both; only the 1 MB profile has the recorded isolated startup/reset observation.",
+  "product.olivetti-m250.technical.video": "Integrated Paradise PVGA1A/OVC, presented commercially as VGA-compatible graphics. The local firmware set has a separate PERC 1.06 video image.",
+  "product.olivetti-m250.technical.storage": "The on-board AT/RLL adapter occupies 1F0h-1F7h and IRQ14. Setup types are CP3022 20 MB (615/4/17), CP3142/CP346 40 MB (805/4/26), and CP3024 40 MB (635/4/17). P6 selects 40 MB 1:1 RLL for CP3142/CP346 or 20 MB 3:1 RLL/no HDD for CP3022.",
+  "product.olivetti-m250.technical.jumpers": "P1/P2 choose the 512 KB, 1 MB or 2 MB on-board DRAM population; P6 selects the disk capacity/interleave; P8 connects the battery. These documented physical selections are not yet exposed or electrically modelled by BluMach.",
+  "product.olivetti-m250.technical.firmware": "Observed local sets are PERB 1.03 system BIOS and PERC 1.06 PVGA1A video BIOS. Their bytes are local-only and are not included in BluMach.",
+  "product.olivetti-m250.technical.verified": "Local isolated cold initialization at 8 MHz/1 MB; user-observed software reset without Keyboard Error 6 on 2026-09-03 with newly-created NVR. Historical records also report M250 POST, Setup and System Test boot.",
+  "product.olivetti-m250.technical.limitations": "Repeat the warm reset with the pre-existing NVR and visually revalidate POST, Setup and System Test. RTC, OS installation, the on-board AT/RLL controller and its P6/P8 behaviour remain open. M250 E needs separate full validation.",
+  "product.olivetti-m250.technical.brochure": "Olivetti M250 commercial brochure, 1989 (access-restricted preservation listing)",
+  "product.olivetti-m250.technical.service_manual": "Olivetti Pocket Service Guide, M250/M250 E technical sections",
+  "product.olivetti-m250.technical.collection": "ISER preservation inventory for an M250 XP1530 unit (secondary evidence)"
+}

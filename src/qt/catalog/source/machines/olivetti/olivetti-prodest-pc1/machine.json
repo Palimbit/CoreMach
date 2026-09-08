@@ -1,0 +1,323 @@
+{
+  "order": 20,
+  "machine": {
+    "id": "olivetti-prodest-pc1",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-prodest",
+    "platform_id": "olivetti-prodest-pc1-platform",
+    "name": "Olivetti Prodest PC 1",
+    "summary_key": "product.olivetti-prodest-pc1.summary",
+    "history_key": "product.olivetti-prodest-pc1.history",
+    "warning_key": "product.olivetti-prodest-pc1.warning",
+    "status": "partial",
+    "period": "1987–1989",
+    "aliases": [
+      "Prodest PC1",
+      "Olivetti PC 1"
+    ],
+    "tags": [
+      "NEC V40",
+      "XT",
+      "V6355",
+      "720 KB",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_8086"
+      ],
+      "storage_interface": [
+        "floppy"
+      ]
+    },
+    "hardware": {
+      "cpu": "NEC V40, switchable 4.77/8 MHz",
+      "memory": "256 or 512 KB base; 640 KB through expansion",
+      "video": "Integrated Yamaha V6355-compatible display logic with Italian character ROM",
+      "floppy": "3.5 in, 720 KB",
+      "expansion": "External ISA-like side connector; not a complete ISA bus",
+      "interfaces": "Non-standard-pinout serial, parallel, XT-style keyboard and quadrature mouse/joystick connector"
+    },
+    "firmware": {
+      "known_sets": [
+        "System BIOS 1.06",
+        "System BIOS 1.07",
+        "System BIOS 1.21",
+        "Character ROM 1.01",
+        "Italian character ROM 1.02"
+      ],
+      "required": true,
+      "identity_note": "Firmware is identified by filename, size and SHA-256 metadata only; no ROM data is distributed with BluMach"
+    },
+    "storage": {
+      "bus": "Internal floppy; the distinct PC 1 HD has an internal XT-class hard-disk interface",
+      "official_drives": [
+        "MF 3510 3.5-inch 720 KB floppy",
+        "External 5.25-inch 360 KB floppy",
+        "PC 1 HD 20 MB hard disk"
+      ]
+    },
+    "relationships": {
+      "commercial_variants": [
+        "PC 1 floppy model",
+        "PC 1 HD"
+      ]
+    },
+    "creation": {
+      "status": "validated",
+      "directory_prefix": "olivetti-prodest-pc1",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-prodest-pc1.creation.model"
+        }
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "512",
+          "choices": [
+            {
+              "id": "256",
+              "label_key": "creation.option.memory.256kb",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 256
+                }
+              ]
+            },
+            {
+              "id": "512",
+              "label_key": "creation.option.memory.512kb",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 512
+                }
+              ]
+            },
+            {
+              "id": "640",
+              "label_key": "creation.option.memory.640kb",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 640
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "floppy_drives",
+          "label_key": "creation.label.floppy_drives",
+          "default": "one-720",
+          "choices": [
+            {
+              "id": "one-720",
+              "label_key": "creation.option.floppy.one-720",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Floppy and CD-ROM drives",
+                  "key": "fdd_02_type",
+                  "value": "none"
+                }
+              ]
+            },
+            {
+              "id": "two-720",
+              "label_key": "creation.option.floppy.two-720",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Floppy and CD-ROM drives",
+                  "key": "fdd_02_type",
+                  "value": "35_2dd"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.olivetti-prodest-pc1.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "bios": "v107",
+            "cpu_family": "necv40",
+            "cpu_speed": 8000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 512
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_pc_xt",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2dd",
+            "fdd_02_type": "none"
+          }
+        }
+      ],
+      "generated_files": []
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.commercial",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.market",
+            "value_key": "product.olivetti-prodest-pc1.technical.market"
+          },
+          {
+            "label_key": "technical.label.commercial_configurations",
+            "value_key": "product.olivetti-prodest-pc1.technical.commercial_configurations"
+          },
+          {
+            "label_key": "technical.label.accessories",
+            "value_key": "product.olivetti-prodest-pc1.technical.accessories"
+          },
+          {
+            "label_key": "technical.label.physical",
+            "value_key": "product.olivetti-prodest-pc1.technical.physical"
+          },
+          {
+            "label_key": "technical.label.bundled_software",
+            "value_key": "product.olivetti-prodest-pc1.technical.bundled_software"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-prodest-pc1.technical.cpu"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-prodest-pc1.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-prodest-pc1.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-prodest-pc1.technical.storage"
+          },
+          {
+            "label_key": "technical.label.serial_parallel",
+            "value_key": "product.olivetti-prodest-pc1.technical.interfaces"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-prodest-pc1.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-prodest-pc1.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-prodest-pc1.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-prodest-pc1.technical.seasip",
+            "url": "https://www.seasip.info/VintagePC/prodestpc1.html"
+          },
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-prodest-pc1.technical.manual_es",
+            "url": "https://archive.org/details/pc1instalacionymanualdelusuario"
+          },
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.olivetti-prodest-pc1.technical.brochure_it",
+            "url": "https://archive.org/details/olivetti-prodest-pc-1"
+          },
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-prodest-pc1.technical.pc1_magazine_1987",
+            "url": "https://archive.org/details/PC1-1987-01"
+          },
+          {
+            "label_key": "technical.label.software",
+            "value_key": "product.olivetti-prodest-pc1.technical.ti99iuc",
+            "url": "https://www.ti99iuc.it/web/?artid=134&pageid=articoli_tech"
+          },
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.olivetti-prodest-pc1.technical.1000bit",
+            "url": "https://www.1000bit.it/scheda.asp?id=259"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 30,
+  "platform": {
+    "id": "olivetti-prodest-pc1-platform",
+    "emulator_machine_id": "olivetti_prodest_pc1",
+    "architecture": "NEC V40"
+  }
+}

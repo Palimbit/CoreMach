@@ -1,0 +1,10 @@
+{
+  "order": 110,
+  "family": {
+    "id": "trigem-sx386",
+    "manufacturer_id": "trigem",
+    "parent_family_id": "",
+    "name": "SX386",
+    "description_key": "family.trigem-sx386.description"
+  }
+}

@@ -66,3 +66,7 @@ CMakeLists.txt.user
 
 # Jetbrains CLion
 .idea
+
+# Python tooling
+__pycache__/
+*.py[cod]

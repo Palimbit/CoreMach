@@ -107,12 +107,6 @@
         <file>qt/icons/warning.ico</file>
     </qresource>
     <qresource prefix="/blumach/catalog">
-        <file alias="catalog.json">qt/catalog/catalog.json</file>
-        <file alias="locales/en.json">qt/catalog/locales/en.json</file>
-        <file alias="locales/es.json">qt/catalog/locales/es.json</file>
-        <file alias="locales/fr.json">qt/catalog/locales/fr.json</file>
-        <file alias="locales/it.json">qt/catalog/locales/it.json</file>
-        <file alias="locales/pt.json">qt/catalog/locales/pt.json</file>
         <file alias="images/olivetti-pcs86.jpg">qt/catalog/images/olivetti-pcs86-family-v3.jpg</file>
         <file alias="images/olivetti-pcs286.jpg">qt/catalog/images/olivetti-pcs286-family-v3.jpg</file>
         <file alias="images/olivetti-pcs286s-board.jpg">qt/catalog/images/olivetti-pcs286s-board.jpg</file>

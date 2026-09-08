@@ -1,0 +1,273 @@
+{
+  "order": 50,
+  "machine": {
+    "id": "olivetti-pcs286",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-pcs",
+    "platform_id": "olivetti-pcs286-platform",
+    "name": "Olivetti PCS 286",
+    "summary_key": "product.olivetti-pcs286.summary",
+    "history_key": "product.olivetti-pcs286.history",
+    "status": "validated",
+    "period": "1989–1990",
+    "aliases": [
+      "PCS286",
+      "PC S 286"
+    ],
+    "tags": [
+      "80286",
+      "AT",
+      "VGA",
+      "IDE",
+      "desktop",
+      "80287"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286 12 MHz",
+      "memory": "1 MB standard; up to 4 MB on-board and 16 MB system",
+      "video": "Paradise/Olivetti VGA integrated",
+      "floppy": "3.5 in, 1.44 MB",
+      "rtc": "128-byte AT-compatible CMOS RTC",
+      "coprocessor": "Intel 80287 optional",
+      "expansion": "2 × 16-bit AT + 1 × 8-bit XT full-size slots",
+      "interfaces": "RS-232C, bidirectional parallel, mouse, AT keyboard",
+      "dimensions": "360 × 312 × 100 mm; 7.6 kg"
+    },
+    "firmware": {
+      "known_sets": [
+        "1.37 (archive label 1.34)",
+        "1.42"
+      ],
+      "required": true
+    },
+    "storage": {
+      "bus": "IDE/ATA",
+      "official_drives": [
+        "Conner CP3022 20 MB",
+        "Conner CP346 40 MB"
+      ]
+    },
+    "relationships": {
+      "distinct_from": [
+        "olivetti-pcs286s"
+      ]
+    },
+    "creation": {
+      "status": "validated",
+      "directory_prefix": "olivetti-pcs286",
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "286",
+            "cpu_speed": 12000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 1024
+          }
+        },
+        {
+          "section": "Olivetti PCS 286",
+          "values": {
+            "bios": "v142"
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "pvga1a"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Storage controllers",
+          "values": {
+            "hdc_1": "ide_isa"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "conner-cp346-40mb.img",
+            "hdd_01_parameters": "26, 4, 805, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "1989_3500rpm"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "conner-cp346-40mb.img",
+          "size": 42864640
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-pcs286.technical.cpu_bus"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-pcs286.technical.memory"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-pcs286.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.chipset",
+        "evidence_key": "technical.evidence.documented_and_modeled",
+        "entries": [
+          {
+            "label_key": "technical.label.chipset",
+            "value_key": "product.olivetti-pcs286.technical.chipset"
+          },
+          {
+            "label_key": "technical.label.chipset_functions",
+            "value_key": "product.olivetti-pcs286.technical.chipset_functions"
+          },
+          {
+            "label_key": "technical.label.headland_ports",
+            "value_key": "product.olivetti-pcs286.technical.headland_ports"
+          },
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-pcs286.technical.headland_manual"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.observed",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-pcs286.technical.bios_revision"
+          },
+          {
+            "label_key": "technical.label.setup",
+            "value_key": "product.olivetti-pcs286.technical.setup"
+          },
+          {
+            "label_key": "technical.label.diagnostics",
+            "value_key": "product.olivetti-pcs286.technical.diagnostics"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.bios_reverse",
+        "evidence_key": "technical.evidence.reverse_engineered",
+        "entries": [
+          {
+            "label_key": "technical.label.rom_layout",
+            "value_key": "product.olivetti-pcs286.technical.rom_layout"
+          },
+          {
+            "label_key": "technical.label.memory_controller_test",
+            "value_key": "product.olivetti-pcs286.technical.memory_controller_test"
+          },
+          {
+            "label_key": "technical.label.ioc02",
+            "value_key": "product.olivetti-pcs286.technical.ioc02"
+          },
+          {
+            "label_key": "technical.label.keyboard_post",
+            "value_key": "product.olivetti-pcs286.technical.keyboard_post"
+          },
+          {
+            "label_key": "technical.label.cmos_bda",
+            "value_key": "product.olivetti-pcs286.technical.cmos_bda"
+          },
+          {
+            "label_key": "technical.label.video_firmware",
+            "value_key": "product.olivetti-pcs286.technical.video_firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-pcs286.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-pcs286.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.olivetti-pcs286.technical.brochure",
+            "url": "https://olivrea.de/prospekte-personal-computer/"
+          },
+          {
+            "label_key": "technical.label.firmware_evidence",
+            "value_key": "product.olivetti-pcs286.technical.firmware_evidence"
+          },
+          {
+            "label_key": "technical.label.programmable_logic",
+            "value_key": "product.olivetti-pcs286.technical.programmable_logic"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 50,
+  "platform": {
+    "id": "olivetti-pcs286-platform",
+    "emulator_machine_id": "olivetti_pcs286",
+    "architecture": "80286"
+  }
+}

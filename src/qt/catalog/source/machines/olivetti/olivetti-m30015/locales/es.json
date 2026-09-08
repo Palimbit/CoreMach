@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30015.summary": "Sobremesa 386SX a 25 MHz con OPTi 82C283, 82C206 separado y vídeo OAK OTI-067 integrado.",
+  "product.olivetti-m30015.history": "El M300-15 BA320 se documentó inicialmente con Intel 386SX a 25 MHz; AMD 80386SX-25 fue una alternativa posterior sin cambio de placa. El bus AT funciona a 8,33 MHz y la memoria admite 4/8/10/14/16 MB.",
+  "product.olivetti-m30015.technical.verified": "Validados POST, Calendar PASS, acceso a disquete y arranque de MS-DOS 3.30a.",
+  "product.olivetti-m30015.technical.limitations": "Emulación parcial arrancable. El 82C283 está modelado y el bus AT se fija a 8,33 MHz; el 82C206 y los controladores discretos se representan con dispositivos compatibles. Falta validar IDE y un conjunto amplio de software."
+}

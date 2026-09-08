@@ -1,0 +1,156 @@
+{
+  "source_schema": "blumach-catalog-source-v1",
+  "output_schema": "blumach-catalog-v3",
+  "filter_facets": [
+    {
+      "id": "form_factor",
+      "label_key": "filter.facet.form_factor",
+      "values": [
+        {
+          "id": "desktop",
+          "label_key": "filter.form_factor.desktop"
+        },
+        {
+          "id": "laptop",
+          "label_key": "filter.form_factor.laptop"
+        },
+        {
+          "id": "luggable",
+          "label_key": "filter.form_factor.luggable"
+        },
+        {
+          "id": "palmtop",
+          "label_key": "filter.form_factor.palmtop"
+        },
+        {
+          "id": "all_in_one",
+          "label_key": "filter.form_factor.all_in_one"
+        }
+      ]
+    },
+    {
+      "id": "mobility",
+      "label_key": "filter.facet.mobility",
+      "values": [
+        {
+          "id": "stationary",
+          "label_key": "filter.mobility.stationary"
+        },
+        {
+          "id": "portable",
+          "label_key": "filter.mobility.portable"
+        }
+      ]
+    },
+    {
+      "id": "cpu_generation",
+      "label_key": "filter.facet.cpu_generation",
+      "values": [
+        {
+          "id": "x86_8086",
+          "label_key": "filter.cpu_generation.x86_8086"
+        },
+        {
+          "id": "x86_286",
+          "label_key": "filter.cpu_generation.x86_286"
+        },
+        {
+          "id": "x86_386sx",
+          "label_key": "filter.cpu_generation.x86_386sx"
+        },
+        {
+          "id": "x86_386",
+          "label_key": "filter.cpu_generation.x86_386"
+        },
+        {
+          "id": "x86_486",
+          "label_key": "filter.cpu_generation.x86_486"
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "label_key": "filter.facet.graphics_standard",
+      "values": [
+        {
+          "id": "cga",
+          "label_key": "filter.video.cga"
+        },
+        {
+          "id": "ega",
+          "label_key": "filter.video.ega"
+        },
+        {
+          "id": "ogc",
+          "label_key": "filter.video.ogc"
+        },
+        {
+          "id": "vga",
+          "label_key": "filter.video.vga"
+        }
+      ]
+    },
+    {
+      "id": "display_technology",
+      "label_key": "filter.facet.display_technology",
+      "values": [
+        {
+          "id": "crt",
+          "label_key": "filter.display_technology.crt"
+        },
+        {
+          "id": "lcd",
+          "label_key": "filter.display_technology.lcd"
+        },
+        {
+          "id": "plasma",
+          "label_key": "filter.display_technology.plasma"
+        }
+      ]
+    },
+    {
+      "id": "display_color",
+      "label_key": "filter.facet.display_color",
+      "values": [
+        {
+          "id": "color",
+          "label_key": "filter.display_color.color"
+        },
+        {
+          "id": "monochrome",
+          "label_key": "filter.display_color.monochrome"
+        },
+        {
+          "id": "amber",
+          "label_key": "filter.display_color.amber"
+        }
+      ]
+    },
+    {
+      "id": "storage_interface",
+      "label_key": "filter.facet.storage_interface",
+      "values": [
+        {
+          "id": "floppy",
+          "label_key": "filter.storage_interface.floppy"
+        },
+        {
+          "id": "mfm",
+          "label_key": "filter.storage_interface.mfm"
+        },
+        {
+          "id": "st506",
+          "label_key": "filter.storage_interface.st506"
+        },
+        {
+          "id": "xta",
+          "label_key": "filter.storage_interface.xta"
+        },
+        {
+          "id": "ide",
+          "label_key": "filter.storage_interface.ide"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,267 @@
+{
+  "order": 270,
+  "machine": {
+    "id": "olivetti-m250e",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m250",
+    "platform_id": "olivetti-m250e-platform",
+    "name": "Olivetti M250 E",
+    "summary_key": "product.olivetti-m250e.summary",
+    "history_key": "product.olivetti-m250e.history",
+    "warning_key": "product.olivetti-m250e.warning",
+    "status": "experimental",
+    "period": "Late 1980s",
+    "aliases": [
+      "M250E"
+    ],
+    "tags": [
+      "80286",
+      "12 MHz",
+      "82C206",
+      "PVGA1A",
+      "VGA",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286, 12 MHz",
+      "memory": "1 MB base profile; 2 and 4 MB populations documented",
+      "chipset": "CHIPS 82C206 with M250 E-only GA80/GA99 board logic",
+      "video": "Paradise PVGA1A / Olivetti VGA-compatible video",
+      "floppy": "3.5-inch drive class; exact shipping configuration remains pending",
+      "hard_disk": "On-board AT/RLL adapter supports documented Setup types: CP346 40 MB, CP3106 100 MB, CP3142 40 MB, CP3022 20 MB; BIOS 1.07 adds CP3044 40 MB",
+      "expansion": "AT-compatible expansion; exact sales bundle remains pending"
+    },
+    "firmware": {
+      "known_sets": [
+        "PDSF 1.06 system BIOS",
+        "PDSD 1.06 PVGA1A video BIOS"
+      ],
+      "required": true,
+      "identity_note": "M250 E uses its own system BIOS and board logic; it is not presented as a speed-only M250 setting."
+    },
+    "relationships": {
+      "commercial_variants": [
+        "M250: 8 MHz sibling with 80C206 and GA98/GA99 logic"
+      ]
+    },
+    "storage": {
+      "bus": "On-board AT/RLL adapter at 1F0h-1F7h / IRQ14. The present generic IDE path is an explicit compatibility approximation.",
+      "official_drives": [
+        "Conner CP3022 20 MB (615/4/17)",
+        "Conner CP3142 40 MB (805/4/26)",
+        "Conner CP346 40 MB (805/4/26)",
+        "Conner CP3044 40 MB (635/4/33, BIOS 1.07+)",
+        "Conner CP3106 100 MB (766/8/33)"
+      ]
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-m250e",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-m250e.creation.model"
+        }
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "1024",
+          "choices": [
+            {
+              "id": "1024",
+              "label_key": "product.olivetti-m250e.creation.memory.1024",
+              "status": "partial",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 1024
+                }
+              ]
+            },
+            {
+              "id": "2048",
+              "label_key": "product.olivetti-m250e.creation.memory.2048",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 2048
+                }
+              ]
+            },
+            {
+              "id": "4096",
+              "label_key": "product.olivetti-m250e.creation.memory.4096",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 4096
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.olivetti-m250e.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "286",
+            "cpu_speed": 12000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 1024
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        }
+      ],
+      "generated_files": []
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.commercial",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.market",
+            "value_key": "product.olivetti-m250e.technical.market"
+          },
+          {
+            "label_key": "technical.label.commercial_configurations",
+            "value_key": "product.olivetti-m250e.technical.commercial_configurations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-m250e.technical.cpu"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-m250e.technical.memory"
+          },
+          {
+            "label_key": "technical.label.chipset",
+            "value_key": "product.olivetti-m250e.technical.chipset"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-m250e.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.configuration",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.jumpers",
+            "value_key": "product.olivetti-m250e.technical.jumpers"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.observed",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-m250e.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-m250e.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-m250e.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-m250e.technical.service_manual",
+            "url": "https://dusted.dk/pages/Olivetti-M6-460-suprema/docs/pocketguide-olivetti-m.pdf"
+          },
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.olivetti-m250e.technical.brochure",
+            "url": "https://www.vintads.it/file.php?cod=159"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 100,
+  "platform": {
+    "id": "olivetti-m250e-platform",
+    "emulator_machine_id": "olivetti_m250e",
+    "architecture": "80286"
+  }
+}

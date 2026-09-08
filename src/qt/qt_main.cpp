@@ -602,6 +602,7 @@ main(int argc, char *argv[])
     app.setApplicationName(EMU_NAME);
     Q_INIT_RESOURCE(qt_resources);
     Q_INIT_RESOURCE(qt_translations);
+    Q_INIT_RESOURCE(blumach_catalog);
 
 #ifdef __APPLE__
     CocoaEventFilter cocoafilter;

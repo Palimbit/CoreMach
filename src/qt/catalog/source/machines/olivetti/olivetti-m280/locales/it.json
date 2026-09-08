@@ -1,0 +1,20 @@
+{
+  "product.olivetti-m280.summary": "Desktop 80286 sperimentale a 12 MHz, con bus a 8 MHz, logica FE2000, video esterno OEC/PGC e BIOS 2.16 preservato localmente.",
+  "product.olivetti-m280.history": "La guida di servizio M280 registra schede di sistema BA817 e BA824, adattatore bus IF622, espansione memoria ME903, adattatori monitor OEC/PGC e controller GO714 MFM o GO723 RLL. È un elenco di opzioni di servizio, non un listino commerciale recuperato.",
+  "product.olivetti-m280.warning": "SPERIMENTALE: la piattaforma si avvia con BIOS locale 2.16, ma POST visivo, video, tastiera, persistenza del Setup e avvio restano da confermare. FE2000, le schede console originali, il video OEC/PGC e lo storage GO714/GO723 non sono modellati singolarmente; PVGA1A esterno è solo un'approssimazione di compatibilità.",
+  "product.olivetti-m280.creation.model": "Piattaforma base documentata: 80286 a 12 MHz / bus a 8 MHz, 1 MB RAM, adattatore video esterno e nessun bundle disco dichiarato",
+  "product.olivetti-m280.creation.memory.1024": "Sistema base da 1 MB (profilo sperimentale corrente)",
+  "product.olivetti-m280.creation.memory.2048": "2 MB totali (il rapporto con ME903 è documentato, ma questo totale non è validato)",
+  "product.olivetti-m280.creation.memory.3072": "3 MB (inferenza: 1 MB base più il massimo ME903 documentato di 2 MB)",
+  "product.olivetti-m280.creation.note": "La guida identifica le opzioni controller GO714 MFM e GO723 RLL, ma non recupera bundle commerciale, geometria o immagine disco. La creazione quindi non aggiunge un disco rigido. PVGA1A è una scelta video esterna di compatibilità, non un modello Olivetti OEC/PGC.",
+  "product.olivetti-m280.technical.commercial_configurations": "La guida documenta un sistema base da 1 MB, espansione ME903 fino a 2 MB, adattatori OEC compatibili EGA o PGC e controller GO714 MFM o GO723 RLL. Non stabilisce quali combinazioni fossero bundle commerciali né i prezzi; il totale selezionabile di 3 MB è un'inferenza esplicita.",
+  "product.olivetti-m280.technical.cpu": "Intel 80286 a 12 MHz, con bus a 8 MHz, accesso RAM di 100 ns e un wait state.",
+  "product.olivetti-m280.technical.memory": "La guida indica 1 MB di RAM minima ed espansione ME903 fino a 2 MB. Il totale selezionabile di 3 MB è inferito da questi due fatti documentati e resta sperimentale, anche se l'emulatore lo supporta.",
+  "product.olivetti-m280.technical.video": "OEC GO451/GO467 è compatibile EGA e PGC GO423 è un adattatore per monitor positivo. Nessuna scheda originale è modellata; PVGA1A serve solo come display esterno di compatibilità per il profilo di creazione.",
+  "product.olivetti-m280.technical.storage": "GO714 è ST506/MFM e GO723 è ST506/RLL. BIOS 2.16 estende la tabella dischi e aggiunge un'opzione RLL da 62 MB, ma la creazione attuale non afferma controller o geometria del disco.",
+  "product.olivetti-m280.technical.jumpers": "JU1 seleziona 512 KB o 1 MB di RAM e l'abilitazione seriale/parallela; JU2/JU6/JU7 selezionano clock di sistema e 80287; JU3 seleziona burn-in, monitor e clock 32 MHz; JU8/JU9 controllano i clock RTC/NVR. Le posizioni predefinite sono documentate, ma questi controlli fisici non sono modellati singolarmente.",
+  "product.olivetti-m280.technical.firmware": "Le coppie BIOS documentate sono PBVW/PBVV 2.14 e PBVS/PBVT 2.16, con aggiornamento 2.16.1. La coppia locale PBVT/PBVS 2.16 è preservata come firmware interlacciato solo locale.",
+  "product.olivetti-m280.technical.verified": "Sono registrati soltanto test di compilazione/esecuzione e caricamento del BIOS locale. Non sono evidenza visiva di POST, tastiera, Setup, video o avvio.",
+  "product.olivetti-m280.technical.limitations": "POST visivo, video, tastiera, salvataggio del Setup e avvio restano in sospeso. FE2000, console, OEC/PGC, GO714/GO723, jumper e mappatura esatta della memoria richiedono modellazione o validazione; i servizi AT generici e PVGA1A sono approssimazioni esplicite.",
+  "product.olivetti-m280.technical.service_manual": "Olivetti Personal Computer - Pocket Service Guide, CAP4 M280, pagine 4-1 a 4-4 (copia locale preservata)."
+}

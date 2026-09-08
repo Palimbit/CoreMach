@@ -1,0 +1,65 @@
+{
+  "order": 210,
+  "machine": {
+    "id": "ta-dario286s",
+    "manufacturer_id": "triumph-adler",
+    "family_id": "triumph-adler-dario",
+    "name": "Triumph-Adler Dario 286S (16 MHz)",
+    "summary_key": "product.ta-dario286s.summary",
+    "history_key": "product.ta-dario286s.history",
+    "warning_key": "product.ta-dario286s.warning",
+    "status": "research",
+    "period": "1991",
+    "aliases": [
+      "TA Dario 286S"
+    ],
+    "tags": [
+      "80286",
+      "16 MHz",
+      "AT",
+      "VGA",
+      "IDE",
+      "desktop",
+      "missing BIOS"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286 16 MHz",
+      "memory": "Configuration not yet verified from primary technical documentation",
+      "video": "Integrated VGA",
+      "floppy": "3.5 in, 1.44 MB",
+      "coprocessor": "Intel 80287 optional"
+    },
+    "firmware": {
+      "known_sets": [],
+      "required": true,
+      "identity_note": "No verified Dario 286S BIOS dump is preserved; equivalence with the Olivetti PCS 286S firmware must not be assumed"
+    },
+    "relationships": {
+      "probable_commercial_relative": [
+        "olivetti-pcs286s-16"
+      ],
+      "distinct_from": [
+        "ta-dario286",
+        "olivetti-pcs286s"
+      ]
+    }
+  }
+}

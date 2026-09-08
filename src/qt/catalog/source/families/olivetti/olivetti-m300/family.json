@@ -1,0 +1,10 @@
+{
+  "order": 30,
+  "family": {
+    "id": "olivetti-m300",
+    "manufacturer_id": "olivetti",
+    "parent_family_id": "",
+    "name": "M300",
+    "description_key": "family.olivetti-m300.description"
+  }
+}

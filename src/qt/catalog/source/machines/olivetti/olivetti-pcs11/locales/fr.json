@@ -1,0 +1,6 @@
+{
+  "product.olivetti-pcs11.summary": "Système compact au format A4 avec processeur 386SX à 16 MHz.",
+  "product.olivetti-pcs11.history": "Le PCS 11 est un produit domestique et petite entreprise physiquement distinct du M300-02F. Il utilise la plate-forme BA013 avec ses propres BIOS R2.04 et R2.07.",
+  "product.olivetti-pcs11.technical.verified": "Les dumps PCS 11/16 R2.04 et R2.07 de 128 Ko sont reliés à une machine 16 MHz dédiée avec sélecteur de BIOS.",
+  "product.olivetti-pcs11.technical.limitations": "Implémentée mais pas encore validée au démarrage; les différences de boîtier ne sont pas modélisées."
+}

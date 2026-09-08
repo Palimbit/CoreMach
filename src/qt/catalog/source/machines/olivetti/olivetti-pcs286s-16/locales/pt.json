@@ -1,0 +1,5 @@
+{
+  "product.olivetti-pcs286s16.summary": "PCS 286S comercial de 16 MHz documentado, ainda não emulável por faltar o BIOS correto.",
+  "product.olivetti-pcs286s16.history": "O folheto Olivetti de 1991 confirma um 80286 de 16 MHz sem estados de espera, 1 MB de série, até 8 MB na placa, 16 MB no sistema e discos de 40, 80 e 120 MB. É catalogado separadamente da placa TI/OLIMCU16 de 12 MHz.",
+  "product.olivetti-pcs286s16.warning": "EMULAÇÃO INDISPONÍVEL: não se conserva um BIOS verificado do PCS 286S comercial de 16 MHz. O BIOS TI/OLIMCU16 2.06 não é reutilizado porque os seus modos correspondem a 12 MHz."
+}

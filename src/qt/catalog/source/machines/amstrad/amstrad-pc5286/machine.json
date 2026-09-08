@@ -1,0 +1,386 @@
+{
+  "order": 280,
+  "machine": {
+    "id": "amstrad-pc5286",
+    "manufacturer_id": "amstrad",
+    "family_id": "amstrad-series-5",
+    "platform_id": "amstrad-pc5286-platform",
+    "name": "Amstrad PC5286",
+    "summary_key": "product.amstrad-pc5286.summary",
+    "history_key": "product.amstrad-pc5286.history",
+    "warning_key": "product.amstrad-pc5286.warning",
+    "status": "experimental",
+    "period": "1991–1992",
+    "aliases": [
+      "PC 5286"
+    ],
+    "tags": [
+      "80286",
+      "16 MHz",
+      "SCAT",
+      "C&T 82C452",
+      "VGA",
+      "AdLib",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286, 16 MHz; Intel 80287 socket",
+      "memory": "1 MB standard; documented 2 MB and 4 MB paired-SIMM expansions",
+      "chipset": "C&T F82C235-12 Single Chip AT and F82C710A I/O controller",
+      "video": "Integrated C&T F82C452 with ADV476KP35E RAMDAC and 256 KiB VRAM on the photographed MC0128A board",
+      "floppy": "One 3.5-inch 1.44 MB drive",
+      "hard_disk": "Diskless and 40 MB IDE commercial configurations",
+      "expansion": "Two half-length 16-bit ISA slots; Games Pack sound card occupies one slot",
+      "interfaces": "Serial, parallel, keyboard, mouse; dual analogue joystick port on the Games Pack sound card",
+      "sound": "Optional Amstrad AdLib-compatible card with external stereo speakers in the Games Pack"
+    },
+    "firmware": {
+      "known_sets": [
+        "AM52V004 system BIOS",
+        "C&T VGA BIOS Version 220"
+      ],
+      "required": true,
+      "identity_note": "BluMach identifies the local 64 KiB system BIOS and 32 KiB VGA BIOS by expected filename, size and recorded SHA-256; no ROM bytes are distributed."
+    },
+    "storage": {
+      "bus": "On-board ISA IDE compatibility path; the exact factory 40 MB drive model and translated Setup geometry remain unconfirmed",
+      "official_drives": [
+        "No hard disk",
+        "40 MB IDE hard disk"
+      ]
+    },
+    "relationships": {
+      "commercial_variants": [
+        "Single 1.44 MB floppy, no hard disk",
+        "Single 1.44 MB floppy and 40 MB IDE hard disk",
+        "Games Pack with 40 MB hard disk, Amstrad AdLib-compatible card, two speakers, AJ-5 joystick and three games"
+      ]
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "amstrad-pc5286",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.amstrad-pc5286.creation.model"
+        }
+      ],
+      "fields": [
+        {
+          "id": "commercial_model",
+          "label_key": "creation.label.commercial_model",
+          "default": "floppy",
+          "choices": [
+            {
+              "id": "floppy",
+              "label_key": "product.amstrad-pc5286.creation.variant.floppy",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Sound",
+                  "key": "sndcard",
+                  "value": "none"
+                }
+              ]
+            },
+            {
+              "id": "hd40",
+              "label_key": "product.amstrad-pc5286.creation.variant.hd40",
+              "status": "experimental",
+              "set": [
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_fn",
+                  "value": "pc5286-40mb.img"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_parameters",
+                  "value": "26, 4, 805, 0, ide"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_ide_channel",
+                  "value": "0:0"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_speed",
+                  "value": "1989_3500rpm"
+                },
+                {
+                  "section": "Sound",
+                  "key": "sndcard",
+                  "value": "none"
+                }
+              ],
+              "generated_files": [
+                {
+                  "path": "pc5286-40mb.img",
+                  "size": 42864640
+                }
+              ]
+            },
+            {
+              "id": "games-pack",
+              "label_key": "product.amstrad-pc5286.creation.variant.games-pack",
+              "status": "experimental",
+              "set": [
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_fn",
+                  "value": "pc5286-40mb.img"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_parameters",
+                  "value": "26, 4, 805, 0, ide"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_ide_channel",
+                  "value": "0:0"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_speed",
+                  "value": "1989_3500rpm"
+                },
+                {
+                  "section": "Sound",
+                  "key": "sndcard",
+                  "value": "adlib"
+                }
+              ],
+              "generated_files": [
+                {
+                  "path": "pc5286-40mb.img",
+                  "size": 42864640
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "2048",
+          "choices": [
+            {
+              "id": "1024",
+              "label_key": "product.amstrad-pc5286.creation.memory.1024",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 1024
+                }
+              ]
+            },
+            {
+              "id": "2048",
+              "label_key": "product.amstrad-pc5286.creation.memory.2048",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 2048
+                }
+              ]
+            },
+            {
+              "id": "4096",
+              "label_key": "product.amstrad-pc5286.creation.memory.4096",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 4096
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.amstrad-pc5286.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "286",
+            "cpu_speed": 16000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "cpu_waitstates": 2,
+            "mem_size": 2048
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "F82C710 UPC Super I/O",
+          "values": {
+            "pc5286_bios_checksum": 1,
+            "serial_irq": 4,
+            "lpt_irq": 7
+          }
+        }
+      ],
+      "generated_files": []
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.commercial",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.market",
+            "value_key": "product.amstrad-pc5286.technical.market"
+          },
+          {
+            "label_key": "technical.label.commercial_configurations",
+            "value_key": "product.amstrad-pc5286.technical.commercial_configurations"
+          },
+          {
+            "label_key": "technical.label.accessories",
+            "value_key": "product.amstrad-pc5286.technical.accessories"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented_and_modeled",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.amstrad-pc5286.technical.cpu"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.amstrad-pc5286.technical.memory"
+          },
+          {
+            "label_key": "technical.label.chipset",
+            "value_key": "product.amstrad-pc5286.technical.chipset"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.amstrad-pc5286.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.amstrad-pc5286.technical.storage"
+          },
+          {
+            "label_key": "technical.label.serial_parallel",
+            "value_key": "product.amstrad-pc5286.technical.interfaces"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.observed",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.amstrad-pc5286.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.amstrad-pc5286.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.amstrad-pc5286.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.amstrad-pc5286.technical.brochure",
+            "url": "https://acpc.me/ACME/AMSTRAD_PRO/AMSTRAD_PC/DOCUMENTS_COMMERCIAUX/CATALOGUES_DEPLIANTS_TARIFS/AMSTRAD_PC5286_Games_Pack[ENG].pdf"
+          },
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.amstrad-pc5286.technical.manual",
+            "url": "https://acpc.me/ACME/AMSTRAD_PRO/AMSTRAD_PC/LITTERATURE/MANUELS/PC5086_PC5286_User_Instructions[ENG].pdf"
+          },
+          {
+            "label_key": "technical.label.source_firmware",
+            "value_key": "product.amstrad-pc5286.technical.firmware_source",
+            "url": "https://banjosmods.wordpress.com/2021/03/18/amstrad-pc5286-bios-dump/"
+          },
+          {
+            "label_key": "technical.label.source_notes",
+            "value_key": "product.amstrad-pc5286.technical.sound_card",
+            "url": "https://www.vogons.org/viewtopic.php?t=47900"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 260,
+  "platform": {
+    "id": "amstrad-pc5286-platform",
+    "emulator_machine_id": "pc5286",
+    "architecture": "80286"
+  }
+}

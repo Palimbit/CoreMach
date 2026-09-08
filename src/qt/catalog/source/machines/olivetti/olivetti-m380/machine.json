@@ -1,0 +1,281 @@
+{
+  "order": 260,
+  "machine": {
+    "id": "olivetti-m380",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m380",
+    "platform_id": "olivetti-m380-platform",
+    "name": "Olivetti M380 / M380 C",
+    "summary_key": "product.olivetti-m380.summary",
+    "history_key": "product.olivetti-m380.history",
+    "warning_key": "product.olivetti-m380.warning",
+    "status": "partial",
+    "period": "1988–1989",
+    "aliases": [
+      "M380 C",
+      "M380 C NEW"
+    ],
+    "tags": [
+      "80386DX",
+      "16 MHz",
+      "BA806",
+      "BA818",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_386"
+      ],
+      "storage_interface": [
+        "floppy",
+        "mfm"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80386DX, 16 MHz",
+      "memory": "Expansion-board memory; ME908/916/919 1 MB, ME912/927 4 MB, ME923 16 MB; 1–48 MB documented",
+      "chipset": "Olivetti proprietary BA806/BA818 PAL logic",
+      "video": "External EGA or monochrome adapters; M380 C NEW VGA GO470/481 remains unavailable",
+      "floppy": "External IF614 U-TURN board with floppy controller",
+      "hard_disk": "External GO717 MFM or GO720 ESDI controller; M380 C NEW GO723 combo remains unavailable",
+      "rtc": "64-byte MC146818-compatible CMOS RAM",
+      "expansion": "Two 8-bit ISA, two 16-bit ISA and three proprietary 32-bit positions"
+    },
+    "firmware": {
+      "known_sets": [
+        "PBUQ/PBUZ 1.09",
+        "PBVQ/PBVR 1.13 (documented, not local)",
+        "PBVN/PBVP 1.14 (documented, not local)"
+      ],
+      "required": true,
+      "identity_note": "The locally preserved PBUQ/PBUZ 1.09 pair is 64 KiB byte-interleaved firmware. BluMach does not distribute its bytes."
+    },
+    "relationships": {
+      "boards": [
+        "M380: BA806",
+        "M380 C / M380 C NEW: BA818"
+      ],
+      "commercial_variants": [
+        "M380 desktop",
+        "M380 C compact",
+        "M380 C NEW with GO723 and GO470/481"
+      ]
+    },
+    "creation": {
+      "status": "partial",
+      "directory_prefix": "olivetti-m380",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-m380.creation.model"
+        }
+      ],
+      "fields": [
+        {
+          "id": "commercial_model",
+          "label_key": "creation.label.commercial_model",
+          "default": "m380",
+          "choices": [
+            {
+              "id": "m380",
+              "label_key": "product.olivetti-m380.creation.variant.m380",
+              "status": "partial",
+              "set": []
+            },
+            {
+              "id": "m380c",
+              "label_key": "product.olivetti-m380.creation.variant.m380c",
+              "status": "documented",
+              "set": []
+            },
+            {
+              "id": "m380c-new",
+              "label_key": "product.olivetti-m380.creation.variant.m380c-new",
+              "status": "unavailable",
+              "set": []
+            }
+          ]
+        },
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "4096",
+          "choices": [
+            {
+              "id": "1024",
+              "label_key": "product.olivetti-m380.creation.memory.1024",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 1024
+                }
+              ]
+            },
+            {
+              "id": "4096",
+              "label_key": "product.olivetti-m380.creation.memory.4096",
+              "status": "partial",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 4096
+                }
+              ]
+            },
+            {
+              "id": "16384",
+              "label_key": "product.olivetti-m380.creation.memory.16384",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 16384
+                }
+              ]
+            },
+            {
+              "id": "49152",
+              "label_key": "product.olivetti-m380.creation.memory.49152",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 49152
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.olivetti-m380.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i386dx",
+            "cpu_speed": 16000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 4096
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "pvga1a"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        }
+      ],
+      "generated_files": []
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.commercial",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.commercial_configurations",
+            "value_key": "product.olivetti-m380.technical.commercial_configurations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-m380.technical.cpu"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-m380.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-m380.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-m380.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.observed",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-m380.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-m380.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-m380.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-m380.technical.service_manual",
+            "url": "https://www.ardent-tool.com/Olivetti/Docs/service_guide/systems1/cap7.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 110,
+  "platform": {
+    "id": "olivetti-m380-platform",
+    "emulator_machine_id": "olivetti_m380",
+    "architecture": "80386DX"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "product.olivetti-m30008.summary": "Sobremesa 386SX a 20 MHz con OPTi 82C283, 82C206 separado y vídeo OAK OTI-067 integrado.",
+  "product.olivetti-m30008.history": "El M300-08 BA319/BA324/BA325 es una plataforma compacta posterior, distinta de IF378 y TOPCAT. El manual documenta un bus AT de 10 MHz y memoria de 2/4/8/10/14/16 MB; 6 y 12 MB no son posibles.",
+  "product.olivetti-m30008.technical.verified": "Validados POST, Setup, cambio de año del calendario, disquete de 1,44 MB y arranque de MS-DOS 3.30a.",
+  "product.olivetti-m30008.technical.limitations": "Emulación parcial arrancable. El 82C283 está modelado y el bus AT se fija a 10 MHz; el 82C206 se representa mediante el núcleo AT común. Falta probar IDE con un disco documentado y la temporización RTC sigue siendo una aproximación."
+}

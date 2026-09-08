@@ -1,0 +1,7 @@
+{
+  "product.olivetti-m30030.summary": "Desktop i486SX a 25 MHz con chipset VLSI VL82C486 e video WD90C31 integrato.",
+  "product.olivetti-m30030.history": "M300-30 è la variante SX di questa piattaforma M300 del 1992–1993. BluMach la separa da M300-30P pur condividendo scheda e firmware.",
+  "product.olivetti-m30030.technical.verified": "BIOS 1.09/Diagnostics 1.04 completa POST e test di CPU, cache, memoria, tastiera, RTC e modalità protetta; avvia MS-DOS 5.00 e conserva il calendario. Con 4 MB, la memoria risulta 640 KB base + 3072 KB estesa + 384 KB dedicata = 4096 KB.",
+  "product.olivetti-m30030.technical.limitations": "Emulazione parziale avviabile. VL82C486 è un primo modello; WD90C31 usa il core WD90C30 compatibile e PC87311/87312 è approssimato con PC873xx. Restano da convalidare le altre configurazioni RAM documentate e un insieme software più ampio.",
+  "product.olivetti-m30030.technical.manual": "Capitolo 36 della guida di servizio Olivetti, fonte primaria per M300-30 e M300-30P."
+}

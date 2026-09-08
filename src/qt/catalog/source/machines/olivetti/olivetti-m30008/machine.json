@@ -1,0 +1,132 @@
+{
+  "order": 150,
+  "machine": {
+    "id": "olivetti-m30008",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m300",
+    "platform_id": "olivetti-m30008-platform",
+    "name": "Olivetti M300-08",
+    "summary_key": "product.olivetti-m30008.summary",
+    "history_key": "product.olivetti-m30008.history",
+    "status": "partial",
+    "period": "1992",
+    "aliases": [
+      "BA319",
+      "BA324",
+      "BA325"
+    ],
+    "tags": [
+      "80386SX",
+      "20 MHz",
+      "OPTi 82C283",
+      "OAK OTI-067"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_386sx"
+      ],
+      "video": [
+        "vga"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80386SX 20 MHz",
+      "memory": "2/4/8/10/14/16 MB",
+      "chipset": "OPTi 82C283 + separate 82C206",
+      "bus": "ISA/AT 10 MHz",
+      "video": "Integrated OAK OTI-067"
+    },
+    "firmware": {
+      "known_sets": [
+        "64 KB system BIOS + 32 KB EVC"
+      ],
+      "required": true
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-m30008",
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i386sx",
+            "cpu_speed": 20000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 1,
+            "mem_size": 2048
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "olivetti-m30008-100mb.img",
+            "hdd_01_parameters": "33, 8, 776, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "CP3104"
+          }
+        }
+      ],
+      "generated_files": [
+        {
+          "path": "olivetti-m30008-100mb.img",
+          "size": 104890368
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-m30008.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-m30008.technical.limitations"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 190,
+  "platform": {
+    "id": "olivetti-m30008-platform",
+    "emulator_machine_id": "olivetti_m30008",
+    "architecture": "80386SX"
+  }
+}

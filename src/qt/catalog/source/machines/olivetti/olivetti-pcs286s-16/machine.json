@@ -1,0 +1,73 @@
+{
+  "order": 70,
+  "machine": {
+    "id": "olivetti-pcs286s-16",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-pcs",
+    "name": "Olivetti PCS 286S (16 MHz)",
+    "summary_key": "product.olivetti-pcs286s16.summary",
+    "history_key": "product.olivetti-pcs286s16.history",
+    "warning_key": "product.olivetti-pcs286s16.warning",
+    "status": "not_bootable",
+    "period": "1991",
+    "aliases": [
+      "PCS286S",
+      "PCS 286 S"
+    ],
+    "tags": [
+      "80286",
+      "16 MHz",
+      "AT",
+      "VGA",
+      "IDE",
+      "desktop",
+      "missing BIOS"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "vga"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286 16 MHz, zero wait states",
+      "memory": "1 MB standard; up to 8 MB on-board and 16 MB system",
+      "video": "Integrated VGA",
+      "floppy": "3.5 in, 1.44 MB",
+      "coprocessor": "Intel 80287 optional"
+    },
+    "firmware": {
+      "known_sets": [],
+      "required": true,
+      "identity_note": "The correct 16 MHz commercial PCS 286S BIOS has not been preserved; TI/OLIMCU16 BIOS 2.06 is not assigned to this machine"
+    },
+    "storage": {
+      "bus": "IDE/ATA",
+      "official_drives": [
+        "40 MB",
+        "80 MB",
+        "120 MB"
+      ]
+    },
+    "relationships": {
+      "derived_from": [
+        "olivetti-pcs286"
+      ],
+      "distinct_from": [
+        "olivetti-pcs286s"
+      ]
+    }
+  }
+}

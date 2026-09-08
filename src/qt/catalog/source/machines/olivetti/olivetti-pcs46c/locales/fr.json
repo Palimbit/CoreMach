@@ -1,0 +1,8 @@
+{
+  "product.olivetti-pcs46c.summary": "PCS i486DX2 50 MHz avec ETEQ ET6000 et Cirrus Logic GD5428 intégré.",
+  "product.olivetti-pcs46c.history": "Le PCS 46/C utilise BA2036, basée sur l'ensemble T.1 BA2044, avec ET6000, 83C206Q, PC87310 et GD5428. M4-46 appartient à la famille technique mais reste un modèle distinct, pas un alias.",
+  "product.olivetti-pcs46c.technical.rom_layout": "Image de 128 Ko : OVC 1.09 en moitié basse à C0000h et BIOS/Diagnostics 1.05 en moitié haute à F0000h.",
+  "product.olivetti-pcs46c.technical.verified": "POST, 4 Mo, vidéo interne, CMOS, disquette/MS-DOS, second démarrage NVR et Ctrl+Alt+Suppr ont été observés.",
+  "product.olivetti-pcs46c.technical.limitations": "Émulation partielle amorçable: date/heure du Setup, IDE, autres capacités RAM et davantage de logiciels restent à vérifier. Les fonctions AT communes remplacent actuellement le 83C206Q; le modèle n'est ni dédié ni cycle-exact.",
+  "product.olivetti-pcs46c.technical.manual": "Chapitre du manuel de service Olivetti M4-4x, M4-6x et PCS4xx (source matérielle primaire)."
+}

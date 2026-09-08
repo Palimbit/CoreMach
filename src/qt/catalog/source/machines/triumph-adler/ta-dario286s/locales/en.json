@@ -1,0 +1,5 @@
+{
+  "product.ta-dario286s.summary": "Possible Triumph-Adler counterpart of the 16 MHz 286S, preserved as a research lead.",
+  "product.ta-dario286s.history": "The existence and exact identity of the Dario 286S require confirmation from primary documentation or physical hardware. It is catalogued separately to avoid confusing it with the 12 MHz Dario 286/P35 or assuming Olivetti firmware equivalence.",
+  "product.ta-dario286s.warning": "EMULATION UNAVAILABLE: no verified Dario 286S BIOS is preserved and its exact relationship to the 16 MHz PCS 286S remains unconfirmed."
+}

@@ -1,0 +1,276 @@
+{
+  "order": 240,
+  "machine": {
+    "id": "olivetti-m280",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m280",
+    "platform_id": "olivetti-m280-fe2000-platform",
+    "name": "Olivetti M280",
+    "summary_key": "product.olivetti-m280.summary",
+    "history_key": "product.olivetti-m280.history",
+    "warning_key": "product.olivetti-m280.warning",
+    "status": "experimental",
+    "period": "Late 1980s",
+    "aliases": [
+      "BA817",
+      "BA824"
+    ],
+    "tags": [
+      "80286",
+      "12 MHz",
+      "FE2000",
+      "EGA",
+      "ST506",
+      "desktop"
+    ],
+    "facets": {
+      "form_factor": [
+        "desktop"
+      ],
+      "mobility": [
+        "stationary"
+      ],
+      "cpu_generation": [
+        "x86_286"
+      ],
+      "video": [
+        "ega"
+      ],
+      "storage_interface": [
+        "floppy",
+        "st506"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80286, 12 MHz CPU / 8 MHz bus",
+      "memory": "1 MB base; ME903 RAM expansion board documented up to 2 MB",
+      "chipset": "Olivetti FE2000 proprietary logic with MC146818 and 8742 keyboard controller",
+      "video": "External OEC EGA-compatible or PGC monitor adapter; no native video board is modelled",
+      "floppy": "GO714 ST506/MFM or GO723 ST506/RLL HD/FD controller options documented",
+      "hard_disk": "BIOS 2.16 expands the HDU table and adds a 62 MB RLL option",
+      "expansion": "IF622 bus adapter; ME903 RAM expansion; OEC/PGC monitor adapters"
+    },
+    "firmware": {
+      "known_sets": [
+        "PBVW/PBVV 2.14",
+        "PBVS/PBVT 2.16",
+        "2.16.1"
+      ],
+      "required": true,
+      "identity_note": "The locally preserved 2.16 PBVT/PBVS pair is byte-interleaved 64 KiB firmware. BluMach does not distribute its bytes."
+    },
+    "storage": {
+      "bus": "GO714 ST506/MFM or GO723 ST506/RLL controller options are documented; current creation does not substitute a generic hard-disk controller.",
+      "official_drives": [
+        "62 MB RLL option added by BIOS 2.16"
+      ]
+    },
+    "relationships": {
+      "boards": [
+        "BA817 system board",
+        "BA824 system board",
+        "CO113 console controller",
+        "IF622 bus adapter",
+        "IF623 U-TURN board",
+        "ME903 RAM expansion",
+        "GO451/GO467 OEC",
+        "GO423 PGC",
+        "GO714 MFM",
+        "GO723 RLL"
+      ],
+      "commercial_configurations": [
+        "1 MB base system",
+        "ME903 RAM expansion documented up to 2 MB"
+      ]
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-m280",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-m280.creation.model"
+        }
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "1024",
+          "choices": [
+            {
+              "id": "1024",
+              "label_key": "product.olivetti-m280.creation.memory.1024",
+              "status": "experimental",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 1024
+                }
+              ]
+            },
+            {
+              "id": "2048",
+              "label_key": "product.olivetti-m280.creation.memory.2048",
+              "status": "experimental",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 2048
+                }
+              ]
+            },
+            {
+              "id": "3072",
+              "label_key": "product.olivetti-m280.creation.memory.3072",
+              "status": "experimental",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 3072
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.olivetti-m280.creation.note"
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "bios": "v216",
+            "cpu_family": "286",
+            "cpu_speed": 12000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "mem_size": 1024
+          }
+        },
+        {
+          "section": "Olivetti M280",
+          "values": {
+            "bios": "v216"
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "pvga1a"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        }
+      ],
+      "generated_files": []
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.commercial",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.commercial_configurations",
+            "value_key": "product.olivetti-m280.technical.commercial_configurations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.cpu_bus",
+            "value_key": "product.olivetti-m280.technical.cpu"
+          },
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.olivetti-m280.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.olivetti-m280.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.olivetti-m280.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.configuration",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.jumpers",
+            "value_key": "product.olivetti-m280.technical.jumpers"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "evidence_key": "technical.evidence.observed",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.olivetti-m280.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.olivetti-m280.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.olivetti-m280.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.olivetti-m280.technical.service_manual"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 80,
+  "platform": {
+    "id": "olivetti-m280-fe2000-platform",
+    "emulator_machine_id": "olivetti_m280",
+    "architecture": "80286"
+  }
+}
