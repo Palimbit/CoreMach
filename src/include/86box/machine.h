@@ -573,6 +573,7 @@ extern int             machine_at_olivetti_m300_if378_init(const machine_t *);
 #ifdef EMU_DEVICE_H
 extern const device_t  ibmat_device;
 extern const device_t  t3200_device;
+extern const device_t  t5100_device;
 #endif
 extern int             machine_at_ibmat_init(const machine_t *);
 #ifdef EMU_DEVICE_H
@@ -1574,6 +1575,7 @@ extern int             machine_at_vpc2007_init(const machine_t *);
 /* m_at_t3100e.c */
 extern int             machine_at_t3100e_init(const machine_t *);
 extern int             machine_at_t3200_init(const machine_t *);
+extern int             machine_at_t5100_init(const machine_t *);
 
 /* m_elt.c */
 extern int machine_elt_init(const machine_t *);
