@@ -1,5 +1,5 @@
 {
-  "filter.all": "All %1",
+  "filter.any": "Any",
   "filter.classification": "Catalogue classification",
   "filter.facet.form_factor": "Form factor",
   "filter.form_factor.desktop": "Desktop",

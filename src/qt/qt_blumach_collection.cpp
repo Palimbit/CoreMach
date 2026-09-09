@@ -522,12 +522,16 @@ void BluMachCollectionWidget::rebuildFacetFilters()
 
     for (const auto &facet : m_catalog.filterFacets()) {
         auto *filter = new QComboBox(this);
-        filter->setMinimumWidth(150);
-        filter->addItem(m_catalog.text(QStringLiteral("filter.all")).arg(m_catalog.facetLabel(facet.id)), QString());
+        const QString facetLabel = m_catalog.facetLabel(facet.id);
+        filter->setMinimumWidth(140);
+        filter->setPlaceholderText(facetLabel);
+        filter->setToolTip(facetLabel);
+        filter->setAccessibleName(facetLabel);
+        filter->addItem(m_catalog.text(QStringLiteral("filter.any")), QString());
         for (const auto &value : facet.values)
             filter->addItem(m_catalog.facetValueText(facet.id, value.id), value.id);
-        const int index = filter->findData(m_facetSelections.value(facet.id));
-        filter->setCurrentIndex(index >= 0 ? index : 0);
+        const QString selection = m_facetSelections.value(facet.id);
+        filter->setCurrentIndex(selection.isEmpty() ? -1 : filter->findData(selection));
         connect(filter, &QComboBox::currentIndexChanged, this, [this] { applyFilter(); });
         m_facetFilters.insert(facet.id, filter);
     }
@@ -562,13 +566,20 @@ void BluMachCollectionWidget::rebuildFilterLayout()
     m_filterLayout->addWidget(m_statusFilter, 0, 1);
     m_filterLayout->addWidget(m_resultsLabel, 0, 2);
     m_filterLayout->setColumnStretch(0, 1);
+    constexpr int facetColumns = 3;
+    int row = 1;
     int column = 0;
     for (const auto &facet : m_catalog.filterFacets()) {
         if (!m_facetFilters.contains(facet.id))
             continue;
-        m_filterLayout->addWidget(m_facetFilters.value(facet.id), 1, column++);
-        m_filterLayout->setColumnStretch(column - 1, 1);
+        m_filterLayout->addWidget(m_facetFilters.value(facet.id), row, column++);
+        if (column == facetColumns) {
+            column = 0;
+            ++row;
+        }
     }
+    for (int index = 0; index < facetColumns; ++index)
+        m_filterLayout->setColumnStretch(index, 1);
 }
 
 void BluMachCollectionWidget::rebuildTree()

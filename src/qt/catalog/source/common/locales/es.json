@@ -1,5 +1,5 @@
 {
-  "filter.all": "Todas las opciones de %1",
+  "filter.any": "Cualquiera",
   "filter.classification": "Clasificación del catálogo",
   "filter.facet.form_factor": "Formato",
   "filter.form_factor.desktop": "Sobremesa",

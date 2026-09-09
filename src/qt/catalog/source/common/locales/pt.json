@@ -1,5 +1,5 @@
 {
-  "filter.all": "Todas as opções de %1",
+  "filter.any": "Todas",
   "filter.classification": "Classificação do catálogo",
   "filter.facet.form_factor": "Formato",
   "filter.form_factor.desktop": "Computador de mesa",
