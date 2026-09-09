@@ -177,40 +177,71 @@ def assemble(source_dir: Path) -> tuple[dict[str, Any], dict[str, dict[str, str]
     return catalog, translations
 
 
-def validate(catalog: dict[str, Any], translations: dict[str, dict[str, str]]) -> list[str]:
+def implementation_documents(catalog: dict[str, Any]) -> list[str]:
+    documents = set()
+    for product in catalog.get("products", []):
+        if not isinstance(product, dict):
+            continue
+        implementation = product.get("implementation")
+        if isinstance(implementation, dict) and isinstance(implementation.get("document"), str):
+            documents.add(implementation["document"])
+    return sorted(documents)
+
+
+def validate(
+    catalog: dict[str, Any],
+    translations: dict[str, dict[str, str]],
+    documents_dir: Path | None = None,
+) -> list[str]:
     errors: list[str] = []
     references = catalog_audit.validate_catalog(catalog, errors)
     catalog_audit.validate_urls(catalog, errors)
     catalog_audit.validate_translation_sets(translations, references, errors, "catalog source")
+    if documents_dir is not None:
+        for document in implementation_documents(catalog):
+            if not (documents_dir / document).is_file():
+                errors.append(f"implementation document not found: {document}")
     return errors
 
 
-def render_qrc(locales: list[str]) -> str:
+def render_qrc(locales: list[str], documents: list[str] | None = None) -> str:
     files = ["    <file alias=\"catalog.json\">catalog.json</file>"]
     files.extend(
         f"    <file alias=\"locales/{locale}.json\">locales/{locale}.json</file>"
         for locale in locales
+    )
+    files.extend(
+        f"    <file alias=\"documents/{document}\">documents/{document}</file>"
+        for document in documents or []
     )
     return "\n".join(
         ["<RCC>", '  <qresource prefix="/blumach/catalog">', *files, "  </qresource>", "</RCC>", ""]
     )
 
 
-def build(source_dir: Path, output_dir: Path) -> None:
+def build(source_dir: Path, output_dir: Path, documents_dir: Path) -> None:
     catalog, translations = assemble(source_dir)
-    errors = validate(catalog, translations)
+    errors = validate(catalog, translations, documents_dir)
     if errors:
         raise ValueError("catalogue validation failed:\n  - " + "\n  - ".join(errors))
     write_json(output_dir / "catalog.json", catalog)
     for locale, localized in sorted(translations.items()):
         write_json(output_dir / "locales" / f"{locale}.json", localized)
+    documents = implementation_documents(catalog)
+    for document in documents:
+        write_text_if_changed(
+            output_dir / "documents" / document,
+            (documents_dir / document).read_text(encoding="utf-8"),
+        )
     write_text_if_changed(
-        output_dir / "blumach_catalog.qrc", render_qrc(sorted(translations))
+        output_dir / "blumach_catalog.qrc",
+        render_qrc(sorted(translations), documents),
     )
 
 
 def main() -> int:
     repository = Path(__file__).resolve().parents[1]
+    documents_dir = repository / "doc" / "machines"
     default_source = repository / "src" / "qt" / "catalog" / "source"
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -226,7 +257,7 @@ def main() -> int:
     try:
         if args.command == "check":
             catalog, translations = assemble(args.source.resolve())
-            errors = validate(catalog, translations)
+            errors = validate(catalog, translations, documents_dir)
             if errors:
                 raise ValueError("catalogue validation failed:\n  - " + "\n  - ".join(errors))
             print(
@@ -234,7 +265,7 @@ def main() -> int:
                 f"{len(translations)} locales"
             )
         elif args.command == "build":
-            build(args.source.resolve(), args.output.resolve())
+            build(args.source.resolve(), args.output.resolve(), documents_dir)
             print(f"Generated BluMach catalogue resources in {args.output.resolve()}")
     except (KeyError, OSError, TypeError, ValueError) as exc:
         print(f"catalog_builder: {exc}", file=sys.stderr)

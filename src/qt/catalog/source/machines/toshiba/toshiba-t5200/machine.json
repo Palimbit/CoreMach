@@ -232,6 +232,10 @@
         }
       ]
     },
+    "implementation": {
+      "document": "toshiba-t5200-implementation.md",
+      "language": "en"
+    },
     "technical": [
       {
         "title_key": "technical.section.commercial",

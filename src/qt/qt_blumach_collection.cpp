@@ -14,6 +14,7 @@
 #include <QCoreApplication>
 #include <QComboBox>
 #include <QDesktopServices>
+#include <QFile>
 #include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
@@ -31,6 +32,9 @@
 #include <QStyledItemDelegate>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTextBrowser>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -381,6 +385,14 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     };
     m_infoTabs->addTab(createPage(&m_overviewScroll, &m_overviewLayout), QString());
     m_infoTabs->addTab(createPage(&m_researchScroll, &m_researchLayout), QString());
+    m_engineeringView = new QTextBrowser(m_infoTabs);
+    m_engineeringView->setObjectName(QStringLiteral("blumachEngineering"));
+    m_engineeringView->setFrameShape(QFrame::NoFrame);
+    m_engineeringView->setOpenLinks(false);
+    m_engineeringView->document()->setDocumentMargin(16.0);
+    connect(m_engineeringView, &QTextBrowser::anchorClicked, this,
+            [](const QUrl &url) { QDesktopServices::openUrl(url); });
+    m_infoTabs->addTab(m_engineeringView, QString());
     m_infoTabs->addTab(createPage(&m_sourcesScroll, &m_sourcesLayout), QString());
     detailLayout->addWidget(m_infoTabs, 1);
 
@@ -484,7 +496,8 @@ void BluMachCollectionWidget::reloadLanguage()
     m_search->setPlaceholderText(tr("Search models, aliases or hardware"));
     m_infoTabs->setTabText(0, m_catalog.text(QStringLiteral("technical.ui.overview")));
     m_infoTabs->setTabText(1, m_catalog.text(QStringLiteral("technical.ui.research")));
-    m_infoTabs->setTabText(2, m_catalog.text(QStringLiteral("technical.ui.sources")));
+    m_infoTabs->setTabText(2, m_catalog.text(QStringLiteral("technical.ui.engineering")));
+    m_infoTabs->setTabText(3, m_catalog.text(QStringLiteral("technical.ui.sources")));
 
     QSet<QString> availableStatuses;
     for (const auto &product : m_catalog.products())
@@ -667,10 +680,11 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
     m_firmwareBadge->hide();
     m_warningFrame->hide();
     m_machineIllustration->hide();
-    setDetailTabsAvailable(false, false);
+    setDetailTabsAvailable(false, false, false);
     clearLayout(m_overviewLayout);
     clearLayout(m_researchLayout);
     clearLayout(m_sourcesLayout);
+    m_engineeringView->clear();
     if (!item) {
         m_title->setText(tr("No matching computers"));
         m_subtitle->setText(tr("Try changing the search text or preservation-state filter."));
@@ -770,9 +784,13 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
     }
     if (hasResearch)
         populateTechnicalPage(*product, false);
+    const bool hasEngineering =
+        !product->implementation.value(QStringLiteral("document")).toString().isEmpty();
+    if (hasEngineering)
+        populateEngineeringPage(*product);
     if (hasSources)
         populateTechnicalPage(*product, true);
-    setDetailTabsAvailable(hasResearch, hasSources);
+    setDetailTabsAvailable(hasResearch, hasEngineering, hasSources);
     emit selectionContextChanged(product->id, product->name, canCreateProduct(*product));
 }
 
@@ -885,14 +903,42 @@ void BluMachCollectionWidget::populateTechnicalPage(const BluMachProduct &produc
     targetLayout->addStretch(1);
 }
 
-void BluMachCollectionWidget::setDetailTabsAvailable(const bool researchAvailable, const bool sourcesAvailable)
+void BluMachCollectionWidget::populateEngineeringPage(const BluMachProduct &product)
+{
+    const QString document = product.implementation.value(QStringLiteral("document")).toString();
+    QFile file(QStringLiteral(":/blumach/catalog/documents/%1").arg(document));
+    if (!file.open(QIODevice::ReadOnly)) {
+        m_engineeringView->setPlainText(m_catalog.text(QStringLiteral("technical.ui.preparing")));
+        return;
+    }
+
+    QString introduction = m_catalog.text(QStringLiteral("technical.ui.engineering_intro"));
+    const QString language = product.implementation.value(QStringLiteral("language")).toString();
+    if (!language.isEmpty() && language != m_catalog.localeCode())
+        introduction += QStringLiteral("\n\n")
+                      + m_catalog.text(QStringLiteral("technical.ui.engineering_language"));
+
+    const QString markdown = QStringLiteral("> %1\n\n%2")
+                                 .arg(introduction.replace(QStringLiteral("\n\n"), QStringLiteral("\n> \n> ")),
+                                      QString::fromUtf8(file.readAll()));
+    m_engineeringView->document()->setBaseUrl(
+        QUrl(QStringLiteral("https://github.com/BluMach/86Box/blob/master/doc/machines/")));
+    m_engineeringView->setMarkdown(markdown);
+    m_engineeringView->moveCursor(QTextCursor::Start);
+}
+
+void BluMachCollectionWidget::setDetailTabsAvailable(const bool researchAvailable,
+                                                     const bool engineeringAvailable,
+                                                     const bool sourcesAvailable)
 {
     if ((!researchAvailable && m_infoTabs->currentIndex() == 1)
-        || (!sourcesAvailable && m_infoTabs->currentIndex() == 2))
+        || (!engineeringAvailable && m_infoTabs->currentIndex() == 2)
+        || (!sourcesAvailable && m_infoTabs->currentIndex() == 3))
         m_infoTabs->setCurrentIndex(0);
     m_infoTabs->setTabVisible(1, researchAvailable);
-    m_infoTabs->setTabVisible(2, sourcesAvailable);
-    m_infoTabs->tabBar()->setVisible(researchAvailable || sourcesAvailable);
+    m_infoTabs->setTabVisible(2, engineeringAvailable);
+    m_infoTabs->setTabVisible(3, sourcesAvailable);
+    m_infoTabs->tabBar()->setVisible(researchAvailable || engineeringAvailable || sourcesAvailable);
 }
 
 void BluMachCollectionWidget::clearLayout(QLayout *layout)
@@ -1022,6 +1068,7 @@ void BluMachCollectionWidget::updateAppearance()
         "QLabel#blumachSectionHeading { color: %4; font-weight: 600; }"
         "QLabel#blumachFieldName { color: %5; font-weight: 600; }"
         "QScrollArea { background: transparent; border: 0; }"
+        "QTextBrowser#blumachEngineering { color: %4; background: %2; border: 0; padding: 2px 8px; }"
         "QTabWidget::pane { background: %2; border: 0; border-top: 1px solid %6; }"
         "QTabBar { background: %2; }"
         "QTabBar::tab { background: transparent; color: %5; border: 0; padding: 9px 8px; }"

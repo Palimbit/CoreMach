@@ -19,6 +19,7 @@ ENTITY_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FACET_ID = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
 TRANSLATION_KEY = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
 PLACEHOLDER = re.compile(r"%(?:L?\d+|n)")
+IMPLEMENTATION_DOCUMENT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*-implementation\.md$")
 REQUIRED_COLLECTIONS = (
     "filter_facets",
     "manufacturers",
@@ -228,6 +229,30 @@ def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
             )
         if status not in VALID_STATUSES:
             errors.append(f"catalog.json: product {product_id!r} has invalid status {status!r}")
+        implementation = product.get("implementation")
+        if implementation is not None:
+            if not isinstance(implementation, dict):
+                errors.append(
+                    f"catalog.json: product {product_id!r}.implementation must be an object"
+                )
+            else:
+                document = implementation.get("document")
+                language = implementation.get("language")
+                if not isinstance(document, str) or not IMPLEMENTATION_DOCUMENT.fullmatch(document):
+                    errors.append(
+                        f"catalog.json: product {product_id!r}.implementation.document "
+                        "must be a simple *-implementation.md filename"
+                    )
+                elif document != f"{product_id}-implementation.md":
+                    errors.append(
+                        f"catalog.json: product {product_id!r}.implementation.document "
+                        f"must be {product_id + '-implementation.md'!r}"
+                    )
+                if not isinstance(language, str) or not re.fullmatch(r"[a-z]{2}", language):
+                    errors.append(
+                        f"catalog.json: product {product_id!r}.implementation.language "
+                        "must be a two-letter lowercase language code"
+                    )
 
     validate_facets(catalog, products, errors)
 
