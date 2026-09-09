@@ -1,0 +1,309 @@
+{
+  "order": 310,
+  "machine": {
+    "id": "toshiba-t5200",
+    "manufacturer_id": "toshiba",
+    "family_id": "toshiba-t-series",
+    "platform_id": "toshiba-t5200-platform",
+    "name": "Toshiba T5200",
+    "summary_key": "product.toshiba-t5200.summary",
+    "history_key": "product.toshiba-t5200.history",
+    "warning_key": "product.toshiba-t5200.warning",
+    "status": "experimental",
+    "period": "1990s",
+    "aliases": [
+      "T5200/100",
+      "T5200/200"
+    ],
+    "tags": [
+      "80386DX",
+      "VGA",
+      "plasma",
+      "IDE"
+    ],
+    "facets": {
+      "form_factor": [
+        "luggable"
+      ],
+      "mobility": [
+        "portable"
+      ],
+      "cpu_generation": [
+        "x86_386"
+      ],
+      "video": [
+        "vga"
+      ],
+      "display_technology": [
+        "plasma"
+      ],
+      "display_color": [
+        "amber"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80386DX, 20 MHz; optional Intel 80387",
+      "memory": "2 MB onboard, selectable and validated from 2 to 14 MB",
+      "video": "Toshiba OEM Paradise PVGA1, 256 KB VRAM; internal 16-level orange gas-plasma panel and external color VGA output",
+      "floppy": "One internal 3.5-inch 720 KB or 1.44 MB drive; both read paths validated",
+      "interfaces": "Two serial ports, parallel/external-floppy connector and proprietary expansion"
+    },
+    "firmware": {
+      "known_sets": [
+        "Award V1.30 system BIOS (1988)",
+        "Toshiba VGA BIOS (1988, 24 KB)"
+      ],
+      "required": true,
+      "identity_note": "Original T5200 system and VGA ROMs are required; only their metadata is distributed."
+    },
+    "storage": {
+      "bus": "IDE; firmware supports specific Conner models, not yet represented by the creation profile",
+      "official_drives": [
+        "Conner CP-344 / CP-3044",
+        "Conner CP-3104 / CP-30104",
+        "Conner CP-3204F"
+      ]
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "toshiba-t5200",
+      "facts": [
+        {
+          "label_key": "technical.label.cpu_bus",
+          "value_key": "product.toshiba-t5200.creation.fact0"
+        },
+        {
+          "label_key": "creation.label.memory",
+          "value_key": "product.toshiba-t5200.creation.fact1"
+        },
+        {
+          "label_key": "creation.label.floppy_drives",
+          "value_key": "product.toshiba-t5200.creation.fact2"
+        }
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "2mb",
+          "choices": [
+            {
+              "id": "2mb",
+              "label_key": "product.toshiba-t5200.creation.2mb",
+              "status": "validated",
+              "set": [{ "section": "Machine", "key": "mem_size", "value": 2048 }]
+            },
+            {
+              "id": "4mb",
+              "label_key": "product.toshiba-t5200.creation.4mb",
+              "status": "validated",
+              "set": [{ "section": "Machine", "key": "mem_size", "value": 4096 }]
+            },
+            {
+              "id": "6mb",
+              "label_key": "product.toshiba-t5200.creation.6mb",
+              "status": "validated",
+              "set": [{ "section": "Machine", "key": "mem_size", "value": 6144 }]
+            },
+            {
+              "id": "8mb",
+              "label_key": "product.toshiba-t5200.creation.8mb",
+              "status": "validated",
+              "set": [{ "section": "Machine", "key": "mem_size", "value": 8192 }]
+            },
+            {
+              "id": "10mb",
+              "label_key": "product.toshiba-t5200.creation.10mb",
+              "status": "validated",
+              "set": [{ "section": "Machine", "key": "mem_size", "value": 10240 }]
+            },
+            {
+              "id": "12mb",
+              "label_key": "product.toshiba-t5200.creation.12mb",
+              "status": "validated",
+              "set": [{ "section": "Machine", "key": "mem_size", "value": 12288 }]
+            },
+            {
+              "id": "14mb",
+              "label_key": "product.toshiba-t5200.creation.14mb",
+              "status": "validated",
+              "set": [{ "section": "Machine", "key": "mem_size", "value": 14336 }]
+            }
+          ]
+        },
+        {
+          "id": "monitor",
+          "label_key": "creation.label.monitor",
+          "default": "dual-outputs",
+          "choices": [
+            {
+              "id": "dual-outputs",
+              "label_key": "product.toshiba-t5200.creation.display.internal",
+              "status": "validated",
+              "set": [{ "section": "Toshiba T5200", "key": "display_output", "value": 0 }]
+            },
+            {
+              "id": "external-only",
+              "label_key": "product.toshiba-t5200.creation.display.external",
+              "status": "validated",
+              "set": [{ "section": "Toshiba T5200", "key": "display_output", "value": 1 }]
+            }
+          ]
+        },
+        {
+          "id": "floppy",
+          "label_key": "creation.label.floppy_drives",
+          "default": "1440k",
+          "choices": [
+            {
+              "id": "1440k",
+              "label_key": "product.toshiba-t5200.creation.1440k",
+              "status": "validated",
+              "set": [{ "section": "Floppy and CD-ROM drives", "key": "fdd_01_type", "value": "35_2hd" }]
+            },
+            {
+              "id": "720k",
+              "label_key": "product.toshiba-t5200.creation.720k",
+              "status": "validated",
+              "set": [{ "section": "Floppy and CD-ROM drives", "key": "fdd_01_type", "value": "35_2dd" }]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.toshiba-t5200.creation.note"
+      ],
+      "generated_files": [],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i386dx",
+            "cpu_speed": 20000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "fpu_type": "none",
+            "mem_size": 2048
+          }
+        },
+        {
+          "section": "Toshiba T5200",
+          "values": {
+            "bios": "award_v130",
+            "display_output": 0
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Storage controllers",
+          "values": {
+            "fdc_1": "internal"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.commercial",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.market",
+            "value_key": "product.toshiba-t5200.technical.market"
+          },
+          {
+            "label_key": "technical.label.commercial_configurations",
+            "value_key": "product.toshiba-t5200.technical.commercial_configurations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.toshiba-t5200.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.toshiba-t5200.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.toshiba-t5200.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.toshiba-t5200.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "entries": [
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.toshiba-t5200.technical.validation"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "entries": [
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.toshiba-t5200.technical.manual",
+            "url": "https://archive.org/details/toshiba-t-5200-maintenance-manual"
+          },
+          {
+            "label_key": "product.toshiba-t5200.source.summary",
+            "value_key": "product.toshiba-t5200.technical.summary",
+            "url": "https://www.minuszerodegrees.net/manuals/Toshiba/Other/Toshiba%20T5200%20and%20T5200C%20-%20Summary.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 290,
+  "platform": {
+    "id": "toshiba-t5200-platform",
+    "emulator_machine_id": "t5200",
+    "architecture": "80386DX"
+  }
+}

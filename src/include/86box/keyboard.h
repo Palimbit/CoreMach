@@ -146,12 +146,14 @@ typedef struct scancode {
 #define KBC_VEN_UMC              0x11
 #define KBC_VEN_SIS              0x12
 #define KBC_VEN_TOSHIBA_T3200    0x13
+#define KBC_VEN_TOSHIBA_T5200    0x14
 #define KBC_VEN_MASK             0x1f
 
 #define KBC_FLAG_IS_ASIC   0x80000000
 #define KBC_FLAG_IS_CLONE  0x40000000
 #define KBC_FLAG_IS_GREEN  0x20000000
 #define KBC_FLAG_IS_TYPE2  0x10000000
+#define KBC_FLAG_DELAY_SELFTEST 0x08000000
 
 #ifdef __cplusplus
 extern "C" {

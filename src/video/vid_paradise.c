@@ -29,8 +29,10 @@
 #include <86box/mem.h>
 #include <86box/rom.h>
 #include <86box/device.h>
+#include <86box/nvr.h>
 #include <86box/machine.h>
 #include <86box/video.h>
+#include <86box/vid_cga.h>
 #include <86box/vid_xga.h>
 #include <86box/vid_svga.h>
 #include <86box/vid_svga_render.h>
@@ -45,6 +47,7 @@
 
 typedef struct paradise_t {
     svga_t svga;
+    cga_t  t5200_cga;
 
     rom_t bios_rom;
 
@@ -57,11 +60,31 @@ typedef struct paradise_t {
     uint32_t vram_mask;
     uint32_t memory;
 
+    mem_mapping_t t5200_cga_mapping;
+
     uint32_t read_bank[4], write_bank[4];
 
     int interlace;
     int board_enabled;
     int board_mapping_enabled;
+    int t5200_pdc;
+    int t5200_internal_plasma;
+    int t5200_dual_output;
+    int t5200_secondary_monitor;
+    int t5200_panel_override;
+    int t5200_cmos_crt_only;
+    int t5200_cga_pending;
+    unsigned int t5200_disable_count;
+    uint8_t t5200_pdc_unlock;
+    uint8_t t5200_pdc_regs[4];
+    uint8_t t5200_setup_control;
+    uint8_t t5200_awake;
+    uint8_t t5200_vga_init_probe;
+    uint8_t t5200_lut_stream[64];
+    uint8_t t5200_lut_stream_pos;
+    uint8_t t5200_vga_mode;
+    uint32_t t5200_external_palette[256];
+    uint32_t t5200_plasma_palette[256];
 
     struct {
         uint8_t reg_block_ptr;
@@ -79,6 +102,328 @@ typedef struct paradise_t {
     } accel;
 } paradise_t;
 
+static void
+paradise_t5200_cga_poll(void *priv)
+{
+    paradise_t *paradise = (paradise_t *) priv;
+    const int   previous_monitor = monitor_index_global;
+
+    monitor_index_global = 0;
+    cga_poll(&paradise->t5200_cga);
+    monitor_index_global = previous_monitor;
+}
+
+static uint8_t
+paradise_t5200_cga_read(uint32_t addr, void *priv)
+{
+    paradise_t *paradise = (paradise_t *) priv;
+
+    return paradise->svga.vram[addr & 0x7fff];
+}
+
+static uint16_t
+paradise_t5200_cga_readw(uint32_t addr, void *priv)
+{
+    return paradise_t5200_cga_read(addr, priv) |
+           ((uint16_t) paradise_t5200_cga_read(addr + 1, priv) << 8);
+}
+
+static uint32_t
+paradise_t5200_cga_readl(uint32_t addr, void *priv)
+{
+    return paradise_t5200_cga_readw(addr, priv) |
+           ((uint32_t) paradise_t5200_cga_readw(addr + 2, priv) << 16);
+}
+
+static void
+paradise_t5200_cga_write(uint32_t addr, uint8_t val, void *priv)
+{
+    paradise_t *paradise = (paradise_t *) priv;
+    svga_t     *svga     = &paradise->svga;
+    const uint32_t offset = addr & 0x7fff;
+
+    svga->vram[offset] = val;
+    svga->changedvram[offset >> 12] = svga->monitor->mon_changeframecount;
+}
+
+static void
+paradise_t5200_cga_writew(uint32_t addr, uint16_t val, void *priv)
+{
+    paradise_t5200_cga_write(addr, val, priv);
+    paradise_t5200_cga_write(addr + 1, val >> 8, priv);
+}
+
+static void
+paradise_t5200_cga_writel(uint32_t addr, uint32_t val, void *priv)
+{
+    paradise_t5200_cga_writew(addr, val, priv);
+    paradise_t5200_cga_writew(addr + 2, val >> 16, priv);
+}
+
+/*
+ * The T5200 PDC-GA converts the PVGA color stream to sixteen orange intensity
+ * levels for the internal gas-plasma panel. Toshiba documents the number of
+ * levels and maximum levels 15 (bright) and 11 (semi-bright), but not the
+ * orange transfer curve. Preserve luminance with a conventional weighted
+ * conversion and quantize only the panel output. The external VGA path
+ * continues to use the unmodified DAC palette.
+ *
+ * In VGA mode the system BIOS writes a 40-entry Color or 64-entry Monochrome
+ * conversion program to PVGA sequencer index 07h. Recognizing those byte-exact
+ * V1.xx streams lets the display follow the firmware choice without reaching
+ * into CMOS from the video device. VCHAD 1.10 independently confirms that this
+ * is a 64-byte read/write PDC table and derives its index from the VGA DAC as
+ * (3R + 6G + B) / 16, with a three-way distinction at index 15. The PDC
+ * register 15h bits used by CGA mode come directly from the BIOS programming
+ * routine at F000:1E22.
+ */
+static void
+paradise_t5200_update_palette(paradise_t *paradise)
+{
+    svga_t *svga = &paradise->svga;
+    nvr_t  *nvr;
+    int     crt_only;
+    int     panel_enabled;
+
+    if (!paradise->t5200_internal_plasma)
+        return;
+
+    nvr = (nvr_t *) device_get_priv(&nvr_at_device);
+    crt_only = !!(nvr && (nvr->regs[0x38] & 0x04));
+
+    /* A new Setup selection supersedes a previous temporary keyboard action. */
+    if (crt_only != paradise->t5200_cmos_crt_only) {
+        paradise->t5200_cmos_crt_only = crt_only;
+        paradise->t5200_panel_override = -1;
+    }
+    panel_enabled = (paradise->t5200_panel_override >= 0) ?
+                    paradise->t5200_panel_override : !crt_only;
+
+    for (int index = 0; index < 256; index++) {
+        /* TEST3 stores Plasma=0 and CRT-only=1 in CMOS 38h bit 2. */
+        if (!panel_enabled) {
+            paradise->t5200_external_palette[index] = svga->pallook[index];
+            paradise->t5200_plasma_palette[index]   = makecol32(0, 0, 0);
+            if (!paradise->t5200_dual_output)
+                svga->pallook[index] = paradise->t5200_plasma_palette[index];
+            continue;
+        }
+
+        const int red       = video_6to8[svga->vgapal[index].r & 0x3f];
+        const int green     = video_6to8[svga->vgapal[index].g & 0x3f];
+        const int blue      = video_6to8[svga->vgapal[index].b & 0x3f];
+        const int luminance = ((30 * red) + (59 * green) + (11 * blue) + 50) / 100;
+        int       level;
+
+        if (!paradise->t5200_vga_mode && (paradise->t5200_pdc_regs[3] & 0x04)) {
+            const int intense = !!(index & 0x08);
+            const int doubled = !!(paradise->t5200_pdc_regs[3] & (1 << intense));
+
+            /* T3100-compatible CGA mode: one visible level per intensity class. */
+            level = luminance ? (doubled ? 15 : 11) : 0;
+        } else if (paradise->t5200_vga_mode) {
+            const int red6  = svga->vgapal[index].r & 0x3f;
+            const int blue6 = svga->vgapal[index].b & 0x3f;
+            int       lut_index = ((3 * red6) +
+                                   (6 * (svga->vgapal[index].g & 0x3f)) + blue6) / 16;
+
+            if (lut_index == 15) {
+                if (!red6 && !blue6)
+                    lut_index = 14;
+                else if (red6 && blue6)
+                    lut_index = 16;
+            }
+
+            level = paradise->t5200_lut_stream[lut_index & 0x3f] & 0x0f;
+        } else {
+            /* CGA 16-gray-scale mode. */
+            level = ((15 * luminance) + 127) / 255;
+        }
+
+        paradise->t5200_external_palette[index] = svga->pallook[index];
+        paradise->t5200_plasma_palette[index] =
+            makecol32((255 * level + 7) / 15,
+                      (128 * level + 7) / 15,
+                      (48 * level + 7) / 15);
+
+        if (!paradise->t5200_dual_output)
+            svga->pallook[index] = paradise->t5200_plasma_palette[index];
+    }
+
+    svga->fullchange = changeframecount;
+}
+
+static uint32_t
+paradise_t5200_plasma_pixel(const paradise_t *paradise, uint32_t pixel,
+                           int *palette_index)
+{
+    for (int index = 0; index < 256; index++) {
+        if (pixel == paradise->t5200_external_palette[index]) {
+            *palette_index = index;
+            return paradise->t5200_plasma_palette[index];
+        }
+    }
+
+    /* Border/direct-color fallback; normal T5200 VGA modes are palette based. */
+    const int luminance = ((30 * getcolr(pixel)) + (59 * getcolg(pixel)) +
+                           (11 * getcolb(pixel)) + 50) / 100;
+    const int level = ((15 * luminance) + 127) / 255;
+
+    *palette_index = 0;
+    return makecol32((255 * level + 7) / 15,
+                     (128 * level + 7) / 15,
+                     (48 * level + 7) / 15);
+}
+
+static void
+paradise_t5200_dual_vsync(svga_t *svga)
+{
+    paradise_t *paradise = (paradise_t *) svga->priv;
+    monitor_t  *plasma   = &monitors[1];
+    const int   width    = svga->monitor->mon_xsize;
+    const int   height   = svga->monitor->mon_ysize;
+    uint32_t    previous = 0xffffffff;
+    uint32_t    converted = 0;
+    uint32_t    previous_converted = 0;
+    int         palette_index = 0;
+    int         widen_previous = 0;
+    const int   text_mode = !(svga->gdcreg[6] & 0x01) &&
+                            !(svga->attrregs[0x10] & 0x01);
+
+    if (!paradise->t5200_secondary_monitor || plasma->target_buffer == NULL)
+        return;
+
+    video_wait_for_buffer_monitor(1);
+
+    if (plasma->mon_xsize != width || plasma->mon_ysize != height ||
+        video_force_resize_get_monitor(1)) {
+        plasma->mon_xsize = width;
+        plasma->mon_ysize = height;
+        set_screen_size_monitor(width, height, 1);
+        video_force_resize_set_monitor(0, 1);
+    }
+
+    for (int y = 0; y < height; y++) {
+        const uint32_t *source = svga->monitor->target_buffer->line[y];
+        uint32_t       *target = plasma->target_buffer->line[y];
+
+        previous = 0xffffffff;
+        widen_previous = 0;
+        for (int x = 0; x < width; x++) {
+            if (source[x] != previous) {
+                previous  = source[x];
+                converted = paradise_t5200_plasma_pixel(paradise, previous,
+                                                        &palette_index);
+            }
+
+            if (widen_previous && converted == paradise->t5200_plasma_palette[0])
+                target[x] = previous_converted;
+            else
+                target[x] = converted;
+
+            /*
+             * Approximate the saved Single/Double strokes on the panel copy.
+             * Exact regional glyph shapes require the undumped 64 KiB CG-ROM.
+             */
+            widen_previous = text_mode && !paradise->t5200_vga_mode &&
+                             palette_index != 0 &&
+                             (paradise->t5200_pdc_regs[3] &
+                              (1 << !!(palette_index & 0x08)));
+            previous_converted = converted;
+        }
+    }
+
+    video_blit_memtoscreen_monitor(0, 0, width, height, 1);
+}
+
+static const uint8_t t5200_color_lut_bright[40] = {
+    0x00, 0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02,
+    0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x05, 0x06,
+    0x07, 0x08, 0x08, 0x09, 0x09, 0x09, 0x0a, 0x0a,
+    0x0a, 0x0f, 0x0f, 0x0f, 0x0c, 0x0c, 0x0c, 0x0d,
+    0x0d, 0x0d, 0x0e, 0x0e, 0x0e, 0x0f, 0x0f, 0x0f
+};
+
+static const uint8_t t5200_color_lut_semibright[40] = {
+    0x00, 0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02,
+    0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x05, 0x06,
+    0x07, 0x08, 0x08, 0x09, 0x09, 0x09, 0x0a, 0x0a,
+    0x0a, 0x0b, 0x0b, 0x0b, 0x0c, 0x0c, 0x0c, 0x0d,
+    0x0d, 0x0d, 0x0e, 0x0e, 0x0e, 0x0b, 0x0b, 0x0b
+};
+
+static void
+paradise_t5200_lut_write(paradise_t *paradise, uint8_t val)
+{
+    if (!paradise->t5200_pdc || paradise->t5200_lut_stream_pos >= 64)
+        return;
+
+    paradise->t5200_lut_stream[paradise->t5200_lut_stream_pos++] = val;
+
+    if (paradise->t5200_lut_stream_pos == 40) {
+        if (!memcmp(paradise->t5200_lut_stream, t5200_color_lut_bright, 40)) {
+            paradise->t5200_vga_mode = 1;
+            paradise_t5200_update_palette(paradise);
+        } else if (!memcmp(paradise->t5200_lut_stream, t5200_color_lut_semibright, 40)) {
+            paradise->t5200_vga_mode = 1;
+            paradise_t5200_update_palette(paradise);
+        }
+    } else if (paradise->t5200_lut_stream_pos == 64) {
+        /* VCHAD writes complete user-defined tables, not just BIOS presets. */
+        paradise->t5200_vga_mode = 1;
+        paradise_t5200_update_palette(paradise);
+    }
+}
+
+void
+paradise_t5200_panel_set(void *priv, int enabled)
+{
+    paradise_t *paradise = (paradise_t *) priv;
+
+    if (paradise == NULL || !paradise->t5200_pdc ||
+        !paradise->t5200_internal_plasma)
+        return;
+
+    paradise->t5200_panel_override = !!enabled;
+    paradise_t5200_update_palette(paradise);
+    paradise->svga.fullchange = changeframecount;
+    pclog("T5200 documented Ctrl+Home approximation: internal plasma enabled; external VGA unchanged\n");
+}
+
+static uint8_t
+paradise_t5200_setup_in(uint16_t addr, void *priv)
+{
+    const paradise_t *paradise = (const paradise_t *) priv;
+
+    return (addr == 0x0102) ? paradise->t5200_awake
+                            : paradise->t5200_setup_control;
+}
+
+static void
+paradise_t5200_setup_out(uint16_t addr, uint8_t val, void *priv)
+{
+    paradise_t *paradise = (paradise_t *) priv;
+
+    if (addr == 0x0102) {
+        if (paradise->t5200_setup_control & 0x10)
+            paradise->t5200_awake = val & 0x01;
+        return;
+    }
+
+    paradise->t5200_setup_control = val;
+    /*
+     * The Toshiba/Phoenix ROM brackets its search for a pre-existing MDA/CGA
+     * adapter with 46E8h values 16h and 0Eh.  The onboard PVGA must not echo
+     * the CRTC 0Fh 55h/AAh probe in that window or the ROM records itself as
+     * the old display and INT 10h/1A00h subsequently reports VGA mono (07h).
+     */
+    if (val == 0x16)
+        paradise->t5200_vga_init_probe = 1;
+    else if (val == 0x0e)
+        paradise->t5200_vga_init_probe = 0;
+
+}
+
 static video_timings_t timing_paradise_pvga1a = { .type = VIDEO_ISA, .write_b = 6, .write_w = 8, .write_l = 16, .read_b = 6, .read_w = 8, .read_l = 16 };
 static video_timings_t timing_paradise_wd90c  = { .type = VIDEO_ISA, .write_b = 3, .write_w = 3, .write_l =  6, .read_b = 5, .read_w = 5, .read_l = 10 };
 
@@ -91,11 +436,32 @@ paradise_in(uint16_t addr, void *priv)
     svga_t     *svga     = &paradise->svga;
     uint8_t     max_sr   = (paradise->type >= WD90C30) ? 0x15 : 0x12;
 
-    if (((addr & 0xfff0) == 0x3d0 || (addr & 0xfff0) == 0x3b0) && !(svga->miscout & 1))
+    if (paradise->t5200_vga_init_probe &&
+        (addr == 0x3b4 || addr == 0x3b5 || addr == 0x3d4 || addr == 0x3d5))
+        return 0xff;
+
+    if (((addr & 0xfff0) == 0x3d0 || (addr & 0xfff0) == 0x3b0) &&
+        !(svga->miscout & 1) &&
+        !(paradise->t5200_pdc && !paradise->board_enabled &&
+          (addr & 0xfff0) == 0x3d0) &&
+        !(paradise->t5200_pdc && (addr == 0x3d4 || addr == 0x3d5)))
         addr ^= 0x60;
 
     switch (addr) {
+        case 0x3c3:
+            if (paradise->t5200_pdc)
+                return paradise->board_enabled ? 0x01 : 0x00;
+            break;
+
         case 0x3c5:
+            if (paradise->t5200_pdc && svga->seqaddr == 0x07 &&
+                (svga->gdcreg[0x0f] & 0x07) == 0x05 &&
+                (svga->seqregs[0x05] & 0x04) && svga->seqregs[0x06] == 0x00) {
+                const uint8_t value = paradise->t5200_lut_stream[paradise->t5200_lut_stream_pos & 0x3f];
+
+                paradise->t5200_lut_stream_pos = (paradise->t5200_lut_stream_pos + 1) & 0x3f;
+                return value;
+            }
             if (svga->seqaddr > 7) {
                 if (paradise->type < WD90C11 || svga->seqregs[6] != 0x48)
                     return 0xff;
@@ -128,8 +494,14 @@ paradise_in(uint16_t addr, void *priv)
             break;
 
         case 0x3D4:
-            return svga->crtcreg;
+            return (!paradise->board_enabled && paradise->t5200_pdc) ?
+                   cga_in(addr, &paradise->t5200_cga) : svga->crtcreg;
         case 0x3D5:
+            if (paradise->t5200_pdc && paradise->t5200_pdc_unlock == 2 &&
+                svga->crtcreg >= 0x12 && svga->crtcreg <= 0x15)
+                return paradise->t5200_pdc_regs[svga->crtcreg - 0x12];
+            if (!paradise->board_enabled && paradise->t5200_pdc)
+                return cga_in(addr, &paradise->t5200_cga);
             if ((paradise->type == PVGA1A) && (svga->crtcreg & 0x20))
                 return 0xff;
             if (svga->crtcreg > 0x29 && svga->crtcreg < 0x30 && (svga->crtc[0x29] & 0x88) != 0x80)
@@ -139,6 +511,10 @@ paradise_in(uint16_t addr, void *priv)
         default:
             break;
     }
+    if (!paradise->board_enabled && paradise->t5200_pdc &&
+        addr >= 0x3d0 && addr <= 0x3df)
+        return cga_in(addr, &paradise->t5200_cga);
+
     return svga_in(addr, svga);
 }
 
@@ -151,11 +527,68 @@ paradise_out(uint16_t addr, uint8_t val, void *priv)
     xga_t      *xga      = (xga_t *) svga->xga;
     uint8_t     old;
 
-    if (((addr & 0xfff0) == 0x3d0 || (addr & 0xfff0) == 0x3b0) && !(svga->miscout & 1))
+    if (paradise->t5200_vga_init_probe &&
+        (addr == 0x3b4 || addr == 0x3b5 || addr == 0x3d4 || addr == 0x3d5))
+        return;
+
+    if (((addr & 0xfff0) == 0x3d0 || (addr & 0xfff0) == 0x3b0) &&
+        !(svga->miscout & 1) &&
+        !(paradise->t5200_pdc && !paradise->board_enabled &&
+          (addr & 0xfff0) == 0x3d0) &&
+        !(paradise->t5200_pdc && (addr == 0x3d4 || addr == 0x3d5)))
         addr ^= 0x60;
 
     switch (addr) {
+        case 0x3c3:
+            if (paradise->t5200_pdc) {
+                /*
+                 * Award V1.xx switches the onboard PVGA and its option ROM
+                 * together through 3C3h. It first hides the ROM, scans the
+                 * C0000h-C7FFFh window, enables and initializes VGA, then
+                 * disables it again when CGA-compatible output was selected.
+                 * Leaving the ROM visible after that final disable makes POST
+                 * reject the saved CGA equipment byte as a bad configuration.
+                 * The PDC-GA register window remains independently reachable.
+                 */
+                paradise->board_enabled = !!(val & 0x01);
+                if (paradise->board_enabled) {
+                    mem_mapping_enable(&paradise->bios_rom.mapping);
+                    mem_mapping_disable(&paradise->t5200_cga_mapping);
+                    timer_disable(&paradise->t5200_cga.timer);
+                    timer_set_delay_u64(&svga->timer, 1);
+                    paradise->t5200_cga_pending = 0;
+                } else {
+                    paradise->t5200_disable_count++;
+                    mem_mapping_disable(&paradise->bios_rom.mapping);
+                    /*
+                     * The undocumented BGS keeps its 32 KiB CGA window at
+                     * B8000h available after PVGA is switched off. The common
+                     * CGA core supplies its documented register and timing
+                     * contract; its VRAM is shared with the output conversion
+                     * until BGS and CG-ROM dumps permit a dedicated model.
+                     */
+                    mem_mapping_enable(&paradise->t5200_cga_mapping);
+                    /* Two discovery passes precede the final CGA hand-off. */
+                    if (paradise->t5200_disable_count >= 3) {
+                        timer_disable(&svga->timer);
+                        paradise->t5200_cga_pending = 1;
+                    }
+                }
+            }
+            break;
+
+        case 0x3c4:
+            if (paradise->t5200_pdc && val == 0x07) {
+                paradise->t5200_lut_stream_pos = 0;
+            }
+            break;
+
         case 0x3c5:
+            if (paradise->t5200_pdc && svga->seqaddr == 0x07 &&
+                (svga->gdcreg[0x0f] & 0x07) == 0x05 &&
+                (svga->seqregs[0x05] & 0x04) && svga->seqregs[0x06] == 0x00) {
+                paradise_t5200_lut_write(paradise, val);
+            }
             if (svga->seqaddr > 7) {
                 if (paradise->type < WD90C11 || svga->seqregs[6] != 0x48)
                     return;
@@ -173,8 +606,10 @@ paradise_out(uint16_t addr, uint8_t val, void *priv)
         case 0x3c9:
             if (paradise->type == WD90C30)
                 sc1148x_ramdac_out(addr, 0, val, svga->ramdac, svga);
-            else
+            else {
                 svga_out(addr, val, svga);
+                paradise_t5200_update_palette(paradise);
+            }
             return;
 
         case 0x3cf:
@@ -259,8 +694,40 @@ paradise_out(uint16_t addr, uint8_t val, void *priv)
 
         case 0x3D4:
             svga->crtcreg = val & 0x3f;
+            if (!paradise->board_enabled && paradise->t5200_pdc)
+                cga_out(addr, val, &paradise->t5200_cga);
+            if (paradise->t5200_pdc && paradise->t5200_pdc_unlock == 2 &&
+                svga->crtcreg != 0x08 &&
+                (svga->crtcreg < 0x12 || svga->crtcreg > 0x15))
+                paradise->t5200_pdc_unlock = 0;
             return;
         case 0x3D5:
+            if (paradise->t5200_pdc) {
+                if (svga->crtcreg == 0x08) {
+                    /* A fresh password may be written while the bank is open. */
+                    if (val == 0x4d) {
+                        paradise->t5200_pdc_unlock = 1;
+                        return;
+                    }
+                    if (paradise->t5200_pdc_unlock == 1 && val == 0x53) {
+                        paradise->t5200_pdc_unlock = 2;
+                        return;
+                    }
+                    paradise->t5200_pdc_unlock = 0;
+                } else if (paradise->t5200_pdc_unlock == 2 &&
+                           svga->crtcreg >= 0x12 && svga->crtcreg <= 0x15) {
+                    paradise->t5200_pdc_regs[svga->crtcreg - 0x12] = val;
+                    if (svga->crtcreg == 0x15)
+                        paradise_t5200_update_palette(paradise);
+                    return;
+                } else if (paradise->t5200_pdc_unlock == 1) {
+                    paradise->t5200_pdc_unlock = 0;
+                }
+            }
+            if (!paradise->board_enabled && paradise->t5200_pdc) {
+                cga_out(addr, val, &paradise->t5200_cga);
+                return;
+            }
             if ((paradise->type == PVGA1A) && (svga->crtcreg & 0x20))
                 return;
             if ((svga->crtcreg < 7) && (svga->crtc[0x11] & 0x80))
@@ -304,6 +771,17 @@ paradise_out(uint16_t addr, uint8_t val, void *priv)
 
         default:
             break;
+    }
+
+    if (!paradise->board_enabled && paradise->t5200_pdc &&
+        addr >= 0x3d0 && addr <= 0x3df) {
+        cga_out(addr, val, &paradise->t5200_cga);
+        if (addr == CGA_REGISTER_MODE_CONTROL &&
+            paradise->t5200_cga_pending) {
+            paradise->t5200_cga_pending = 0;
+            timer_set_delay_u64(&paradise->t5200_cga.timer, 1);
+        }
+        return;
     }
 
     svga_out(addr, val, svga);
@@ -923,6 +1401,51 @@ paradise_pvga1a_pcs386sx_init(const device_t *info)
 }
 
 static void *
+paradise_pvga1a_t5200_init(const device_t *info)
+{
+    paradise_t *paradise = paradise_init(info, 256);
+
+    if (paradise) {
+        paradise->t5200_pdc             = 1;
+        paradise->t5200_dual_output      = (machine_get_config_int("display_output") == 0);
+        paradise->t5200_internal_plasma = paradise->t5200_dual_output;
+        paradise->t5200_panel_override   = -1;
+        paradise->t5200_cmos_crt_only    = -1;
+        if (paradise->t5200_dual_output && monitors[1].target_buffer == NULL) {
+            video_monitor_init(1);
+            video_inform_monitor(VIDEO_FLAG_TYPE_SPECIAL, &timing_paradise_pvga1a, 1);
+            paradise->t5200_secondary_monitor = 1;
+            paradise->svga.vsync_callback = paradise_t5200_dual_vsync;
+        }
+        paradise_t5200_update_palette(paradise);
+
+        /* Award V1.xx is documented to require the original 24 KiB VGA ROM. */
+        rom_init(&paradise->bios_rom, "roms/machines/t5200/t5200-vga-1988.bin",
+                 0xc0000, 0x8000, 0x7fff, 0, MEM_MAPPING_EXTERNAL);
+        mem_mapping_add(&paradise->t5200_cga_mapping, 0xb8000, 0x08000,
+                        paradise_t5200_cga_read, paradise_t5200_cga_readw,
+                        paradise_t5200_cga_readl, paradise_t5200_cga_write,
+                        paradise_t5200_cga_writew, paradise_t5200_cga_writel,
+                        NULL, MEM_MAPPING_EXTERNAL, paradise);
+        mem_mapping_disable(&paradise->t5200_cga_mapping);
+        paradise->t5200_cga.vram         = paradise->svga.vram;
+        paradise->t5200_cga.composite    = 0;
+        paradise->t5200_cga.snow_enabled = 0;
+        paradise->t5200_cga.double_type  = 1;
+        paradise->t5200_cga.monitor_used = 0;
+        timer_add(&paradise->t5200_cga.timer, paradise_t5200_cga_poll,
+                  paradise, 1);
+        timer_disable(&paradise->t5200_cga.timer);
+        io_sethandler(0x0102, 1, paradise_t5200_setup_in, NULL, NULL,
+                      paradise_t5200_setup_out, NULL, NULL, paradise);
+        io_sethandler(0x46e8, 1, paradise_t5200_setup_in, NULL, NULL,
+                      paradise_t5200_setup_out, NULL, NULL, paradise);
+    }
+
+    return paradise;
+}
+
+static void *
 paradise_pvga1a_standalone_init(const device_t *info)
 {
     paradise_t *paradise;
@@ -1105,6 +1628,9 @@ paradise_close(void *priv)
 
     svga_close(&paradise->svga);
 
+    if (paradise->t5200_secondary_monitor && monitors[1].target_buffer != NULL)
+        video_monitor_close(1);
+
     free(paradise);
 }
 
@@ -1196,6 +1722,21 @@ const device_t paradise_pvga1a_pcs386sx_device = {
     .speed_changed = paradise_speed_changed,
     .force_redraw  = paradise_force_redraw,
     .machine       = "Olivetti PCS 386SX",
+    .config        = NULL
+};
+
+const device_t paradise_pvga1a_t5200_device = {
+    .name          = "Paradise PVGA1A On-Board (Toshiba T5200)",
+    .internal_name = "pvga1a_t5200",
+    .flags         = 0,
+    .local         = PVGA1A,
+    .init          = paradise_pvga1a_t5200_init,
+    .close         = paradise_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = paradise_speed_changed,
+    .force_redraw  = paradise_force_redraw,
+    .machine       = "Toshiba T5200",
     .config        = NULL
 };
 

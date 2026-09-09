@@ -43,6 +43,7 @@ add_library(mch OBJECT
     m_at_common.c
     m_at_olivetti_286.c
     m_at_olivetti_386sx.c
+    m_at_toshiba_t5200.c
     m_at_trigem_sx386m.c
     m_at_olivetti_m300.c
     m_at_olivetti_m300_if378.c

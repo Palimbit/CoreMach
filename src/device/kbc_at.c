@@ -104,6 +104,7 @@ typedef struct atkbc_t {
     uint8_t channel;
     uint8_t stat_hi;
     uint8_t pending;
+    uint8_t delay_selftest;
     uint8_t irq_state;
     uint8_t do_irq;
     uint8_t is_asic;
@@ -791,6 +792,12 @@ kbc_at_poll(void *priv)
     atkbc_t *dev = (atkbc_t *) priv;
 
     timer_advance_u64(&dev->kbc_poll_timer, (100ULL * TIMER_USEC));
+
+    /* Preserve one observable IBF phase for firmware that polls after AA. */
+    if (dev->delay_selftest) {
+        dev->delay_selftest = 0;
+        return;
+    }
 
     /* TODO: Implement the password security state. */
     kbc_at_do_poll(dev);
@@ -2363,6 +2370,26 @@ write_cmd_toshiba(void *priv, uint8_t val)
 }
 
 static uint8_t
+write_cmd_toshiba_t5200(void *priv, uint8_t val)
+{
+    atkbc_t *dev = (atkbc_t *) priv;
+    uint8_t  ret = 1;
+
+    switch (val) {
+        default:
+            break;
+
+        case 0xb4: /* T5200: sampled hardware/FDD status. */
+            kbc_at_log("ATkbc: T5200: Get hardware / FDD status\n");
+            kbc_delay_to_ob(dev, machine_t5200_kbc_status(), 0, 0x00);
+            ret = 0;
+            break;
+    }
+
+    return ret;
+}
+
+static uint8_t
 read_p1(atkbc_t *dev)
 {
     /*
@@ -2926,6 +2953,9 @@ kbc_at_port_2_write(uint16_t port, uint8_t val, void *priv)
 
     dev->ib = val;
     dev->status |= STAT_IFULL;
+
+    if ((val == 0xaa) && (dev->flags & KBC_FLAG_DELAY_SELFTEST))
+        dev->delay_selftest = 1;
 }
 
 static uint8_t
@@ -2974,8 +3004,9 @@ kbc_at_reset(void *priv)
 {
     atkbc_t *dev = (atkbc_t *) priv;
 
-    dev->status        = STAT_UNLOCKED;
-    dev->mem[0x20]     = 0x01;
+    dev->status         = STAT_UNLOCKED;
+    dev->delay_selftest = 0;
+    dev->mem[0x20]      = 0x01;
     dev->mem[0x20]    |= CCB_TRANSLATE;
     dev->command_phase = 0;
     dev->olivetti_pcs386sx_enable_reply =
@@ -3220,6 +3251,10 @@ kbc_at_init(const device_t *info)
 
         case KBC_VEN_TOSHIBA_T3200:
             dev->write_cmd_ven = write_cmd_toshiba_t3200;
+            break;
+
+        case KBC_VEN_TOSHIBA_T5200:
+            dev->write_cmd_ven = write_cmd_toshiba_t5200;
             break;
     }
 

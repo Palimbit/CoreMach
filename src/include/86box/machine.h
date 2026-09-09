@@ -456,6 +456,8 @@ extern uint8_t         machine_ncr_p1_handler(void);
 extern uint8_t         machine_ps1_p1_handler(void);
 extern uint8_t         machine_ps2_isa_p1_handler(void);
 extern uint8_t         machine_t3100e_p1_handler(void);
+extern uint8_t         machine_t5200_kbc_status(void);
+extern int             t5200_display_hotkey(int down, uint16_t scan);
 
 extern uint8_t         machine_get_p1_default(void);
 extern void            machine_set_p1_default(uint8_t val);
@@ -536,6 +538,9 @@ extern int             machine_at_olivetti_pcs286s_ti_init(const machine_t *);
 
 /* m_at_olivetti_386sx.c */
 extern int             machine_at_olivetti_pcs386sx_init(const machine_t *);
+
+/* m_at_toshiba_t5200.c */
+extern int             machine_at_t5200_init(const machine_t *);
 
 /* m_at_trigem_sx386m.c */
 #ifdef EMU_DEVICE_H
