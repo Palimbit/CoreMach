@@ -5,6 +5,9 @@ resident diagnostics, boots 720 KB media at both supported memory sizes and
 runs the graphical tutorial supplied with the M15 Starter Kit. Board-level
 timing and several custom interfaces remain explicit approximations.
 
+For the evidence-to-model account, including failed hypotheses and replacement
+criteria, see the [M15 engineering notes](olivetti-m15-implementation.md).
+
 ## Historical identity
 
 Olivetti introduced the M15 in 1987 as a portable IBM-compatible computer. It
