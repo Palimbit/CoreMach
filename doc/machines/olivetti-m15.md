@@ -70,6 +70,20 @@ verified, so no BIOS or proprietary software image is included with BluMach.
 - the unmodified M15 *Keyboard Drivers & Getting to know* Starter Kit disk,
   including its graphical tutorial.
 
+## Board switches in Configure
+
+The standard **Machine** page controls the two supported RAM populations (256
+or 512 KB). The M15-specific configuration page controls the BIOS startup text
+mode: 40 or 80 columns, with 80 columns as the validated default. Firmware
+directly decodes both switch values; 40 columns remains an implementation
+setting rather than a fully validated commercial baseline. They take effect
+after restart and are not live video modes: software may select later text or
+graphics modes through INT 10h.
+
+Reported 384, 448 and 544 KB settings, the exact physical meaning of the
+remaining switch positions and the external floppy unit are not exposed as
+configuration controls without stronger documentation or a hardware trace.
+
 ## Known approximations and pending work
 
 - The available CPU core is an NMOS 8088 model. The PIT period is calibrated

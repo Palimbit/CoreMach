@@ -81,6 +81,7 @@
         "entries": [
           {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-m15.technical.cpu_bus"},
           {"label_key": "technical.label.video", "value_key": "product.olivetti-m15.technical.video"},
+          {"label_key": "technical.label.jumpers", "value_key": "product.olivetti-m15.technical.switches"},
           {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-m15.technical.firmware"}
         ]
       },
