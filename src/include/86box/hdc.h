@@ -55,6 +55,7 @@ extern const device_t esdi_ps2_device;           /* esdi_mca */
 extern const device_t esdi_integrated_device;           /* esdi_mca */
 
 extern const device_t ide_isa_device;         /* isa_ide */
+extern const device_t ide_t5100_device;       /* Toshiba T5100 integrated IDE */
 extern const device_t ide_isa_sec_device;     /* isa_ide sec*/
 extern const device_t ide_isa_2ch_device;     /* isa_ide_2ch */
 extern const device_t ide_vlb_device;         /* vlb_ide */

@@ -124,7 +124,7 @@ typedef struct ide_bm_t {
 
 typedef struct ide_board_t {
     uint8_t    devctl;
-    uint8_t    pad;
+    uint8_t    side_ports;
     uint16_t   base[2];
     int        bit32;
     int        cur_dev;
@@ -3038,7 +3038,7 @@ ide_handlers(uint8_t board, int set)
         }
 
         if (ide_boards[board]->base[1]) {
-            io_handler(set, ide_boards[board]->base[1], 2,
+            io_handler(set, ide_boards[board]->base[1], ide_boards[board]->side_ports,
                        ide_read_alt_status, NULL, NULL,
                        ide_write_devctl, NULL, NULL,
                        ide_boards[board]);
@@ -3222,7 +3222,8 @@ ide_board_setup(const int board)
 }
 
 static void
-ide_board_init(int board, int irq, int base_main, int side_main, int type, int bus)
+ide_board_init_ex(int board, int irq, int base_main, int side_main, int type, int bus,
+                  uint8_t side_ports)
 {
     ide_log("ide_board_init(%i, %i, %04X, %04X, %i, %i)\n", board, irq, base_main, side_main, type, bus);
 
@@ -3240,6 +3241,7 @@ ide_board_init(int board, int irq, int base_main, int side_main, int type, int b
         ide_boards[board]->bit32 = 1;
     ide_boards[board]->base[0] = base_main;
     ide_boards[board]->base[1] = side_main;
+    ide_boards[board]->side_ports = side_ports;
 
     if (!(bus & DEVICE_MCA))
         ide_set_handlers(board);
@@ -3249,6 +3251,12 @@ ide_board_init(int board, int irq, int base_main, int side_main, int type, int b
     ide_board_setup(board);
 
     ide_boards[board]->inited = 1;
+}
+
+static void
+ide_board_init(int board, int irq, int base_main, int side_main, int type, int bus)
+{
+    ide_board_init_ex(board, irq, base_main, side_main, type, bus, 2);
 }
 
 /* Needed for ESS ES1688/968 PnP. */
@@ -3489,6 +3497,16 @@ ide_init(const device_t *info)
             break;
     }
 
+    return (void *) (intptr_t) -1;
+}
+
+static void *
+ide_t5100_init(const device_t *info)
+{
+    /* The T5100 FDC gate array owns 03F7h.  Its integrated ATA interface
+       therefore exposes only Device Control/Alternate Status at 03F6h. */
+    ide_board_init_ex(0, HDC_PRIMARY_IRQ, HDC_PRIMARY_BASE, HDC_PRIMARY_SIDE,
+                      info->local, info->flags, 1);
     return (void *) (intptr_t) -1;
 }
 
@@ -3754,6 +3772,20 @@ const device_t ide_isa_device = {
     .flags         = DEVICE_ISA16,
     .local         = 0,
     .init          = ide_init,
+    .close         = ide_close,
+    .reset         = ide_reset,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t ide_t5100_device = {
+    .name          = "Toshiba T5100 Integrated IDE Controller",
+    .internal_name = "ide_t5100",
+    .flags         = DEVICE_ISA16,
+    .local         = 0,
+    .init          = ide_t5100_init,
     .close         = ide_close,
     .reset         = ide_reset,
     .available     = NULL,

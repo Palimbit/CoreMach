@@ -1,0 +1,271 @@
+{
+  "order": 300,
+  "machine": {
+    "id": "toshiba-t5100",
+    "manufacturer_id": "toshiba",
+    "family_id": "toshiba-t-series",
+    "platform_id": "toshiba-t5100-platform",
+    "name": "Toshiba T5100",
+    "summary_key": "product.toshiba-t5100.summary",
+    "history_key": "product.toshiba-t5100.history",
+    "warning_key": "product.toshiba-t5100.warning",
+    "status": "experimental",
+    "period": "1987–1988",
+    "aliases": [],
+    "tags": [
+      "80386DX",
+      "EGA",
+      "AGS",
+      "plasma",
+      "IDE"
+    ],
+    "facets": {
+      "form_factor": [
+        "luggable"
+      ],
+      "mobility": [
+        "portable"
+      ],
+      "cpu_generation": [
+        "x86_386"
+      ],
+      "video": [
+        "ega"
+      ],
+      "display_technology": [
+        "plasma"
+      ],
+      "display_color": [
+        "amber"
+      ],
+      "storage_interface": [
+        "floppy",
+        "ide"
+      ]
+    },
+    "hardware": {
+      "cpu": "Intel 80386DX, 16/8 MHz; optional Intel 80387",
+      "memory": "2 MB standard; optional 2 MB memory card",
+      "video": "Toshiba AGS/CELT EGA-compatible graphics and 640 × 400 four-level gas-plasma panel",
+      "floppy": "One internal 3.5-inch 1.44 MB drive; 720 KB media supported",
+      "interfaces": "Integrated IDE, serial, parallel, external RGB display and Toshiba keyboard controls"
+    },
+    "firmware": {
+      "known_sets": [
+        "System BIOS V2.30 (042F/043F)",
+        "Original 32 KB AGS ROM (not preserved)"
+      ],
+      "required": true,
+      "identity_note": "Local Toshiba V2.30 system ROMs and the identified IBM EGA compatibility ROM are required. The compatibility ROM is adapted in memory and is not Toshiba firmware."
+    },
+    "storage": {
+      "bus": "Toshiba integrated IDE-compatible host interface at 1F0h–1F7h/3F6h",
+      "official_drives": [
+        "Conner CP-342, 40 MB, Setup type 6",
+        "Conner CP-3044, 40 MB, Setup type 7",
+        "Conner CP30104, 100 MB, Setup type 9"
+      ]
+    },
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "toshiba-t5100",
+      "facts": [
+        {
+          "label_key": "technical.label.cpu_bus",
+          "value_key": "product.toshiba-t5100.creation.fact0"
+        },
+        {
+          "label_key": "creation.label.memory",
+          "value_key": "product.toshiba-t5100.creation.fact1"
+        },
+        {
+          "label_key": "technical.label.storage",
+          "value_key": "product.toshiba-t5100.creation.fact2"
+        }
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "2mb",
+          "choices": [
+            {
+              "id": "2mb",
+              "label_key": "product.toshiba-t5100.creation.2mb",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 2048
+                }
+              ]
+            },
+            {
+              "id": "4mb",
+              "label_key": "product.toshiba-t5100.creation.4mb",
+              "status": "unavailable",
+              "set": []
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.toshiba-t5100.creation.note"
+      ],
+      "generated_files": [
+        {
+          "path": "toshiba-t5100-cp3044.img",
+          "size": 42649600
+        }
+      ],
+      "configuration": [
+        {
+          "section": "General",
+          "values": {
+            "vid_renderer": "qt_software",
+            "time_sync": "disabled"
+          }
+        },
+        {
+          "section": "Machine",
+          "values": {
+            "cpu_family": "i386dx",
+            "cpu_speed": 16000000,
+            "cpu_multi": 1,
+            "cpu_use_dynarec": 0,
+            "fpu_type": "none",
+            "mem_size": 2048
+          }
+        },
+        {
+          "section": "Toshiba T5100",
+          "values": {
+            "bios": "v230",
+            "trace": 0
+          }
+        },
+        {
+          "section": "Video",
+          "values": {
+            "gfxcard": "internal"
+          }
+        },
+        {
+          "section": "Input devices",
+          "values": {
+            "keyboard_type": "keyboard_at",
+            "mouse_type": "none"
+          }
+        },
+        {
+          "section": "Storage controllers",
+          "values": {
+            "hdc": "internal",
+            "fdc": "internal"
+          }
+        },
+        {
+          "section": "Floppy and CD-ROM drives",
+          "values": {
+            "fdd_01_type": "35_2hd",
+            "fdd_02_type": "none"
+          }
+        },
+        {
+          "section": "Hard disks",
+          "values": {
+            "hdd_01_fn": "toshiba-t5100-cp3044.img",
+            "hdd_01_parameters": "17, 5, 980, 0, ide",
+            "hdd_01_ide_channel": "0:0",
+            "hdd_01_speed": "CP3044"
+          }
+        }
+      ]
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.commercial",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.market",
+            "value_key": "product.toshiba-t5100.technical.market"
+          },
+          {
+            "label_key": "technical.label.commercial_configurations",
+            "value_key": "product.toshiba-t5100.technical.commercial_configurations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {
+            "label_key": "technical.label.memory_map",
+            "value_key": "product.toshiba-t5100.technical.memory"
+          },
+          {
+            "label_key": "technical.label.video",
+            "value_key": "product.toshiba-t5100.technical.video"
+          },
+          {
+            "label_key": "technical.label.storage",
+            "value_key": "product.toshiba-t5100.technical.storage"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.firmware",
+        "entries": [
+          {
+            "label_key": "technical.label.bios_revision",
+            "value_key": "product.toshiba-t5100.technical.firmware"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {
+            "label_key": "technical.label.verified",
+            "value_key": "product.toshiba-t5100.technical.verified"
+          },
+          {
+            "label_key": "technical.label.limitations",
+            "value_key": "product.toshiba-t5100.technical.limitations"
+          }
+        ]
+      },
+      {
+        "title_key": "technical.section.research_material",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {
+            "label_key": "technical.label.manual",
+            "value_key": "product.toshiba-t5100.technical.manual",
+            "url": "https://www.minuszerodegrees.net/manuals/Toshiba/Other/Toshiba%20T5100%20-%20Maintenance%20Manual.pdf"
+          },
+          {
+            "label_key": "product.toshiba-t5100.source.techaccess",
+            "value_key": "product.toshiba-t5100.technical.techaccess",
+            "url": "https://conventionalmemories.com/Toshiba/TECHaccess/tech5228.htm"
+          },
+          {
+            "label_key": "technical.label.brochure",
+            "value_key": "product.toshiba-t5100.technical.flyer",
+            "url": "https://www.minuszerodegrees.net/manuals/Toshiba/Other/Toshiba%20T5100%20-%20Flyer.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "platform_order": 280,
+  "platform": {
+    "id": "toshiba-t5100-platform",
+    "emulator_machine_id": "t5100",
+    "architecture": "80386DX"
+  }
+}

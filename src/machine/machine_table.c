@@ -8305,7 +8305,7 @@ const machine_t machines[] = {
         .net_device               = NULL,
         .aliases                  = { "" }
     },
-    /* BluMach experimental T5100: external-video fallback; AGS unavailable. */
+    /* BluMach experimental T5100: compatible PEGA2/AGS plasma path. */
     {
         .name              = "[ISA] Toshiba T5100 (experimental)",
         .internal_name     = "t5100",
@@ -8327,10 +8327,10 @@ const machine_t machines[] = {
             .max_multi   = 0
         },
         .bus_flags = MACHINE_AT,
-        .flags     = MACHINE_IDE | MACHINE_FDC | MACHINE_VIDEO | MACHINE_KEYBOARD,
+        .flags     = MACHINE_IDE | MACHINE_FDC | MACHINE_VIDEO_FIXED | MACHINE_KEYBOARD,
         .ram       = {
             .min  = 2048,
-            .max  = 4096,
+            .max  = 2048,
             .step = 2048
         },
         .nvrmask                  = 63,
