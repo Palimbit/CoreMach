@@ -457,6 +457,7 @@ extern uint8_t         machine_ps1_p1_handler(void);
 extern uint8_t         machine_ps2_isa_p1_handler(void);
 extern uint8_t         machine_t3100e_p1_handler(void);
 extern uint8_t         machine_t5200_kbc_status(void);
+extern int             t5200_display_hotkey(int down, uint16_t scan);
 
 extern uint8_t         machine_get_p1_default(void);
 extern void            machine_set_p1_default(uint8_t val);

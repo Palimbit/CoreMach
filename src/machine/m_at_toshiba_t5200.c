@@ -43,6 +43,44 @@
 
 extern uint8_t *ram;
 
+static void *t5200_video;
+
+/*
+ * The maintenance manual documents Ctrl+Home as the recovery action when the
+ * plasma is blank and the CRT indicator is lit.  No preserved T5200 source yet
+ * identifies the reverse key or the 8749/8042 notification protocol, so keep
+ * this interception deliberately one-way and leave CMOS untouched.  Both Ctrl
+ * keys are accepted because the original 91-key keyboard labels the modifier
+ * simply Ctrl; Home is accepted in its ordinary and E0-normalized forms.
+ */
+int
+t5200_display_hotkey(int down, uint16_t scan)
+{
+    static int swallowed;
+    const int  home = (scan == 0x47 || scan == 0x147);
+
+    if (strcmp(machine_get_internal_name(), "t5200") || t5200_video == NULL) {
+        swallowed = 0;
+        return 0;
+    }
+    if (!home)
+        return 0;
+    if (!down && swallowed) {
+        swallowed = 0;
+        return 1;
+    }
+    if (down && (keyboard_recv_ui(0x01d) || keyboard_recv_ui(0x11d))) {
+        if (!swallowed) {
+            swallowed = 1;
+            paradise_t5200_panel_set(t5200_video, 1);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+#ifndef T5200_HOTKEY_TEST
+
 /*
  * The documented T4758A integrates the AT DMA, PIC and PIT functions; T9761
  * supplies the FDC, UART and I/O decode. Their register-level integration and
@@ -73,6 +111,21 @@ static const device_config_t t5200_config[] = {
             },
             { .files_no = 0 }
         }
+    },
+    {
+        .name           = "display_output",
+        .description    = "Presented physical outputs",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "External VGA and internal 11.5-inch gas plasma", .value = 0 },
+            { .description = "External color VGA only",                       .value = 1 },
+            { .description = "" }
+        },
+        .bios           = { { 0 } }
     },
     { .name = "", .description = "", .type = CONFIG_END }
     // clang-format on
@@ -524,8 +577,9 @@ machine_at_t5200_init(const machine_t *model)
     device_add_inst(&lpt_port_device, 1);
 
     /* The dedicated T5200 device loads the preserved external VGA option ROM. */
+    t5200_video = NULL;
     if (gfxcard[0] == VID_INTERNAL)
-        device_add(&paradise_pvga1a_t5200_device);
+        t5200_video = device_add(&paradise_pvga1a_t5200_device);
 
 #ifdef T5200_POST_TRACE
     t5200_post_trace_init();
@@ -533,3 +587,4 @@ machine_at_t5200_init(const machine_t *model)
 
     return ret;
 }
+#endif

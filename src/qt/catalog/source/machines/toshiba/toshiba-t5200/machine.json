@@ -1,5 +1,5 @@
 {
-  "order": 300,
+  "order": 310,
   "machine": {
     "id": "toshiba-t5200",
     "manufacturer_id": "toshiba",
@@ -38,7 +38,7 @@
         "plasma"
       ],
       "display_color": [
-        "monochrome"
+        "amber"
       ],
       "storage_interface": [
         "floppy",
@@ -48,7 +48,7 @@
     "hardware": {
       "cpu": "Intel 80386DX, 20 MHz; optional Intel 80387",
       "memory": "2 MB onboard, selectable and validated from 2 to 14 MB",
-      "video": "Toshiba OEM Paradise PVGA1, 256 KB VRAM; external VGA approximation",
+      "video": "Toshiba OEM Paradise PVGA1, 256 KB VRAM; internal 16-level orange gas-plasma panel and external color VGA output",
       "floppy": "One internal 3.5-inch 720 KB or 1.44 MB drive; both read paths validated",
       "interfaces": "Two serial ports, parallel/external-floppy connector and proprietary expansion"
     },
@@ -136,6 +136,25 @@
           ]
         },
         {
+          "id": "monitor",
+          "label_key": "creation.label.monitor",
+          "default": "dual-outputs",
+          "choices": [
+            {
+              "id": "dual-outputs",
+              "label_key": "product.toshiba-t5200.creation.display.internal",
+              "status": "validated",
+              "set": [{ "section": "Toshiba T5200", "key": "display_output", "value": 0 }]
+            },
+            {
+              "id": "external-only",
+              "label_key": "product.toshiba-t5200.creation.display.external",
+              "status": "validated",
+              "set": [{ "section": "Toshiba T5200", "key": "display_output", "value": 1 }]
+            }
+          ]
+        },
+        {
           "id": "floppy",
           "label_key": "creation.label.floppy_drives",
           "default": "1440k",
@@ -181,7 +200,8 @@
         {
           "section": "Toshiba T5200",
           "values": {
-            "bios": "award_v130"
+            "bios": "award_v130",
+            "display_output": 0
           }
         },
         {
@@ -280,7 +300,7 @@
       }
     ]
   },
-  "platform_order": 280,
+  "platform_order": 290,
   "platform": {
     "id": "toshiba-t5200-platform",
     "emulator_machine_id": "t5200",
