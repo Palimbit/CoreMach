@@ -14,8 +14,10 @@ This initial BluMach model is intentionally limited to behavior supported by
 the Toshiba maintenance manual and observation of system BIOS V2.30:
 
 - the 64 KiB interleaved system BIOS at `F0000-FFFFF`;
-- a distinct secondary keyboard-controller endpoint at `8060/8064`, including
-  the POST command `BB` and hardware-status command `B4`;
+- a distinct secondary keyboard-controller endpoint at `8060/8064/8066`,
+  including the POST command `BB`, hardware-status command `B4` and the
+  BIOS-mediated display notifications used by `Fn+Home`, `Fn+End` and
+  `Fn+Down`;
 - coherent Toshiba system-control latches at `8080-808F`, with unknown
   electrical side effects left unimplemented;
 - the 64 KiB LIM frame at `D0000-DFFFF`, four 16 KiB slots and the eight page
@@ -26,7 +28,8 @@ the Toshiba maintenance manual and observation of system BIOS V2.30:
   shared port `3F7` exclusively to the floppy gate logic; and
 - an experimental internal PEGA2-compatible video path: EGA register and
   256 KiB VRAM behavior, the documented 2 KiB SRAM aperture, Toshiba's
-  two-read extended-register unlock, and a four-level orange plasma palette;
+  two-read extended-register unlock, a four-level orange plasma palette and
+  run-time selection between the plasma presentation and generic EGA RGB;
   and
 - generic AT RTC and external-keyboard cores where the documented interfaces
   permit reuse.
@@ -39,17 +42,27 @@ The documented `B4` result is `8C` for the standard 16 MHz machine with one
 The original 32 KiB AGS video ROM has not been preserved. BluMach neither
 invents it nor borrows the T3200 ROM. For this explicitly experimental v1, a
 locally supplied IBM EGA option ROM is adapted **in memory only**: the system
-BIOS's `AGS` signature and its two far-entry pointers at `3FF0` and `3FF4` are
-provided as conservative returns, while the standard option entry supplies
-EGA INT 10h services. The source ROM is not modified on disk and is not
-presented as Toshiba firmware.
+BIOS's `AGS` signature and the six far-entry slots observed at `3FE0` through
+`3FF4` are provided as conservative returns, while the standard option entry
+supplies EGA INT 10h services. The source ROM is not modified on disk and is
+not presented as Toshiba firmware.
 
 This is a compatibility implementation, not a faithful recovery of AGS or
 CELT. The current guest timing is standard 640x350 EGA rather than the panel's
 exact 640x400 scan conversion. Exact line expansion, gray-scale transfer,
-extended-register side effects, internal/external display switching, optional
-memory-card page decode, remaining Toshiba gate-array behavior, exact floppy
-timing and controller firmware remain unavailable or provisional.
+extended-register side effects, AGS output gating and electrical behavior,
+`Fn+Right` font switching, optional memory-card page decode, remaining Toshiba
+gate-array behavior, exact floppy timing and controller firmware remain
+unavailable or provisional.
+
+The documented display shortcuts are available with **right Ctrl acting as
+Fn**: `Fn+End` selects external RGB, `Fn+Home` returns to the internal plasma
+presentation and `Fn+Down` toggles the 350/400-line presentation. BluMach
+delivers their notification at `8066h` and changes the host presentation only
+after BIOS V2.30 acknowledges it with command `BCh`. The external view is a
+generic EGA RGB presentation, not a model of the physical connector or a
+second simultaneous output. The 400-line choice changes host geometry while
+the guest still renders standard 640x350 EGA timing.
 
 BIOS V2.30 now boots both the read-only TESTCE3 floppy and Toshiba MS-DOS 3.30
 from hard disk on the internal compatibility display. In Setup choose

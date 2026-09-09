@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 #include <86box/86box.h>
 #include "cpu.h"
 #include <86box/timer.h>
@@ -58,6 +59,8 @@ typedef struct t5100_t {
     uint32_t      plasma64[256];
     uint8_t       kbc2_data;
     uint8_t       kbc2_status;
+    int           external_display;
+    int           extended_display;
     uint8_t       post_code;
     int           post_seen;
     unsigned      samples;
@@ -66,13 +69,82 @@ typedef struct t5100_t {
     int           trace;
 } t5100_t;
 
+/* TECHaccess documents Fn+End (external), Fn+Home (plasma) and Fn+Down
+   (350/400-line presentation).  BIOS V2.30's timer service reads the stable
+   low-nibble notification twice at 8066h, dispatches the matching AGS far
+   pointer and acknowledges it with command BCh at 8064h.  Keep the UI request
+   separate from the active state so the original BIOS remains in that loop. */
+static atomic_int t5100_display_active   = -1;
+static atomic_int t5100_display_target   = 0;
+static atomic_int t5100_extension_target = 0;
+static atomic_int t5100_fn_notification  = 0;
+#ifndef T5100_CALLBACK_TEST
+static void t5100_apply_display(t5100_t *dev);
+#endif
+
+int
+t5100_display_hotkey(int down, uint16_t scan)
+{
+    static int swallowed[3];
+    int key = (scan == 0x147 || scan == 0x47) ? 0 :
+              (scan == 0x14f || scan == 0x4f) ? 1 :
+              (scan == 0x150 || scan == 0x50) ? 2 : -1;
+
+    if (atomic_load(&t5100_display_active) < 0) {
+        swallowed[0] = swallowed[1] = swallowed[2] = 0;
+        return 0;
+    }
+    if (key < 0)
+        return 0;
+    if (!down && swallowed[key]) {
+        swallowed[key] = 0;
+        return 1;
+    }
+    if (down && keyboard_recv_ui(0x11d)) {
+        if (swallowed[key])
+            return 1;
+        swallowed[key] = 1;
+        if (key == 0) {
+            atomic_store(&t5100_display_target, 0);
+            atomic_store(&t5100_fn_notification, 0x09); /* Fn+Home */
+        } else if (key == 1) {
+            atomic_store(&t5100_display_target, 1);
+            atomic_store(&t5100_fn_notification, 0x01); /* Fn+End */
+        } else {
+            atomic_fetch_xor(&t5100_extension_target, 1);
+            atomic_store(&t5100_fn_notification, 0x02); /* Fn+Down */
+        }
+        return 1;
+    }
+    return 0;
+}
+
+static void
+t5100_commit_notification(t5100_t *dev, uint8_t notification)
+{
+    if (notification == 0x01 || notification == 0x09) {
+        dev->external_display = atomic_load(&t5100_display_target);
+        atomic_store(&t5100_display_active, dev->external_display);
+    } else if (notification == 0x02) {
+        dev->extended_display = atomic_load(&t5100_extension_target);
+    }
+#ifndef T5100_CALLBACK_TEST
+    if (notification == 0x01 || notification == 0x02 || notification == 0x09)
+        t5100_apply_display(dev);
+#endif
+}
+
 /* BIOS V2.30 uses a Toshiba-specific pre-RAM handoff rather than the normal
    option-ROM entry: it checks "AGS" at offset 000Ah, builds a far-return frame
    at F000:213Ah and jumps through the far pointer at 3FF0h.  Later, after it
    selects the internal panel at F000:399Dh, it calls a second AGS hook through
    3FF4h.  Both undocumented hooks can conservatively return to the system BIOS
    while the unmodified option entry at offset 0003h installs the standard EGA
-   INT 10h services.
+   INT 10h services.  Its timer service later calls far-pointer slots 3FE0h,
+   3FE8h and 3FECh for external, internal and 350/400-line selection.  The
+   compatibility ROM makes those missing AGS routines conservative returns;
+   the platform applies the documented presentation change only when the BIOS
+   acknowledges the corresponding 8066h notification with command BCh.
 
    The transformation is deliberately in-memory.  The source ROM remains an
    external local test input and no derived firmware bytes enter the tree. */
@@ -86,15 +158,18 @@ t5100_prepare_compat_rom(uint8_t *rom, size_t size)
     rom[0x000b] = 'G';
     rom[0x000c] = 'S';
 
-    rom[0x3fe0] = 0xcb; /* RETF to F000:2185 on the ROM-resident frame. */
-    rom[0x3ff0] = 0xe0;
-    rom[0x3ff1] = 0x3f;
-    rom[0x3ff2] = 0x00;
-    rom[0x3ff3] = 0xc0;
-    rom[0x3ff4] = 0xe0;
-    rom[0x3ff5] = 0x3f;
-    rom[0x3ff6] = 0x00;
-    rom[0x3ff7] = 0xc0;
+    rom[0x3fd0] = 0xcb; /* Shared conservative RETF target. */
+    static const uint16_t far_slots[] = {
+        0x3fe0, 0x3fe4, 0x3fe8, 0x3fec, 0x3ff0, 0x3ff4
+    };
+    for (unsigned index = 0; index < sizeof(far_slots) / sizeof(far_slots[0]);
+         index++) {
+        uint16_t slot = far_slots[index];
+        rom[slot]     = 0xd0;
+        rom[slot + 1] = 0x3f;
+        rom[slot + 2] = 0x00;
+        rom[slot + 3] = 0xc0;
+    }
 
     /* The IBM header declares 20h 512-byte blocks.  Keep that boundary and
        repair only its final checksum byte after the compatibility additions. */
@@ -144,6 +219,15 @@ t5100_kbc2_command(t5100_t *dev, uint8_t command)
             dev->kbc2_status |= 0x01;
             break;
 
+        case 0xbc: {
+            /* F000:90A1 acknowledges a stable notification after the BIOS has
+               dispatched the relevant AGS pointer.  Commit the presentation
+               state here, not at host key-down time. */
+            uint8_t notification = atomic_exchange(&t5100_fn_notification, 0);
+            t5100_commit_notification(dev, notification);
+            break;
+        }
+
         default:
             /* Unknown controller commands are deliberately not acknowledged. */
             break;
@@ -156,6 +240,8 @@ t5100_kbc2_in(uint16_t port, void *priv)
     t5100_t *dev = priv;
     if (port == 0x8064)
         return dev->kbc2_status;
+    if (port == 0x8066)
+        return (uint8_t) atomic_load(&t5100_fn_notification);
 
     uint8_t val = dev->kbc2_status & 0x01 ? dev->kbc2_data : 0xff;
     dev->kbc2_status &= ~0x01;
@@ -282,17 +368,44 @@ t5100_plasma_palette(t5100_t *dev)
 static void
 t5100_recalctimings(ega_t *ega)
 {
+    t5100_t *dev = ega->priv_parent;
     int panel_lines =
         (ega->crtc[0x12] | ((ega->crtc[7] & 2) << 7)) + 1;
 
-    /* The original panel is 640x400.  This compatibility path preserves the
-       generic EGA guest counters; exact AGS line expansion remains unknown. */
+    /* The original panel is 640x400.  Preserve generic EGA guest counters and
+       approximate Fn+Down as host presentation geometry; the undocumented
+       AGS duplicated-line placement remains unavailable. */
+    double ratio = dev->external_display ? 0.0 : 1.2;
+    if (!dev->external_display && dev->extended_display && panel_lines == 350)
+        ratio = 480.0 / 350.0;
+    if (monitors[0].mon_pixel_height_ratio != ratio) {
+        monitors[0].mon_pixel_height_ratio = ratio;
+        monitors[0].mon_force_resize = 1;
+    }
 
     ega->vtotal = (ega->crtc[6] | ((ega->crtc[7] & 1) << 8)) + 2;
     ega->dispend = panel_lines;
     ega->vsyncstart =
         (ega->crtc[0x10] | ((ega->crtc[7] & 4) << 6)) + 1;
     ega->vres = !(ega->miscout & 0x80);
+}
+
+static void
+t5100_apply_display(t5100_t *dev)
+{
+    extern uint32_t pallook16[256], pallook64[256];
+
+    if (dev->external_display) {
+        dev->ega.output_palette16 = NULL;
+        dev->ega.output_palette64 = NULL;
+        dev->ega.pallook = dev->ega.vres ? pallook16 : pallook64;
+    } else {
+        t5100_plasma_palette(dev);
+    }
+    ega_recalctimings(&dev->ega);
+    pclog("T5100 display committed by BIOS KBC2 acknowledgement: %s, %s\n",
+          dev->external_display ? "external RGB" : "internal plasma",
+          dev->extended_display ? "400-line presentation" : "350-line presentation");
 }
 
 static int
@@ -415,6 +528,10 @@ t5100_init(const device_t *info)
     dev->ega.priv_parent = dev;
     dev->ega.timing_override = t5100_recalctimings;
     ega_init(&dev->ega, 9, 0);
+    atomic_store(&t5100_display_target, 0);
+    atomic_store(&t5100_extension_target, 0);
+    atomic_store(&t5100_fn_notification, 0);
+    atomic_store(&t5100_display_active, 0);
     t5100_plasma_palette(dev);
     /* The compatibility handoff returns before the option-ROM entry runs.
        Establish a safe initial renderer for that short pre-scan interval. */
@@ -456,6 +573,8 @@ t5100_init(const device_t *info)
                   t5100_kbc2_out, NULL, NULL, dev);
     io_sethandler(0x8064, 1, t5100_kbc2_in, NULL, NULL,
                   t5100_kbc2_out, NULL, NULL, dev);
+    io_sethandler(0x8066, 1, t5100_kbc2_in, NULL, NULL,
+                  NULL, NULL, NULL, dev);
     io_sethandler(0x8080, 0x10, t5100_system_in, NULL, NULL,
                   t5100_system_out, NULL, NULL, dev);
     io_sethandler(0x3b0, 0x30, t5100_video_in, NULL, NULL,
@@ -473,7 +592,7 @@ t5100_init(const device_t *info)
     }
 
     pclog("T5100 experimental: PEGA2/EGA compatibility video, four-level "
-          "plasma, 2 KiB AGS SRAM, independent 8060/8064 KBC2, "
+          "plasma, 2 KiB AGS SRAM, independent 8060/8064/8066 KBC2, "
           "8080-808F latches and 384 KiB LIM subset; exact AGS/CELT, "
           "firmware and optional-card decode remain unavailable.\n");
     return dev;
@@ -483,6 +602,8 @@ static void
 t5100_close(void *priv)
 {
     t5100_t *dev = priv;
+    atomic_store(&t5100_display_active, -1);
+    atomic_store(&t5100_fn_notification, 0);
     if (dev->trace)
         timer_disable(&dev->sample_timer);
     monitors[0].mon_pixel_height_ratio = 0.0;
