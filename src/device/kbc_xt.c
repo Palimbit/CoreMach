@@ -748,9 +748,15 @@ kbd_init(const device_t *info)
            software selects later text and graphics modes through INT 10h.
            The fixed internal V6355D is instantiated after this switch block,
            so querying the not-yet-created adapter would incorrectly yield
-           00h. Advertise the validated 80-column startup configuration. */
-        if (kbd->type == KBD_TYPE_M15)
-            kbd->pd |= 0x20;
+           00h. Expose the two BIOS-decoded text startup choices through the
+           M15 board configuration, defaulting to the validated 80 columns. */
+        if (kbd->type == KBD_TYPE_M15) {
+            int startup_display = device_get_config_int("startup_display");
+
+            if (startup_display != 0x10)
+                startup_display = 0x20;
+            kbd->pd |= startup_display;
+        }
         else
             kbd->pd |= get_videomode_switch_settings();
 
@@ -1046,6 +1052,21 @@ const device_t kbc_xt_olivetti_device = {
     .config        = NULL
 };
 
+static const device_config_t kbc_xt_m15_config[] = {
+    {
+        .name        = "startup_display",
+        .description = "BIOS startup text mode",
+        .type        = CONFIG_SELECTION,
+        .default_int = 0x20,
+        .selection   = {
+            { .description = "40 columns", .value = 0x10 },
+            { .description = "80 columns", .value = 0x20 },
+            { .description = "" }
+        }
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+};
+
 const device_t kbc_xt_m15_device = {
     .name          = "Olivetti M15 Keyboard",
     .internal_name = "kbc_xt_m15",
@@ -1057,7 +1078,7 @@ const device_t kbc_xt_m15_device = {
     .available     = NULL,
     .speed_changed = NULL,
     .force_redraw  = NULL,
-    .config        = NULL
+    .config        = kbc_xt_m15_config
 };
 
 const device_t kbc_xt_zenith_device = {
