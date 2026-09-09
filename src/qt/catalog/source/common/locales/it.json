@@ -1,5 +1,5 @@
 {
-  "filter.all": "Tutte le opzioni di %1",
+  "filter.any": "Tutte",
   "filter.classification": "Classificazione del catalogo",
   "filter.facet.form_factor": "Formato",
   "filter.form_factor.desktop": "Desktop",
