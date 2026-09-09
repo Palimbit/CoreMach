@@ -410,7 +410,7 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     connect(m_tree, &QTreeWidget::currentItemChanged, this,
             [this](QTreeWidgetItem *current) { updateDetails(current); });
     connect(m_search, &QLineEdit::textChanged, this, [this] { applyFilter(); });
-    connect(m_statusFilter, &QComboBox::currentIndexChanged, this, [this] { applyFilter(); });
+    connect(m_statusFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] { applyFilter(); });
     reloadLanguage();
     updateAppearance();
     // The catalogue is constructed before the main-window header connects to
@@ -545,7 +545,7 @@ void BluMachCollectionWidget::rebuildFacetFilters()
             filter->addItem(m_catalog.facetValueText(facet.id, value.id), value.id);
         const QString selection = m_facetSelections.value(facet.id);
         filter->setCurrentIndex(selection.isEmpty() ? -1 : filter->findData(selection));
-        connect(filter, &QComboBox::currentIndexChanged, this, [this] { applyFilter(); });
+        connect(filter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] { applyFilter(); });
         m_facetFilters.insert(facet.id, filter);
     }
 }
