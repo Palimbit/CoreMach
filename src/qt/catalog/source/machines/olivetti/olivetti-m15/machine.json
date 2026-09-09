@@ -70,6 +70,10 @@
       ],
       "generated_files": []
     },
+    "implementation": {
+      "document": "olivetti-m15-implementation.md",
+      "language": "en"
+    },
     "technical": [
       {
         "title_key": "technical.section.architecture",
