@@ -67,6 +67,8 @@ typedef struct ctr_t {
 typedef struct PIT {
     int        flags;
     int        clock;
+    uint8_t    clock_period_numerator;
+    uint8_t    clock_period_denominator;
     pc_timer_t callback_timer;
     pitx_device_t exact; /* pin-clocked 8253/8254 state */
 
@@ -134,6 +136,7 @@ extern void pit_device_reset(pit_t *dev);
 extern void pit_change_pas16_consts(double prescale);
 
 extern void pit_set_pit_const(void *data, uint64_t pit_const);
+extern void pit_set_clock_period_ratio(void *data, uint8_t numerator, uint8_t denominator);
 
 extern void ctr_clock(void *data, int counter_id);
 

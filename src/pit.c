@@ -492,10 +492,25 @@ pit_set_pit_const(void *data, uint64_t pit_const)
     pit->pit_const = pit_const;
 }
 
+void
+pit_set_clock_period_ratio(void *data, uint8_t numerator, uint8_t denominator)
+{
+    pit_t *pit = (pit_t *) data;
+
+    pit->clock_period_numerator   = numerator ? numerator : 1;
+    pit->clock_period_denominator = denominator ? denominator : 1;
+    pit_set_pit_const(pit, (PITCONST * pit->clock_period_numerator) /
+                           pit->clock_period_denominator);
+}
+
 static void
 pit_speed_changed(void *priv)
 {
-    pit_set_pit_const(priv, PITCONST);
+    pit_t *pit = (pit_t *) priv;
+
+    pit_set_pit_const(pit,
+                      (PITCONST * (pit->clock_period_numerator ? pit->clock_period_numerator : 1)) /
+                      (pit->clock_period_denominator ? pit->clock_period_denominator : 1));
 }
 
 static void
@@ -521,6 +536,7 @@ pit_init(const device_t *info)
         return NULL;
     dev->flags = info->local;
     pit_reset(dev);
+    dev->clock_period_numerator = dev->clock_period_denominator = 1;
     pit_set_pit_const(dev, PITCONST);
     if (!(dev->flags & PIT_PS2) && !(dev->flags & PIT_CUSTOM_CLOCK)) {
         timer_add(&dev->callback_timer, pit_timer_over, (void *)dev, 0);
@@ -1587,10 +1603,25 @@ pit_set_pit_const(void *data, uint64_t pit_const)
     pit->pit_const = pit_const;
 }
 
+void
+pit_set_clock_period_ratio(void *data, uint8_t numerator, uint8_t denominator)
+{
+    pit_t *pit = (pit_t *) data;
+
+    pit->clock_period_numerator   = numerator ? numerator : 1;
+    pit->clock_period_denominator = denominator ? denominator : 1;
+    pit_set_pit_const(pit, (PITCONST * pit->clock_period_numerator) /
+                           pit->clock_period_denominator);
+}
+
 static void
 pit_speed_changed(void *priv)
 {
-    pit_set_pit_const(priv, PITCONST);
+    pit_t *pit = (pit_t *) priv;
+
+    pit_set_pit_const(pit,
+                      (PITCONST * (pit->clock_period_numerator ? pit->clock_period_numerator : 1)) /
+                      (pit->clock_period_denominator ? pit->clock_period_denominator : 1));
 }
 
 static void
@@ -1615,6 +1646,7 @@ pit_init(const device_t *info)
 
     pit_reset(dev);
 
+    dev->clock_period_numerator = dev->clock_period_denominator = 1;
     pit_set_pit_const(dev, PITCONST);
 
     dev->flags = info->local;

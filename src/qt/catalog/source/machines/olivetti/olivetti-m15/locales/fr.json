@@ -1,0 +1,18 @@
+{
+  "product.olivetti-m15.summary": "Portable 80C88 de 1987 avec clavier amovible, deux lecteurs de 720 Ko et LCD vert fixe à quatre niveaux. Un pilote expérimental fonctionnel est disponible.",
+  "product.olivetti-m15.history": "Le M15 est un portable Olivetti distinct du M19 et du M15 Plus. Sa configuration de base documentée comprend 512 Ko, deux lecteurs internes de 3,5 pouces et aucun disque dur. Le LCD fixe est son seul écran : le M15 ne possède aucune sortie vidéo externe. BluMach exécute le BIOS 1.08, les diagnostics résidents et le didacticiel officiel du Starter Kit, tout en signalant les incertitudes au niveau de la carte.",
+  "product.olivetti-m15.warning": "PILOTE EXPÉRIMENTAL : POST, diagnostics résidents, 256/512 Ko, démarrage sur deux lecteurs de 720 Ko, réinitialisations logicielle et matérielle et didacticiel officiel sont validés. Réponse LCD, caractères hauts, protocole clavier, électronique exacte du lecteur et logique Hitachi restent approximatifs ou en attente.",
+  "product.olivetti-m15.creation.memory.256": "256 Ko — observés et validés",
+  "product.olivetti-m15.creation.memory.512": "512 Ko — base commerciale documentée et validée",
+  "product.olivetti-m15.creation.model": "Portable M15 (1987), LCD vert fixe et deux lecteurs internes de 720 Ko",
+  "product.olivetti-m15.creation.note": "Le lecteur externe documenté de 5,25 pouces reste hors de ce pilote ; seuls les deux lecteurs internes sont créés.",
+  "product.olivetti-m15.technical.cpu_bus": "Intel 80C88 à 4,77 MHz. Le bus de la carte portable et sa logique de contrôle ne sont pas encore cartographiés.",
+  "product.olivetti-m15.technical.video": "LCD vert monochrome fixe commandé par Yamaha V6355D-F, avec texte 40/80 colonnes, graphismes 320×200/640×200 et quatre niveaux de vert. Le M15 ne possède aucune sortie vidéo externe.",
+  "product.olivetti-m15.technical.firmware": "Image BIOS 1.08 locale : conteneur de 64 Kio, 16 Kio de code effectif à FC000h-FFFFFh, date de réinitialisation 05/09/87. Elle reste locale jusqu'à vérification de la provenance et des droits.",
+  "product.olivetti-m15.technical.status": "Le pilote passe le POST et les diagnostics résidents, démarre une disquette M15 de 720 Ko avec 256 ou 512 Ko, accepte les deux réinitialisations et exécute le didacticiel graphique officiel du Starter Kit. Le texte et les deux résolutions graphiques documentées ont été validés visuellement.",
+  "product.olivetti-m15.technical.limitations": "Les quatre niveaux verts approximent la luminance RGBI, non la réponse physique du panneau. Le BIOS fournit les glyphes 00h–7Fh ; 80h–FFh conservent une CP437 générique. Clavier, UART, FDC et parallèle emploient des périphériques compatibles, le RTC est un modèle MSM6242 fonctionnel et la logique Hitachi reste non cartographiée.",
+  "product.olivetti-m15.source.manual": "Index du guide d'installation et d'utilisation M15 (Olivrea)",
+  "product.olivetti-m15.source.internals": "Photographies internes et modules M15 identifiés (Old Crap Vintage Computing, 2024)",
+  "product.olivetti-m15.source.mame": "Approximation de compatibilité olivm15 de MAME et métadonnées ROM",
+  "product.olivetti-m15.source.specification": "Spécifications techniques Olivetti M15 (1987)"
+}

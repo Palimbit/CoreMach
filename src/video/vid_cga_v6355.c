@@ -75,7 +75,8 @@
  * Currently unimplemented:
  * > Display type (PAL/SECAM @50Hz vs NTSC @60Hz)
  * > MDA monitor support
- * > LCD panel support 
+ * > LCD panel support (the M15 panel presentation is an explicit, limited
+ *   approximation; panel timing and physical response are still unimplemented)
  * > Horizontal / vertical position adjustments
  * > 160x200x16 and 640x200x16 video modes. Documentation suggests that these 
  *   should be selected by setting bit 6 of the CGA control register, but 
@@ -248,6 +249,22 @@ v6355_in(uint16_t addr, void *priv)
     }
 
     return ret;
+}
+
+/* The M15 BIOS retains the IBM monochrome compatibility path and addresses
+   the built-in V6355 through 3Bxh when mode 7 is selected.  The portable has
+   one fixed LCD controller, so expose that path as an alias of 3Dxh rather
+   than as a second display adapter. */
+static void
+v6355_mono_out(uint16_t addr, uint8_t val, void *priv)
+{
+    v6355_out(addr + 0x20, val, priv);
+}
+
+static uint8_t
+v6355_mono_in(uint16_t addr, void *priv)
+{
+    return v6355_in(addr + 0x20, priv);
 }
 
 static void
@@ -631,6 +648,30 @@ v6355_render_blank(v6355_t *v6355, int line)
     hline(buffer32, 0, line, width + 16, cols[0]);
 }
 
+/*
+ * The V6355D supplies RGBI pixels to its LCD interface.  The M15 firmware
+ * can be explicitly selected through register 65h bit 5.  The physical M15
+ * has this fixed internal panel from reset, however, and its BIOS emits
+ * ordinary CGA POST output before programming that register. The electrical
+ * panel driver and its response curve are not documented, so this is
+ * deliberately a presentation approximation: RGBI luminance is quantised to
+ * four green levels rather than treated as a colour CRT palette.
+ */
+static uint32_t
+v6355_lcd_colour(uint8_t index)
+{
+    static const uint8_t green[4] = { 0x00, 0x19, 0x43, 0x78 };
+    int                  luminance;
+
+    index &= 0x0f;
+    luminance = ((index & 0x04) ? 3 : 0) +
+                ((index & 0x02) ? 6 : 0) +
+                ((index & 0x01) ? 1 : 0) +
+                ((index & 0x08) ? 3 : 0);
+
+    return makecol(0x00, green[(luminance * 3 + 6) / 13], 0x00);
+}
+
 static void
 v6355_render_process(v6355_t *v6355, int line)
 {
@@ -640,6 +681,13 @@ v6355_render_process(v6355_t *v6355, int line)
     int      x     = width + 16;
 
     /* Now render the 640 pixels to the display buffer */
+    if (v6355->lcd_panel) {
+        for (c = 0; c < x; c++)
+            ((uint32_t *) buffer32->line[line])[c] =
+                v6355_lcd_colour(((uint32_t *) buffer32->line[line])[c]);
+        return;
+    }
+
     switch (v6355->display_type) {
         /* XXX V6355_COMPOSITE can't use the V6355's palette registers */
         case V6355_COMPOSITE:
@@ -906,6 +954,7 @@ v6355_standalone_init(const device_t *info) {
     video_inform(VIDEO_FLAG_TYPE_CGA, &timing_v6355);
 
     v6355->display_type = device_get_config_int("display_type");
+    v6355->lcd_panel = (info == &v6355d_lcd_device);
 
     overscan_x = overscan_y = 16;
 
@@ -957,7 +1006,11 @@ v6355_standalone_init(const device_t *info) {
 
     v6355->prodest_pc1 = (info->local == 1);
 
-    mem_mapping_add(&v6355->mapping, 0xb8000, 0x08000,
+    /* The M15 BIOS can select either B000h or B800h for the same internal
+       controller.  Mirror its 16 KiB VRAM through the full B0000h-BFFFFh
+       legacy video aperture; retain the original V6355 mapping elsewhere. */
+    mem_mapping_add(&v6355->mapping, v6355->lcd_panel ? 0xb0000 : 0xb8000,
+                    v6355->lcd_panel ? 0x10000 : 0x08000,
                     v6355_read, NULL, NULL, v6355_write, NULL, NULL, NULL,
                     MEM_MAPPING_EXTERNAL, v6355);
 
@@ -983,7 +1036,12 @@ v6355_standalone_init(const device_t *info) {
                       v6355_prodest_alias_in, NULL, NULL,
                       v6355_prodest_alias_out, NULL, NULL, v6355);
 
-    v6355->rgb_type = device_get_config_int("rgb_type");
+    if (v6355->lcd_panel)
+        io_sethandler(0x03b0, 0x0010,
+                      v6355_mono_in, NULL, NULL, v6355_mono_out, NULL, NULL,
+                      v6355);
+
+    v6355->rgb_type = v6355->lcd_panel ? 1 : device_get_config_int("rgb_type");
     if (&(cga_palette) != NULL)
         cga_palette     = (v6355->rgb_type << 1);
     cgapal_rebuild();
@@ -1149,4 +1207,24 @@ const device_t v6355d_prodest_pc1_device = {
     .speed_changed = v6355_speed_changed,
     .force_redraw  = NULL,
     .config        = v6355_config
+};
+
+/*
+ * Fixed green-phosphor LCD variant for systems whose V6355D drives an
+ * internal monochrome panel. The V6355D register interface remains identical;
+ * this only selects the host-side presentation of its RGBI output.
+ */
+const device_t v6355d_lcd_device = {
+    .name          = "Yamaha V6355D (green monochrome LCD)",
+    .internal_name = "v6355d_lcd",
+    .flags         = DEVICE_ISA,
+    .local         = 0,
+    .init          = v6355_standalone_init,
+    .close         = v6355_close,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = v6355_speed_changed,
+    .force_redraw  = NULL,
+    .config        = NULL,
+    .alias         = "V6355D LCD"
 };

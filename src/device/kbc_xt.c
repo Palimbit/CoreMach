@@ -69,8 +69,36 @@ enum {
     KBD_TYPE_HYUNDAI,
     KBD_TYPE_FE2010,
     KBD_TYPE_JUKOST,
+    KBD_TYPE_M15,
     KBD_TYPE_XTCLONE
 };
+
+/* The M15 resident BIOS reconstructs installed memory as
+   blocks = (switch_x << 1) + switch_y + 1, in 16 KiB blocks. */
+static uint8_t
+m15_memory_blocks(void)
+{
+    int blocks = (mem_size + isa_mem_size) / 16;
+
+    if (blocks < 1)
+        blocks = 1;
+    else if (blocks > 64)
+        blocks = 64;
+
+    return (uint8_t) blocks;
+}
+
+static uint8_t
+m15_memory_switch_x(void)
+{
+    return (m15_memory_blocks() - 1) >> 1;
+}
+
+static uint8_t
+m15_memory_switch_y(void)
+{
+    return (m15_memory_blocks() - 1) & 1;
+}
 
 typedef struct xtkbd_t {
     int want_irq;
@@ -88,6 +116,8 @@ typedef struct xtkbd_t {
     uint8_t pravetz_flags;
     uint8_t cpu_speed;
     uint8_t ignore;
+    uint8_t m15_status;
+    uint8_t m15_response;
 
     pc_timer_t send_delay_timer;
 } xtkbd_t;
@@ -390,6 +420,17 @@ kbd_write(uint16_t port, uint8_t val, void *priv)
     uint8_t  new_clock = 0;
 
     switch (port) {
+        case 0x60: /* Olivetti M15 keyboard command/data register */
+            if (kbd->type == KBD_TYPE_M15) {
+                /* The M15 OEM MS-DOS keyboard probe sends command 05h and
+                   identifies the internal keyboard by its 82h response. */
+                if (val == 0x05) {
+                    kbd->m15_response = 0x82;
+                    kbd->m15_status  |= STAT_OFULL;
+                }
+            }
+            break;
+
         case 0x61: /* Keyboard Control Register (aka Port B) */
             if (!(val & 0x80) || (kbd->type == KBD_TYPE_HYUNDAI) ||
                 (kbd->type == KBD_TYPE_JUKOST)) {
@@ -480,19 +521,25 @@ kbd_write(uint16_t port, uint8_t val, void *priv)
 static uint8_t
 kbd_read(uint16_t port, void *priv)
 {
-    const xtkbd_t *kbd = (xtkbd_t *) priv;
-    uint8_t        ret = 0xff;
+    xtkbd_t *kbd = (xtkbd_t *) priv;
+    uint8_t   ret = 0xff;
 
     switch (port) {
         case 0x60: /* Keyboard Data Register  (aka Port A) */
+            if ((kbd->type == KBD_TYPE_M15) && (kbd->m15_status & STAT_OFULL)) {
+                ret = kbd->m15_response;
+                kbd->m15_status &= ~STAT_OFULL;
+                break;
+            }
             if ((kbd->pb & 0x80) && ((kbd->type == KBD_TYPE_PC81) ||
                 (kbd->type == KBD_TYPE_PC82) || (kbd->type == KBD_TYPE_PRAVETZ) ||
                 (kbd->type == KBD_TYPE_XT82) || (kbd->type == KBD_TYPE_XT86) ||
-                (kbd->type == KBD_TYPE_XTCLONE) || (kbd->type == KBD_TYPE_COMPAQ) ||
+                (kbd->type == KBD_TYPE_M15) || (kbd->type == KBD_TYPE_XTCLONE) || (kbd->type == KBD_TYPE_COMPAQ) ||
                 (kbd->type == KBD_TYPE_ZENITH) || (kbd->type == KBD_TYPE_HYUNDAI) ||
                 (kbd->type == KBD_TYPE_VTECH))) {
                 if ((kbd->type == KBD_TYPE_PC81) || (kbd->type == KBD_TYPE_PC82) ||
                     (kbd->type == KBD_TYPE_XTCLONE) || (kbd->type == KBD_TYPE_COMPAQ) ||
+                    (kbd->type == KBD_TYPE_M15) ||
                     (kbd->type == KBD_TYPE_PRAVETZ) || (kbd->type == KBD_TYPE_HYUNDAI))
                     ret = (kbd->pd & ~0x02) | (hasfpu ? 0x02 : 0x00);
                 else if ((kbd->type == KBD_TYPE_XT82) || (kbd->type == KBD_TYPE_XT86) ||
@@ -523,12 +570,29 @@ kbd_read(uint16_t port, void *priv)
                 ret = kbd->pa;
             break;
 
+        case 0x64: /* Olivetti M15 keyboard status register */
+            if (kbd->type == KBD_TYPE_M15) {
+                ret = kbd->m15_status;
+                if (kbd->blocked)
+                    ret |= STAT_OFULL;
+                /* Writes complete atomically, so STAT_IFULL remains clear. */
+            }
+            break;
+
         case 0x61: /* Keyboard Control Register (aka Port B) */
             ret = kbd->pb;
             break;
 
         case 0x62: /* Switch Register (aka Port C) */
-            if (kbd->type == KBD_TYPE_FE2010) {
+            if (kbd->type == KBD_TYPE_M15) {
+                /* PB2 multiplexes the low nibble and high bit of switch_x. */
+                const uint8_t memory_switch = m15_memory_switch_x();
+
+                if (kbd->pb & 0x04)
+                    ret = memory_switch & 0x0f;
+                else
+                    ret = memory_switch >> 4;
+            } else if (kbd->type == KBD_TYPE_FE2010) {
                 if (kbd->pb & 0x04) /* PB2 */
                     ret = (kbd->pd & 0x0d) | (hasfpu ? 0x02 : 0x00);
                 else
@@ -614,6 +678,8 @@ kbd_reset(void *priv)
     kbd->blocked       = 0;
     kbd->pa            = 0x00;
     kbd->pb            = 0x00;
+    kbd->m15_status    = 0x00;
+    kbd->m15_response  = 0x00;
     kbd->pravetz_flags = 0x00;
 
     keyboard_scan   = 1;
@@ -639,6 +705,9 @@ kbd_init(const device_t *info)
                   kbd_read, NULL, NULL, kbd_write, NULL, NULL, kbd);
     keyboard_send = kbd_adddata_ex;
     kbd->type = info->local;
+    if (kbd->type == KBD_TYPE_M15)
+        io_sethandler(0x0064, 1,
+                      kbd_read, NULL, NULL, kbd_write, NULL, NULL, kbd);
     if (kbd->type == KBD_TYPE_VTECH)
         kbd->cpu_speed = (!!cpu) << 2;
     kbd_reset(kbd);
@@ -656,6 +725,7 @@ kbd_init(const device_t *info)
     if ((kbd->type == KBD_TYPE_PC81) || (kbd->type == KBD_TYPE_PC82) ||
         (kbd->type == KBD_TYPE_PRAVETZ) || (kbd->type == KBD_TYPE_XT82) ||
         (kbd->type <= KBD_TYPE_XT86) || (kbd->type == KBD_TYPE_XTCLONE) ||
+        (kbd->type == KBD_TYPE_M15) ||
         (kbd->type == KBD_TYPE_COMPAQ) || (kbd->type == KBD_TYPE_TOSHIBA) ||
         (kbd->type == KBD_TYPE_OLIVETTI) || (kbd->type == KBD_TYPE_HYUNDAI) ||
         (kbd->type == KBD_TYPE_VTECH) || (kbd->type == KBD_TYPE_FE2010)) {
@@ -672,11 +742,23 @@ kbd_init(const device_t *info)
             /* Switches 7, 8 - floppy drives. */
             kbd->pd = get_fdd_switch_settings();
 
-        /* Switches 5, 6 - video card type */
-        kbd->pd |= get_videomode_switch_settings();
+        /* Switches 5, 6 - startup video configuration. The M15 BIOS maps
+           10h to mode 1 (40-column text), 20h to mode 3 (80-column text),
+           and both 00h and 30h to mode 7. These are not live mode bits:
+           software selects later text and graphics modes through INT 10h.
+           The fixed internal V6355D is instantiated after this switch block,
+           so querying the not-yet-created adapter would incorrectly yield
+           00h. Advertise the validated 80-column startup configuration. */
+        if (kbd->type == KBD_TYPE_M15)
+            kbd->pd |= 0x20;
+        else
+            kbd->pd |= get_videomode_switch_settings();
 
         /* Switches 3, 4 - memory size. */
-        if ((kbd->type == KBD_TYPE_XT86) || (kbd->type == KBD_TYPE_XTCLONE) ||
+        if (kbd->type == KBD_TYPE_M15) {
+            /* Port 60 bits 2-3 provide switch_y. */
+            kbd->pd |= m15_memory_switch_y() << 2;
+        } else if ((kbd->type == KBD_TYPE_XT86) || (kbd->type == KBD_TYPE_XTCLONE) ||
             (kbd->type == KBD_TYPE_HYUNDAI) || (kbd->type == KBD_TYPE_COMPAQ) ||
             (kbd->type == KBD_TYPE_TOSHIBA) || (kbd->type == KBD_TYPE_FE2010)) {
             switch (mem_size) {
@@ -955,6 +1037,20 @@ const device_t kbc_xt_olivetti_device = {
     .internal_name = "kbc_xt_olivetti",
     .flags         = 0,
     .local         = KBD_TYPE_OLIVETTI,
+    .init          = kbd_init,
+    .close         = kbd_close,
+    .reset         = kbd_reset,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+
+const device_t kbc_xt_m15_device = {
+    .name          = "Olivetti M15 Keyboard",
+    .internal_name = "kbc_xt_m15",
+    .flags         = DEVICE_ISA,
+    .local         = KBD_TYPE_M15,
     .init          = kbd_init,
     .close         = kbd_close,
     .reset         = kbd_reset,
