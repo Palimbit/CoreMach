@@ -1,5 +1,6 @@
 {
   "filter.any": "Toutes",
+  "filter.advanced": "Filtres avancés",
   "filter.classification": "Classification du catalogue",
   "filter.facet.form_factor": "Format",
   "filter.form_factor.desktop": "Ordinateur de bureau",

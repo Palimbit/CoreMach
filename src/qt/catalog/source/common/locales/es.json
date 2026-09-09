@@ -1,5 +1,6 @@
 {
   "filter.any": "Cualquiera",
+  "filter.advanced": "Filtros avanzados",
   "filter.classification": "Clasificación del catálogo",
   "filter.facet.form_factor": "Formato",
   "filter.form_factor.desktop": "Sobremesa",

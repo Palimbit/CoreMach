@@ -19,6 +19,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
@@ -29,6 +30,7 @@
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QStyle>
 #include <QStyledItemDelegate>
 #include <QTabBar>
 #include <QTabWidget>
@@ -298,6 +300,19 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_search->setClearButtonEnabled(true);
     m_statusFilter = new QComboBox(this);
     m_statusFilter->setMinimumWidth(190);
+    m_advancedFiltersButton = new QToolButton(this);
+    m_advancedFiltersButton->setObjectName(QStringLiteral("blumachAdvancedFiltersButton"));
+    m_advancedFiltersButton->setCheckable(true);
+    m_advancedFiltersButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_advancedFiltersButton->setIcon(QIcon::fromTheme(
+        QStringLiteral("view-filter"), style()->standardIcon(QStyle::SP_FileDialogDetailedView)));
+    m_advancedFiltersPanel = new QFrame(this);
+    m_advancedFiltersPanel->setObjectName(QStringLiteral("blumachAdvancedFilters"));
+    m_advancedFiltersPanel->setVisible(false);
+    m_advancedFiltersLayout = new QGridLayout(m_advancedFiltersPanel);
+    m_advancedFiltersLayout->setContentsMargins(10, 9, 10, 9);
+    m_advancedFiltersLayout->setHorizontalSpacing(8);
+    m_advancedFiltersLayout->setVerticalSpacing(7);
     m_resultsLabel = new QLabel(this);
     m_resultsLabel->setObjectName(QStringLiteral("blumachResultsLabel"));
     m_resultsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -411,6 +426,8 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
             [this](QTreeWidgetItem *current) { updateDetails(current); });
     connect(m_search, &QLineEdit::textChanged, this, [this] { applyFilter(); });
     connect(m_statusFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] { applyFilter(); });
+    connect(m_advancedFiltersButton, &QToolButton::toggled, m_advancedFiltersPanel,
+            &QWidget::setVisible);
     reloadLanguage();
     updateAppearance();
     // The catalogue is constructed before the main-window header connects to
@@ -513,6 +530,7 @@ void BluMachCollectionWidget::reloadLanguage()
     m_statusFilter->setCurrentIndex(statusIndex >= 0 ? statusIndex : 0);
     rebuildFacetFilters();
     rebuildFilterLayout();
+    updateAdvancedFiltersButton();
     rebuildTree();
     applyFilter();
     if (!selected.isEmpty()) {
@@ -554,45 +572,54 @@ void BluMachCollectionWidget::rebuildFilterLayout()
 {
     while (m_filterLayout->count())
         delete m_filterLayout->takeAt(0);
+    while (m_advancedFiltersLayout->count())
+        delete m_advancedFiltersLayout->takeAt(0);
+
+    const int filterColumns = m_narrowLayout ? 2 : 3;
+    m_advancedFiltersLayout->addWidget(m_statusFilter, 0, 0);
+    int advancedRow = 0;
+    int advancedColumn = 1;
+    for (const auto &facet : m_catalog.filterFacets()) {
+        if (!m_facetFilters.contains(facet.id))
+            continue;
+        m_advancedFiltersLayout->addWidget(m_facetFilters.value(facet.id), advancedRow, advancedColumn++);
+        if (advancedColumn == filterColumns) {
+            advancedColumn = 0;
+            ++advancedRow;
+        }
+    }
+    for (int index = 0; index < filterColumns; ++index)
+        m_advancedFiltersLayout->setColumnStretch(index, 1);
 
     if (m_narrowLayout) {
-        m_filterLayout->addWidget(m_search, 0, 0, 1, 3);
-        m_filterLayout->addWidget(m_statusFilter, 1, 0, 1, 2);
-        m_filterLayout->addWidget(m_resultsLabel, 1, 2);
-        int row = 2;
-        int column = 0;
-        for (const auto &facet : m_catalog.filterFacets()) {
-            if (!m_facetFilters.contains(facet.id))
-                continue;
-            m_filterLayout->addWidget(m_facetFilters.value(facet.id), row, column++);
-            if (column == 2) {
-                column = 0;
-                ++row;
-            }
-        }
+        m_filterLayout->addWidget(m_search, 0, 0, 1, 2);
+        m_filterLayout->addWidget(m_advancedFiltersButton, 1, 0);
+        m_filterLayout->addWidget(m_resultsLabel, 1, 1);
+        m_filterLayout->addWidget(m_advancedFiltersPanel, 2, 0, 1, 2);
         m_filterLayout->setColumnStretch(0, 1);
         m_filterLayout->setColumnStretch(1, 1);
         return;
     }
 
     m_filterLayout->addWidget(m_search, 0, 0);
-    m_filterLayout->addWidget(m_statusFilter, 0, 1);
+    m_filterLayout->addWidget(m_advancedFiltersButton, 0, 1);
     m_filterLayout->addWidget(m_resultsLabel, 0, 2);
+    m_filterLayout->addWidget(m_advancedFiltersPanel, 1, 0, 1, 3);
     m_filterLayout->setColumnStretch(0, 1);
-    constexpr int facetColumns = 3;
-    int row = 1;
-    int column = 0;
-    for (const auto &facet : m_catalog.filterFacets()) {
-        if (!m_facetFilters.contains(facet.id))
-            continue;
-        m_filterLayout->addWidget(m_facetFilters.value(facet.id), row, column++);
-        if (column == facetColumns) {
-            column = 0;
-            ++row;
-        }
-    }
-    for (int index = 0; index < facetColumns; ++index)
-        m_filterLayout->setColumnStretch(index, 1);
+}
+
+void BluMachCollectionWidget::updateAdvancedFiltersButton()
+{
+    int activeFilters = m_statusFilter->currentData().toString().isEmpty() ? 0 : 1;
+    for (const auto *filter : m_facetFilters)
+        activeFilters += !filter->currentData().toString().isEmpty();
+
+    const QString label = m_catalog.text(QStringLiteral("filter.advanced"));
+    m_advancedFiltersButton->setText(activeFilters == 0
+                                         ? label
+                                         : QStringLiteral("%1 (%2)").arg(label).arg(activeFilters));
+    m_advancedFiltersButton->setToolTip(label);
+    m_advancedFiltersButton->setAccessibleName(label);
 }
 
 void BluMachCollectionWidget::rebuildTree()
@@ -969,6 +996,7 @@ bool BluMachCollectionWidget::canCreateProduct(const BluMachProduct &product) co
 
 void BluMachCollectionWidget::applyFilter()
 {
+    updateAdvancedFiltersButton();
     const QString needle = m_search->text().trimmed();
     const QString status = m_statusFilter->currentData().toString();
     int visibleProducts = 0;
@@ -1061,6 +1089,9 @@ void BluMachCollectionWidget::updateAppearance()
         "QLabel#blumachCollectionIntro, QLabel#blumachResultsLabel, QLabel#blumachProductSubtitle, QLabel#blumachEvidence { color: %5; background: transparent; }"
         "QLabel#blumachProductSummary, QLabel#blumachWarningText { color: %4; background: transparent; }"
         "QLineEdit, QComboBox { color: %4; background: %2; border: 1px solid %6; border-radius: 6px; padding: 6px 8px; }"
+        "QFrame#blumachAdvancedFilters { background: %3; border: 1px solid %6; border-radius: 7px; }"
+        "QToolButton#blumachAdvancedFiltersButton { color: %4; background: %3; border: 1px solid %6; border-radius: 6px; padding: 6px 10px; }"
+        "QToolButton#blumachAdvancedFiltersButton:checked { background: %7; border-color: %8; }"
         "QLabel#blumachBadge { color: %4; background: %7; border: 1px solid %8; border-radius: 9px; padding: 3px 9px; }"
         "QWidget#blumachCollection[compact=\"true\"] QLabel#blumachBadge { padding: 2px 6px; }"
         "QFrame#blumachWarning { color: %4; background: %9; border: 0; border-left: 3px solid %8; border-radius: 6px; }"
