@@ -409,9 +409,9 @@ No ROM bytes are committed. The source file remains unchanged on disk. After
 loading, BluMach adapts its private in-memory copy:
 
 - bytes `000Ah–000Ch` become the `AGS` signature;
-- offset `3FE0h` receives a single `RETF` instruction;
-- the far pointer at `3FF0h` points to `C000:3FE0`;
-- a second far pointer at `3FF4h` points to the same conservative return;
+- offset `3FD0h` receives a single shared `RETF` instruction;
+- the far-pointer slots at `3FE0h`, `3FE4h`, `3FE8h`, `3FECh`, `3FF0h` and
+  `3FF4h` point to `C000:3FD0`;
 - the normal option-ROM entry at offset `0003h` is left intact; and
 - the checksum byte at `3FFFh` is recalculated across the 16 KiB size declared
   by the IBM ROM header.
@@ -465,9 +465,40 @@ not calibrated colorimetry.
 
 The timing callback preserves generic EGA counters. It does not yet reconstruct
 how AGS/CELT expanded a 350-line EGA image onto the 640x400 panel, nor how it
-handled fonts, line repetition, blanking and internal/external switching. The
-model reports special ISA video timing and uses a panel-like pixel aspect, but
-the guest mode remains 640x350.
+handled fonts, line repetition or blanking. The model reports special ISA video
+timing and uses a panel-like pixel aspect, but the guest mode remains 640x350.
+
+### The display keys are a BIOS transaction, not a renderer shortcut
+
+TECHaccess documents `Fn+End` for the external display, `Fn+Home` for the
+plasma panel and `Fn+Down` for the 350/400-line choice. Static analysis of BIOS
+V2.30 supplied the missing mechanism. Its timer service reads the low nibble of
+port `8066h` twice, rejects an unstable value, dispatches through an AGS far
+pointer selected by that notification and finally writes command `BCh` to
+`8064h`. Notifications `01h`, `02h` and `09h` lead respectively to the external,
+line-mode and internal handlers.
+
+The implementation preserves that ordering. Right Ctrl represents the Toshiba
+`Fn` key; the three documented key combinations publish a stable notification,
+but do not immediately change the display. Only the BIOS acknowledgement
+commits the requested state. This boundary matters: a direct host-side palette
+toggle would look convincing while silently bypassing the firmware behavior we
+actually recovered.
+
+Because the AGS ROM and output circuitry remain unavailable, the committed
+state is intentionally presentational. External mode restores the generic EGA
+RGB palette and aspect; internal mode restores the four-level plasma palette.
+`Fn+Down` changes host pixel geometry to approximate the 350/400-line choice
+without inventing new guest scan counters. Exact duplicated-line placement,
+connector gating, electrical output and the documented `Fn+Right` font change
+remain outside the claim.
+
+The deterministic platform test verifies stable `8066h` reads, delayed commit,
+the `BCh` acknowledgement boundary, all three notification values, repeat-key
+suppression and the six compatibility-ROM far pointers. A Qt 6 UCRT64 build also
+passes. A disposable interactive run reached the normal video route but its
+launcher exited with code 127 before the timed keys were delivered, so this
+revision does not claim an observed live BIOS hotkey round trip.
 
 This is the largest compromise in the machine. It is also the most visible, so
 the UI, firmware selector, logs and documentation all call it compatible and
@@ -481,13 +512,13 @@ evidence, not quietly accumulate exceptions inside it.
 | 80386DX execution | existing core, fixed at 16 MHz | bus/chipset timing not measured |
 | AT PIC/DMA/PIT | existing AT platform infrastructure | Toshiba T4758 integration not modeled at register/timing level |
 | Primary keyboard | generic Toshiba-parameterized AT KBC | exact primary masked firmware unavailable |
-| Secondary keyboard | new bounded `8060h/8064h` endpoint | only observed `BBh` and documented `B4h` behavior |
+| Secondary keyboard | bounded `8060h/8064h/8066h` endpoint | display notification/acknowledgement is modeled; masked firmware and other commands remain unavailable |
 | RTC/NVR | generic AT RTC with 64-byte mask | model-specific shutdown/resume semantics incomplete |
 | System registers | sixteen coherent latches | unknown side effects and true AGS gating omitted |
 | Base LIM | four slots and 24 independent pages | upper EMS and optional card absent |
 | Floppy | Toshiba T1x00 TC8565-compatible path | T5100 FDC-GA/VFO timing and writes incomplete |
 | Hard disk | common ATA engine with T5100 port routing | exact CP-342/3044/30104 identity and timing incomplete |
-| Video firmware | IBM EGA ROM adapted only in memory | not Toshiba AGS firmware |
+| Video firmware | IBM EGA ROM adapted only in memory, including conservative returns for six observed AGS far slots | not Toshiba AGS firmware |
 | Video hardware | EGA/256 KiB/2 KiB wrapper and four-level palette | not exact AGS/CELT or 640x400 conversion |
 
 This table is more important than a binary “supported” label. It identifies
@@ -587,7 +618,8 @@ boundary has an obvious home:
 
 | File | Responsibility |
 |---|---|
-| [`src/machine/m_at_t5100.c`](../../src/machine/m_at_t5100.c) | system ROM loading, in-memory AGS compatibility handoff, EGA/plasma wrapper, secondary KBC, Toshiba latches, LIM window and optional tracing |
+| [`src/machine/m_at_t5100.c`](../../src/machine/m_at_t5100.c) | system ROM loading, in-memory AGS compatibility handoff, EGA/plasma wrapper, BIOS-mediated display selection, secondary KBC, Toshiba latches, LIM window and optional tracing |
+| [`src/device/keyboard.c`](../../src/device/keyboard.c) | routes the three supported Toshiba `Fn` combinations to the active T5100 before ordinary scan-code delivery |
 | [`src/machine/machine_table.c`](../../src/machine/machine_table.c) | 386DX16 registration, fixed internal video and the supported 2 MiB v1 limit |
 | [`src/disk/hdc_ide.c`](../../src/disk/hdc_ide.c) | integrated primary ATA route that leaves `3F7h` to the floppy gate |
 | [`tests/t5100_platform_test.c`](../../tests/t5100_platform_test.c) | deterministic host contracts for ROM adaptation, KBC2, latches, POST and LIM mapping |
@@ -607,7 +639,8 @@ The catalogue template creates the intended baseline:
 - Toshiba T5100 machine ID `t5100`;
 - Intel 80386DX at 16 MHz, interpreter by default;
 - 2 MiB RAM and no coprocessor;
-- fixed internal video;
+- integrated video, starting on the internal plasma presentation and switchable
+  at run time with right Ctrl as `Fn`;
 - Toshiba internal floppy path with one 1.44 MB drive;
 - T5100 integrated IDE path; and
 - a blank 980/5/17 image using the CP-3044 timing profile.
@@ -632,8 +665,8 @@ would be:
 2. dumps or behavior traces for both keyboard controllers;
 3. the T5100 Gate Array Specification Manual, or equivalent hardware traces
    for MCNT2, BCNT, BDRV, FDC-GA and AGS;
-4. measurements of 640x400 panel conversion, gray-level transfer and display
-   switching;
+4. measurements of 640x400 panel conversion, gray-level transfer, AGS output
+   gating and the physical external-video signal;
 5. optional-memory-card traces sufficient to map all EMS/extended modes; and
 6. broader floppy write, reset, resume, diagnostic and I/O validation.
 
@@ -641,7 +674,10 @@ An authentic AGS dump would not automatically make the current wrapper exact.
 It would provide new executable contracts, which would then need to be traced
 against registers, VRAM, SRAM, timing and display output. The v1 code should be
 treated as a compatibility scaffold whose approximations can be removed one by
-one, not as a description of undocumented Toshiba silicon.
+one, not as a description of undocumented Toshiba silicon. It would also make
+it possible to replace the conservative hotkey returns, investigate
+`Fn+Right` font selection and validate the exact display-side effects rather
+than only the recovered BIOS transaction.
 
 ## Final assessment
 

@@ -304,7 +304,8 @@ keyboard_input(int down, uint16_t scan)
                            means we then use the scan code as is, and need to
                            make sure we do not accidentally strip that upper byte */
 
-    if (t3200_display_hotkey(down, scan))
+    if (t3200_display_hotkey(down, scan) ||
+        t5100_display_hotkey(down, scan))
         return;
     if (recv_key[scan & 0x1ff] ^ down) {
         if (down) {

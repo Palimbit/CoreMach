@@ -1782,4 +1782,5 @@ extern void t3200_display_request(int external);
 extern void t3200_display_extend(void);
 extern void t3200_display_commit(int external);
 extern int t3200_display_hotkey(int down, uint16_t scan);
+extern int t5100_display_hotkey(int down, uint16_t scan);
 #endif /*EMU_MACHINE_H*/

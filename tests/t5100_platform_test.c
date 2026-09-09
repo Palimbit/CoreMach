@@ -8,7 +8,9 @@
 cpu_state_t cpu_state;
 static uint8_t test_ram[0x100000 + 32];
 uint8_t *ram = test_ram;
+static int test_fn;
 void pclog(const char *fmt, ...) { (void) fmt; }
+int keyboard_recv_ui(uint16_t scan) { return scan == 0x11d && test_fn; }
 void mem_mapping_set_exec(mem_mapping_t *map, uint8_t *exec) { map->exec = exec; }
 void mem_mapping_enable(mem_mapping_t *map) { map->enable = 1; }
 void mem_mapping_disable(mem_mapping_t *map) { map->enable = 0; }
@@ -26,11 +28,16 @@ main(void)
     assert(!t5100_prepare_compat_rom(compat_rom, 0x3fff));
     assert(t5100_prepare_compat_rom(compat_rom, sizeof(compat_rom)));
     assert(!memcmp(compat_rom + 0x000a, "AGS", 3));
-    assert(compat_rom[0x3fe0] == 0xcb);
-    assert(compat_rom[0x3ff0] == 0xe0 && compat_rom[0x3ff1] == 0x3f);
-    assert(compat_rom[0x3ff2] == 0x00 && compat_rom[0x3ff3] == 0xc0);
-    assert(compat_rom[0x3ff4] == 0xe0 && compat_rom[0x3ff5] == 0x3f);
-    assert(compat_rom[0x3ff6] == 0x00 && compat_rom[0x3ff7] == 0xc0);
+    assert(compat_rom[0x3fd0] == 0xcb);
+    static const uint16_t far_slots[] = {
+        0x3fe0, 0x3fe4, 0x3fe8, 0x3fec, 0x3ff0, 0x3ff4
+    };
+    for (unsigned index = 0; index < sizeof(far_slots) / sizeof(far_slots[0]);
+         index++) {
+        uint16_t slot = far_slots[index];
+        assert(compat_rom[slot] == 0xd0 && compat_rom[slot + 1] == 0x3f);
+        assert(compat_rom[slot + 2] == 0x00 && compat_rom[slot + 3] == 0xc0);
+    }
     uint8_t checksum = 0;
     for (size_t offset = 0; offset < sizeof(compat_rom); offset++)
         checksum += compat_rom[offset];
@@ -47,6 +54,37 @@ main(void)
     assert(t5100_kbc2_in(0x8060, &dev) == 0x8c);
     t5100_kbc2_out(0x8064, 0xaa, &dev);
     assert(t5100_kbc2_in(0x8064, &dev) == 0x00);
+
+    atomic_store(&t5100_display_active, 0);
+    test_fn = 0;
+    assert(!t5100_display_hotkey(1, 0x14f));
+    test_fn = 1;
+    assert(t5100_display_hotkey(1, 0x14f));
+    assert(t5100_display_hotkey(1, 0x14f));
+    assert(t5100_kbc2_in(0x8066, &dev) == 0x01);
+    assert(t5100_kbc2_in(0x8066, &dev) == 0x01);
+    assert(!dev.external_display && atomic_load(&t5100_display_active) == 0);
+    t5100_kbc2_out(0x8064, 0xbc, &dev);
+    assert(dev.external_display && atomic_load(&t5100_display_active) == 1);
+    assert(t5100_kbc2_in(0x8066, &dev) == 0x00);
+    assert(t5100_display_hotkey(0, 0x14f));
+
+    assert(t5100_display_hotkey(1, 0x147));
+    assert(t5100_kbc2_in(0x8066, &dev) == 0x09);
+    t5100_kbc2_out(0x8064, 0xbc, &dev);
+    assert(!dev.external_display && atomic_load(&t5100_display_active) == 0);
+    assert(t5100_display_hotkey(0, 0x147));
+
+    assert(t5100_display_hotkey(1, 0x150));
+    assert(t5100_kbc2_in(0x8066, &dev) == 0x02);
+    t5100_kbc2_out(0x8064, 0xbc, &dev);
+    assert(dev.extended_display);
+    assert(t5100_display_hotkey(0, 0x150));
+    assert(t5100_display_hotkey(1, 0x150));
+    t5100_kbc2_out(0x8064, 0xbc, &dev);
+    assert(!dev.extended_display);
+    assert(t5100_display_hotkey(0, 0x150));
+    assert(!t5100_display_hotkey(1, 0x14d)); /* Fn+Right remains unsupported. */
 
     t5100_system_out(0x8084, 0x13, &dev);
     t5100_system_out(0x808c, 0xa5, &dev);
