@@ -24,6 +24,7 @@ class QScrollArea;
 class QSplitter;
 class QTabWidget;
 class QTextBrowser;
+class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QUrl;
@@ -54,6 +55,7 @@ private:
     void rebuildTree();
     void rebuildFacetFilters();
     void rebuildFilterLayout();
+    void updateAdvancedFiltersButton();
     void updateDetails(QTreeWidgetItem *item);
     void applyFilter();
     bool matchesFacetFilters(const BluMachProduct &product) const;
@@ -73,6 +75,9 @@ private:
     QLabel         *m_intro = nullptr;
     QLineEdit      *m_search = nullptr;
     QComboBox      *m_statusFilter = nullptr;
+    QToolButton    *m_advancedFiltersButton = nullptr;
+    QFrame         *m_advancedFiltersPanel = nullptr;
+    QGridLayout    *m_advancedFiltersLayout = nullptr;
     QHash<QString, QComboBox *> m_facetFilters;
     QHash<QString, QString>     m_facetSelections;
     QLabel         *m_resultsLabel = nullptr;

@@ -1,5 +1,6 @@
 {
   "filter.any": "Tutte",
+  "filter.advanced": "Filtri avanzati",
   "filter.classification": "Classificazione del catalogo",
   "filter.facet.form_factor": "Formato",
   "filter.form_factor.desktop": "Desktop",
