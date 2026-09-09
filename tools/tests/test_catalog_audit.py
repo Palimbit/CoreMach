@@ -36,6 +36,18 @@ class CatalogAuditTests(unittest.TestCase):
 
         self.assertIn("fr.json: missing English key 'second'", errors)
 
+    def test_implementation_document_rejects_paths(self) -> None:
+        self.assertIsNone(
+            catalog_audit.IMPLEMENTATION_DOCUMENT.fullmatch(
+                "../../private/machine-implementation.md"
+            )
+        )
+        self.assertIsNotNone(
+            catalog_audit.IMPLEMENTATION_DOCUMENT.fullmatch(
+                "machine-implementation.md"
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

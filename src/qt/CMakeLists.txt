@@ -60,6 +60,8 @@ set(BLUMACH_CATALOG_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/catalog")
 set(BLUMACH_CATALOG_QRC "${BLUMACH_CATALOG_BUILD_DIR}/blumach_catalog.qrc")
 file(GLOB_RECURSE BLUMACH_CATALOG_SOURCE_FILES CONFIGURE_DEPENDS
     "${BLUMACH_CATALOG_SOURCE_DIR}/*.json")
+file(GLOB BLUMACH_IMPLEMENTATION_DOCUMENTS CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/doc/machines/*-implementation.md")
 
 # Materialize the generated QRC during configuration so AUTORCC can discover
 # its inputs. Changes to existing shards and changes to the glob both trigger a
@@ -80,6 +82,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/tools/catalog_builder.py"
     "${CMAKE_SOURCE_DIR}/tools/catalog_audit.py"
     ${BLUMACH_CATALOG_SOURCE_FILES}
+    ${BLUMACH_IMPLEMENTATION_DOCUMENTS}
 )
 
 if(APPLE AND MOLTENVK)

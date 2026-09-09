@@ -23,6 +23,7 @@ class QResizeEvent;
 class QScrollArea;
 class QSplitter;
 class QTabWidget;
+class QTextBrowser;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QUrl;
@@ -57,9 +58,10 @@ private:
     void applyFilter();
     bool matchesFacetFilters(const BluMachProduct &product) const;
     bool matchesFacetFilters(const QJsonObject &commonFacets, const QJsonObject &profileFacets) const;
-    void setDetailTabsAvailable(bool researchAvailable, bool sourcesAvailable);
+    void setDetailTabsAvailable(bool researchAvailable, bool engineeringAvailable, bool sourcesAvailable);
     void populateOverview(const BluMachProduct &product);
     void populateTechnicalPage(const BluMachProduct &product, bool sourcesPage);
+    void populateEngineeringPage(const BluMachProduct &product);
     void clearLayout(QLayout *layout);
     void openTechnicalLink(const QUrl &url);
     bool isSourceSection(const QJsonObject &section) const;
@@ -91,6 +93,7 @@ private:
     QScrollArea    *m_overviewScroll = nullptr;
     QScrollArea    *m_researchScroll = nullptr;
     QScrollArea    *m_sourcesScroll = nullptr;
+    QTextBrowser   *m_engineeringView = nullptr;
     QVBoxLayout    *m_overviewLayout = nullptr;
     QVBoxLayout    *m_researchLayout = nullptr;
     QVBoxLayout    *m_sourcesLayout = nullptr;

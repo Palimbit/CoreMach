@@ -27,11 +27,30 @@ class CatalogBuilderTests(unittest.TestCase):
             catalog_builder.merge_translations(target, incoming, Path("second"))
 
     def test_qrc_preserves_runtime_aliases(self) -> None:
-        qrc = catalog_builder.render_qrc(["en", "es"])
+        qrc = catalog_builder.render_qrc(
+            ["en", "es"], ["toshiba-t5100-implementation.md"]
+        )
 
         self.assertIn('prefix="/blumach/catalog"', qrc)
         self.assertIn('alias="catalog.json"', qrc)
         self.assertIn('alias="locales/es.json"', qrc)
+        self.assertIn(
+            'alias="documents/toshiba-t5100-implementation.md"', qrc
+        )
+
+    def test_implementation_documents_are_deduplicated(self) -> None:
+        catalog = {
+            "products": [
+                {"implementation": {"document": "machine-implementation.md"}},
+                {"implementation": {"document": "machine-implementation.md"}},
+                {},
+            ]
+        }
+
+        self.assertEqual(
+            catalog_builder.implementation_documents(catalog),
+            ["machine-implementation.md"],
+        )
 
     def test_generated_resource_is_initialized_by_qt_main(self) -> None:
         repository = Path(__file__).resolve().parents[2]
