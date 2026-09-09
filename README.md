@@ -46,8 +46,8 @@ documentary photographs. Their purpose and provenance are recorded in the
 
 ## Historical collection
 
-The current catalogue contains 22 product entries across seven families from
-three manufacturers:
+The current catalogue contains 30 product entries across 14 families from
+seven manufacturers. Selected public machine notes:
 
 | Manufacturer | Families | Public machine notes |
 | --- | --- | --- |
