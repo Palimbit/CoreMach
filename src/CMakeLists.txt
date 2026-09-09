@@ -252,7 +252,7 @@ elseif(APPLE AND NOT QT)
     install(CODE "
         include(BundleUtilities)
         get_filename_component(CMAKE_INSTALL_PREFIX_ABSOLUTE \${CMAKE_INSTALL_PREFIX} ABSOLUTE)
-        fixup_bundle(\"\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/86Box.app\" \"\" \"\")"
+        fixup_bundle(\"\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/BluMach.app\" \"\" \"\")"
     COMPONENT Runtime)
 endif()
 
