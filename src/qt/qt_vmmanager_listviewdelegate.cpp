@@ -17,6 +17,7 @@
 #include <QApplication>
 
 #include "qt_util.hpp"
+#include "qt_blumach_formfactoricon.hpp"
 #include "qt_vmmanager_listviewdelegate.hpp"
 #include "qt_vmmanager_model.hpp"
 
@@ -71,6 +72,8 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     }
 
     const bool hasIcon    = !opt.icon.isNull();
+    const QString formFactor = index.data(VMManagerModel::Roles::CatalogFormFactor).toString();
+    const bool hasFormFactor = !formFactor.isEmpty();
     QFont      f(opt.font);
 
     f.setPointSizeF(m_ptr->statusFontPointSize(opt.font));
@@ -91,13 +94,21 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
         painter->drawRoundedRect(QRect(rect.left() + 2, rect.top() + 9, 3, rect.height() - 18), 2, 2);
     }
 
-    // Draw a user-supplied icon when present. Otherwise use BluMach's provisional
-    // Linea mark so the application brand is not repeated for every VM and the
-    // legacy pixel-art 86Box icon never becomes the fallback. Replace this once
-    // the definitive per-family machine icon system is available.
+    // A user-selected icon always wins. Catalogue machines otherwise use the
+    // same semantic form-factor mark as the collection; ordinary machines keep
+    // BluMach's neutral fallback.
     if (hasIcon) {
         painter->drawPixmap(contentRect.left(), contentRect.top(),
                             opt.icon.pixmap(m_ptr->iconSize));
+    } else if (hasFormFactor) {
+        const QRect iconRect(contentRect.left(), contentRect.top(), m_ptr->iconSize.width(),
+                             m_ptr->iconSize.height());
+        QColor iconBackground = palette.highlight().color();
+        iconBackground.setAlpha(24);
+        painter->setPen(QPen(palette.mid().color(), 1));
+        painter->setBrush(iconBackground);
+        painter->drawRoundedRect(iconRect, 7, 7);
+        BluMachFormFactorIcon::paint(painter, iconRect, formFactor, palette);
     } else {
         static const QIcon defaultMachineIcon(QStringLiteral(":/blumach/ui/machine-default.png"));
         painter->drawPixmap(contentRect.left(), contentRect.top(),
@@ -118,8 +129,22 @@ VMManagerListViewDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     painter->setPen(palette.text().color());
     const int availableWidth = qMax(30, rect.right() - systemNameRect.left() - m_ptr->margins.right());
     systemNameRect.setWidth(availableWidth);
+    const QString catalogModel = index.data(VMManagerModel::Roles::CatalogModel).toString();
+    const QString catalogManufacturer = index.data(VMManagerModel::Roles::CatalogManufacturer).toString();
+    QString title = opt.text;
+    if (!catalogModel.isEmpty()) {
+        QString historicalTitle = catalogModel;
+        if (!catalogManufacturer.isEmpty() &&
+            !historicalTitle.startsWith(catalogManufacturer, Qt::CaseInsensitive))
+            historicalTitle.prepend(catalogManufacturer + QLatin1Char(' '));
+        if (title.compare(catalogModel, Qt::CaseInsensitive) == 0 ||
+            title.compare(historicalTitle, Qt::CaseInsensitive) == 0)
+            title = historicalTitle;
+        else
+            title = QStringLiteral("%1 · %2").arg(historicalTitle, title);
+    }
     painter->drawText(systemNameRect, Qt::TextSingleLine,
-                      painter->fontMetrics().elidedText(opt.text, Qt::ElideRight, availableWidth));
+                      painter->fontMetrics().elidedText(title, Qt::ElideRight, availableWidth));
 
     // Draw status icon
     QColor statusColor = palette.mid().color();

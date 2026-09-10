@@ -122,6 +122,7 @@ BluMachCatalog::load(QString *errorMessage)
         product.firmware           = object.value(QStringLiteral("firmware")).toObject();
         product.storage            = object.value(QStringLiteral("storage")).toObject();
         product.relationships      = object.value(QStringLiteral("relationships")).toObject();
+        product.media              = object.value(QStringLiteral("media")).toObject();
         product.creation           = object.value(QStringLiteral("creation")).toObject();
         product.implementation     = object.value(QStringLiteral("implementation")).toObject();
         product.technical          = object.value(QStringLiteral("technical")).toArray();

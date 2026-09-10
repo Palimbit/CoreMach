@@ -39,7 +39,10 @@ public:
         UUID,
         Notes,
         SearchList,
-        Icon
+        Icon,
+        CatalogManufacturer,
+        CatalogModel,
+        CatalogFormFactor
     };
 
     [[nodiscard]] int      rowCount(const QModelIndex &parent) const override;

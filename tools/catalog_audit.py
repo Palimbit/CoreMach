@@ -34,6 +34,7 @@ VALID_STATUSES = {
     "research",
     "not_bootable",
 }
+CREATION_ID = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 
 
 class DuplicateKeyError(ValueError):
@@ -169,6 +170,102 @@ def validate_facets(
             check_values(owner, profile.get("facets", {}))
 
 
+def validate_creation(product_id: str, product: dict[str, Any], errors: list[str]) -> None:
+    creation = product.get("creation")
+    if creation is None:
+        return
+    owner = f"catalog.json: product {product_id!r}.creation"
+    if not isinstance(creation, dict):
+        errors.append(f"{owner} must be an object")
+        return
+
+    fields = creation.get("fields", [])
+    if not isinstance(fields, list):
+        errors.append(f"{owner}.fields must be an array")
+        return
+    field_ids: set[str] = set()
+    for position, field in enumerate(fields):
+        location = f"{owner}.fields[{position}]"
+        if not isinstance(field, dict):
+            errors.append(f"{location} must be an object")
+            continue
+        field_id = field.get("id")
+        if not isinstance(field_id, str) or not CREATION_ID.fullmatch(field_id):
+            errors.append(f"{location}.id must be a lowercase identifier")
+        elif field_id in field_ids:
+            errors.append(f"{owner} has duplicate field {field_id!r}")
+        else:
+            field_ids.add(field_id)
+
+        choices = field.get("choices")
+        if not isinstance(choices, list) or not choices:
+            errors.append(f"{location}.choices must be a non-empty array")
+            continue
+        choice_ids: set[str] = set()
+        choices_by_id: dict[str, dict[str, Any]] = {}
+        for choice_position, choice in enumerate(choices):
+            choice_location = f"{location}.choices[{choice_position}]"
+            if not isinstance(choice, dict):
+                errors.append(f"{choice_location} must be an object")
+                continue
+            choice_id = choice.get("id")
+            if not isinstance(choice_id, str) or not CREATION_ID.fullmatch(choice_id):
+                errors.append(f"{choice_location}.id must be a lowercase identifier")
+            elif choice_id in choice_ids:
+                errors.append(f"{location} has duplicate choice {choice_id!r}")
+            else:
+                choice_ids.add(choice_id)
+                choices_by_id[choice_id] = choice
+            status = choice.get("status")
+            if status is not None and status not in VALID_STATUSES | {"documented", "unavailable"}:
+                errors.append(f"{choice_location}.status has invalid value {status!r}")
+            settings = choice.get("set", [])
+            if not isinstance(settings, list):
+                errors.append(f"{choice_location}.set must be an array")
+            else:
+                for setting_position, setting in enumerate(settings):
+                    setting_location = f"{choice_location}.set[{setting_position}]"
+                    if not isinstance(setting, dict) or not isinstance(setting.get("section"), str) \
+                            or not setting.get("section") or not isinstance(setting.get("key"), str) \
+                            or not setting.get("key") or "value" not in setting:
+                        errors.append(f"{setting_location} must define section, key and value")
+
+        default_id = field.get("default")
+        if not isinstance(default_id, str) or default_id not in choices_by_id:
+            errors.append(f"{location}.default must reference one of its choices")
+        elif choices_by_id[default_id].get("status") == "unavailable":
+            errors.append(f"{location}.default must not reference an unavailable choice")
+
+    configuration = creation.get("configuration", [])
+    if not isinstance(configuration, list):
+        errors.append(f"{owner}.configuration must be an array")
+    else:
+        for position, section in enumerate(configuration):
+            location = f"{owner}.configuration[{position}]"
+            if not isinstance(section, dict) or not isinstance(section.get("section"), str) \
+                    or not section.get("section") or not isinstance(section.get("values"), dict):
+                errors.append(f"{location} must define a section and values object")
+
+
+def validate_media(product_id: str, product: dict[str, Any], errors: list[str]) -> None:
+    media = product.get("media")
+    if media is None:
+        return
+    owner = f"catalog.json: product {product_id!r}.media"
+    if not isinstance(media, dict):
+        errors.append(f"{owner} must be an object")
+        return
+    if media.get("kind") not in {"photograph", "concept_illustration", "board_recreation"}:
+        errors.append(f"{owner}.kind must identify the documentary media type")
+    resource = media.get("resource")
+    if not isinstance(resource, str) or not re.fullmatch(
+        r":/blumach/catalog/images/[a-z0-9][a-z0-9_-]*\.(?:png|jpg|jpeg|webp)", resource
+    ):
+        errors.append(f"{owner}.resource must be a catalogue image resource path")
+    if not isinstance(media.get("label_key"), str) or not media.get("label_key"):
+        errors.append(f"{owner}.label_key is required")
+
+
 def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
     if not isinstance(catalog, dict):
         errors.append("catalog.json: root must be an object")
@@ -229,6 +326,8 @@ def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
             )
         if status not in VALID_STATUSES:
             errors.append(f"catalog.json: product {product_id!r} has invalid status {status!r}")
+        validate_creation(product_id, product, errors)
+        validate_media(product_id, product, errors)
         implementation = product.get("implementation")
         if implementation is not None:
             if not isinstance(implementation, dict):

@@ -107,6 +107,10 @@ public:
     QString     displayName;
     QString     notes;
     QString     icon;
+    QString     catalogProductId;
+    QString     catalogManufacturer;
+    QString     catalogModel;
+    QString     catalogFormFactor;
     QStringList searchTerms;
 
     config_hash_t config_hash;
@@ -117,6 +121,9 @@ public:
 
     void setDisplayName(const QString &newDisplayName);
     void setNotes(const QString &newNotes);
+    void setCatalogIdentity(const QString &productId, const QString &manufacturer,
+                            const QString &model, const QString &formFactor);
+    [[nodiscard]] QString presentationTitle() const;
 
     [[nodiscard]] bool   isValid() const;
     [[nodiscard]] bool   isProcessRunning() const;

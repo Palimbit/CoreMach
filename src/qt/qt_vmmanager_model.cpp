@@ -66,6 +66,12 @@ VMManagerModel::data(const QModelIndex &index, int role) const
             return machines.at(index.row())->timestamp();
         case Icon:
             return machines.at(index.row())->icon;
+        case CatalogManufacturer:
+            return machines.at(index.row())->catalogManufacturer;
+        case CatalogModel:
+            return machines.at(index.row())->catalogModel;
+        case CatalogFormFactor:
+            return machines.at(index.row())->catalogFormFactor;
         case Qt::ToolTipRole:
             return machines.at(index.row())->shortened_dir;
         case Qt::UserRole:

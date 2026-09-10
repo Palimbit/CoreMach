@@ -40,6 +40,11 @@
         "ide"
       ]
     },
+    "media": {
+      "kind": "concept_illustration",
+      "resource": ":/blumach/catalog/images/ta-dario286s.jpg",
+      "label_key": "media.kind.concept_illustration"
+    },
     "hardware": {
       "cpu": "Intel 80286 16 MHz",
       "memory": "Configuration not yet verified from primary technical documentation",

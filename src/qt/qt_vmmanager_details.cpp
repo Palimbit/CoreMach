@@ -337,7 +337,7 @@ VMManagerDetails::updateData(VMManagerSystem *passed_sysconfig)
     updateConfig(passed_sysconfig);
     updateScreenshots(passed_sysconfig);
 
-    ui->systemLabel->setText(passed_sysconfig->displayName);
+    ui->systemLabel->setText(passed_sysconfig->presentationTitle());
     const QString machineDescription = passed_sysconfig->getDisplayValue(VMManager::Display::Name::Machine);
     machineMetaLabel->setText(machineDescription);
     machineMetaLabel->setVisible(!machineDescription.isEmpty());

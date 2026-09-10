@@ -40,6 +40,11 @@
         "ide"
       ]
     },
+    "media": {
+      "kind": "concept_illustration",
+      "resource": ":/blumach/catalog/images/ta-dario386sx.jpg",
+      "label_key": "media.kind.concept_illustration"
+    },
     "hardware": {
       "cpu": "Intel 80386SX 16 MHz",
       "memory": "1 MB standard; up to 8 MB on-board; LIM 4.0/EMS",

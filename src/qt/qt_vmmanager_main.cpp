@@ -1026,6 +1026,15 @@ VMManagerMain::newHistoricalMachine(const QString &productId, const QString &mac
     const QDir machineDirectory(QDir(vmm_path).filePath(directoryName));
     if (!machineDirectory.exists())
         return;
+    const auto createdIndex = vm_model->getIndexForConfigFile(
+        QFileInfo(machineDirectory.filePath(QStringLiteral(CONFIG_FILE))));
+    if (createdIndex.isValid()) {
+        const auto formFactors = product->facets.value(QStringLiteral("form_factor")).toArray();
+        const QString formFactor = formFactors.isEmpty() ? QString() : formFactors.at(0).toString();
+        const auto *manufacturer = catalog.manufacturer(product->manufacturerId);
+        vm_model->getConfigObjectForIndex(createdIndex)->setCatalogIdentity(
+            product->id, manufacturer ? manufacturer->name : QString(), product->name, formFactor);
+    }
     const auto generateFiles = [this, &machineDirectory](const QJsonArray &files) {
         for (const auto &fileValue : files) {
             const auto fileDefinition = fileValue.toObject();

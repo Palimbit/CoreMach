@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>475</height>
+    <height>580</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -151,6 +151,77 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="catalogSkinGroupBox">
+     <property name="title">
+      <string>Collection appearance</string>
+     </property>
+     <layout class="QVBoxLayout" name="catalogSkinLayout">
+      <item>
+       <widget class="QLabel" name="catalogSkinDescription">
+        <property name="text">
+         <string>Optional visual packages are stored locally and can add historical manufacturer marks without changing BluMach's default appearance.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="catalogSkinDirectoryLabel">
+        <property name="buddy">
+         <cstring>catalogSkinDirectory</cstring>
+        </property>
+        <property name="text">
+         <string>Visual package folder:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="catalogSkinPathLayout">
+        <item>
+         <widget class="QLineEdit" name="catalogSkinDirectory">
+          <property name="accessibleName">
+           <string>Visual package folder</string>
+          </property>
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="catalogSkinBrowseButton">
+          <property name="text">
+           <string>Choose...</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="catalogSkinClearButton">
+          <property name="text">
+           <string>Use default</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="catalogSkinManufacturerMarks">
+        <property name="text">
+         <string>Show manufacturer marks from this package</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="catalogSkinStatus">
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="QGroupBox" name="groupBoxColorScheme">
      <property name="title">
       <string>Color scheme</string>
@@ -214,6 +285,10 @@
   <tabstop>updateCheckBox</tabstop>
   <tabstop>regexSearchCheckBox</tabstop>
   <tabstop>deleteToTrashCheckBox</tabstop>
+  <tabstop>catalogSkinDirectory</tabstop>
+  <tabstop>catalogSkinBrowseButton</tabstop>
+  <tabstop>catalogSkinClearButton</tabstop>
+  <tabstop>catalogSkinManufacturerMarks</tabstop>
   <tabstop>radioButtonSystem</tabstop>
   <tabstop>radioButtonLight</tabstop>
   <tabstop>radioButtonDark</tabstop>

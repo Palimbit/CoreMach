@@ -10,8 +10,10 @@
 #define QT_BLUMACH_COLLECTION_HPP
 
 #include "qt_blumach_catalog.hpp"
+#include "qt_blumach_skin.hpp"
 
 #include <QWidget>
+#include <QSet>
 
 class QComboBox;
 class QFrame;
@@ -36,6 +38,7 @@ class BluMachCollectionWidget final : public QWidget {
 public:
     explicit BluMachCollectionWidget(QWidget *parent = nullptr);
     void reloadLanguage();
+    void reloadSkin();
 
 public slots:
     void createSelectedMachine();
@@ -56,6 +59,11 @@ private:
     void rebuildFacetFilters();
     void rebuildFilterLayout();
     void updateAdvancedFiltersButton();
+    void clearFilters();
+    void restoreTreeExpansion(const QSet<QString> &expandedIds);
+    QSet<QString> expandedTreeIds() const;
+    void loadUiState();
+    void saveUiState();
     void updateDetails(QTreeWidgetItem *item);
     void applyFilter();
     bool matchesFacetFilters(const BluMachProduct &product) const;
@@ -71,11 +79,13 @@ private:
     void updateResponsiveLayout();
 
     BluMachCatalog m_catalog;
+    BluMachCatalogSkin m_skin;
     QLabel         *m_heading = nullptr;
     QLabel         *m_intro = nullptr;
     QLineEdit      *m_search = nullptr;
     QComboBox      *m_statusFilter = nullptr;
     QToolButton    *m_advancedFiltersButton = nullptr;
+    QToolButton    *m_clearFiltersButton = nullptr;
     QFrame         *m_advancedFiltersPanel = nullptr;
     QGridLayout    *m_advancedFiltersLayout = nullptr;
     QHash<QString, QComboBox *> m_facetFilters;
@@ -89,7 +99,6 @@ private:
     QLabel         *m_summary = nullptr;
     QLabel         *m_statusBadge = nullptr;
     QLabel         *m_architectureBadge = nullptr;
-    QLabel         *m_firmwareBadge = nullptr;
     QGridLayout    *m_badgeLayout = nullptr;
     QFrame         *m_warningFrame = nullptr;
     QLabel         *m_warningLabel = nullptr;
@@ -103,6 +112,12 @@ private:
     QVBoxLayout    *m_researchLayout = nullptr;
     QVBoxLayout    *m_sourcesLayout = nullptr;
     QString         m_selectedProductId;
+    QSet<QString>   m_expandedBeforeFilter;
+    QSet<QString>   m_savedExpandedIds;
+    bool            m_hasSavedTreeState = false;
+    bool            m_restoringUiState = false;
+    bool            m_rebuildingTree = false;
+    bool            m_filterRevealActive = false;
     bool            m_compactLayout = false;
     bool            m_narrowLayout = false;
 };
