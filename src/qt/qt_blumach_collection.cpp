@@ -407,13 +407,13 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_badgeLayout->setHorizontalSpacing(6);
     m_badgeLayout->setVerticalSpacing(5);
     int badgeColumn = 0;
-    for (auto **badge : { &m_statusBadge, &m_architectureBadge, &m_firmwareBadge }) {
+    for (auto **badge : { &m_statusBadge, &m_architectureBadge }) {
         *badge = new QLabel(detailPanel);
         (*badge)->setObjectName(QStringLiteral("blumachBadge"));
         (*badge)->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
         m_badgeLayout->addWidget(*badge, 0, badgeColumn++);
     }
-    m_badgeLayout->setColumnStretch(3, 1);
+    m_badgeLayout->setColumnStretch(2, 1);
     productText->addLayout(m_badgeLayout);
     productText->addStretch(1);
     productHeader->addLayout(productText, 1);
@@ -544,14 +544,10 @@ void BluMachCollectionWidget::updateResponsiveLayout()
         m_narrowLayout = narrow;
         rebuildFilterLayout();
 
-        for (auto *badge : { m_statusBadge, m_architectureBadge, m_firmwareBadge })
+        for (auto *badge : { m_statusBadge, m_architectureBadge })
             m_badgeLayout->removeWidget(badge);
         m_badgeLayout->addWidget(m_statusBadge, 0, 0);
         m_badgeLayout->addWidget(m_architectureBadge, 0, 1);
-        if (narrow)
-            m_badgeLayout->addWidget(m_firmwareBadge, 1, 0, 1, 2, Qt::AlignLeft);
-        else
-            m_badgeLayout->addWidget(m_firmwareBadge, 0, 2);
     }
     m_machineIllustration->setVisible(!m_selectedProductId.isEmpty() && width() >= 900);
 }
@@ -899,7 +895,6 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
     m_selectedProductId.clear();
     m_statusBadge->hide();
     m_architectureBadge->hide();
-    m_firmwareBadge->hide();
     m_warningFrame->hide();
     m_machineIllustration->hide();
     setDetailTabsAvailable(false, false, false);
@@ -980,15 +975,6 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
     if (const auto *platform = m_catalog.platform(product->platformId)) {
         m_architectureBadge->setText(platform->architecture);
         m_architectureBadge->show();
-    }
-    if (product->firmware.value(QStringLiteral("required")).toBool()) {
-        const auto *platform = m_catalog.platform(product->platformId);
-        const bool firmwarePreserved = platform && !platform->emulatorMachineId.isEmpty()
-                                    && product->status != QStringLiteral("research")
-                                    && product->status != QStringLiteral("not_bootable");
-        m_firmwareBadge->setText(firmwarePreserved ? tr("Authentic firmware")
-                                                   : tr("Unpreserved firmware"));
-        m_firmwareBadge->show();
     }
     const auto formFactors = product->facets.value(QStringLiteral("form_factor")).toArray();
     const QString formFactor = formFactors.isEmpty() ? QStringLiteral("desktop")

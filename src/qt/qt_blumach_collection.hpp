@@ -99,7 +99,6 @@ private:
     QLabel         *m_summary = nullptr;
     QLabel         *m_statusBadge = nullptr;
     QLabel         *m_architectureBadge = nullptr;
-    QLabel         *m_firmwareBadge = nullptr;
     QGridLayout    *m_badgeLayout = nullptr;
     QFrame         *m_warningFrame = nullptr;
     QLabel         *m_warningLabel = nullptr;
