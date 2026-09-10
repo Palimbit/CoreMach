@@ -1,9 +1,13 @@
 {
   "filter.any": "Cualquiera",
   "filter.advanced": "Filtros avanzados",
+  "filter.clear_all": "Limpiar filtros",
+  "filter.no_results": "Ningún ordenador coincide",
+  "filter.no_results_hint": "Prueba a cambiar la búsqueda o a limpiar los filtros.",
   "filter.classification": "Clasificación del catálogo",
   "filter.facet.form_factor": "Formato",
   "filter.form_factor.desktop": "Sobremesa",
+  "filter.form_factor.tower": "Sobremesa en torre",
   "filter.form_factor.laptop": "Portátil",
   "filter.form_factor.luggable": "Transportable",
   "filter.form_factor.palmtop": "De bolsillo",

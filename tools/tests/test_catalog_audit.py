@@ -48,6 +48,44 @@ class CatalogAuditTests(unittest.TestCase):
             )
         )
 
+    def test_creation_rejects_unavailable_default(self) -> None:
+        errors: list[str] = []
+        product = {
+            "creation": {
+                "fields": [{
+                    "id": "memory",
+                    "default": "4mb",
+                    "choices": [{"id": "4mb", "status": "unavailable"}],
+                }],
+                "configuration": [],
+            }
+        }
+
+        catalog_audit.validate_creation("example", product, errors)
+
+        self.assertTrue(any("must not reference an unavailable choice" in error for error in errors))
+
+    def test_creation_accepts_valid_field(self) -> None:
+        errors: list[str] = []
+        product = {
+            "creation": {
+                "fields": [{
+                    "id": "memory",
+                    "default": "512",
+                    "choices": [{
+                        "id": "512",
+                        "status": "validated",
+                        "set": [{"section": "Machine", "key": "mem_size", "value": 512}],
+                    }],
+                }],
+                "configuration": [{"section": "Machine", "values": {"mem_size": 512}}],
+            }
+        }
+
+        catalog_audit.validate_creation("example", product, errors)
+
+        self.assertEqual([], errors)
+
 
 if __name__ == "__main__":
     unittest.main()

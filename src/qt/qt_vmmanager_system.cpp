@@ -291,6 +291,11 @@ VMManagerSystem::loadSettings()
     auto loadedIcon = config_settings->getStringValue("icon");
     if (!loadedIcon.isEmpty())
         icon = loadedIcon;
+
+    catalogProductId   = config_settings->getStringValue("blumach_catalog_product_id");
+    catalogManufacturer = config_settings->getStringValue("blumach_catalog_manufacturer");
+    catalogModel       = config_settings->getStringValue("blumach_catalog_model");
+    catalogFormFactor  = config_settings->getStringValue("blumach_catalog_form_factor");
 }
 void
 VMManagerSystem::saveSettings()
@@ -311,6 +316,10 @@ VMManagerSystem::saveSettings()
         config_settings->setStringValue("timestamp", lastUsedTimestamp.toString(Qt::ISODate));
 
     config_settings->setStringValue("icon", icon);
+    config_settings->setStringValue("blumach_catalog_product_id", catalogProductId);
+    config_settings->setStringValue("blumach_catalog_manufacturer", catalogManufacturer);
+    config_settings->setStringValue("blumach_catalog_model", catalogModel);
+    config_settings->setStringValue("blumach_catalog_form_factor", catalogFormFactor);
     generateSearchTerms();
 }
 void
@@ -324,6 +333,8 @@ VMManagerSystem::generateSearchTerms()
             searchTerms.append(value);
     searchTerms.append(displayName);
     searchTerms.append(config_name);
+    searchTerms.append(catalogManufacturer);
+    searchTerms.append(catalogModel);
     QRegularExpression whitespaceRegex("\\s+");
     searchTerms.append(notes.split(whitespaceRegex));
 }
@@ -363,6 +374,35 @@ VMManagerSystem::setNotes(const QString &newNotes)
 {
     notes = newNotes;
     saveSettings();
+}
+
+void
+VMManagerSystem::setCatalogIdentity(const QString &productId, const QString &manufacturer,
+                                    const QString &model, const QString &formFactor)
+{
+    catalogProductId    = productId;
+    catalogManufacturer = manufacturer;
+    catalogModel        = model;
+    catalogFormFactor   = formFactor;
+    saveSettings();
+    emit itemDataChanged();
+}
+
+QString
+VMManagerSystem::presentationTitle() const
+{
+    if (catalogModel.isEmpty())
+        return displayName;
+
+    QString historicalTitle = catalogModel;
+    if (!catalogManufacturer.isEmpty() &&
+        !historicalTitle.startsWith(catalogManufacturer, Qt::CaseInsensitive))
+        historicalTitle.prepend(catalogManufacturer + QLatin1Char(' '));
+
+    if (displayName.compare(catalogModel, Qt::CaseInsensitive) == 0 ||
+        displayName.compare(historicalTitle, Qt::CaseInsensitive) == 0)
+        return historicalTitle;
+    return QStringLiteral("%1 · %2").arg(historicalTitle, displayName);
 }
 bool
 VMManagerSystem::isValid() const

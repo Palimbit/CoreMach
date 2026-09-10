@@ -106,7 +106,7 @@
     <qresource prefix="/misc">
         <file>qt/icons/warning.ico</file>
     </qresource>
-    <qresource prefix="/blumach/catalog">
+      <qresource prefix="/blumach/catalog">
         <file alias="images/olivetti-pcs86.jpg">qt/catalog/images/olivetti-pcs86-family-v3.jpg</file>
         <file alias="images/olivetti-pcs286.jpg">qt/catalog/images/olivetti-pcs286-family-v3.jpg</file>
         <file alias="images/olivetti-pcs286s-board.jpg">qt/catalog/images/olivetti-pcs286s-board.jpg</file>

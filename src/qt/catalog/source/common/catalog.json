@@ -11,6 +11,10 @@
           "label_key": "filter.form_factor.desktop"
         },
         {
+          "id": "tower",
+          "label_key": "filter.form_factor.tower"
+        },
+        {
           "id": "laptop",
           "label_key": "filter.form_factor.laptop"
         },

@@ -13,10 +13,12 @@
  *          Copyright 2024 cold-brewed
  */
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QStyle>
 #include <cstring>
 
 #include "qt_preferences.hpp"
+#include "qt_blumach_skin.hpp"
 #include "qt_vmmanager_preferences.hpp"
 #include "qt_vmmanager_config.hpp"
 #include "ui_qt_vmmanager_preferences.h"
@@ -40,6 +42,9 @@ VMManagerPreferences::
     ui->setupUi(this);
     ui->dirSelectButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
     connect(ui->dirSelectButton, &QPushButton::clicked, this, &VMManagerPreferences::chooseDirectoryLocation);
+    ui->catalogSkinBrowseButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+    connect(ui->catalogSkinBrowseButton, &QPushButton::clicked, this, &VMManagerPreferences::chooseCatalogSkinDirectory);
+    connect(ui->catalogSkinClearButton, &QPushButton::clicked, this, &VMManagerPreferences::clearCatalogSkinDirectory);
 
     const auto config          = new VMManagerConfig(VMManagerConfig::ConfigType::General);
     const auto configSystemDir = QString(vmm_path_cfg);
@@ -83,6 +88,11 @@ VMManagerPreferences::
 #else
     ui->deleteToTrashCheckBox->setVisible(false);
 #endif
+    ui->catalogSkinDirectory->setText(QDir::toNativeSeparators(
+        config->getStringValue(QStringLiteral("blumach_catalog_skin_directory"))));
+    ui->catalogSkinManufacturerMarks->setChecked(
+        config->getStringValue(QStringLiteral("blumach_catalog_skin_manufacturer_marks")) != QStringLiteral("0"));
+    updateCatalogSkinSummary();
 
     ui->radioButtonSystem->setChecked(color_scheme == 0);
     ui->radioButtonLight->setChecked(color_scheme == 1);
@@ -124,6 +134,52 @@ VMManagerPreferences::on_pushButtonLanguage_released()
 }
 
 void
+VMManagerPreferences::chooseCatalogSkinDirectory()
+{
+    const auto directory = QFileDialog::getExistingDirectory(
+        this, tr("Choose BluMach skin package"), ui->catalogSkinDirectory->text(),
+        QFileDialog::ShowDirsOnly);
+    if (directory.isEmpty())
+        return;
+
+    QString name;
+    QString error;
+    if (!BluMachCatalogSkin::inspectDirectory(directory, &name, &error)) {
+        QMessageBox::warning(this, tr("Skin package unavailable"), error);
+        return;
+    }
+    ui->catalogSkinDirectory->setText(QDir::toNativeSeparators(directory));
+    ui->catalogSkinManufacturerMarks->setChecked(true);
+    updateCatalogSkinSummary();
+}
+
+void
+VMManagerPreferences::clearCatalogSkinDirectory()
+{
+    ui->catalogSkinDirectory->clear();
+    ui->catalogSkinManufacturerMarks->setChecked(false);
+    updateCatalogSkinSummary();
+}
+
+void
+VMManagerPreferences::updateCatalogSkinSummary()
+{
+    const QString directory = ui->catalogSkinDirectory->text();
+    ui->catalogSkinClearButton->setEnabled(!directory.isEmpty());
+    ui->catalogSkinManufacturerMarks->setEnabled(!directory.isEmpty());
+    if (directory.isEmpty()) {
+        ui->catalogSkinStatus->setText(tr("No visual package selected. BluMach uses its neutral appearance."));
+        return;
+    }
+    QString name;
+    QString error;
+    if (BluMachCatalogSkin::inspectDirectory(directory, &name, &error))
+        ui->catalogSkinStatus->setText(tr("Selected package: %1").arg(name));
+    else
+        ui->catalogSkinStatus->setText(tr("Selected package is unavailable: %1").arg(error));
+}
+
+void
 VMManagerPreferences::accept()
 {
     const auto config = new VMManagerConfig(VMManagerConfig::ConfigType::General);
@@ -141,6 +197,11 @@ VMManagerPreferences::accept()
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     config->setStringValue("delete_to_trash", ui->deleteToTrashCheckBox->isChecked() ? "1" : "0");
 #endif
+    config->setStringValue(QStringLiteral("blumach_catalog_skin_directory"),
+                           QDir::cleanPath(ui->catalogSkinDirectory->text()));
+    config->setStringValue(QStringLiteral("blumach_catalog_skin_manufacturer_marks"),
+                           ui->catalogSkinManufacturerMarks->isChecked() ? QStringLiteral("1") : QStringLiteral("0"));
+    config->sync();
     QDialog::accept();
 }
 

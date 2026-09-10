@@ -7,6 +7,8 @@
  */
 
 #include "qt_blumach_collection.hpp"
+#include "qt_blumach_formfactoricon.hpp"
+#include "qt_vmmanager_config.hpp"
 #include "qt_util.hpp"
 
 #include <QAbstractItemView>
@@ -51,6 +53,10 @@ constexpr auto PeriodRole       = Qt::UserRole + 2;
 constexpr auto ArchitectureRole = Qt::UserRole + 3;
 constexpr auto StatusRole       = Qt::UserRole + 4;
 constexpr auto FamilyRole       = Qt::UserRole + 5;
+constexpr auto FormFactorRole   = Qt::UserRole + 6;
+constexpr auto CountRole        = Qt::UserRole + 7;
+constexpr auto BrandMarkRole    = Qt::UserRole + 8;
+constexpr auto BrandMarkBackgroundRole = Qt::UserRole + 9;
 
 QColor
 blendColor(const QColor &background, const QColor &foreground, const qreal amount)
@@ -86,9 +92,12 @@ public:
         setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     }
 
-    void setProduct(const QString &productId, const QString &caption)
+    void setProduct(const QString &productId, const QString &caption,
+                    const QString &formFactor, const QString &formFactorLabel)
     {
         m_productId = productId;
+        m_formFactor = formFactor;
+        m_formFactorLabel = formFactorLabel;
         m_isBoard = productId == QStringLiteral("olivetti-pcs286s")
                  || productId == QStringLiteral("olivetti-pcs286s-16");
         QString imageId = productId;
@@ -123,19 +132,16 @@ protected:
             painter.drawPixmap((width() - scaled.width()) / 2,
                                (height() - scaled.height()) / 2, scaled);
         } else {
-            const bool dario = m_productId.startsWith(QStringLiteral("ta-"));
             QColor accent = pal.color(QPalette::Highlight);
-            accent.setAlpha(32);
+            accent.setAlpha(22);
             painter.setPen(Qt::NoPen);
             painter.setBrush(accent);
-            painter.drawEllipse(card.center(), card.height() * 0.38, card.height() * 0.38);
-            auto markFont = font();
-            markFont.setBold(true);
-            markFont.setPointSizeF(markFont.pointSizeF() + 12);
-            painter.setFont(markFont);
-            painter.setPen(pal.color(QPalette::Text));
-            painter.drawText(card, Qt::AlignCenter, dario ? QStringLiteral("DARIO")
-                                                          : QStringLiteral("PCS"));
+            painter.drawEllipse(card.center(), card.height() * 0.39, card.height() * 0.39);
+            const int iconSide = qRound(card.height() * 0.66);
+            const QRect iconRect(qRound(card.center().x() - iconSide / 2.0),
+                                 qRound(card.center().y() - iconSide / 2.0),
+                                 iconSide, iconSide);
+            BluMachFormFactorIcon::paint(&painter, iconRect, m_formFactor, pal);
         }
         painter.setClipping(false);
 
@@ -143,9 +149,13 @@ protected:
         labelFont.setBold(true);
         labelFont.setPointSizeF(qMax(7.0, labelFont.pointSizeF() - 1.5));
         painter.setFont(labelFont);
-        const QString label = QCoreApplication::translate("BluMachCollectionWidget",
-                                                          m_isBoard ? "Board recreation"
-                                                                    : "Concept illustration");
+        const QString label = m_isBoard
+                                ? QCoreApplication::translate("BluMachCollectionWidget",
+                                                              "Board recreation")
+                                : (!m_image.isNull()
+                                       ? QCoreApplication::translate("BluMachCollectionWidget",
+                                                                     "Concept illustration")
+                                       : m_formFactorLabel);
         const int labelWidth = painter.fontMetrics().horizontalAdvance(label) + 18;
         QRectF labelRect(10, 10, labelWidth, 24);
         painter.setPen(Qt::NoPen);
@@ -159,6 +169,8 @@ protected:
 
 private:
     QString m_productId;
+    QString m_formFactor;
+    QString m_formFactorLabel;
     QPixmap m_image;
     bool    m_isBoard = false;
 };
@@ -170,7 +182,7 @@ public:
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
         const int type = index.data(TypeRole).toInt();
-        return { option.rect.width(), type == 3 ? 50 : 26 };
+        return { option.rect.width(), type == 3 ? 50 : 30 };
     }
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
@@ -182,14 +194,54 @@ public:
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing);
         if (type != 3) {
+            const int count = index.data(CountRole).toInt();
+            const bool manufacturer = type == 1;
             auto font = opt.font;
             font.setBold(true);
-            if (type == 1)
+            if (manufacturer)
                 font.setLetterSpacing(QFont::AbsoluteSpacing, 0.8);
             painter->setFont(font);
-            painter->setPen(opt.palette.color(QPalette::PlaceholderText));
-            painter->drawText(opt.rect.adjusted(8, 0, -8, 0),
-                              Qt::AlignVCenter | Qt::AlignLeft, opt.text);
+            painter->setPen(manufacturer ? opt.palette.color(QPalette::Text)
+                                         : opt.palette.color(QPalette::PlaceholderText));
+            const QRect textRect = opt.rect.adjusted(8, 0, -40, 0);
+            const QString brandMarkResource = index.data(BrandMarkRole).toString();
+            const QColor brandMarkBackground(index.data(BrandMarkBackgroundRole).toString());
+            QPixmap brandMark(brandMarkResource);
+            if (manufacturer && !brandMark.isNull()) {
+                const QSize available(qMin(104, textRect.width()), qMax(16, textRect.height() - 8));
+                const qreal devicePixelRatio = painter->device()->devicePixelRatioF();
+                QPixmap scaled = brandMark.scaled(available * devicePixelRatio,
+                                                  Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                scaled.setDevicePixelRatio(devicePixelRatio);
+                const QSize logicalSize(qRound(scaled.width() / devicePixelRatio),
+                                        qRound(scaled.height() / devicePixelRatio));
+                const QRect markRect(textRect.left(), textRect.center().y() - logicalSize.height() / 2,
+                                     logicalSize.width(), logicalSize.height());
+                if (brandMarkBackground.isValid()) {
+                    const QRect backgroundRect = markRect.adjusted(-5, -3, 5, 3);
+                    painter->setPen(Qt::NoPen);
+                    painter->setBrush(brandMarkBackground);
+                    painter->drawRoundedRect(backgroundRect, 3, 3);
+                }
+                painter->drawPixmap(markRect, scaled);
+            } else {
+                painter->drawText(textRect,
+                                  Qt::AlignVCenter | Qt::AlignLeft, opt.text);
+            }
+            if (count > 0) {
+                const QString countText = QString::number(count);
+                const int badgeWidth = qMax(22, painter->fontMetrics().horizontalAdvance(countText) + 12);
+                const QRect badge(opt.rect.right() - badgeWidth - 7, opt.rect.center().y() - 9,
+                                  badgeWidth, 18);
+                QColor badgeBackground = manufacturer ? opt.palette.color(QPalette::Highlight)
+                                                      : opt.palette.color(QPalette::AlternateBase);
+                badgeBackground.setAlpha(manufacturer ? 42 : 140);
+                painter->setPen(Qt::NoPen);
+                painter->setBrush(badgeBackground);
+                painter->drawRoundedRect(badge, 9, 9);
+                painter->setPen(opt.palette.color(QPalette::PlaceholderText));
+                painter->drawText(badge, Qt::AlignCenter, countText);
+            }
             painter->restore();
             return;
         }
@@ -204,24 +256,16 @@ public:
             const QRect selectionRow(4, row.top(), selectionWidth, row.height());
             painter->drawRoundedRect(selectionRow, 7, 7);
         }
-        QRect monitor(row.left() + 8, row.top() + 10, 28, 28);
-        const bool dario = index.data(FamilyRole).toString().contains(QStringLiteral("dario"));
-        QColor familyColor = dario ? opt.palette.color(QPalette::Link)
-                                   : opt.palette.color(QPalette::Highlight);
-        familyColor.setAlpha(34);
+        QRect device(row.left() + 8, row.top() + 10, 28, 28);
+        QColor deviceColor = opt.palette.color(QPalette::Highlight);
+        deviceColor.setAlpha(24);
         painter->setPen(QPen(blendColor(opt.palette.color(QPalette::Base),
                                         opt.palette.color(QPalette::Text), 0.18), 1));
-        painter->setBrush(familyColor);
-        painter->drawRoundedRect(monitor, 7, 7);
-        auto markFont = opt.font;
-        markFont.setBold(true);
-        markFont.setPointSizeF(qMax(7.0, markFont.pointSizeF() - (dario ? 1.0 : 2.0)));
-        painter->setFont(markFont);
-        painter->setPen(opt.palette.color(QPalette::Text));
-        painter->drawText(monitor, Qt::AlignCenter, dario ? QStringLiteral("D")
-                                                          : QStringLiteral("PCS"));
+        painter->setBrush(deviceColor);
+        painter->drawRoundedRect(device, 7, 7);
+        BluMachFormFactorIcon::paint(painter, device, index.data(FormFactorRole).toString(), opt.palette);
 
-        const int textLeft = monitor.right() + 11;
+        const int textLeft = device.right() + 11;
         auto nameFont = opt.font;
         nameFont.setBold(true);
         painter->setFont(nameFont);
@@ -306,6 +350,12 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_advancedFiltersButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     m_advancedFiltersButton->setIcon(QIcon::fromTheme(
         QStringLiteral("view-filter"), style()->standardIcon(QStyle::SP_FileDialogDetailedView)));
+    m_clearFiltersButton = new QToolButton(this);
+    m_clearFiltersButton->setObjectName(QStringLiteral("blumachClearFiltersButton"));
+    m_clearFiltersButton->setIcon(QIcon::fromTheme(
+        QStringLiteral("edit-clear"), style()->standardIcon(QStyle::SP_DialogResetButton)));
+    m_clearFiltersButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_clearFiltersButton->setVisible(false);
     m_advancedFiltersPanel = new QFrame(this);
     m_advancedFiltersPanel->setObjectName(QStringLiteral("blumachAdvancedFilters"));
     m_advancedFiltersPanel->setVisible(false);
@@ -325,8 +375,8 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_tree->setMinimumWidth(270);
     m_tree->setMaximumWidth(430);
     m_tree->setFrameShape(QFrame::NoFrame);
-    m_tree->setIndentation(12);
-    m_tree->setRootIsDecorated(false);
+    m_tree->setIndentation(14);
+    m_tree->setRootIsDecorated(true);
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tree->setItemDelegate(new CollectionItemDelegate(m_tree));
 
@@ -422,12 +472,18 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
         m_title->setText(tr("Catalog unavailable"));
         m_subtitle->setText(error);
     }
+    m_skin.loadConfigured();
+    loadUiState();
     connect(m_tree, &QTreeWidget::currentItemChanged, this,
             [this](QTreeWidgetItem *current) { updateDetails(current); });
     connect(m_search, &QLineEdit::textChanged, this, [this] { applyFilter(); });
     connect(m_statusFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] { applyFilter(); });
     connect(m_advancedFiltersButton, &QToolButton::toggled, m_advancedFiltersPanel,
             &QWidget::setVisible);
+    connect(m_clearFiltersButton, &QToolButton::clicked, this, &BluMachCollectionWidget::clearFilters);
+    connect(m_tree, &QTreeWidget::itemExpanded, this, [this] { if (!m_filterRevealActive) saveUiState(); });
+    connect(m_tree, &QTreeWidget::itemCollapsed, this, [this] { if (!m_filterRevealActive) saveUiState(); });
+    connect(m_splitter, &QSplitter::splitterMoved, this, [this] { saveUiState(); });
     reloadLanguage();
     updateAppearance();
     // The catalogue is constructed before the main-window header connects to
@@ -511,6 +567,9 @@ void BluMachCollectionWidget::reloadLanguage()
     m_heading->setText(tr("Historical computer collection"));
     m_intro->setText(tr("Explore computers by manufacturer and family, review their preservation status, and create a historically accurate machine."));
     m_search->setPlaceholderText(tr("Search models, aliases or hardware"));
+    m_clearFiltersButton->setText(m_catalog.text(QStringLiteral("filter.clear_all")));
+    m_clearFiltersButton->setToolTip(m_catalog.text(QStringLiteral("filter.clear_all")));
+    m_clearFiltersButton->setAccessibleName(m_catalog.text(QStringLiteral("filter.clear_all")));
     m_infoTabs->setTabText(0, m_catalog.text(QStringLiteral("technical.ui.overview")));
     m_infoTabs->setTabText(1, m_catalog.text(QStringLiteral("technical.ui.research")));
     m_infoTabs->setTabText(2, m_catalog.text(QStringLiteral("technical.ui.engineering")));
@@ -531,6 +590,23 @@ void BluMachCollectionWidget::reloadLanguage()
     rebuildFacetFilters();
     rebuildFilterLayout();
     updateAdvancedFiltersButton();
+    rebuildTree();
+    applyFilter();
+    if (!selected.isEmpty()) {
+        for (auto iterator = QTreeWidgetItemIterator(m_tree); *iterator; ++iterator) {
+            if ((*iterator)->data(0, IdRole).toString() == selected && !(*iterator)->isHidden()) {
+                m_tree->setCurrentItem(*iterator);
+                break;
+            }
+        }
+    }
+}
+
+void
+BluMachCollectionWidget::reloadSkin()
+{
+    m_skin.loadConfigured();
+    const QString selected = m_selectedProductId;
     rebuildTree();
     applyFilter();
     if (!selected.isEmpty()) {
@@ -588,6 +664,9 @@ void BluMachCollectionWidget::rebuildFilterLayout()
             ++advancedRow;
         }
     }
+    m_advancedFiltersLayout->addWidget(m_clearFiltersButton, advancedRow,
+                                       advancedColumn, 1,
+                                       qMax(1, filterColumns - advancedColumn));
     for (int index = 0; index < filterColumns; ++index)
         m_advancedFiltersLayout->setColumnStretch(index, 1);
 
@@ -620,23 +699,98 @@ void BluMachCollectionWidget::updateAdvancedFiltersButton()
                                          : QStringLiteral("%1 (%2)").arg(label).arg(activeFilters));
     m_advancedFiltersButton->setToolTip(label);
     m_advancedFiltersButton->setAccessibleName(label);
+    m_clearFiltersButton->setVisible(activeFilters > 0 || !m_search->text().trimmed().isEmpty());
+}
+
+void BluMachCollectionWidget::clearFilters()
+{
+    const QSignalBlocker searchBlocker(m_search);
+    const QSignalBlocker statusBlocker(m_statusFilter);
+    m_search->clear();
+    m_statusFilter->setCurrentIndex(0);
+    for (auto *filter : m_facetFilters) {
+        const QSignalBlocker blocker(filter);
+        filter->setCurrentIndex(-1);
+    }
+    applyFilter();
+    m_search->setFocus();
+}
+
+QSet<QString> BluMachCollectionWidget::expandedTreeIds() const
+{
+    QSet<QString> ids;
+    for (auto iterator = QTreeWidgetItemIterator(m_tree); *iterator; ++iterator) {
+        if ((*iterator)->isExpanded() && (*iterator)->data(0, TypeRole).toInt() != ProductItem)
+            ids.insert((*iterator)->data(0, IdRole).toString());
+    }
+    return ids;
+}
+
+void BluMachCollectionWidget::restoreTreeExpansion(const QSet<QString> &expandedIds)
+{
+    m_restoringUiState = true;
+    for (auto iterator = QTreeWidgetItemIterator(m_tree); *iterator; ++iterator) {
+        if ((*iterator)->data(0, TypeRole).toInt() != ProductItem)
+            (*iterator)->setExpanded(expandedIds.contains((*iterator)->data(0, IdRole).toString()));
+    }
+    m_restoringUiState = false;
+}
+
+void BluMachCollectionWidget::loadUiState()
+{
+    const VMManagerConfig config(VMManagerConfig::ConfigType::General);
+    m_selectedProductId = config.getStringValue(QStringLiteral("blumach_catalog_selected_product"));
+    const QString expandedValue = config.getStringValue(QStringLiteral("blumach_catalog_expanded_nodes"));
+    m_hasSavedTreeState = !expandedValue.isEmpty();
+    const auto expanded = expandedValue.split('|', Qt::SkipEmptyParts);
+    m_savedExpandedIds = QSet<QString>(expanded.cbegin(), expanded.cend());
+    m_savedExpandedIds.remove(QStringLiteral("-"));
+    bool widthOk = false;
+    const int treeWidth = config.getStringValue(QStringLiteral("blumach_catalog_tree_width")).toInt(&widthOk);
+    if (widthOk && treeWidth >= m_tree->minimumWidth() && treeWidth <= m_tree->maximumWidth())
+        m_splitter->setSizes({ treeWidth, qMax(1, width() - treeWidth) });
+}
+
+void BluMachCollectionWidget::saveUiState()
+{
+    if (m_restoringUiState || m_rebuildingTree)
+        return;
+    const VMManagerConfig config(VMManagerConfig::ConfigType::General);
+    config.setStringValue(QStringLiteral("blumach_catalog_selected_product"), m_selectedProductId);
+    m_savedExpandedIds = expandedTreeIds();
+    m_hasSavedTreeState = true;
+    QStringList expanded(m_savedExpandedIds.cbegin(), m_savedExpandedIds.cend());
+    expanded.sort();
+    config.setStringValue(QStringLiteral("blumach_catalog_expanded_nodes"),
+                          expanded.isEmpty() ? QStringLiteral("-") : expanded.join('|'));
+    if (!m_splitter->sizes().isEmpty())
+        config.setStringValue(QStringLiteral("blumach_catalog_tree_width"), QString::number(m_splitter->sizes().first()));
+    config.sync();
 }
 
 void BluMachCollectionWidget::rebuildTree()
 {
+    m_rebuildingTree = true;
     m_tree->clear();
+    int manufacturerIndex = 0;
     for (const auto &manufacturer : m_catalog.manufacturers()) {
         auto *manufacturerItem = new QTreeWidgetItem(m_tree, { manufacturer.name });
         manufacturerItem->setData(0, IdRole, manufacturer.id);
         manufacturerItem->setData(0, TypeRole, ManufacturerItem);
-        manufacturerItem->setExpanded(true);
+        const auto mark = m_skin.manufacturerMark(manufacturer.id);
+        manufacturerItem->setData(0, BrandMarkRole, mark.imagePath);
+        manufacturerItem->setData(0, BrandMarkBackgroundRole, mark.background);
+        manufacturerItem->setExpanded(manufacturerIndex == 0);
+        int manufacturerCount = 0;
+        int familyIndex = 0;
         for (const auto &family : m_catalog.families()) {
             if (family.manufacturerId != manufacturer.id || !family.parentFamilyId.isEmpty())
                 continue;
             auto *familyItem = new QTreeWidgetItem(manufacturerItem, { family.name });
             familyItem->setData(0, IdRole, family.id);
             familyItem->setData(0, TypeRole, FamilyItem);
-            familyItem->setExpanded(true);
+            familyItem->setExpanded(manufacturerIndex == 0 && familyIndex == 0);
+            int familyCount = 0;
             for (const auto &product : m_catalog.products()) {
                 if (product.familyId != family.id)
                     continue;
@@ -646,21 +800,45 @@ void BluMachCollectionWidget::rebuildTree()
                 productItem->setData(0, PeriodRole, product.period);
                 productItem->setData(0, StatusRole, product.status);
                 productItem->setData(0, FamilyRole, product.familyId);
+                const auto formFactors = product.facets.value(QStringLiteral("form_factor")).toArray();
+                productItem->setData(0, FormFactorRole,
+                                     formFactors.isEmpty() ? QString() : formFactors.at(0).toString());
                 if (const auto *platform = m_catalog.platform(product.platformId))
                     productItem->setData(0, ArchitectureRole, platform->architecture);
                 else
                     productItem->setData(0, ArchitectureRole, tr("Unpreserved firmware"));
                 productItem->setToolTip(0, QStringLiteral("%1\n%2")
                                                .arg(product.name, m_catalog.text(product.summaryKey)));
+                ++familyCount;
+            }
+            familyItem->setData(0, CountRole, familyCount);
+            manufacturerCount += familyCount;
+            ++familyIndex;
+        }
+        manufacturerItem->setData(0, CountRole, manufacturerCount);
+        ++manufacturerIndex;
+    }
+    if (m_hasSavedTreeState)
+        restoreTreeExpansion(m_savedExpandedIds);
+    bool restoredSelection = false;
+    for (auto iterator = QTreeWidgetItemIterator(m_tree); *iterator; ++iterator) {
+        if ((*iterator)->data(0, TypeRole).toInt() == ProductItem) {
+            if ((*iterator)->data(0, IdRole).toString() == m_selectedProductId) {
+                m_tree->setCurrentItem(*iterator);
+                restoredSelection = true;
+                break;
             }
         }
     }
-    for (auto iterator = QTreeWidgetItemIterator(m_tree); *iterator; ++iterator) {
-        if ((*iterator)->data(0, TypeRole).toInt() == ProductItem) {
-            m_tree->setCurrentItem(*iterator);
-            break;
+    if (!restoredSelection) {
+        for (auto iterator = QTreeWidgetItemIterator(m_tree); *iterator; ++iterator) {
+            if ((*iterator)->data(0, TypeRole).toInt() == ProductItem) {
+                m_tree->setCurrentItem(*iterator);
+                break;
+            }
         }
     }
+    m_rebuildingTree = false;
 }
 
 bool BluMachCollectionWidget::matchesFacetFilters(const BluMachProduct &product) const
@@ -713,8 +891,8 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
     clearLayout(m_sourcesLayout);
     m_engineeringView->clear();
     if (!item) {
-        m_title->setText(tr("No matching computers"));
-        m_subtitle->setText(tr("Try changing the search text or preservation-state filter."));
+        m_title->setText(m_catalog.text(QStringLiteral("filter.no_results")));
+        m_subtitle->setText(m_catalog.text(QStringLiteral("filter.no_results_hint")));
         m_summary->clear();
         m_overviewLayout->addStretch(1);
         emit selectionContextChanged({}, {}, false);
@@ -776,6 +954,7 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
         return;
     }
     m_selectedProductId = product->id;
+    saveUiState();
     m_title->setText(product->name);
     m_subtitle->setText(product->period);
     m_summary->setText(m_catalog.text(product->summaryKey));
@@ -794,7 +973,12 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
                                                    : tr("Unpreserved firmware"));
         m_firmwareBadge->show();
     }
-    static_cast<MachineIllustration *>(m_machineIllustration)->setProduct(product->id, product->name);
+    const auto formFactors = product->facets.value(QStringLiteral("form_factor")).toArray();
+    const QString formFactor = formFactors.isEmpty() ? QStringLiteral("desktop")
+                                                     : formFactors.at(0).toString();
+    static_cast<MachineIllustration *>(m_machineIllustration)
+        ->setProduct(product->id, product->name, formFactor,
+                     m_catalog.facetValueText(QStringLiteral("form_factor"), formFactor));
     updateResponsiveLayout();
     if (!product->warningKey.isEmpty()) {
         m_warningLabel->setText(m_catalog.text(product->warningKey));
@@ -999,6 +1183,18 @@ void BluMachCollectionWidget::applyFilter()
     updateAdvancedFiltersButton();
     const QString needle = m_search->text().trimmed();
     const QString status = m_statusFilter->currentData().toString();
+    bool hasAdvancedSelection = !status.isEmpty();
+    for (const auto *filter : m_facetFilters)
+        hasAdvancedSelection |= !filter->currentData().toString().isEmpty();
+    const bool revealMatches = !needle.isEmpty() || hasAdvancedSelection;
+    if (revealMatches && !m_filterRevealActive) {
+        m_expandedBeforeFilter = expandedTreeIds();
+        m_filterRevealActive = true;
+    } else if (!revealMatches && m_filterRevealActive) {
+        m_filterRevealActive = false;
+        restoreTreeExpansion(m_expandedBeforeFilter);
+        m_expandedBeforeFilter.clear();
+    }
     int visibleProducts = 0;
     for (int mi = 0; mi < m_tree->topLevelItemCount(); ++mi) {
         auto *manufacturerItem = m_tree->topLevelItem(mi);
@@ -1028,13 +1224,19 @@ void BluMachCollectionWidget::applyFilter()
                 visibleProducts += visible ? 1 : 0;
             }
             familyItem->setHidden(!familyVisible);
+            if (revealMatches && familyVisible)
+                familyItem->setExpanded(true);
             manufacturerVisible |= familyVisible;
         }
         manufacturerItem->setHidden(!manufacturerVisible);
+        if (revealMatches && manufacturerVisible)
+            manufacturerItem->setExpanded(true);
     }
-    m_resultsLabel->setText(visibleProducts == 1
-                                ? tr("%1 computer").arg(visibleProducts)
-                                : tr("%1 computers").arg(visibleProducts));
+    m_resultsLabel->setText(visibleProducts == 0 && revealMatches
+                                ? m_catalog.text(QStringLiteral("filter.no_results"))
+                                : (visibleProducts == 1
+                                       ? tr("%1 computer").arg(visibleProducts)
+                                       : tr("%1 computers").arg(visibleProducts)));
     const auto itemIsVisible = [](QTreeWidgetItem *item) {
         for (auto *current = item; current; current = current->parent()) {
             if (current->isHidden())

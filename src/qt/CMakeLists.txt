@@ -189,6 +189,10 @@ add_library(ui STATIC
     qt_blumach_catalog.hpp
     qt_blumach_collection.cpp
     qt_blumach_collection.hpp
+    qt_blumach_formfactoricon.cpp
+    qt_blumach_formfactoricon.hpp
+    qt_blumach_skin.cpp
+    qt_blumach_skin.hpp
 
     qt_settings.cpp
     qt_settings.hpp

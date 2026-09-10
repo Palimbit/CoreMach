@@ -271,6 +271,7 @@ VMManagerMainWindow::
 
     // Inform the main view when preferences are updated
     connect(this, &VMManagerMainWindow::preferencesUpdated, vmm, &VMManagerMain::onPreferencesUpdated);
+    connect(this, &VMManagerMainWindow::preferencesUpdated, collection, &BluMachCollectionWidget::reloadSkin);
     connect(this, &VMManagerMainWindow::languageUpdated, vmm, &VMManagerMain::onLanguageUpdated);
 #ifdef Q_OS_WINDOWS
     connect(this, &VMManagerMainWindow::darkModeUpdated, vmm, &VMManagerMain::onDarkModeUpdated);

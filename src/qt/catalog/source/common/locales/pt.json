@@ -1,9 +1,13 @@
 {
   "filter.any": "Todas",
   "filter.advanced": "Filtros avançados",
+  "filter.clear_all": "Limpar filtros",
+  "filter.no_results": "Nenhum computador correspondente",
+  "filter.no_results_hint": "Altere a pesquisa ou limpe os filtros.",
   "filter.classification": "Classificação do catálogo",
   "filter.facet.form_factor": "Formato",
   "filter.form_factor.desktop": "Computador de mesa",
+  "filter.form_factor.tower": "Computador de mesa em torre",
   "filter.form_factor.laptop": "Portátil",
   "filter.form_factor.luggable": "Transportável",
   "filter.form_factor.palmtop": "De bolso",

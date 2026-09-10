@@ -1,9 +1,13 @@
 {
   "filter.any": "Any",
   "filter.advanced": "Advanced filters",
+  "filter.clear_all": "Clear filters",
+  "filter.no_results": "No matching computers",
+  "filter.no_results_hint": "Try changing the search text or clearing the filters.",
   "filter.classification": "Catalogue classification",
   "filter.facet.form_factor": "Form factor",
   "filter.form_factor.desktop": "Desktop",
+  "filter.form_factor.tower": "Tower desktop",
   "filter.form_factor.laptop": "Laptop",
   "filter.form_factor.luggable": "Transportable",
   "filter.form_factor.palmtop": "Palmtop",

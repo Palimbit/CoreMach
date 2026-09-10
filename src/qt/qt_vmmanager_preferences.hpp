@@ -34,12 +34,17 @@ private:
     QString                   settingsFile;
 private slots:
     void chooseDirectoryLocation();
+    void chooseCatalogSkinDirectory();
+    void clearCatalogSkinDirectory();
     void on_pushButtonDefaultSystemDir_released();
     void on_pushButtonLanguage_released();
 
 protected:
     void accept() override;
     void reject() override;
+
+private:
+    void updateCatalogSkinSummary();
 };
 
 #endif // VMMANAGER_PREFERENCES_H
