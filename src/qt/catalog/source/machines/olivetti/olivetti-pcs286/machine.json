@@ -40,6 +40,11 @@
         "ide"
       ]
     },
+    "media": {
+      "kind": "concept_illustration",
+      "resource": ":/blumach/catalog/images/olivetti-pcs286.jpg",
+      "label_key": "media.kind.concept_illustration"
+    },
     "hardware": {
       "cpu": "Intel 80286 12 MHz",
       "memory": "1 MB standard; up to 4 MB on-board and 16 MB system",

@@ -6,6 +6,21 @@ Author and copyright: rtzor, 2026. Distributed under
 These images are generated editorial recreations, not documentary photographs.
 The UI identifies them as **Concept illustration** or **Board recreation**.
 
+Each bundled image is opt-in metadata in its machine bundle:
+
+```json
+"media": {
+  "kind": "concept_illustration",
+  "resource": ":/blumach/catalog/images/example.jpg",
+  "label_key": "media.kind.concept_illustration"
+}
+```
+
+Supported v1 kinds are `photograph`, `concept_illustration` and
+`board_recreation`. A machine without `media` uses the localized generic
+form-factor symbol. The interface never guesses a product image from its ID;
+an unreadable declared resource also falls back to that generic symbol.
+
 Generated with the built-in OpenAI image tool on 2026-08-31 and 2026-09-01 from
 locally held research references. The reference images are not distributed with
 BluMach.

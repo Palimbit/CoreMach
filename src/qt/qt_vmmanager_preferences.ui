@@ -168,6 +168,9 @@
       </item>
       <item>
        <widget class="QLabel" name="catalogSkinDirectoryLabel">
+        <property name="buddy">
+         <cstring>catalogSkinDirectory</cstring>
+        </property>
         <property name="text">
          <string>Visual package folder:</string>
         </property>
@@ -177,6 +180,9 @@
        <layout class="QHBoxLayout" name="catalogSkinPathLayout">
         <item>
          <widget class="QLineEdit" name="catalogSkinDirectory">
+          <property name="accessibleName">
+           <string>Visual package folder</string>
+          </property>
           <property name="readOnly">
            <bool>true</bool>
           </property>
@@ -192,7 +198,7 @@
         <item>
          <widget class="QPushButton" name="catalogSkinClearButton">
           <property name="text">
-           <string>Remove</string>
+           <string>Use default</string>
           </property>
          </widget>
         </item>
@@ -279,6 +285,10 @@
   <tabstop>updateCheckBox</tabstop>
   <tabstop>regexSearchCheckBox</tabstop>
   <tabstop>deleteToTrashCheckBox</tabstop>
+  <tabstop>catalogSkinDirectory</tabstop>
+  <tabstop>catalogSkinBrowseButton</tabstop>
+  <tabstop>catalogSkinClearButton</tabstop>
+  <tabstop>catalogSkinManufacturerMarks</tabstop>
   <tabstop>radioButtonSystem</tabstop>
   <tabstop>radioButtonLight</tabstop>
   <tabstop>radioButtonDark</tabstop>

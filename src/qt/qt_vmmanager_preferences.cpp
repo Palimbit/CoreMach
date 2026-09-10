@@ -45,6 +45,8 @@ VMManagerPreferences::
     ui->catalogSkinBrowseButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
     connect(ui->catalogSkinBrowseButton, &QPushButton::clicked, this, &VMManagerPreferences::chooseCatalogSkinDirectory);
     connect(ui->catalogSkinClearButton, &QPushButton::clicked, this, &VMManagerPreferences::clearCatalogSkinDirectory);
+    connect(ui->catalogSkinManufacturerMarks, &QCheckBox::toggled,
+            this, &VMManagerPreferences::updateCatalogSkinSummary);
 
     const auto config          = new VMManagerConfig(VMManagerConfig::ConfigType::General);
     const auto configSystemDir = QString(vmm_path_cfg);
@@ -144,7 +146,8 @@ VMManagerPreferences::chooseCatalogSkinDirectory()
 
     QString name;
     QString error;
-    if (!BluMachCatalogSkin::inspectDirectory(directory, &name, &error)) {
+    QString warning;
+    if (!BluMachCatalogSkin::inspectDirectory(directory, &name, &error, &warning)) {
         QMessageBox::warning(this, tr("Skin package unavailable"), error);
         return;
     }
@@ -173,10 +176,17 @@ VMManagerPreferences::updateCatalogSkinSummary()
     }
     QString name;
     QString error;
-    if (BluMachCatalogSkin::inspectDirectory(directory, &name, &error))
-        ui->catalogSkinStatus->setText(tr("Selected package: %1").arg(name));
-    else
+    QString warning;
+    if (BluMachCatalogSkin::inspectDirectory(directory, &name, &error, &warning)) {
+        const QString state = ui->catalogSkinManufacturerMarks->isChecked()
+                                ? tr("Manufacturer marks enabled")
+                                : tr("Manufacturer marks disabled");
+        ui->catalogSkinStatus->setText(warning.isEmpty()
+                                          ? tr("Selected package: %1 · %2").arg(name, state)
+                                          : tr("Selected package: %1 · %2 · %3").arg(name, state, warning));
+    } else {
         ui->catalogSkinStatus->setText(tr("Selected package is unavailable: %1").arg(error));
+    }
 }
 
 void

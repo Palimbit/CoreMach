@@ -31,6 +31,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QShortcut>
 #include <QSplitter>
 #include <QStyle>
 #include <QStyledItemDelegate>
@@ -92,19 +93,19 @@ public:
         setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     }
 
-    void setProduct(const QString &productId, const QString &caption,
-                    const QString &formFactor, const QString &formFactorLabel)
+    void setProduct(const QString &caption, const QString &formFactor,
+                    const QString &genericLabel, const QJsonObject &media,
+                    const QString &mediaLabel)
     {
-        m_productId = productId;
         m_formFactor = formFactor;
-        m_formFactorLabel = formFactorLabel;
-        m_isBoard = productId == QStringLiteral("olivetti-pcs286s")
-                 || productId == QStringLiteral("olivetti-pcs286s-16");
-        QString imageId = productId;
-        if (m_isBoard)
-            imageId = QStringLiteral("olivetti-pcs286s-board");
-        m_image.load(QStringLiteral(":/blumach/catalog/images/%1.jpg").arg(imageId));
-        setAccessibleName(caption);
+        m_genericLabel = genericLabel;
+        m_mediaLabel = mediaLabel;
+        m_image.load(media.value(QStringLiteral("resource")).toString());
+        if (m_image.isNull()) {
+            m_mediaLabel = m_genericLabel;
+        }
+        setAccessibleName(QStringLiteral("%1 — %2").arg(caption, m_mediaLabel));
+        setAccessibleDescription(m_mediaLabel);
         update();
     }
 
@@ -149,13 +150,7 @@ protected:
         labelFont.setBold(true);
         labelFont.setPointSizeF(qMax(7.0, labelFont.pointSizeF() - 1.5));
         painter.setFont(labelFont);
-        const QString label = m_isBoard
-                                ? QCoreApplication::translate("BluMachCollectionWidget",
-                                                              "Board recreation")
-                                : (!m_image.isNull()
-                                       ? QCoreApplication::translate("BluMachCollectionWidget",
-                                                                     "Concept illustration")
-                                       : m_formFactorLabel);
+        const QString label = m_mediaLabel;
         const int labelWidth = painter.fontMetrics().horizontalAdvance(label) + 18;
         QRectF labelRect(10, 10, labelWidth, 24);
         painter.setPen(Qt::NoPen);
@@ -168,11 +163,10 @@ protected:
     }
 
 private:
-    QString m_productId;
     QString m_formFactor;
-    QString m_formFactorLabel;
+    QString m_genericLabel;
+    QString m_mediaLabel;
     QPixmap m_image;
-    bool    m_isBoard = false;
 };
 
 class CollectionItemDelegate final : public QStyledItemDelegate {
@@ -342,6 +336,7 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_filterLayout->setVerticalSpacing(7);
     m_search = new QLineEdit(this);
     m_search->setClearButtonEnabled(true);
+    m_search->setAccessibleName(tr("Search historical computers"));
     m_statusFilter = new QComboBox(this);
     m_statusFilter->setMinimumWidth(190);
     m_advancedFiltersButton = new QToolButton(this);
@@ -366,6 +361,7 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_resultsLabel = new QLabel(this);
     m_resultsLabel->setObjectName(QStringLiteral("blumachResultsLabel"));
     m_resultsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_resultsLabel->setAccessibleName(tr("Search results"));
     mainLayout->addLayout(m_filterLayout);
 
     m_splitter = new QSplitter(this);
@@ -378,6 +374,7 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     m_tree->setIndentation(14);
     m_tree->setRootIsDecorated(true);
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_tree->setAccessibleName(tr("Historical computer catalogue"));
     m_tree->setItemDelegate(new CollectionItemDelegate(m_tree));
 
     auto *detailPanel = new QWidget(m_splitter);
@@ -434,6 +431,7 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     detailLayout->addWidget(m_warningFrame);
 
     m_infoTabs = new QTabWidget(detailPanel);
+    m_infoTabs->setAccessibleName(tr("Machine information"));
     m_infoTabs->setDocumentMode(true);
     m_infoTabs->setElideMode(Qt::ElideRight);
     m_infoTabs->tabBar()->setUsesScrollButtons(false);
@@ -484,6 +482,25 @@ BluMachCollectionWidget::BluMachCollectionWidget(QWidget *parent)
     connect(m_tree, &QTreeWidget::itemExpanded, this, [this] { if (!m_filterRevealActive) saveUiState(); });
     connect(m_tree, &QTreeWidget::itemCollapsed, this, [this] { if (!m_filterRevealActive) saveUiState(); });
     connect(m_splitter, &QSplitter::splitterMoved, this, [this] { saveUiState(); });
+    auto *findShortcut = new QShortcut(QKeySequence::Find, this);
+    findShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(findShortcut, &QShortcut::activated, m_search, [this] {
+        m_search->setFocus();
+        m_search->selectAll();
+    });
+    auto *escapeShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    escapeShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(escapeShortcut, &QShortcut::activated, this, [this] {
+        if (m_advancedFiltersButton->isChecked()) {
+            m_advancedFiltersButton->setChecked(false);
+            m_advancedFiltersButton->setFocus();
+        } else if (!m_search->text().isEmpty()) {
+            clearFilters();
+        }
+    });
+    QWidget::setTabOrder(m_search, m_advancedFiltersButton);
+    QWidget::setTabOrder(m_advancedFiltersButton, m_tree);
+    QWidget::setTabOrder(m_tree, m_infoTabs);
     reloadLanguage();
     updateAppearance();
     // The catalogue is constructed before the main-window header connects to
@@ -976,9 +993,13 @@ void BluMachCollectionWidget::updateDetails(QTreeWidgetItem *item)
     const auto formFactors = product->facets.value(QStringLiteral("form_factor")).toArray();
     const QString formFactor = formFactors.isEmpty() ? QStringLiteral("desktop")
                                                      : formFactors.at(0).toString();
+    const QString genericLabel = m_catalog.text(QStringLiteral("media.kind.generic_form_factor"))
+                                     .arg(m_catalog.facetValueText(QStringLiteral("form_factor"), formFactor));
+    const QString mediaLabel = product->media.isEmpty()
+                                 ? genericLabel
+                                 : m_catalog.text(product->media.value(QStringLiteral("label_key")).toString());
     static_cast<MachineIllustration *>(m_machineIllustration)
-        ->setProduct(product->id, product->name, formFactor,
-                     m_catalog.facetValueText(QStringLiteral("form_factor"), formFactor));
+        ->setProduct(product->name, formFactor, genericLabel, product->media, mediaLabel);
     updateResponsiveLayout();
     if (!product->warningKey.isEmpty()) {
         m_warningLabel->setText(m_catalog.text(product->warningKey));

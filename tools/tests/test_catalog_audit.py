@@ -86,6 +86,28 @@ class CatalogAuditTests(unittest.TestCase):
 
         self.assertEqual([], errors)
 
+    def test_media_requires_explicit_kind_and_resource(self) -> None:
+        errors: list[str] = []
+        catalog_audit.validate_media(
+            "example", {"media": {"kind": "image", "resource": "example.jpg"}}, errors
+        )
+
+        self.assertEqual(3, len(errors))
+
+    def test_media_accepts_declared_concept_illustration(self) -> None:
+        errors: list[str] = []
+        catalog_audit.validate_media(
+            "example",
+            {"media": {
+                "kind": "concept_illustration",
+                "resource": ":/blumach/catalog/images/example.jpg",
+                "label_key": "media.kind.concept_illustration",
+            }},
+            errors,
+        )
+
+        self.assertEqual([], errors)
+
 
 if __name__ == "__main__":
     unittest.main()

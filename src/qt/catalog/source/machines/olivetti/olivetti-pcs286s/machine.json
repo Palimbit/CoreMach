@@ -45,6 +45,11 @@
         "ide"
       ]
     },
+    "media": {
+      "kind": "board_recreation",
+      "resource": ":/blumach/catalog/images/olivetti-pcs286s-board.jpg",
+      "label_key": "media.kind.board_recreation"
+    },
     "hardware": {
       "cpu": "Intel 80286 at 12 MHz; TI BIOS modes 6/6, 12/6 and 12/12 MHz",
       "memory": "1, 2 and 4 MB validated on the TI/OLIMCU16 board. Experimental generic ISA/AT expansion profiles also boot with 8 and 16 MB total; they prove a workable emulation path, not the existence of a specific Olivetti expansion card",

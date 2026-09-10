@@ -247,6 +247,25 @@ def validate_creation(product_id: str, product: dict[str, Any], errors: list[str
                 errors.append(f"{location} must define a section and values object")
 
 
+def validate_media(product_id: str, product: dict[str, Any], errors: list[str]) -> None:
+    media = product.get("media")
+    if media is None:
+        return
+    owner = f"catalog.json: product {product_id!r}.media"
+    if not isinstance(media, dict):
+        errors.append(f"{owner} must be an object")
+        return
+    if media.get("kind") not in {"photograph", "concept_illustration", "board_recreation"}:
+        errors.append(f"{owner}.kind must identify the documentary media type")
+    resource = media.get("resource")
+    if not isinstance(resource, str) or not re.fullmatch(
+        r":/blumach/catalog/images/[a-z0-9][a-z0-9_-]*\.(?:png|jpg|jpeg|webp)", resource
+    ):
+        errors.append(f"{owner}.resource must be a catalogue image resource path")
+    if not isinstance(media.get("label_key"), str) or not media.get("label_key"):
+        errors.append(f"{owner}.label_key is required")
+
+
 def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
     if not isinstance(catalog, dict):
         errors.append("catalog.json: root must be an object")
@@ -308,6 +327,7 @@ def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
         if status not in VALID_STATUSES:
             errors.append(f"catalog.json: product {product_id!r} has invalid status {status!r}")
         validate_creation(product_id, product, errors)
+        validate_media(product_id, product, errors)
         implementation = product.get("implementation")
         if implementation is not None:
             if not isinstance(implementation, dict):

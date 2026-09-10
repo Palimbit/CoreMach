@@ -129,7 +129,8 @@ BluMachCatalogSkin::manufacturerMarksEnabled()
 }
 
 bool
-BluMachCatalogSkin::inspectDirectory(const QString &directory, QString *name, QString *errorMessage)
+BluMachCatalogSkin::inspectDirectory(const QString &directory, QString *name,
+                                     QString *errorMessage, QString *warningMessage)
 {
     QJsonObject manifest;
     QString root;
@@ -137,6 +138,20 @@ BluMachCatalogSkin::inspectDirectory(const QString &directory, QString *name, QS
         return false;
     if (name)
         *name = manifest.value(QStringLiteral("name")).toString().trimmed();
+    int rejectedMarks = 0;
+    const auto marks = manifest.value(QStringLiteral("manufacturer_marks")).toObject();
+    for (auto it = marks.constBegin(); it != marks.constEnd(); ++it) {
+        const auto mark = it.value().toObject();
+        QString imagePath;
+        if (!resolveImage(root, mark.value(QStringLiteral("asset")).toString(), &imagePath))
+            ++rejectedMarks;
+    }
+    if (warningMessage) {
+        warningMessage->clear();
+        if (rejectedMarks > 0)
+            *warningMessage = QStringLiteral("%1 manufacturer mark(s) could not be loaded.")
+                                  .arg(rejectedMarks);
+    }
     return true;
 }
 

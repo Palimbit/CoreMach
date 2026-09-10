@@ -39,6 +39,11 @@
         "xta"
       ]
     },
+    "media": {
+      "kind": "concept_illustration",
+      "resource": ":/blumach/catalog/images/olivetti-pcs86.jpg",
+      "label_key": "media.kind.concept_illustration"
+    },
     "hardware": {
       "cpu": "NEC V30 10 MHz, 0 wait states",
       "memory": "640 KB; expansion to 2.5 MB, LIM 4.0/EMS",

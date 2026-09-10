@@ -25,7 +25,8 @@ public:
     static QString configuredDirectory();
     static bool    manufacturerMarksEnabled();
     static bool    inspectDirectory(const QString &directory, QString *name = nullptr,
-                                    QString *errorMessage = nullptr);
+                                    QString *errorMessage = nullptr,
+                                    QString *warningMessage = nullptr);
 
     [[nodiscard]] QString displayName() const;
     [[nodiscard]] BluMachManufacturerMark manufacturerMark(const QString &manufacturerId) const;

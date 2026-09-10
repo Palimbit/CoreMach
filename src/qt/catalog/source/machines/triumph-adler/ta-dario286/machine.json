@@ -40,6 +40,11 @@
         "ide"
       ]
     },
+    "media": {
+      "kind": "concept_illustration",
+      "resource": ":/blumach/catalog/images/ta-dario286.jpg",
+      "label_key": "media.kind.concept_illustration"
+    },
     "hardware": {
       "cpu": "Intel 80286 12/6 MHz, 1 wait state",
       "memory": "1 MB standard; board configurations from 512 KB to 4 MB",
