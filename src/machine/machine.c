@@ -143,6 +143,11 @@ machine_init(void)
 {
     bios_only = 0;
 
+    /* A failed or replaced machine must never leave host controls from its
+       predecessor visible.  The active platform registers its own controls
+       once its device state is ready. */
+    machine_runtime_controls_set(NULL, 0);
+
     machine_set_p1_default(machines[machine].kbc_p1);
     machine_set_ps2();
 

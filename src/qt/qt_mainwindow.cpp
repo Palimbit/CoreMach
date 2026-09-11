@@ -100,6 +100,23 @@ extern bool fast_forward;
 #    include <QVulkanFunctions>
 #endif
 
+static QString
+machineRuntimeControlText(const char *sourceText)
+{
+    /* These anchors make the machine-owned labels visible to Qt's translation
+       extractor while retaining the machine/device as descriptor owner. */
+    static const char *const translatableStrings[] = {
+        QT_TRANSLATE_NOOP("MachineRuntimeControls", "Display output"),
+        QT_TRANSLATE_NOOP("MachineRuntimeControls", "Display lines"),
+        QT_TRANSLATE_NOOP("MachineRuntimeControls", "Internal plasma"),
+        QT_TRANSLATE_NOOP("MachineRuntimeControls", "External RGB"),
+        QT_TRANSLATE_NOOP("MachineRuntimeControls", "350 lines"),
+        QT_TRANSLATE_NOOP("MachineRuntimeControls", "400 lines")
+    };
+    Q_UNUSED(translatableStrings);
+    return QCoreApplication::translate("MachineRuntimeControls", sourceText);
+}
+
 void qt_set_sequence_auto_mnemonic(bool b);
 
 #include <array>
@@ -217,24 +234,55 @@ MainWindow::MainWindow(QWidget *parent)
     extern MainWindow *main_window;
     main_window = this;
     ui->setupUi(this);
-    auto displayMenu = ui->menuView->addMenu(tr("T3200 display"));
-    auto plasmaAction = displayMenu->addAction(tr("Internal plasma (Fn + Home / Right Ctrl + Home)"));
-    auto crtAction = displayMenu->addAction(tr("External RGB (Fn + End / Right Ctrl + End)"));
-    auto extendAction = displayMenu->addAction(tr("Toggle 350/400 lines (Fn + Down / Right Ctrl + Down)"));
-    connect(extendAction, &QAction::triggered, this, [] { t3200_display_extend(); });
-    plasmaAction->setCheckable(true);
-    crtAction->setCheckable(true);
-    connect(plasmaAction, &QAction::triggered, this, [] { t3200_display_request(0); });
-    connect(crtAction, &QAction::triggered, this, [] { t3200_display_request(1); });
-    auto displayTimer = new QTimer(this);
-    connect(displayTimer, &QTimer::timeout, this, [displayMenu, plasmaAction, crtAction] {
-        const int active = t3200_display_get();
-        displayMenu->menuAction()->setVisible(active >= 0);
-        plasmaAction->setChecked(active == 0);
-        crtAction->setChecked(active == 1);
+    /* The platform owns both the control descriptors and state transitions.
+       The Qt layer only renders those descriptors, so adding a machine never
+       requires a product-ID conditional here. */
+    auto machineControlsMenu = ui->menuView->addMenu(tr("Machine controls"));
+    auto machineControlsTimer = new QTimer(this);
+    connect(machineControlsTimer, &QTimer::timeout, this, [machineControlsMenu] {
+        size_t controlCount = 0;
+        const machine_runtime_control_t *controls = machine_runtime_controls_get(&controlCount);
+        const auto previousControls = reinterpret_cast<const machine_runtime_control_t *>(
+            machineControlsMenu->property("machineControlsSource").value<quintptr>());
+        const size_t previousCount = machineControlsMenu->property("machineControlsCount").toULongLong();
+
+        if (controls != previousControls || controlCount != previousCount) {
+            machineControlsMenu->clear();
+            machineControlsMenu->setProperty("machineControlsSource",
+                                             QVariant::fromValue<quintptr>(reinterpret_cast<quintptr>(controls)));
+            machineControlsMenu->setProperty("machineControlsCount", QVariant::fromValue<qulonglong>(controlCount));
+
+            for (size_t index = 0; index < controlCount; index++) {
+                const auto &control = controls[index];
+                if (control.kind != MACHINE_RUNTIME_CONTROL_SELECTOR || control.get == nullptr || control.set == nullptr)
+                    continue;
+
+                auto controlMenu = machineControlsMenu->addMenu(machineRuntimeControlText(control.label));
+                auto group = new QActionGroup(controlMenu);
+                group->setExclusive(true);
+                for (int value = 0; value < control.value_count; value++) {
+                    auto action = controlMenu->addAction(machineRuntimeControlText(control.values[value]));
+                    action->setCheckable(true);
+                    group->addAction(action);
+                    connect(action, &QAction::triggered, action, [control, value] { control.set(value); });
+
+                    /* The platform can change the value through firmware or
+                       a keyboard chord, so reflect it without treating the
+                       host menu as the state owner. */
+                    auto stateTimer = new QTimer(action);
+                    connect(stateTimer, &QTimer::timeout, action, [action, control, value] {
+                        const int current = control.get();
+                        action->setEnabled(current >= 0);
+                        action->setChecked(current == value);
+                    });
+                    stateTimer->start(200);
+                }
+            }
+        }
+        machineControlsMenu->menuAction()->setVisible(controlCount != 0);
     });
-    displayMenu->menuAction()->setVisible(false);
-    displayTimer->start(200);
+    machineControlsMenu->menuAction()->setVisible(false);
+    machineControlsTimer->start(200);
     status->setSoundMenu(ui->menuSound);
     ui->actionMute_Unmute->setText(sound_muted ? tr("&Unmute") : tr("&Mute"));
     ui->stackedWidget->setMouseTracking(true);

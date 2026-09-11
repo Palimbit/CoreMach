@@ -95,6 +95,37 @@ void t3200_display_extend(void)
         atomic_fetch_xor(&t3200_extension_target, 1);
 }
 
+static int
+t3200_display_extended_get(void)
+{
+    return t3200_display_get() < 0 ? -1 : atomic_load(&t3200_extension_target);
+}
+
+static void
+t3200_display_extended_request(int extended)
+{
+    if (t3200_display_extended_get() >= 0 &&
+        atomic_load(&t3200_extension_target) != !!extended)
+        t3200_display_extend();
+}
+
+static const char *const t3200_display_values[] = {
+    "Internal plasma",
+    "External RGB"
+};
+
+static const char *const t3200_line_values[] = {
+    "350 lines",
+    "400 lines"
+};
+
+static const machine_runtime_control_t t3200_runtime_controls[] = {
+    { "display.output", "Display output", MACHINE_RUNTIME_CONTROL_SELECTOR,
+      t3200_display_values, 2, t3200_display_get, t3200_display_request },
+    { "display.lines", "Display lines", MACHINE_RUNTIME_CONTROL_SELECTOR,
+      t3200_line_values, 2, t3200_display_extended_get, t3200_display_extended_request }
+};
+
 int t3200_display_hotkey(int down, uint16_t scan)
 {
     static int swallowed[3];
@@ -508,6 +539,8 @@ t3200_init(const device_t *info)
     atomic_store(&t3200_display_target, 0);
     atomic_store(&t3200_extension_target, 0);
     atomic_store(&t3200_display_active, 0);
+    machine_runtime_controls_set(t3200_runtime_controls,
+                                 sizeof(t3200_runtime_controls) / sizeof(t3200_runtime_controls[0]));
     if (machine_get_config_int("provisional_plasma"))
         t3200_plasma_palette(dev);
     dev->ega.x_add = 8;
@@ -556,6 +589,7 @@ static void
 t3200_close(void *priv)
 {
     t3200_t *dev = priv;
+    machine_runtime_controls_clear(t3200_runtime_controls);
     atomic_store(&t3200_display_active, -1);
     monitors[0].mon_pixel_height_ratio = 0.0;
     t3200_platform = NULL;
