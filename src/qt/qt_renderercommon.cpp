@@ -133,7 +133,16 @@ RendererCommon::onResize(int width, int height)
     height = round(pixelRatio * height);
 
     const double physicalPixelHeight = monitors[r_monitor_index].mon_pixel_height_ratio;
-    if (physicalPixelHeight <= 0.0 && is_fs && (video_fullscreen_scale_maximized ? (parent_max && main_is_max) : 1) && !(force_43 && vid_resize))
+    /*
+     * Some video devices publish their physical pixel ratio before the first
+     * valid source rectangle.  In keep-ratio mode a zero source height makes
+     * the scale infinite and Qt 6 aborts when that value reaches QRect.  Draw
+     * with the widget dimensions until the first real frame establishes the
+     * source geometry.
+     */
+    const bool sourceGeometryValid = source.width() > 0 && source.height() > 0;
+    if (!sourceGeometryValid ||
+        (physicalPixelHeight <= 0.0 && is_fs && (video_fullscreen_scale_maximized ? (parent_max && main_is_max) : 1) && !(force_43 && vid_resize)))
         destination.setRect(0, 0, width, height);
     else {
         auto   temp_fullscreen_scale = video_fullscreen_scale;
