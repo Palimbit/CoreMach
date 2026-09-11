@@ -82,6 +82,55 @@ static atomic_int t5100_fn_notification  = 0;
 static void t5100_apply_display(t5100_t *dev);
 #endif
 
+static int
+t5100_display_get(void)
+{
+    return atomic_load(&t5100_display_active);
+}
+
+static void
+t5100_display_request(int external)
+{
+    if (t5100_display_get() >= 0 &&
+        atomic_load(&t5100_display_target) != !!external) {
+        atomic_store(&t5100_display_target, !!external);
+        atomic_store(&t5100_fn_notification, external ? 0x01 : 0x09);
+    }
+}
+
+static int
+t5100_display_extended_get(void)
+{
+    return t5100_display_get() < 0 ? -1 : atomic_load(&t5100_extension_target);
+}
+
+static void
+t5100_display_extended_request(int extended)
+{
+    if (t5100_display_extended_get() >= 0 &&
+        atomic_load(&t5100_extension_target) != !!extended) {
+        atomic_store(&t5100_extension_target, !!extended);
+        atomic_store(&t5100_fn_notification, 0x02);
+    }
+}
+
+static const char *const t5100_display_values[] = {
+    "Internal plasma",
+    "External RGB"
+};
+
+static const char *const t5100_line_values[] = {
+    "350 lines",
+    "400 lines"
+};
+
+static const machine_runtime_control_t t5100_runtime_controls[] = {
+    { "display.output", "Display output", MACHINE_RUNTIME_CONTROL_SELECTOR,
+      t5100_display_values, 2, t5100_display_get, t5100_display_request },
+    { "display.lines", "Display lines", MACHINE_RUNTIME_CONTROL_SELECTOR,
+      t5100_line_values, 2, t5100_display_extended_get, t5100_display_extended_request }
+};
+
 int
 t5100_display_hotkey(int down, uint16_t scan)
 {
@@ -532,6 +581,8 @@ t5100_init(const device_t *info)
     atomic_store(&t5100_extension_target, 0);
     atomic_store(&t5100_fn_notification, 0);
     atomic_store(&t5100_display_active, 0);
+    machine_runtime_controls_set(t5100_runtime_controls,
+                                 sizeof(t5100_runtime_controls) / sizeof(t5100_runtime_controls[0]));
     t5100_plasma_palette(dev);
     /* The compatibility handoff returns before the option-ROM entry runs.
        Establish a safe initial renderer for that short pre-scan interval. */
@@ -602,6 +653,7 @@ static void
 t5100_close(void *priv)
 {
     t5100_t *dev = priv;
+    machine_runtime_controls_clear(t5100_runtime_controls);
     atomic_store(&t5100_display_active, -1);
     atomic_store(&t5100_fn_notification, 0);
     if (dev->trace)

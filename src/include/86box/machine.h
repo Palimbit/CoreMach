@@ -23,6 +23,8 @@
 #ifndef EMU_MACHINE_H
 #define EMU_MACHINE_H
 
+#include <stddef.h>
+
 /* Machine feature flags. */
 #define MACHINE_BUS_NONE      0x00000000 /* sys has no bus */
 /* Feature flags for BUS'es. */
@@ -342,6 +344,26 @@ typedef struct _machine_memory_ {
     const uint32_t *valid;
 } machine_memory_t;
 
+/*
+ * Runtime controls are small, machine-owned actions that a host UI may
+ * present while a machine is running.  They deliberately do not describe
+ * configuration jumpers, nor generic window preferences: the machine/device
+ * remains the authority for availability and for changing emulated state.
+ */
+typedef enum machine_runtime_control_kind_t {
+    MACHINE_RUNTIME_CONTROL_SELECTOR = 0
+} machine_runtime_control_kind_t;
+
+typedef struct _machine_runtime_control_ {
+    const char *                   id;
+    const char *                   label;
+    machine_runtime_control_kind_t kind;
+    const char *const *            values;
+    int                            value_count;
+    int                          (*get)(void); /* Negative means unavailable. */
+    void                         (*set)(int value);
+} machine_runtime_control_t;
+
 typedef struct _machine_ {
     const char            *name;
     const char            *internal_name;
@@ -417,6 +439,9 @@ extern const char *    machine_get_internal_name(void);
 extern const char *    machine_get_nvr_name(void);
 extern int             machine_get_machine_from_internal_name(const char *s);
 extern void            machine_init(void);
+extern const machine_runtime_control_t *machine_runtime_controls_get(size_t *count);
+extern void            machine_runtime_controls_set(const machine_runtime_control_t *controls, size_t count);
+extern void            machine_runtime_controls_clear(const machine_runtime_control_t *controls);
 #ifdef EMU_DEVICE_H
 extern const device_t *machine_get_kbc_device(int m);
 extern const device_t *machine_get_nvr_device(int m);
