@@ -23,6 +23,10 @@ failed hypotheses and replacement criteria behind those compromises.
 - IDE initialization is present, but the documented Conner disks are omitted
   from catalogue creation until their geometries and firmware behavior are
   validated.
+- The half-length expansion position can be reserved for its documented
+  Toshiba-only **A form factor** instead of ISA-8. Its initial endpoint exposes
+  I/O, option-ROM/memory and IRQ5/IRQ9 services for a future documented card;
+  it does not emulate a card yet.
 
 The firmware's Plasma/CRT-only selection controls whether the internal panel
 is active. When CRT-only has blanked the panel, **Ctrl+Home** performs the
@@ -70,8 +74,11 @@ These checks establish a functional vertical slice, not cycle accuracy.
   its orange transfer curve is visually inferred and not calibrated from real
   hardware.
 - Exact regional characters require the missing 64 KB CG-ROM.
-- External-floppy routing, proprietary expansion behavior and documented
-  Conner hard disks remain incomplete.
+- The A-form endpoint is specific to the T5200 and models that later receive
+  positive connector evidence. It is mutually exclusive with the half-length
+  ISA-8 position; PJ12's 16-bit extension, electrical timing/DMA behavior and
+  arbitrary ISA-card compatibility remain unmodeled.
+- External-floppy routing and documented Conner hard disks remain incomplete.
 - Ctrl+Home currently reaches the PDC model directly. The original 8749
   SCC/8042/BIOS notification transaction and CRT indicator are not reproduced.
 
@@ -79,6 +86,7 @@ These checks establish a functional vertical slice, not cycle accuracy.
 
 - [Toshiba T5200 Maintenance Manual](https://archive.org/details/toshiba-t-5200-maintenance-manual)
 - [Toshiba T5200 and T5200C summary](https://www.minuszerodegrees.net/manuals/Toshiba/Other/Toshiba%20T5200%20and%20T5200C%20-%20Summary.pdf)
+- [T5200 TECHaccess specification](https://conventionalmemories.com/Toshiba/TECHaccess/tech5580.htm)
 
 The canonical local preservation record is `library/toshiba/t5200`, stable ID
 `t5200`. Firmware, diagnostics, disks, manuals and validation captures remain

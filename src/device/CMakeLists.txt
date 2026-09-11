@@ -66,6 +66,7 @@ add_library(dev OBJECT
     smbus_piix4.c
     smbus_sis5595.c
     tulip_jumper.c
+    toshiba_aform.c
     unittester.c
     zenith_scratchpad.c
     lightpen_pxl380.c

@@ -23,6 +23,7 @@
 #include <86box/86box.h>
 #include "cpu.h"
 #include <86box/timer.h>
+#include <86box/toshiba_aform.h>
 #include <86box/io.h>
 #include <86box/device.h>
 #include <86box/chipset.h>
@@ -123,6 +124,21 @@ static const device_config_t t5200_config[] = {
         .selection      = {
             { .description = "External VGA and internal 11.5-inch gas plasma", .value = 0 },
             { .description = "External color VGA only",                       .value = 1 },
+            { .description = "" }
+        },
+        .bios           = { { 0 } }
+    },
+    {
+        .name           = "half_length_expansion",
+        .description    = "Half-length expansion position",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "IBM PC/XT-compatible ISA-8 position", .value = 0 },
+            { .description = "Toshiba proprietary A form factor (reserved)", .value = 1 },
             { .description = "" }
         },
         .bios           = { { 0 } }
@@ -567,6 +583,20 @@ machine_at_t5200_init(const machine_t *model)
     device_add(&t5200_cache_control_device);
     device_add(&t5200_platform_control_device);
     device_add(&t5200_ems_device);
+
+    /*
+     * TECHaccess documents this as an alternative to the half-length ISA-8
+     * position. It is deliberately a T5200-owned endpoint rather than a
+     * globally available ISA bus. No card attaches until it has its own
+     * documented A-form implementation.
+     */
+    if (device_get_config_int("half_length_expansion")) {
+        const toshiba_aform_slot_params_t aform_params = {
+            .machine = "t5200",
+            .signals = TOSHIBA_AFORM_T5200_SIGNALS
+        };
+        device_add_params(&toshiba_aform_slot_device, (void *) &aform_params);
+    }
 
     if (fdc_current[0] == FDC_INTERNAL)
         device_add(&fdc_at_device);
