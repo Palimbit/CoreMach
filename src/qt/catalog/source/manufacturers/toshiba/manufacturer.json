@@ -3,6 +3,12 @@
   "manufacturer": {
     "id": "toshiba",
     "name": "Toshiba",
-    "description_key": "manufacturer.toshiba.description"
+    "description_key": "manufacturer.toshiba.description",
+    "history_key": "manufacturer.toshiba.history",
+    "history_references": [
+      {"title": "Chronology of History", "publisher": "Toshiba Corporation", "url": "https://www.global.toshiba/ww/outline/corporate/history/chronology.html"},
+      {"title": "Toshiba's Portable PCs Set New Sales Record", "publisher": "Toshiba Corporation", "url": "https://www.global.toshiba/ww/news/corporate/1997/11/pr0401.html"},
+      {"title": "T1100", "publisher": "Information Processing Society of Japan Computer Museum", "url": "https://museum.ipsj.or.jp/en/heritage/T1100.html"}
+    ]
   }
 }
