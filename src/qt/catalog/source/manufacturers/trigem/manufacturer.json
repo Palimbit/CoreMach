@@ -5,6 +5,22 @@
     "name": "TriGem",
     "description_key": "manufacturer.trigem.description",
     "history_key": "manufacturer.trigem.history",
-    "history_source_url": "https://trigem.co.kr/company/company_history.jsp"
+    "history_references": [
+      {
+        "title": "History Overview",
+        "publisher": "TG&Co., Inc.",
+        "url": "https://en.tgnco.kr/history/"
+      },
+      {
+        "title": "Company History",
+        "publisher": "TG Sambo",
+        "url": "https://www.trigem.co.kr/company/company_history.jsp"
+      },
+      {
+        "title": "TriGem 20XT / HPM-8000, Korea's first exported PC",
+        "publisher": "Ministry of Trade, Industry and Energy, Republic of Korea",
+        "url": "https://www.motir.go.kr/kor/search?kwd=TriGem%2020XT"
+      }
+    ]
   }
 }
