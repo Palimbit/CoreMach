@@ -5,6 +5,17 @@
     "name": "Triumph-Adler",
     "description_key": "manufacturer.triumph-adler.description",
     "history_key": "manufacturer.triumph-adler.history",
-    "history_source_url": "https://www.triumph-adler.com/resource/blob/18288/94911497d9a5c4ed3c64a7cb8cd6fbde/ta-historie-e_2022-09-08.pdf"
+    "history_references": [
+      {
+        "title": "Our History",
+        "publisher": "TA Triumph-Adler GmbH",
+        "url": "https://www.triumph-adler.com/resource/blob/18288/94911497d9a5c4ed3c64a7cb8cd6fbde/ta-historie-e_2022-09-08.pdf"
+      },
+      {
+        "title": "The Company",
+        "publisher": "TA Triumph-Adler GmbH",
+        "url": "https://www.triumph-adler.com/ta-en-de/the-company"
+      }
+    ]
   }
 }
