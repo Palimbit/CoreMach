@@ -3,6 +3,11 @@
   "manufacturer": {
     "id": "amstrad",
     "name": "Amstrad",
-    "description_key": "manufacturer.amstrad.description"
+    "description_key": "manufacturer.amstrad.description",
+    "history_key": "manufacturer.amstrad.history",
+    "history_references": [
+      {"title": "About us", "publisher": "Amstrad", "url": "https://amstrad.com/about-us/"},
+      {"title": "Curriculum Vitae: Alan Michael Sugar", "publisher": "Alan Sugar", "url": "https://www.two-mag.com/cpc/ACME/AMSTRAD_LTD_CO/ALAN-MICHAEL_SUGAR/LIVRES/Alan_SUGAR_The_CV%5BENG%5D.pdf"}
+    ]
   }
 }
