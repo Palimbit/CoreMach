@@ -1270,7 +1270,10 @@ nvr_at_init(const device_t *info)
 
     /* Factory state expected by the PCS 386SX Phoenix v1.14 diagnostics. */
     if (nvr->is_new && (machines[machine].init == machine_at_olivetti_pcs386sx_init)) {
+        const uint16_t extended_kb = (mem_size > 1024) ? (uint16_t) (mem_size - 1024) : 0;
+
         nvr->regs[0x0e] = 0x00;
+        nvr->regs[0x10] = 0x40; /* One integrated 3.5-inch 1.44 MB floppy. */
         if (hdd[0].bus_type == HDD_BUS_IDE)
             nvr->regs[0x12] = 0x40; /* Olivetti type 4: Conner CP3104. */
         /* Phoenix splits the six SET-UP video choices across CMOS 14h and
@@ -1279,19 +1282,36 @@ nvr_at_init(const device_t *info)
         nvr->regs[0x14] = 0x01 | ((fpu_type != FPU_NONE) ? 0x02 : 0x00);
         nvr->regs[0x15] = 0x80;
         nvr->regs[0x16] = 0x02; /* 640 KiB base memory. */
-        nvr->regs[0x17] = 0x80;
-        nvr->regs[0x18] = 0x01; /* 384 KiB extended in the 1 MiB profile. */
+        /* Phoenix 1.14 stores memory above the first MiB in little-endian
+         * KiB at 17h/18h and mirrors it at 30h/31h.  Preserved working CMOS
+         * images contain 0000h, 0400h, 0C00h and 1C00h for the supported
+         * 1, 2, 4 and 8 MiB populations respectively. */
+        nvr->regs[0x17] = extended_kb & 0xff;
+        nvr->regs[0x18] = extended_kb >> 8;
         nvr->regs[0x1c] = 0x20; /* SET-UP choice 5: 80x25 internal PVGA1A. */
+        /* Phoenix/Olivetti factory-layout marker observed in every validated
+         * PCS 386SX image. Without it, POST treats the otherwise valid
+         * equipment and memory fields as an unconfigured CMOS image. */
+        nvr->regs[0x2c] = 0xa5;
+        nvr->regs[0x2d] = 0x03;
+        nvr->regs[0x30] = extended_kb & 0xff;
+        nvr->regs[0x31] = extended_kb >> 8;
+        /* The validated factory image records the 384 KiB between 640 KiB
+         * and 1 MiB separately from memory above 1 MiB. */
+        nvr->regs[0x33] = 0x80;
+        nvr->regs[0x34] = 0x01;
         uint16_t sum = 0;
         for (int i = 0x10; i <= 0x2d; i++)
             sum += nvr->regs[i];
         nvr->regs[0x2e] = (sum >> 8) & 0xff;
-        nvr->regs[0x2f] = sum & 0x7f;
+        nvr->regs[0x2f] = sum & 0xff;
     }
 
-    /* The 80387 socket and the on-board/external video choice are physical
-     * equipment options.  Keep an existing PCS 386SX CMOS image consistent
-     * with the emulator selections and refresh the Phoenix checksum once.
+    /* Memory population, the 80387 socket and the on-board/external video
+     * choice are physical equipment options. Keep an existing PCS 386SX CMOS
+     * image consistent with the emulator selections and refresh the Phoenix
+     * checksum once. This also repairs CMOS images produced by the former
+     * fixed 1 MiB initializer when their configured RAM was later changed.
      *
      * Disassembly of Phoenix 1.14 at F:64C9 shows the exact encoding:
      *   CMOS 14h bits 4-5 = 1/2/3 -> 40x25/80x25/mono external
@@ -1299,6 +1319,9 @@ nvr_at_init(const device_t *info)
      *   CMOS 1Ch bits 4-5 = 1/2/3 -> 40x25/80x25/mono internal
      * Keep the machine default at 80x25 for either adapter family. */
     if (machines[machine].init == machine_at_olivetti_pcs386sx_init) {
+        const uint16_t extended_kb = (mem_size > 1024) ? (uint16_t) (mem_size - 1024) : 0;
+        const uint8_t  extended_lo = extended_kb & 0xff;
+        const uint8_t  extended_hi = extended_kb >> 8;
         const uint8_t equipment =
             (nvr->regs[0x14] & ~0x32) |
             ((fpu_type != FPU_NONE) ? 0x02 : 0x00) |
@@ -1306,14 +1329,29 @@ nvr_at_init(const device_t *info)
         const uint8_t video =
             (nvr->regs[0x1c] & ~0x30) |
             ((gfxcard[0] == VID_INTERNAL) ? 0x20 : 0x00);
-        if ((nvr->regs[0x14] != equipment) || (nvr->regs[0x1c] != video)) {
+        if ((nvr->regs[0x10] != 0x40) ||
+            (nvr->regs[0x14] != equipment) || (nvr->regs[0x1c] != video) ||
+            (nvr->regs[0x17] != extended_lo) || (nvr->regs[0x18] != extended_hi) ||
+            (nvr->regs[0x2c] != 0xa5) || (nvr->regs[0x2d] != 0x03) ||
+            (nvr->regs[0x30] != extended_lo) || (nvr->regs[0x31] != extended_hi) ||
+            (nvr->regs[0x33] != 0x80) || (nvr->regs[0x34] != 0x01)) {
+            nvr->regs[0x0e] = 0x00;
+            nvr->regs[0x10] = 0x40;
             nvr->regs[0x14] = equipment;
             nvr->regs[0x1c] = video;
+            nvr->regs[0x17] = extended_lo;
+            nvr->regs[0x18] = extended_hi;
+            nvr->regs[0x2c] = 0xa5;
+            nvr->regs[0x2d] = 0x03;
+            nvr->regs[0x30] = extended_lo;
+            nvr->regs[0x31] = extended_hi;
+            nvr->regs[0x33] = 0x80;
+            nvr->regs[0x34] = 0x01;
             uint16_t sum = 0;
             for (int i = 0x10; i <= 0x2d; i++)
                 sum += nvr->regs[i];
             nvr->regs[0x2e] = (sum >> 8) & 0xff;
-            nvr->regs[0x2f] = sum & 0x7f;
+            nvr->regs[0x2f] = sum & 0xff;
         }
     }
 

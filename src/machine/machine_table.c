@@ -6689,7 +6689,10 @@ const machine_t machines[] = {
             .max_multi   = 0
         },
         .bus_flags = MACHINE_AT,
-        .flags     = MACHINE_FLAGS_NONE,
+        /* The driver installs these motherboard resources itself.  Advertise
+           them here so the settings layer does not add ISA duplicates. */
+        .flags     = MACHINE_IDE | MACHINE_FDC | MACHINE_LPT_PRI |
+                     MACHINE_UART_PRI | MACHINE_VIDEO,
         .ram       = {
             .min  = 1024,
             .max  = 8192,
