@@ -75,6 +75,195 @@
     "creation": {
       "status": "experimental",
       "directory_prefix": "olivetti-pcs386sx",
+      "facts": [
+        {
+          "label_key": "creation.label.commercial_model",
+          "value_key": "product.olivetti-pcs386sx.creation.model"
+        },
+        {
+          "label_key": "technical.label.storage",
+          "value_key": "product.olivetti-pcs386sx.creation.storage"
+        }
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "4096",
+          "choices": [
+            {
+              "id": "1024",
+              "label_key": "product.olivetti-pcs386sx.creation.memory.1024",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 1024
+                }
+              ]
+            },
+            {
+              "id": "2048",
+              "label_key": "product.olivetti-pcs386sx.creation.memory.2048",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 2048
+                }
+              ]
+            },
+            {
+              "id": "4096",
+              "label_key": "product.olivetti-pcs386sx.creation.memory.4096",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 4096
+                }
+              ]
+            },
+            {
+              "id": "8192",
+              "label_key": "product.olivetti-pcs386sx.creation.memory.8192",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "mem_size",
+                  "value": 8192
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "coprocessor",
+          "label_key": "hardware.coprocessor",
+          "default": "none",
+          "choices": [
+            {
+              "id": "none",
+              "label_key": "product.olivetti-pcs386sx.creation.coprocessor.none",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "fpu_type",
+                  "value": "none"
+                }
+              ]
+            },
+            {
+              "id": "80387sx",
+              "label_key": "product.olivetti-pcs386sx.creation.coprocessor.80387sx",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Machine",
+                  "key": "fpu_type",
+                  "value": "387"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "hard_disk",
+          "label_key": "creation.label.hard_disk",
+          "default": "100mb",
+          "choices": [
+            {
+              "id": "20mb",
+              "label_key": "product.olivetti-pcs386sx.creation.disk.20mb",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_fn",
+                  "value": "conner-cp3024-20mb.img"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_parameters",
+                  "value": "17, 4, 615, 0, ide"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_ide_channel",
+                  "value": "0:0"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_speed",
+                  "value": "CP3024"
+                }
+              ]
+            },
+            {
+              "id": "40mb",
+              "label_key": "product.olivetti-pcs386sx.creation.disk.40mb",
+              "status": "documented",
+              "set": [
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_fn",
+                  "value": "conner-cp3044-40mb.img"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_parameters",
+                  "value": "17, 5, 980, 0, ide"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_ide_channel",
+                  "value": "0:0"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_speed",
+                  "value": "CP3044"
+                }
+              ]
+            },
+            {
+              "id": "100mb",
+              "label_key": "product.olivetti-pcs386sx.creation.disk.100mb",
+              "status": "validated",
+              "set": [
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_fn",
+                  "value": "conner-cp3104-100mb.img"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_parameters",
+                  "value": "33, 8, 776, 0, ide"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_ide_channel",
+                  "value": "0:0"
+                },
+                {
+                  "section": "Hard disks",
+                  "key": "hdd_01_speed",
+                  "value": "CP3104"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "note_keys": [
+        "product.olivetti-pcs386sx.creation.note"
+      ],
       "configuration": [
         {
           "section": "General",
@@ -125,6 +314,14 @@
         }
       ],
       "generated_files": [
+        {
+          "path": "conner-cp3024-20mb.img",
+          "size": 21411840
+        },
+        {
+          "path": "conner-cp3044-40mb.img",
+          "size": 42649600
+        },
         {
           "path": "conner-cp3104-100mb.img",
           "size": 104890368
