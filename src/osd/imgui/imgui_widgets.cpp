@@ -1577,7 +1577,20 @@ bool ImGui::TextLinkOpenURL(const char* label, const char* url)
     bool pressed = TextLink(label);
     if (pressed && g.PlatformIO.Platform_OpenInShellFn != NULL)
         g.PlatformIO.Platform_OpenInShellFn(&g, url);
-    SetItemTooltip(LocalizeGetMsg(ImGuiLocKey_OpenLink_s), url); // It is more reassuring for user to _always_ display URL when it is the same as the label.
+    const char* tooltip_fmt = LocalizeGetMsg(ImGuiLocKey_OpenLink_s);
+    const char* url_placeholder = ImStristr(tooltip_fmt, NULL, "%s", NULL);
+    ImGuiTextBuffer tooltip;
+    if (url_placeholder != NULL)
+    {
+        tooltip.append(tooltip_fmt, url_placeholder);
+        tooltip.append(url);
+        tooltip.append(url_placeholder + 2);
+    }
+    else
+    {
+        tooltip.append(tooltip_fmt);
+    }
+    SetItemTooltip("%s", tooltip.c_str()); // It is more reassuring for user to _always_ display URL when it is the same as the label.
     if (BeginPopupContextItem())
     {
         if (MenuItem(LocalizeGetMsg(ImGuiLocKey_CopyLink)))
