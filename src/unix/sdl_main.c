@@ -338,6 +338,9 @@ main(int argc, char **argv)
     SDL_Event event;
     int       ret = 0;
 
+    if (pc_print_version_if_requested(argc, argv))
+        return 0;
+
     SDL_Init(0);
     ret = pc_init(argc, argv);
     if (ret == 0)

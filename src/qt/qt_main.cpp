@@ -538,6 +538,9 @@ WindowsDarkModeFilter *vmm_dark_mode_filter = nullptr;
 int
 main(int argc, char *argv[])
 {
+    if (pc_print_version_if_requested(argc, argv))
+        return 0;
+
 #ifdef Q_OS_WINDOWS
     bool wasDarkTheme = false;
     /* Check if Windows supports UTF-8 */

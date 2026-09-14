@@ -50,5 +50,5 @@ endforeach()
 
 if(BLUMACH_UNRESOLVED_DEPENDENCIES)
     list(JOIN BLUMACH_UNRESOLVED_DEPENDENCIES ", " BLUMACH_UNRESOLVED_TEXT)
-    message(WARNING "Unresolved BluMach runtime dependencies: ${BLUMACH_UNRESOLVED_TEXT}")
+    message(FATAL_ERROR "Unresolved BluMach runtime dependencies: ${BLUMACH_UNRESOLVED_TEXT}")
 endif()
