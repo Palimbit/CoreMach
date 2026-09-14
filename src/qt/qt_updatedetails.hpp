@@ -31,10 +31,9 @@ public:
 
 private:
     Ui::UpdateDetails *ui;
-    static QString     jenkinsUpdateToMarkdown(const QList<UpdateCheck::JenkinsReleaseInfo> &releaseInfoList);
     static QString     githubUpdateToMarkdown(const QList<UpdateCheck::GithubReleaseInfo> &releaseInfoList);
 private slots:
-    static void visitDownloadPage(const UpdateCheck::UpdateChannel &channel);
+    static void visitDownloadPage();
 };
 
 #endif // QT_UPDATEDETAILS_HPP

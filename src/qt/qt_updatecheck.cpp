@@ -15,8 +15,6 @@
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QStandardPaths>
-#include <QTimer>
 
 #include "qt_updatecheck.hpp"
 #include "qt_downloader.hpp"
@@ -27,11 +25,10 @@ extern "C" {
 }
 
 UpdateCheck::
-    UpdateCheck(const UpdateChannel channel, QObject *parent)
+    UpdateCheck(QObject *parent)
     : QObject(parent)
 {
-    updateChannel  = channel;
-    currentVersion = getCurrentVersion(channel);
+    currentVersion = getCurrentVersion();
 }
 
 UpdateCheck::~UpdateCheck()
@@ -40,54 +37,10 @@ UpdateCheck::~UpdateCheck()
 void
 UpdateCheck::checkForUpdates()
 {
-    if (updateChannel == UpdateChannel::Stable) {
-        const auto githubDownloader = new Downloader(Downloader::DownloadLocation::Temp);
-        connect(githubDownloader, &Downloader::downloadCompleted, this, &UpdateCheck::githubDownloadComplete);
-        connect(githubDownloader, &Downloader::errorOccurred, this, &UpdateCheck::generalDownloadError);
-        githubDownloader->download(QUrl(githubReleaseApi), "github_releases.json");
-    } else {
-        const auto jenkinsDownloader = new Downloader(Downloader::DownloadLocation::Temp);
-        connect(jenkinsDownloader, &Downloader::downloadCompleted, this, &UpdateCheck::jenkinsDownloadComplete);
-        connect(jenkinsDownloader, &Downloader::errorOccurred, this, &UpdateCheck::generalDownloadError);
-        jenkinsDownloader->download(jenkinsLatestNReleasesUrl(10), "jenkins_list.json");
-    }
-}
-
-void
-UpdateCheck::jenkinsDownloadComplete(const QString &filename)
-{
-    auto generalError             = tr("Unable to determine release information");
-    auto jenkinsReleaseListResult = parseJenkinsJson(filename);
-    auto latestVersion            = 0; // NOLINT (Default value as a fallback)
-
-    if (!jenkinsReleaseListResult.has_value() || jenkinsReleaseListResult.value().isEmpty()) {
-        generalDownloadError(generalError);
-        return;
-    }
-    const auto jenkinsReleaseList = jenkinsReleaseListResult.value();
-    latestVersion                 = jenkinsReleaseListResult->first().buildNumber;
-
-    // If we can't determine the local build (blank current version), always show an update as available.
-    // Callers can adjust accordingly.
-    // Otherwise, do a comparison with EMU_BUILD_NUM
-    bool updateAvailable = false;
-    bool upToDate        = true;
-    if (currentVersion.isEmpty() || EMU_BUILD_NUM < latestVersion) {
-        updateAvailable = true;
-        upToDate        = false;
-    }
-
-    const auto updateResult = UpdateResult {
-        .channel         = updateChannel,
-        .updateAvailable = updateAvailable,
-        .upToDate        = upToDate,
-        .currentVersion  = currentVersion,
-        .latestVersion   = QString::number(latestVersion),
-        .githubInfo      = {},
-        .jenkinsInfo     = jenkinsReleaseList,
-    };
-
-    emit updateCheckComplete(updateResult);
+    const auto githubDownloader = new Downloader(Downloader::DownloadLocation::Temp);
+    connect(githubDownloader, &Downloader::downloadCompleted, this, &UpdateCheck::githubDownloadComplete);
+    connect(githubDownloader, &Downloader::errorOccurred, this, &UpdateCheck::generalDownloadError);
+    githubDownloader->download(githubReleaseApi, "github_releases.json");
 }
 
 void
@@ -125,147 +78,20 @@ UpdateCheck::githubDownloadComplete(const QString &filename)
     }
 
     const auto updateResult = UpdateResult {
-        .channel         = updateChannel,
         .updateAvailable = updateAvailable,
         .upToDate        = upToDate,
         .currentVersion  = currentVersion,
         .latestVersion   = latestVersion,
         .githubInfo      = githubReleaseList,
-        .jenkinsInfo     = {},
     };
 
     emit updateCheckComplete(updateResult);
 }
 
-QUrl
-UpdateCheck::jenkinsLatestNReleasesUrl(const int &count)
-{
-    Q_UNUSED(count);
-    return {};
-}
-
 QString
-UpdateCheck::getCurrentVersion(const UpdateChannel &updateChannel)
+UpdateCheck::getCurrentVersion()
 {
-    if (updateChannel == UpdateChannel::Stable) {
-        return { EMU_VERSION };
-    }
-    // If EMU_BUILD_NUM is anything other than the default of zero it was set by the build process
-    if constexpr (EMU_BUILD_NUM != 0) {
-        return QString::number(EMU_BUILD_NUM); // NOLINT because EMU_BUILD_NUM is defined as 0 by default and is set at build time
-    }
-    // EMU_BUILD_NUM is not set, most likely a local build
-    return {}; // NOLINT (Having EMU_BUILD_NUM assigned to a default number throws off the linter)
-}
-
-std::optional<QList<UpdateCheck::JenkinsReleaseInfo>>
-UpdateCheck::parseJenkinsJson(const QString &filename)
-{
-    QList<JenkinsReleaseInfo> releaseInfoList;
-    QFile                     json_file(filename);
-    if (!json_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning() << "Couldn't open the json file: error" << json_file.error();
-        return std::nullopt;
-    }
-
-    const QString read_file = json_file.readAll();
-    json_file.close();
-
-    const auto json_doc = QJsonDocument::fromJson(read_file.toUtf8());
-
-    if (json_doc.isNull()) {
-        qWarning("Failed to create QJsonDocument, possibly invalid JSON");
-        return std::nullopt;
-    }
-
-    if (!json_doc.isObject()) {
-        qWarning("JSON does not have the expected format (object in root), cannot continue");
-        return std::nullopt;
-    }
-
-    auto json_object = json_doc.object();
-
-    // The json contains multiple release
-    if (json_object.contains("builds") && json_object["builds"].isArray()) {
-
-        QJsonArray builds = json_object["builds"].toArray();
-        for (const auto &each_build : builds) {
-            if (auto build = parseJenkinsRelease(each_build.toObject()); build.has_value() && build.value().result == "SUCCESS") {
-                releaseInfoList.append(build.value());
-            }
-        }
-    } else if (json_object.contains("changeSets") && json_object["changeSets"].isArray()) {
-        // The json contains only one release, as obtained by the lastSuccessfulBuild api
-        if (const auto build = parseJenkinsRelease(json_object); build.has_value()) {
-            releaseInfoList.append(build.value());
-        }
-    } else {
-        qWarning("JSON is missing data or has invalid data, cannot continue");
-        qDebug() << json_object;
-        return std::nullopt;
-    }
-
-    return releaseInfoList;
-}
-
-std::optional<UpdateCheck::JenkinsReleaseInfo>
-UpdateCheck::parseJenkinsRelease(const QJsonObject &json)
-{
-    // The root should contain number, result, and timestamp.
-    if (!json.contains("number") || !json.contains("result") || !json.contains("timestamp")) {
-        return std::nullopt;
-    }
-
-    auto releaseInfo = JenkinsReleaseInfo {
-        .buildNumber = json["number"].toInt(),
-        .result      = json["result"].toString(),
-        .timestamp   = static_cast<qint64>(json["timestamp"].toDouble())
-    };
-
-    // Overview
-    // Each build should contain a changeSets object with an array. Only the first element is needed.
-    // The first element should be an object containing an items object with an array.
-    // Each array element in the items object has information releated to the build. More or less: commit data
-    // In jq parlance it would be similar to `builds[].changeSets[0].items[]`
-
-    // To break down the somewhat complicated if-init statement below:
-    // * Get the object for `changeSets`
-    // * Convert the value to array
-    // * Grab the first element in the array
-    // Proceed if
-    // * the element (first in changeSets) is an object that contains the key `items`
-    if (const auto changeSet = json["changeSets"].toArray().first(); changeSet.isObject() && changeSet.toObject().contains("items")) {
-        // Then proceed to process each `items` array element
-        for (const auto &item : changeSet.toObject()["items"].toArray()) {
-            auto itemObject = item.toObject();
-            // Basic validation
-            if (!itemObject.contains("commitId") || !itemObject.contains("msg") || !itemObject.contains("affectedPaths")) {
-                return std::nullopt;
-            }
-            // Convert the paths for each commit to a string list
-            QStringList paths;
-            for (const auto &each_path : itemObject["affectedPaths"].toArray().toVariantList()) {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-                if (each_path.typeId() == QMetaType::QString) {
-#else
-                if (each_path.type() == QVariant::String) {
-#endif
-                    paths.append(each_path.toString());
-                }
-            }
-            // Build the structure
-            const auto releaseItem = JenkinsChangeSetItem {
-                .buildId       = itemObject["commitId"].toString(),
-                .author        = itemObject["author"].toObject()["fullName"].toString(),
-                .message       = itemObject["msg"].toString(),
-                .affectedPaths = paths,
-            };
-            releaseInfo.changeSetItems.append(releaseItem);
-        }
-    } else {
-        qWarning("Could not parse release information, possibly invalid JSON");
-    }
-    return releaseInfo;
+    return { EMU_VERSION };
 }
 
 std::optional<QList<UpdateCheck::GithubReleaseInfo>>

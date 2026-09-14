@@ -1356,8 +1356,7 @@ VMManagerMain::getActiveMachineCount()
 void
 VMManagerMain::backgroundUpdateCheckStart() const
 {
-    const auto updateChannel = UpdateCheck::UpdateChannel::Stable;
-    const auto updateCheck = new UpdateCheck(updateChannel);
+    const auto updateCheck = new UpdateCheck;
     connect(updateCheck, &UpdateCheck::updateCheckComplete, this, &VMManagerMain::backgroundUpdateCheckComplete);
     connect(updateCheck, &UpdateCheck::updateCheckError, this, &VMManagerMain::backgroundUpdateCheckError);
     updateCheck->checkForUpdates();
@@ -1368,8 +1367,7 @@ VMManagerMain::backgroundUpdateCheckComplete(const UpdateCheck::UpdateResult &re
 {
     qDebug() << "Check complete: update available?" << result.updateAvailable;
     if (result.updateAvailable) {
-        auto       type          = result.channel == UpdateCheck::UpdateChannel::CI ? tr("build") : tr("version");
-        const auto updateMessage = tr("An update to BluMach is available: %1 %2").arg(type, result.latestVersion);
+        const auto updateMessage = tr("An update to BluMach is available: %1 %2").arg(tr("version"), result.latestVersion);
         emit       updateStatusLeft(updateMessage);
     }
 }

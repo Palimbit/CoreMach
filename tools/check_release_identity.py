@@ -30,11 +30,13 @@ FORBIDDEN_NAMES = {
     "dis" + "cord.c",
     "dis" + "cord.h",
     "dis" + "cord_game_sdk.h",
+    "Jenkins" + "file",
 }
 
 REMOVED_FEATURE_TEXT = (
     "win" + "box",
     "dis" + "cord",
+    "irc" + "notify",
 )
 
 

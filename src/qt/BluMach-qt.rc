@@ -56,10 +56,10 @@
 /* Icon by OBattler and laciba96 (green for release builds)*/
  10                     ICON    DISCARDABLE     ICON_PATH "icons/BluMach-green.ico"
 #elif BETA_BUILD
-/* Icon by OBattler and laciba96 (yellow for beta builds done by Jenkins)*/
+/* Icon by OBattler and laciba96 (yellow for beta builds)*/
  10                     ICON    DISCARDABLE     ICON_PATH "icons/BluMach-yellow.ico"
 #elif ALPHA_BUILD
-/* Icon by OBattler and laciba96 (red for alpha builds done by Jenkins)*/
+/* Icon by OBattler and laciba96 (red for alpha builds)*/
  10                     ICON    DISCARDABLE     ICON_PATH "icons/BluMach-red.ico"
 #else
 /* Icon by OBattler and laciba96 (gray for builds of branches and from the git master)*/

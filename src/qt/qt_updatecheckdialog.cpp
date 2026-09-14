@@ -24,15 +24,14 @@ extern "C" {
 }
 
 UpdateCheckDialog::
-    UpdateCheckDialog(const UpdateCheck::UpdateChannel channel, QWidget *parent)
+    UpdateCheckDialog(QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::UpdateCheckDialog)
-    , updateCheck(new UpdateCheck(channel))
+    , updateCheck(new UpdateCheck)
 {
     ui->setupUi(this);
     ui->statusLabel->setHidden(true);
-    updateChannel  = channel;
-    currentVersion = UpdateCheck::getCurrentVersion(updateChannel);
+    currentVersion = UpdateCheck::getCurrentVersion();
     connect(updateCheck, &UpdateCheck::updateCheckError, [=](const QString &errorMsg) {
         generalDownloadError(errorMsg);
     });
@@ -82,12 +81,8 @@ UpdateCheckDialog::upToDate()
     ui->progressBar->setMaximum(100);
     ui->progressBar->setValue(100);
     ui->statusLabel->setVisible(true);
-    QString currentVersionString;
-    if (updateChannel == UpdateCheck::UpdateChannel::Stable)
-        currentVersionString = QString("v%1").arg(currentVersion);
-    else
-        currentVersionString = QString("%1 %2").arg(tr("build"), currentVersion);
-    const auto statusText = tr("You are running the latest %1 version of BluMach: %2").arg(updateChannel == UpdateCheck::UpdateChannel::Stable ? tr("stable") : tr("beta"), currentVersionString);
+    const auto currentVersionString = QString("v%1").arg(currentVersion);
+    const auto statusText = tr("You are running the latest %1 version of BluMach: %2").arg(tr("stable"), currentVersionString);
     ui->statusLabel->setText(statusText);
     ui->buttonBox->setStandardButtons(QDialogButtonBox::Ok);
 }

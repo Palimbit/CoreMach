@@ -25,25 +25,6 @@
 class UpdateCheck final : public QObject {
     Q_OBJECT
 public:
-    enum class UpdateChannel {
-        Stable,
-        CI,
-    };
-
-    struct JenkinsChangeSetItem {
-        QString     buildId;       // sha hash
-        QString     author;        // github username
-        QString     message;       // commit message
-        QStringList affectedPaths; // list of files in the change
-    };
-
-    struct JenkinsReleaseInfo {
-        int                         buildNumber = 0;
-        QString                     result;
-        qint64                      timestamp = 0;
-        QList<JenkinsChangeSetItem> changeSetItems;
-    };
-
     struct GithubReleaseInfo {
         QString name;
         QString tag_name;
@@ -55,44 +36,31 @@ public:
     };
 
     struct UpdateResult {
-        UpdateChannel             channel;
-        bool                      updateAvailable = false;
-        bool                      upToDate        = false;
-        QString                   currentVersion;
-        QString                   latestVersion;
-        QList<GithubReleaseInfo>  githubInfo;
-        QList<JenkinsReleaseInfo> jenkinsInfo;
+        bool                     updateAvailable = false;
+        bool                     upToDate        = false;
+        QString                  currentVersion;
+        QString                  latestVersion;
+        QList<GithubReleaseInfo> githubInfo;
     };
 
-    explicit UpdateCheck(UpdateChannel channel, QObject *parent = nullptr);
+    explicit UpdateCheck(QObject *parent = nullptr);
     ~UpdateCheck() override;
     void                         checkForUpdates();
     static int                   versionCompare(const QString &version1, const QString &version2);
-    [[nodiscard]] static QString getCurrentVersion(const UpdateChannel &updateChannel = UpdateChannel::Stable);
+    [[nodiscard]] static QString getCurrentVersion();
 
 signals:
-    // void updateCheckComplete(const UpdateCheck::UpdateChannel &channel, const QVariant &updateData);
     void updateCheckComplete(const UpdateCheck::UpdateResult &result);
     void updateCheckError(const QString &errorMsg);
 
 private:
-    UpdateChannel updateChannel = UpdateChannel::Stable;
-
     const QUrl githubReleaseApi = QUrl("https://api.github.com/repos/BluMach/BluMach/releases");
-    const QUrl jenkinsLatestApi = QUrl();
-    QString    jenkinsLatestVersion;
     QString    currentVersion;
-
-    static QUrl jenkinsLatestNReleasesUrl(const int &count);
-
-    static std::optional<QList<JenkinsReleaseInfo>> parseJenkinsJson(const QString &filename);
-    static std::optional<JenkinsReleaseInfo>        parseJenkinsRelease(const QJsonObject &json);
 
     static std::optional<QList<GithubReleaseInfo>> parseGithubJson(const QString &filename);
     static std::optional<GithubReleaseInfo>        parseGithubRelease(const QJsonObject &json);
 
 private slots:
-    void jenkinsDownloadComplete(const QString &filename);
     void githubDownloadComplete(const QString &filename);
     void generalDownloadError(const QString &error);
 };

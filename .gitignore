@@ -26,18 +26,11 @@ CMakeFiles
 /src/roms/
 /src/screenshots/
 
-# Build scripts
-/archive_tmp
-/archive_tmp_universal
-/static2dll.*
-/VERSION
+# Build archives
 *.zip
 *.tar
 *.tar.*
 *.AppImage
-/appimage-builder-cache
-/appimage-build
-/AppImageBuilder-generated.yml
 
 # Visual Studio Code
 /.vs
