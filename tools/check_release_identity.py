@@ -19,6 +19,16 @@ FORBIDDEN_TEXT = (
     "https://ci." + "86box.net",
     "https://86box.net/" + "builds",
     "api.github.com/repos/86box/" + "86Box",
+    "Usage: " + "86box",
+    "weblate.github.com/" + "BluMach/BluMach",
+    "d:" + "\\\\86boxnew",
+    "The current catalogue " + "contains",
+    # BluMach targets Qt 6 hosts; these compatibility declarations advertise
+    # unsupported Windows versions in the release executable manifest.
+    "1f676c76-80e1-4239-95bb-" + "83d0f6d0da78",
+    "4a2f28e3-53b9-4441-ba9c-" + "d69d4a4a6e38",
+    "35138b9a-5d96-4fbd-8e2d-" + "a2440225f93a",
+    "e2011457-1546-43c5-a5fe-" + "008deee3d3f0",
 )
 
 FORBIDDEN_NAMES = {
@@ -31,6 +41,13 @@ FORBIDDEN_NAMES = {
     "dis" + "cord.h",
     "dis" + "cord_game_sdk.h",
     "Jenkins" + "file",
+    "README-UNIX-MODE-WITH-" + "OSD.txt",
+}
+
+FORBIDDEN_PACKAGING_TEXT = {
+    "vcpkg.json": ('"sdl' + '2"',),
+    "debian/control": ("libsdl" + "2-dev",),
+    "src/unix/assets/BluMach.spec": ("SDL" + "2-devel",),
 }
 
 REMOVED_FEATURE_TEXT = (
@@ -83,6 +100,9 @@ def main() -> int:
             for value in UNSUPPORTED_QT_TEXT:
                 if value in line:
                     errors.append(f"{relative}:{line_number}: unsupported Qt 5 compatibility {value!r}")
+            for value in FORBIDDEN_PACKAGING_TEXT.get(relative, ()):
+                if value in line:
+                    errors.append(f"{relative}:{line_number}: obsolete package dependency {value!r}")
 
     if errors:
         print("BluMach release identity check failed:", file=sys.stderr)

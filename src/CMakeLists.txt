@@ -228,7 +228,7 @@ endif()
 
 
 # Install other dependencies
-if(WIN32)
+if(WIN32 AND (NOT QT OR STATIC_BUILD))
     install(CODE "
         include(BundleUtilities)
         get_filename_component(CMAKE_INSTALL_PREFIX_ABSOLUTE \${CMAKE_INSTALL_PREFIX} ABSOLUTE)
