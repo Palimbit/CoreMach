@@ -39,10 +39,9 @@ BuildRequires: openal-soft-devel
 BuildRequires: qt6-linguist
 BuildRequires: qt6-qtbase-devel
 BuildRequires: qt6-qtbase-private-devel
-BuildRequires: qt6-qtbase-static
 BuildRequires: rtmidi-devel
 BuildRequires: wayland-devel
-BuildRequires: SDL2-devel
+BuildRequires: SDL3-devel
 
 Requires: hicolor-icon-theme
 Requires: fluid-soundfont-gm

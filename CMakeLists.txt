@@ -14,7 +14,7 @@
 #          Copyright 2021-2026 Jasmine Iwanek.
 #
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.21)
 
 cmake_policy(SET CMP0091 NEW)
 cmake_policy(SET CMP0079 NEW)
