@@ -14,13 +14,13 @@
 #endif
 
 #ifdef RELEASE_BUILD
-#    define EMU_ICON_PATH ":/settings/qt/icons/86Box-green.ico"
+#    define EMU_ICON_PATH ":/settings/qt/icons/BluMach-green.ico"
 #elif defined ALPHA_BUILD
-#    define EMU_ICON_PATH ":/settings/qt/icons/86Box-red.ico"
+#    define EMU_ICON_PATH ":/settings/qt/icons/BluMach-red.ico"
 #elif defined BETA_BUILD
-#    define EMU_ICON_PATH ":/settings/qt/icons/86Box-yellow.ico"
+#    define EMU_ICON_PATH ":/settings/qt/icons/BluMach-yellow.ico"
 #else
-#    define EMU_ICON_PATH ":/settings/qt/icons/86Box-gray.ico"
+#    define EMU_ICON_PATH ":/settings/qt/icons/BluMach-gray.ico"
 #endif
 
 #define SETTINGS_CHANGED            1

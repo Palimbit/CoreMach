@@ -155,7 +155,7 @@ endif()
 
 if(WIN32)
     enable_language(RC)
-    target_sources(86Box PUBLIC ../qt/86Box-qt.rc)
+    target_sources(86Box PUBLIC ../qt/BluMach-qt.rc)
 
     # CMake 3.22 messed this up for clang/clang++
     # See https://gitlab.kitware.com/cmake/cmake/-/issues/22611
@@ -163,8 +163,8 @@ if(WIN32)
         # MSVC linker adds its own manifest to the executable, which fails if
         # we include ours in 86Box.rc. We therefore need to pass the manifest
         # directly as as a source file, so the linker can use that instead.
-        set_property(SOURCE ../qt/86Box-qt.rc DIRECTORY .. PROPERTY COMPILE_DEFINITIONS NO_INCLUDE_MANIFEST)
-        target_sources(86Box PRIVATE ../qt/86Box.manifest)
+        set_property(SOURCE ../qt/BluMach-qt.rc DIRECTORY .. PROPERTY COMPILE_DEFINITIONS NO_INCLUDE_MANIFEST)
+        target_sources(86Box PRIVATE ../qt/BluMach.manifest)
     endif()
 
     if (MINGW)

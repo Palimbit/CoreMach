@@ -571,7 +571,7 @@ ltsermouse_process_command(mouse_t *dev)
         [FORMAT_MS_4BYTE]  = 0x08, /* Guess */
         [FORMAT_MS_WHEEL]  = 0x08  /* Guess */
     };
-    const char *copr = "\r\n(C) " COPYRIGHT_YEAR " 86Box, Revision 3.0";
+    const char *copr = "\r\n(C) " COPYRIGHT_YEAR " BluMach, Revision 3.0";
 
     mouse_serial_log("ltsermouse_process_command(): %02X\n", dev->ib);
     dev->command = dev->ib;

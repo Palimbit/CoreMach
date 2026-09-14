@@ -1435,7 +1435,7 @@ cdrom_get_from_name(const char *s)
 
     if (!found) {
         if (strcmp(s, "none"))
-            warning("WARNING: CD-ROM \"%s\" not found - contact 86Box support\n", s);
+            warning("WARNING: CD-ROM \"%s\" not found - contact BluMach support\n", s);
         c = -1;
     }
 

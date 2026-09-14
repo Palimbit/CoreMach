@@ -42,7 +42,7 @@ endif()
 project(BluMach
     VERSION 7.0
     DESCRIPTION "Preservation-focused emulator of x86-based systems, derived from 86Box"
-    HOMEPAGE_URL "https://github.com/BluMachOrg/86Box"
+    HOMEPAGE_URL "https://github.com/BluMach/BluMach"
     LANGUAGES C CXX)
 
 if (NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
@@ -104,10 +104,6 @@ if(NOT NO_STATIC_OPTION)
     endif()
 endif()
 
-if(NOT (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
-    set(DISCORD OFF)
-endif()
-
 if(HAIKU)
     set(OPENAL ON)
 endif()
@@ -130,7 +126,6 @@ option(VNC          "VNC renderer"                                              
 option(MINITRACE    "Enable Chrome tracing using the modified minitrace library" OFF)
 option(GDBSTUB      "Enable GDB stub server for debugging"                       OFF)
 option(DEV_BRANCH   "Development branch"                                         OFF)
-option(DISCORD      "Discord Rich Presence support"                              ON)
 option(DEBUGREGS486 "Enable debug register opeartion on 486+ CPUs"               OFF)
 option(LIBASAN      "Enable compilation with the addresss sanitizer"             OFF)
 option(QT           "Use the Qt-based user interface"                            ON)

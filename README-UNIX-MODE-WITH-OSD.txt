@@ -1,6 +1,6 @@
 UNIX MODE WITH OSD
 
-86Box supports running on the linux framebuffer without QT and without X, making the pc appear as a nearly native old machine.
+BluMach supports running on the Linux framebuffer without Qt and without X, making the PC appear as a nearly native old machine.
 
 running it that way is already supported but when doing it, 86box loses all menu and all abilities to mount floppies and CDs, it also becomes the owner of the entire pc with no way of quitting it or changing virtual console.
 
@@ -25,7 +25,7 @@ current limitations:
 	extremely long filenames can overflow the blue window
 	the title does actually overflow the window width :)
 
-These are the steps to install a machine fully dedicated to 86Box and tuned to make it appear almost native.
+These are the steps to install a machine fully dedicated to BluMach and tuned to make it appear almost native.
 This works almost the same for on a Raspberry Pi
 
 
@@ -38,23 +38,23 @@ This works almost the same for on a Raspberry Pi
 	apt install git build-essential cmake extra-cmake-modules pkg-config ninja-build libfreetype-dev libsdl2-dev libpng-dev libopenal-dev librtmidi-dev libfluidsynth-dev libsndfile1-dev libserialport-dev libevdev-dev libxkbcommon-dev libxkbcommon-x11-dev libslirp-dev
 	
 4) setup git and clone
-	git@github.com:86Box/86Box.git
+	git@github.com:BluMach/BluMach.git
 	git@github.com:86Box/roms.git
 
 5) build (128 => super speed, too much for a 2GB machine)
-	cd 86Box
+	cd BluMach
 	mkdir build
 	cd build
 	cmake .. --preset regular -D QT=OFF -D PREFER_STATIC=ON
 	cmake --build regular -j 128
 	cd ../../
-	ln -s 86Box/build/regular/src/86Box 86Box.exe
+	ln -s BluMach/build/regular/src/BluMach BluMach.exe
 	
 6) boot
 	as root so it can take complete ownership of the linux framebuffer
 
 7) notes:
-- 86Box will complain to be unable to find readline, this is fine, we don't need the command line at all
+- BluMach will complain that it is unable to find readline, this is fine, we don't need the command line at all
 - ALSOFT will complain it can't connect to PipeWire, no problem, sounds will come from standard ALSA
 
 8) additional steps

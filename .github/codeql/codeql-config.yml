@@ -1,4 +1,4 @@
-name: "86Box CodeQL config"
+name: "BluMach CodeQL config"
 
 queries:
   - uses: security-extended

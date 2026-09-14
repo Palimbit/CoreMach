@@ -587,7 +587,7 @@ unittester_init(UNUSED(const device_t *info))
 
     io_sethandler(unittester.trigger_port, 1, NULL, NULL, NULL, unittester_trigger_write, NULL, NULL, NULL);
 
-    unittester_log("[UT] 86Box Unit Tester initialised\n");
+    unittester_log("[UT] BluMach Unit Tester initialised\n");
 
     return &unittester; /* Dummy non-NULL value */
 }
@@ -606,14 +606,14 @@ unittester_close(UNUSED(void *priv))
         unittester_screen_buffer = NULL;
     }
 
-    unittester_log("[UT] 86Box Unit Tester closed\n");
+    unittester_log("[UT] BluMach Unit Tester closed\n");
 }
 
 static const device_config_t unittester_config[] = {
   // clang-format off
     {
         .name           = "exit_enabled",
-        .description    = "Enable 0x04 \"Exit 86Box\" command",
+        .description    = "Enable 0x04 \"Exit emulator\" command",
         .type           = CONFIG_BINARY,
         .default_int    = 1,
         .default_string = NULL,
@@ -627,7 +627,7 @@ static const device_config_t unittester_config[] = {
 };
 
 const device_t unittester_device = {
-    .name          = "86Box Unit Tester",
+    .name          = "BluMach Unit Tester",
     .internal_name = "unittester",
     .flags         = DEVICE_ISA,
     .local         = 0,

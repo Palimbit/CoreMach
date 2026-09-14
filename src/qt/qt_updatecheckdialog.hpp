@@ -26,15 +26,14 @@ class UpdateCheckDialog;
 class UpdateCheckDialog final : public QDialog {
     Q_OBJECT
 public:
-    explicit UpdateCheckDialog(UpdateCheck::UpdateChannel channel, QWidget *parent = nullptr);
+    explicit UpdateCheckDialog(QWidget *parent = nullptr);
     ~UpdateCheckDialog() override;
 
 private:
-    Ui::UpdateCheckDialog     *ui;
-    UpdateCheck::UpdateChannel updateChannel = UpdateCheck::UpdateChannel::Stable;
-    UpdateCheck               *updateCheck;
-    QString                    currentVersion;
-    void                       upToDate();
+    Ui::UpdateCheckDialog *ui;
+    UpdateCheck           *updateCheck;
+    QString                currentVersion;
+    void                   upToDate();
 
 private slots:
     void downloadComplete(const UpdateCheck::UpdateResult &result);

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop">
+    <id>io.github.BluMach.BluMach</id>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>GPL-2.0-or-later</project_license>
+    <name>BluMach</name>
+    <developer_name>The BluMach project</developer_name>
+    <summary>Documented preservation and emulation of distinctive historical PCs</summary>
+    <categories>
+      <category>Emulator</category>
+    </categories>
+    <launchable type="desktop-id">io.github.BluMach.BluMach.desktop</launchable>
+    <releases>
+      <release version="7.0" date="2026-06-20"/>
+    </releases>
+    <content_rating type="oars-1.1" />
+    <description>
+        <p>
+            BluMach is a preservation-focused emulator derived from 86Box. It
+            combines low-level x86 emulation with a curated historical
+            catalogue, explicit evidence and reproducible machine
+            configurations.
+        </p>
+        <p>
+            To use BluMach you will need firmware images for the machines you
+            want to emulate. BluMach does not distribute proprietary firmware.
+        </p>
+    </description>
+    <url type="homepage">https://github.com/BluMach/BluMach</url>
+</component>

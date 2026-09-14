@@ -25,33 +25,22 @@ UpdateDetails::
     , ui(new Ui::UpdateDetails)
 {
     ui->setupUi(this);
-    ui->updateTitle->setText(tr("<b>An update to 86Box is available!</b>"));
-    QString currentVersionText;
-    QString latestVersionText;
-    if (updateResult.channel == UpdateCheck::UpdateChannel::Stable) {
-        currentVersionText = tr("You are currently running version <b>%1</b>.").arg(updateResult.currentVersion);
-        latestVersionText  = tr("<b>Version %1</b> is now available.").arg(updateResult.latestVersion);
-    } else {
-        currentVersionText = tr("You are currently running build <b>%1</b>.").arg(updateResult.currentVersion);
-        latestVersionText  = tr("<b>Build %1</b> is now available.").arg(updateResult.latestVersion);
-    }
+    ui->updateTitle->setText(tr("<b>An update to BluMach is available!</b>"));
+    QString currentVersionText = tr("You are currently running version <b>%1</b>.").arg(updateResult.currentVersion);
+    const QString latestVersionText = tr("<b>Version %1</b> is now available.").arg(updateResult.latestVersion);
     if (updateResult.currentVersion.isEmpty())
         currentVersionText = "";
 
     const auto updateDetailsText = QString("%1 %2%3").arg(latestVersionText, currentVersionText.append(' '), tr("Would you like to visit the download page?"));
     ui->updateDetails->setText(updateDetailsText);
 
-    if (updateResult.channel == UpdateCheck::UpdateChannel::Stable) {
-        ui->updateText->setMarkdown(githubUpdateToMarkdown(updateResult.githubInfo));
-    } else {
-        ui->updateText->setMarkdown(jenkinsUpdateToMarkdown(updateResult.jenkinsInfo));
-    }
+    ui->updateText->setMarkdown(githubUpdateToMarkdown(updateResult.githubInfo));
 
     const auto downloadButton = new QPushButton(tr("Visit download page"));
     ui->buttonBox->addButton(downloadButton, QDialogButtonBox::AcceptRole);
     // Override accepted to mean "I want to visit the download page"
-    connect(ui->buttonBox, &QDialogButtonBox::accepted, [updateResult] {
-        visitDownloadPage(updateResult.channel);
+    connect(ui->buttonBox, &QDialogButtonBox::accepted, [] {
+        visitDownloadPage();
     });
     const auto logo = QIcon(EMU_ICON_PATH).pixmap(QSize(64, 64));
 
@@ -60,24 +49,6 @@ UpdateDetails::
 
 UpdateDetails::~UpdateDetails()
     = default;
-
-QString
-UpdateDetails::jenkinsUpdateToMarkdown(const QList<UpdateCheck::JenkinsReleaseInfo> &releaseInfoList)
-{
-    QStringList fullText;
-    for (const auto &update : releaseInfoList) {
-        fullText.append(QString("### Build %1").arg(update.buildNumber));
-        fullText.append("Changes:");
-        for (const auto &item : update.changeSetItems) {
-            fullText.append(QString("* %1").arg(item.message));
-        }
-        fullText.append("\n\n\n---\n\n\n");
-    }
-    // pop off the last hr
-    fullText.removeLast();
-    // return fullText.join("\n\n---\n\n");
-    return fullText.join("\n");
-}
 
 QString
 UpdateDetails::githubUpdateToMarkdown(const QList<UpdateCheck::GithubReleaseInfo> &releaseInfoList)
@@ -101,34 +72,7 @@ UpdateDetails::githubUpdateToMarkdown(const QList<UpdateCheck::GithubReleaseInfo
     return fullText.join("\n");
 }
 void
-UpdateDetails::visitDownloadPage(const UpdateCheck::UpdateChannel &channel)
+UpdateDetails::visitDownloadPage()
 {
-    switch (channel) {
-        case UpdateCheck::UpdateChannel::Stable:
-            QDesktopServices::openUrl(QUrl("https://github.com/86Box/86Box/releases/latest"));
-            break;
-        case UpdateCheck::UpdateChannel::CI:
-            QDesktopServices::openUrl(QUrl("https://86box.net/builds#"
-#ifdef Q_OS_WINDOWS
-                                           "win"
-#elif defined(Q_OS_MACOS)
-                                           "mac"
-#elif defined(Q_OS_LINUX)
-                                           "lin"
-#endif
-
-#if defined(__aarch64__) || defined(_M_ARM64)
-                                           "arm64"
-#elif defined(__x86_64) || defined(__x86_64__) || defined(__amd64) || defined(_M_X64)
-                                           "64"
-#endif
-
-#ifdef USE_NEW_DYNAREC
-                                           "ndr"
-#else
-                                           "odr"
-#endif
-                                           ));
-            break;
-    }
+    QDesktopServices::openUrl(QUrl("https://github.com/BluMach/BluMach/releases/latest"));
 }

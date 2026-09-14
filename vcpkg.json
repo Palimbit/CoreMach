@@ -7,10 +7,10 @@
 			"reference": "9b965a116838c6cdcd36bca60d1b81b030c8ab8d"
 		}
 	},
-    "name": "86box",
+    "name": "blumach",
     "version-string": "7.0",
-    "homepage": "https://86box.net/",
-    "documentation": "https://86box.readthedocs.io/",
+    "homepage": "https://github.com/BluMach/BluMach",
+    "documentation": "https://github.com/BluMach/BluMach#readme",
     "license": "GPL-2.0-or-later",
     "dependencies": [
         "freetype",

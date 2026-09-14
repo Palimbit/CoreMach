@@ -72,4 +72,4 @@ patch_file 'changelog version' 's/(^[*]\s.*>\s+)[0-9].+/\1'"$newversion"-1'/' sr
 patch_file 'changelog date' 's/(^[*]\s)[a-zA-Z]{3}\s[a-zA-Z]{3}\s[0-9]{2}\s[0-9]{4}/\1'"$(pretty_date)"'/' src/unix/assets/*.spec
 patch_file release 's/(<release version=")[^"]+(" date=")[^"]+/\1'"$newversion"'\2'"$(date +%Y-%m-%d)"'/' src/unix/assets/*.metainfo.xml
 patch_file 'changelog date' 's/>  .+/>  '"$(date -R)"'/' debian/changelog
-patch_file 'changelog version' 's/86box \(.+\)/86box \('"$newversion"'\)/' debian/changelog
+patch_file 'changelog version' 's/blumach \(.+\)/blumach \('"$newversion"'\)/' debian/changelog

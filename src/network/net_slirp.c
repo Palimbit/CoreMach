@@ -534,7 +534,7 @@ net_slirp_init(const netcard_t *card, const uint8_t *mac_addr, UNUSED(void *priv
         .vprefix_addr6         = { .s6_addr = { 0xfe, 0xc0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, /* fec0:: - unused */
         .vprefix_len           = 64,
         .vhost6                = { .s6_addr = { 0xfe, 0xc0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02 } }, /* fec0::2 - unused */
-        .vhostname             = "86Box",
+        .vhostname             = "BluMach",
         .tftp_server_name      = NULL,
         .tftp_path             = NULL,
         .bootfile              = NULL,

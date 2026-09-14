@@ -389,7 +389,7 @@ endif()
 
 if(WIN32)
     enable_language(RC)
-    target_sources(86Box PUBLIC 86Box-qt.rc)
+    target_sources(86Box PUBLIC BluMach-qt.rc)
     target_sources(plat PRIVATE win_dynld.c)
     target_link_libraries(86Box dwmapi SetupAPI)
 
@@ -399,8 +399,8 @@ if(WIN32)
         # MSVC linker adds its own manifest to the executable, which fails if
         # we include ours in 86Box.rc. We therefore need to pass the manifest
         # directly as as a source file, so the linker can use that instead.
-        set_property(SOURCE 86Box-qt.rc DIRECTORY .. PROPERTY COMPILE_DEFINITIONS NO_INCLUDE_MANIFEST)
-        target_sources(86Box PRIVATE 86Box.manifest)
+        set_property(SOURCE BluMach-qt.rc DIRECTORY .. PROPERTY COMPILE_DEFINITIONS NO_INCLUDE_MANIFEST)
+        target_sources(86Box PRIVATE BluMach.manifest)
     endif()
 
     if (MINGW)
@@ -735,11 +735,11 @@ foreach(po_file ${po_files})
         endif()
     endif()
 
-    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/86box_${PO_FILE_NAME}.qm"
-                       COMMAND "$<TARGET_FILE:Qt${QT_MAJOR}::lconvert>" -i ${po_file} -o ${CMAKE_CURRENT_BINARY_DIR}/86box_${PO_FILE_NAME}.qm
+    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/blumach_${PO_FILE_NAME}.qm"
+                       COMMAND "$<TARGET_FILE:Qt${QT_MAJOR}::lconvert>" -i ${po_file} -o ${CMAKE_CURRENT_BINARY_DIR}/blumach_${PO_FILE_NAME}.qm
                        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                        DEPENDS "${po_file}")
-    list(APPEND QM_FILES "${CMAKE_CURRENT_BINARY_DIR}/86box_${PO_FILE_NAME}.qm")
+    list(APPEND QM_FILES "${CMAKE_CURRENT_BINARY_DIR}/blumach_${PO_FILE_NAME}.qm")
     list(APPEND QM_FILES "${po_file}")
 endforeach()
 

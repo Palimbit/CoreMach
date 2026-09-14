@@ -534,7 +534,7 @@ gameport_close(void *priv)
 }
 
 const device_t gameport_device = {
-    .name          = "86Box PNP Game port",
+    .name          = "BluMach PNP Game port",
     .internal_name = "gameport",
     .flags         = 0,
     .local         = GAMEPORT_PNPROM | GAMEPORT_8ADDR | 0x0200,

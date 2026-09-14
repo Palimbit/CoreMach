@@ -85,9 +85,9 @@ static void host_noop(const clap_host_t *host) { (void) host; }
 static const clap_host_t boxclap_host = {
     .clap_version    = CLAP_VERSION_INIT,
     .host_data       = NULL,
-    .name            = "86Box",
-    .vendor          = "The 86Box Team",
-    .url             = "https://86box.net",
+    .name            = "BluMach",
+    .vendor          = "The BluMach project",
+    .url             = "https://github.com/BluMach/BluMach",
     .version         = "1.0",
     .get_extension   = host_get_extension,
     .request_restart = host_noop,

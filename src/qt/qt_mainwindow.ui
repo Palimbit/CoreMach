@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>86Box</string>
+   <string>BluMach</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
@@ -117,8 +117,6 @@
     </widget>
     <addaction name="actionSettings"/>
     <addaction name="actionUpdate_status_bar_icons"/>
-    <addaction name="separator"/>
-    <addaction name="actionEnable_Discord_integration"/>
     <addaction name="separator"/>
     <addaction name="actionTake_screenshot"/>
     <addaction name="actionTake_raw_screenshot"/>
@@ -645,7 +643,7 @@
   </action>
   <action name="actionAbout_86Box">
    <property name="text">
-    <string>&amp;About 86Box…</string>
+    <string>&amp;About BluMach…</string>
    </property>
    <property name="menuRole">
     <enum>QAction::AboutRole</enum>
@@ -739,14 +737,6 @@
    </property>
    <property name="menuRole">
     <enum>QAction::PreferencesRole</enum>
-   </property>
-  </action>
-  <action name="actionEnable_Discord_integration">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Enable &amp;Discord integration</string>
    </property>
   </action>
   <action name="actionHide_tool_bar">

@@ -1140,7 +1140,7 @@ void BluMachCollectionWidget::populateEngineeringPage(const BluMachProduct &prod
                                  .arg(introduction.replace(QStringLiteral("\n\n"), QStringLiteral("\n> \n> ")),
                                       QString::fromUtf8(file.readAll()));
     m_engineeringView->document()->setBaseUrl(
-        QUrl(QStringLiteral("https://github.com/BluMach/86Box/blob/master/doc/machines/")));
+        QUrl(QStringLiteral("https://github.com/BluMach/BluMach/blob/master/doc/machines/")));
     m_engineeringView->setMarkdown(markdown);
     m_engineeringView->moveCursor(QTextCursor::Start);
 }
