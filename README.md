@@ -88,6 +88,12 @@ used for [Windows/MSYS2](.github/workflows/cmake_windows_msys2.yml),
 [Linux](.github/workflows/cmake_linux.yml) and
 [macOS](.github/workflows/cmake_macos.yml).
 
+Host-side contract tests are built by default and require neither firmware nor
+guest media. After building, run them with
+`ctest --test-dir <build-directory> --output-on-failure`. Set
+`BUILD_TESTING=OFF` only when a build intentionally does not need the test
+executables, such as static-analysis extraction.
+
 The [upstream 86Box build guide](https://86box.readthedocs.io/en/latest/dev/buildguide.html)
 is a useful dependency reference, but its release paths, branding and support
 channels do not describe BluMach.

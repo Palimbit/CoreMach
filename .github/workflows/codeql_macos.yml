@@ -81,6 +81,7 @@ jobs:
           -D CMAKE_PREFIX_PATH=$(brew --prefix qt)
           -D OpenAL_ROOT=$(brew --prefix openal-soft)
           -D LIBSERIALPORT_ROOT=$(brew --prefix libserialport)
+          -D BUILD_TESTING=OFF
 
       - name: Build
         run: cmake --build build

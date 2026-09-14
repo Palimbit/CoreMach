@@ -22,14 +22,16 @@ machine_runtime_controls_get(size_t *count)
     unsigned                         generation_after;
     size_t                           local_count;
 
-    do {
+    for (;;) {
         generation_before = atomic_load(&runtime_control_generation);
         if (generation_before & 1)
             continue;
         controls          = atomic_load(&runtime_controls);
         local_count       = atomic_load(&runtime_control_count);
         generation_after  = atomic_load(&runtime_control_generation);
-    } while (generation_before != generation_after || (generation_after & 1));
+        if (generation_before == generation_after && !(generation_after & 1))
+            break;
+    }
 
     if (count != NULL)
         *count = local_count;

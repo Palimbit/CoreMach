@@ -115,6 +115,7 @@ jobs:
           -D NEW_DYNAREC=${{ matrix.dynarec.new }}
           -D QT=${{ matrix.ui.qt }}
           -D USE_SDL_SHADER=${{ matrix.ui.sdl_shader }}
+          -D BUILD_TESTING=OFF
 
       - name: Build
         run: cmake --build build
