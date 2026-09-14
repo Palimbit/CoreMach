@@ -94,6 +94,11 @@ guest media. After building, run them with
 `BUILD_TESTING=OFF` only when a build intentionally does not need the test
 executables, such as static-analysis extraction.
 
+Each regular CI build also installs and audits its distributable package. The
+audit checks the platform layout, starts the packaged executable with
+`--version` without requiring ROMs, and rejects unexpected size growth. It can
+be run locally with `python tools/package_audit.py --help`.
+
 The [upstream 86Box build guide](https://86box.readthedocs.io/en/latest/dev/buildguide.html)
 is a useful dependency reference, but its release paths, branding and support
 channels do not describe BluMach.

@@ -747,6 +747,7 @@ pc_show_usage(void)
             "\nUsage: " EMU_NAME " [options] [cfg-file]\n\n"
             "Valid options are:\n\n"
             "-? or --help\t\t\t- show this information\n"
+            "--version\t\t\t- show the version and exit\n"
             "-A or --assetpath path\t\t- set 'path' to be asset path\n"
 #ifdef SHOW_EXTRA_PARAMS
             "-C or --config path\t\t- set 'path' to be config file\n"
@@ -800,6 +801,20 @@ pc_show_usage(void)
 #else
     always_log("%s", p);
 #endif
+}
+
+int
+pc_print_version_if_requested(int argc, char *argv[])
+{
+    for (int c = 1; c < argc; c++) {
+        if (!strcasecmp(argv[c], "--version")) {
+            printf(EMU_NAME " " EMU_VERSION_FULL "\n");
+            fflush(stdout);
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static int

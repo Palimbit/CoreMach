@@ -524,11 +524,20 @@ if(WIN32)
         # needed for static builds
         qt_import_plugins(plat INCLUDE Qt6::QWindowsIntegrationPlugin Qt6::QICOPlugin Qt6::QWindowsVistaStylePlugin)
     else()
+        get_filename_component(BLUMACH_INSTALL_RUNTIME_SEARCH_DIR
+                               "${CMAKE_CXX_COMPILER}" DIRECTORY)
         install(CODE "
             get_filename_component(CMAKE_INSTALL_PREFIX_ABSOLUTE \${CMAKE_INSTALL_PREFIX} ABSOLUTE)
             execute_process(
                 COMMAND $<TARGET_FILE:Qt6::windeployqt>
-                \"\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/$<TARGET_FILE_NAME:86Box>\")
+                \"\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/$<TARGET_FILE_NAME:86Box>\"
+                COMMAND_ERROR_IS_FATAL ANY)
+            execute_process(
+                COMMAND ${CMAKE_COMMAND}
+                    -DBLUMACH_EXECUTABLE=\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/$<TARGET_FILE_NAME:86Box>
+                    -DBLUMACH_RUNTIME_SEARCH_DIR=${BLUMACH_INSTALL_RUNTIME_SEARCH_DIR}
+                    -P ${PROJECT_SOURCE_DIR}/cmake/DeployBluMachRuntime.cmake
+                COMMAND_ERROR_IS_FATAL ANY)
         ")
     endif()
 endif()
