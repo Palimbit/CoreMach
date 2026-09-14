@@ -24,3 +24,5 @@ add_library(mt32emu STATIC Analog.cpp BReverbModel.cpp Display.cpp File.cpp File
     srchelper/srctools/src/SincResampler.cpp
     srchelper/InternalResampler.cpp Synth.cpp Tables.cpp TVA.cpp TVF.cpp
     TVP.cpp sha1/sha1.cpp c_interface/c_interface.cpp)
+
+target_compile_definitions(mt32emu PRIVATE MT32EMU_WITH_STD_SNPRINTF)
