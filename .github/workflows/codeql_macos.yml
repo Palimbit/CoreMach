@@ -2,19 +2,9 @@ name: CodeQL Analysis (macos)
 
 on:
 
-  push:
-    branches: [ "master" ]
-    paths:
-      - src/**
-      - cmake/**
-      - "**/CMakeLists.txt"
-      - "CMakePresets.json"
-      - "!.github/workflows/**"
-      - .github/workflows/codeql_macos.yml
-      - vcpkg.json
-      - "!**/Makefile*"
+  workflow_dispatch:
 
-  pull_request:
+  push:
     branches: [ "master" ]
     paths:
       - src/**
@@ -40,6 +30,7 @@ jobs:
     name: "${{ matrix.ui.name }}, ${{ matrix.build.name }}, ${{ matrix.dynarec.name }}, ${{ matrix.environment.arch }}"
 
     runs-on: ${{ matrix.environment.runner }}
+    timeout-minutes: 90
 
     permissions:
       actions: read

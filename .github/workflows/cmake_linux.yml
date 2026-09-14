@@ -2,6 +2,8 @@ name: CMake (Linux)
 
 on:
 
+  workflow_dispatch:
+
   push:
     branches: [ "master" ]
     paths:
@@ -29,6 +31,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
 
   linux:
@@ -36,6 +41,11 @@ jobs:
     name: "${{ matrix.ui.name }}, ${{ matrix.build.name }}, ${{ matrix.dynarec.name }}, ${{ matrix.environment.arch }}"
 
     runs-on: ${{ matrix.environment.runner }}
+    timeout-minutes: 35
+
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 400M
 
     strategy:
       fail-fast: true
@@ -77,6 +87,7 @@ jobs:
         run: >-
           sudo apt update && sudo apt install
           build-essential
+          ccache
           ninja-build
           libfreetype-dev
           libgles2-mesa-dev
@@ -94,8 +105,14 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Restore compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ui.slug }}${{ matrix.dynarec.slug }}${{ matrix.build.slug }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'src/**/CMakeLists.txt', 'vcpkg.json') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ runner.arch }}-${{ matrix.ui.slug }}${{ matrix.dynarec.slug }}${{ matrix.build.slug }}-
 
       - name: Configure CMake
         run: >-
@@ -103,17 +120,25 @@ jobs:
           -D NEW_DYNAREC=${{ matrix.dynarec.new }}
           -D QT=${{ matrix.ui.qt }}
           -D USE_SDL_SHADER=${{ matrix.ui.sdl_shader }}
+          -D CMAKE_C_COMPILER_LAUNCHER=ccache
+          -D CMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: |
           cmake --build build
+
+      - name: Show compiler cache statistics
+        if: always()
+        run: ccache --show-stats
 
       - name: Generate package
         run: |
           cmake --install build
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: 'BluMach${{ matrix.ui.slug }}${{ matrix.dynarec.slug }}${{ matrix.build.slug }}-Ubuntu2604${{ matrix.environment.slug }}-gha${{ github.run_number }}'
           path: build/artifacts/**
+          retention-days: 7
