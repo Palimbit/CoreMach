@@ -4,23 +4,13 @@ on:
 
   workflow_dispatch:
 
-  push:
-    branches: [ "master" ]
-    paths:
-      - src/**
-      - cmake/**
-      - "**/CMakeLists.txt"
-      - "CMakePresets.json"
-      - "!.github/workflows/**"
-      - .github/workflows/codeql_windows_msys2.yml
-      - vcpkg.json
-      - "!**/Makefile*"
-
+  # Full platform scans are deliberately kept outside the pull-request and
+  # mainline-push critical paths. They remain available on demand.
   schedule:
     - cron: '02 12 * * 0'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
