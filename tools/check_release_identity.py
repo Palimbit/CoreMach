@@ -45,6 +45,11 @@ FORBIDDEN_NAMES = {
 }
 
 FORBIDDEN_PACKAGING_TEXT = {
+    "debian/copyright": (
+        "<" + "years>",
+        "<" + "put author's name and email here>",
+        "<" + "likewise for another author>",
+    ),
     "vcpkg.json": ('"sdl' + '2"',),
     "debian/control": ("libsdl" + "2-dev",),
     "src/unix/assets/BluMach.spec": ("SDL" + "2-devel",),
