@@ -29,6 +29,10 @@ on:
   schedule:
     - cron: '22 11 * * 0'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   analyze-linux:
@@ -48,55 +52,31 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        language: [ 'cpp' ]
-        build:
-#          - name: Regular
-#            preset: regular
-          - name: Debug
-            preset: dev_debug
-            slug: -Debug
-#          - name: Dev
-#            preset: development
-#            slug: -Dev
-        dynarec:
-          - name: ODR
-            new: off
-            slug: -ODR
-          - name: NDR
-            new: on
-            slug: -NDR
-        ui:
-          - name: SDL GUI
-            qt: off
-            sdl_shader: on
-            slug: -SDL
-            static: on
-          - name: Qt 6 GUI
-            qt: on
-            sdl_shader: off
-            slug: -Qt6
-            packages: >-
-              qt6-base-dev
-              qt6-base-private-dev
-              qt6-tools-dev
-              qt6-tools-dev-tools
-              qt6-l10n-tools
-              qt6-translations-l10n
-              libevdev-dev
-              libxkbcommon-x11-dev
-              libvulkan-dev
-        environment:
-          - arch: x86_64
-            slug: "-x86_64"
-            runner: ubuntu-22.04
-#          - arch: arm64
-#            slug: -arm64
-#            runner: ubuntu-22.04-arm
-#        exclude:
-#          - dynarec:
-#              new: off
-#            environment:
-#              arch: arm64
+        include:
+          - language: cpp
+            build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: ODR, new: off, slug: -ODR }
+            ui: { name: SDL GUI, qt: off, sdl_shader: on, slug: -SDL }
+            environment: { arch: x86_64, slug: -x86_64, runner: ubuntu-22.04 }
+          - language: cpp
+            build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui:
+              name: Qt 6 GUI
+              qt: on
+              sdl_shader: off
+              slug: -Qt6
+              packages: >-
+                qt6-base-dev
+                qt6-base-private-dev
+                qt6-tools-dev
+                qt6-tools-dev-tools
+                qt6-l10n-tools
+                qt6-translations-l10n
+                libevdev-dev
+                libxkbcommon-x11-dev
+                libvulkan-dev
+            environment: { arch: x86_64, slug: -x86_64, runner: ubuntu-22.04 }
 
     steps:
       - name: Install dependencies
@@ -146,7 +126,7 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{matrix.language}}"
+          category: "/language:${{ matrix.language }}/ui:${{ matrix.ui.slug }}/dynarec:${{ matrix.dynarec.slug }}/platform:linux"
 
       - name: SonarQube Scan
         if: matrix.build.preset == 'dev_debug' && matrix.dynarec.new == 'on' && matrix.ui.qt == 'on' && env.SONAR_TOKEN != ''

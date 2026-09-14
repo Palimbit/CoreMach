@@ -3,6 +3,7 @@ name: CMake (Windows)
 on:
 
   push:
+    branches: [ "master" ]
     paths:
       - src/**
       - cmake/**
@@ -24,6 +25,10 @@ on:
       - vcpkg.json
       - "!**/Makefile*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   windows:
@@ -39,54 +44,28 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        build:
-#          - name: Regular
-#            preset: regular
-          - name: Debug
-            preset: dev_debug
-            slug: -Debug
-          - name: Dev
-            preset: development
-            slug: -Dev
-        dynarec:
-          - name: ODR
-            new: off
-            slug: -ODR
-          - name: NDR
-            new: on
-            slug: -NDR
-        ui:
-          - name: Qt 6 GUI
-            qt: on
-            slug: -Qt6
-            static: off
-            packages: >-
-              qt6-base:p
-              qt6-tools:p
-              vulkan-headers:p
-        environment:
-#          - msystem: MSYS
-#            slug: "-MSYS64"
-#          - msystem: MINGW64
-#            prefix: mingw-w64-x86_64
-#            slug: "MINGW64"
-#            runner: windows-2022
-#          - msystem: CLANG64
-#            prefix: mingw-w64-clang-x86_64
-#            slug: "CLANG64"
-#            runner: windows-2022
-          - msystem: UCRT64
-            prefix: mingw-w64-ucrt-x86_64
-            slug: "-64"
-            runner: windows-2022
-          - msystem: CLANGARM64
-            slug: -arm64
-            runner: windows-11-arm
-        exclude:
-          - dynarec:
-              new: off
-            environment:
-              msystem: CLANGARM64
+        include:
+          - build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: ODR, new: off, slug: -ODR }
+            ui: &qt6_ui
+              name: Qt 6 GUI
+              qt: on
+              slug: -Qt6
+              static: off
+              packages: qt6-base:p qt6-tools:p vulkan-headers:p
+            environment: &ucrt64
+              msystem: UCRT64
+              prefix: mingw-w64-ucrt-x86_64
+              slug: -64
+              runner: windows-2022
+          - build: { name: Dev, preset: development, slug: -Dev }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: *qt6_ui
+            environment: *ucrt64
+          - build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: *qt6_ui
+            environment: { msystem: CLANGARM64, slug: -arm64, runner: windows-11-arm }
 
     steps:
       - name: Prepare MSYS2 environment

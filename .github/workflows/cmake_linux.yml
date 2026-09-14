@@ -3,6 +3,7 @@ name: CMake (Linux)
 on:
 
   push:
+    branches: [ "master" ]
     paths:
       - src/**
       - cmake/**
@@ -24,6 +25,10 @@ on:
       - vcpkg.json
       - "!**/Makefile*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   linux:
@@ -35,54 +40,37 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        build:
-#          - name: Regular
-#            preset: regular
-          - name: Debug
-            preset: dev_debug
-            slug: -Debug
-          - name: Dev
-            preset: development
-            slug: -Dev
-        dynarec:
-          - name: ODR
-            new: off
-            slug: -ODR
-          - name: NDR
-            new: on
-            slug: -NDR
-        ui:
-          - name: SDL GUI
-            qt: off
-            sdl_shader: on
-            slug: -SDL
-            static: on
-          - name: Qt 6 GUI
-            qt: on
-            sdl_shader: off
-            slug: -Qt6
-            packages: >-
-              qt6-base-dev
-              qt6-base-private-dev
-              qt6-tools-dev
-              qt6-tools-dev-tools
-              qt6-l10n-tools
-              qt6-translations-l10n
-              libevdev-dev
-              libxkbcommon-x11-dev
-              libvulkan-dev
-        environment:
-          - arch: x86_64
-            slug: "-x86_64"
-            runner: ubuntu-26.04
-          - arch: arm64
-            slug: -arm64
-            runner: ubuntu-26.04-arm
-        exclude:
-          - dynarec:
-              new: off
-            environment:
-              arch: arm64
+        include:
+          - build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: ODR, new: off, slug: -ODR }
+            ui: { name: SDL GUI, qt: off, sdl_shader: on, slug: -SDL }
+            environment: { arch: x86_64, slug: -x86_64, runner: ubuntu-26.04 }
+          - build: { name: Dev, preset: development, slug: -Dev }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui:
+              name: Qt 6 GUI
+              qt: on
+              sdl_shader: off
+              slug: -Qt6
+              packages: &qt6_packages >-
+                qt6-base-dev
+                qt6-base-private-dev
+                qt6-tools-dev
+                qt6-tools-dev-tools
+                qt6-l10n-tools
+                qt6-translations-l10n
+                libevdev-dev
+                libxkbcommon-x11-dev
+                libvulkan-dev
+            environment: { arch: x86_64, slug: -x86_64, runner: ubuntu-26.04 }
+          - build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: { name: Qt 6 GUI, qt: on, sdl_shader: off, slug: -Qt6, packages: *qt6_packages }
+            environment: { arch: arm64, slug: -arm64, runner: ubuntu-26.04-arm }
+          - build: { name: Dev, preset: development, slug: -Dev }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: { name: SDL GUI, qt: off, sdl_shader: on, slug: -SDL }
+            environment: { arch: arm64, slug: -arm64, runner: ubuntu-26.04-arm }
 
     steps:
       - name: Install dependencies

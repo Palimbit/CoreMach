@@ -3,6 +3,7 @@ name: CMake (macos)
 on:
 
   push:
+    branches: [ "master" ]
     paths:
       - src/**
       - cmake/**
@@ -24,6 +25,10 @@ on:
       - vcpkg.json
       - "!**/Makefile*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   macos:
@@ -35,44 +40,23 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        build:
-#          - name: Regular
-#            preset: regular
-          - name: Debug
-            preset: dev_debug
-            slug: -Debug
-          - name: Dev
-            preset: development
-            slug: -Dev
-        dynarec:
-          - name: ODR
-            new: off
-            slug: -ODR
-          - name: NDR
-            new: on
-            slug: -NDR
-        ui:
-          - name: SDL GUI
-            qt: off
-            slug: -SDL
-            static: on
-          - name: Qt 6 GUI
-            qt: on
-            slug: -Qt6
-            packages: >-
-              qt
-        environment:
-          - arch: x86_64
-            slug: -x86_64
-            runner: macos-15-intel
-          - arch: arm64
-            slug: -arm64
-            runner: macos-14
-        exclude:
-          - dynarec:
-              new: off
-            environment:
-              arch: arm64
+        include:
+          - build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: ODR, new: off, slug: -ODR }
+            ui: { name: SDL GUI, qt: off, slug: -SDL }
+            environment: { arch: x86_64, slug: -x86_64, runner: macos-15-intel }
+          - build: { name: Dev, preset: development, slug: -Dev }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: { name: Qt 6 GUI, qt: on, slug: -Qt6, packages: qt }
+            environment: { arch: x86_64, slug: -x86_64, runner: macos-15-intel }
+          - build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: { name: Qt 6 GUI, qt: on, slug: -Qt6, packages: qt }
+            environment: { arch: arm64, slug: -arm64, runner: macos-14 }
+          - build: { name: Dev, preset: development, slug: -Dev }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: { name: SDL GUI, qt: off, slug: -SDL }
+            environment: { arch: arm64, slug: -arm64, runner: macos-14 }
 
     steps:
       - name: Install dependencies

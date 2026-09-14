@@ -27,7 +27,11 @@ on:
       - "!**/Makefile*"
 
   schedule:
-    - cron: '22 11 * * 0'
+    - cron: '42 11 * * 0'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
 
@@ -37,9 +41,6 @@ jobs:
 
     runs-on: ${{ matrix.environment.runner }}
 
-    env:
-      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
-
     permissions:
       actions: read
       contents: read
@@ -48,45 +49,12 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        language: [ 'cpp' ]
-        build:
-#          - name: Regular
-#            preset: regular
-          - name: Debug
-            preset: dev_debug
-            slug: -Debug
-#          - name: Dev
-#            preset: development
-#            slug: -Dev
-        dynarec:
-          - name: ODR
-            new: off
-            slug: -ODR
-          - name: NDR
-            new: on
-            slug: -NDR
-        ui:
-#          - name: SDL GUI
-#            qt: off
-#            slug: -SDL
-#            static: on
-          - name: Qt 6 GUI
-            qt: on
-            slug: -Qt6
-            packages: >-
-              qt
-        environment:
-          - arch: x86_64
-            slug: -x86_64
-            runner: macos-15-intel
-#          - arch: arm64
-#            slug: -arm64
-#            runner: macos-14
-#        exclude:
-#          - dynarec:
-#              new: off
-#            environment:
-#              arch: arm64
+        include:
+          - language: cpp
+            build: { name: Debug, preset: dev_debug, slug: -Debug }
+            dynarec: { name: NDR, new: on, slug: -NDR }
+            ui: { name: Qt 6 GUI, qt: on, slug: -Qt6, packages: qt }
+            environment: { arch: x86_64, slug: -x86_64, runner: macos-15-intel }
 
     steps:
       - name: Install dependencies
@@ -108,9 +76,6 @@ jobs:
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
 
-      - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -127,23 +92,9 @@ jobs:
           -D LIBSERIALPORT_ROOT=$(brew --prefix libserialport)
 
       - name: Build
-        run: |
-          build-wrapper-macosx-x86 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build build
+        run: cmake --build build
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{matrix.language}}"
-
-      - name: SonarQube Scan
-#        if: matrix.build.preset == 'dev_debug' && matrix.dynarec.new == 'on' && matrix.ui.qt == 'on' && env.SONAR_TOKEN != ''
-        if: 0
-        uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_ROOT_CERT: ${{ secrets.SONAR_ROOT_CERT }}
-        with:
-           # Consult https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/ for more information and options
-           args: >
-             --define sonar.cfamily.compile-commands=build/compile_commands.json
+          category: "/language:${{ matrix.language }}/platform:macos"
