@@ -92,5 +92,5 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.BluM
 %{_datadir}/icons/hicolor/*/apps/io.github.BluMach.BluMach.png
 
 %changelog
-* Sat Aug 31 Jasmine Iwanek <jriwanek[AT]gmail.com> 7.0-1
+* Sat Jun 20 2026 BluMach project maintainers <blumach@users.noreply.github.com> 7.0-1
 - Bump release
