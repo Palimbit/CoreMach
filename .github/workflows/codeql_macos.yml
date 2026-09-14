@@ -70,11 +70,11 @@ jobs:
 #            qt: off
 #            slug: -SDL
 #            static: on
-          - name: Qt 5 GUI
+          - name: Qt 6 GUI
             qt: on
-            slug: -Qt5
+            slug: -Qt6
             packages: >-
-              qt@5
+              qt
         environment:
           - arch: x86_64
             slug: -x86_64
@@ -122,8 +122,7 @@ jobs:
           cmake -S . -B build --preset ${{ matrix.build.preset }}
           -D NEW_DYNAREC=${{ matrix.dynarec.new }}
           -D QT=${{ matrix.ui.qt }}
-          -D Qt5_ROOT=$(brew --prefix qt@5)
-          -D Qt5LinguistTools_ROOT=$(brew --prefix qt@5)
+          -D CMAKE_PREFIX_PATH=$(brew --prefix qt)
           -D OpenAL_ROOT=$(brew --prefix openal-soft)
           -D LIBSERIALPORT_ROOT=$(brew --prefix libserialport)
 

@@ -223,11 +223,7 @@ RendererStack::mouseReleaseEvent(QMouseEvent *event)
 #endif
 
     event->accept();
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     if (!dopause && this->geometry().contains(m_monitor_index >= 1 ? event->globalPosition().toPoint() : event->position().toPoint()) &&
-#else
-    if (!dopause && this->geometry().contains(m_monitor_index >= 1 ? event->globalPos() : event->pos()) &&
-#endif
         (event->button() == Qt::LeftButton) && !mouse_capture && (isMouseDown & 1) && (kbd_req_capture || (mouse_get_buttons() != 0)) && (mouse_input_mode == 0)) {
         plat_mouse_capture(1);
         this->setCursor(Qt::BlankCursor);
@@ -337,11 +333,7 @@ RendererStack::mouseMoveEvent(QMouseEvent *event)
 }
 
 void
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 RendererStack::enterEvent(QEnterEvent *event)
-#else
-RendererStack::enterEvent(QEvent *event)
-#endif
 {
     mousedata.mouse_tablet_in_proximity = m_monitor_index + 1;
 
@@ -572,21 +564,11 @@ RendererStack::event(QEvent *event)
         if (m_monitor_index >= 1) {
             if (mouse_input_mode >= 1) {
 #ifdef TOUCH_PR
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
                 mouse_x_abs = (mouse_event->position().x()) / (double) width();
                 mouse_y_abs = (mouse_event->position().y()) / (double) height();
 #else
-                mouse_x_abs = (mouse_event->localPos().x()) / (double) width();
-                mouse_y_abs = (mouse_event->localPos().y()) / (double) height();
-#endif
-#else
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
                 mouse_x_abs       = (mouse_event->position().x()) / (long double)width();
                 mouse_y_abs       = (mouse_event->position().y()) / (long double)height();
-#else
-                mouse_x_abs       = (mouse_event->localPos().x()) / (long double)width();
-                mouse_y_abs       = (mouse_event->localPos().y()) / (long double)height();
-#endif
 #endif
                 if (!mouse_tablet_in_proximity)
                     mouse_tablet_in_proximity = mousedata.mouse_tablet_in_proximity;
@@ -612,13 +594,8 @@ RendererStack::event(QEvent *event)
 #ifdef TOUCH_PR
 #ifdef Q_OS_WINDOWS
         if (mouse_input_mode == 0) {
-#    if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             mouse_x_abs = (mouse_event->position().x()) / (double) width();
             mouse_y_abs = (mouse_event->position().y()) / (double) height();
-#    else
-            mouse_x_abs = (mouse_event->localPos().x()) / (double) width();
-            mouse_y_abs = (mouse_event->localPos().y()) / (double) height();
-#    endif
             mouse_x_abs -= rendererWindow->destinationF.left();
             mouse_y_abs -= rendererWindow->destinationF.top();
 
@@ -642,23 +619,13 @@ RendererStack::event(QEvent *event)
         }
 #endif
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         mouse_x_abs = (mouse_event->position().x()) / (double) width();
         mouse_y_abs = (mouse_event->position().y()) / (double) height();
 #else
-        mouse_x_abs = (mouse_event->localPos().x()) / (double) width();
-        mouse_y_abs = (mouse_event->localPos().y()) / (double) height();
-#endif
-#else
 #ifdef Q_OS_WINDOWS
         if (mouse_input_mode == 0) {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
             mouse_x_abs = (mouse_event->position().x()) / (long double)width();
             mouse_y_abs = (mouse_event->position().y()) / (long double)height();
-#else
-            mouse_x_abs = (mouse_event->localPos().x()) / (long double)width();
-            mouse_y_abs = (mouse_event->localPos().y()) / (long double)height();
-#endif
             mouse_x_abs -= rendererWindow->destinationF.left();
             mouse_y_abs -= rendererWindow->destinationF.top();
 
@@ -678,13 +645,8 @@ RendererStack::event(QEvent *event)
         }
 #endif
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         mouse_x_abs               = (mouse_event->position().x()) / (long double)width();
         mouse_y_abs               = (mouse_event->position().y()) / (long double)height();
-#else
-        mouse_x_abs               = (mouse_event->localPos().x()) / (long double)width();
-        mouse_y_abs               = (mouse_event->localPos().y()) / (long double)height();
-#endif
 #endif
         mouse_x_abs              -= rendererWindow->destinationF.left();
         mouse_y_abs              -= rendererWindow->destinationF.top();
@@ -708,33 +670,6 @@ RendererStack::event(QEvent *event)
             case QEvent::TouchBegin:
             case QEvent::TouchUpdate:
                 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-                    QTouchEvent *touchevent = (QTouchEvent *) event;
-                    if (mouse_input_mode == 0)
-                        break;
-                    if (touchevent->touchPoints().count()) {
-                        mouse_x_abs = (touchevent->touchPoints()[0].pos().x()) / (double) width();
-                        mouse_y_abs = (touchevent->touchPoints()[0].pos().y()) / (double) height();
-                        mouse_x_abs -= rendererWindow->destinationF.left();
-                        mouse_y_abs -= rendererWindow->destinationF.top();
-
-                        if (mouse_x_abs < 0)
-                            mouse_x_abs = 0;
-                        if (mouse_y_abs < 0)
-                            mouse_y_abs = 0;
-
-                        mouse_x_abs /= rendererWindow->destinationF.width();
-                        mouse_y_abs /= rendererWindow->destinationF.height();
-
-                        if (mouse_x_abs > 1)
-                            mouse_x_abs = 1;
-                        if (mouse_y_abs > 1)
-                            mouse_y_abs = 1;
-                    }
-                    mouse_set_buttons_ex(mouse_get_buttons_ex() | 1);
-                    touchevent->accept();
-                    return true;
-#else
                     QTouchEvent *touchevent = (QTouchEvent *) event;
                     if (mouse_input_mode == 0)
                         break;
@@ -760,38 +695,10 @@ RendererStack::event(QEvent *event)
                     mouse_set_buttons_ex(mouse_get_buttons_ex() | 1);
                     touchevent->accept();
                     return true;
-#endif
                 }
             case QEvent::TouchEnd:
             case QEvent::TouchCancel:
                 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-                    QTouchEvent *touchevent = (QTouchEvent *) event;
-                    if (mouse_input_mode == 0)
-                        break;
-                    if (touchevent->touchPoints().count()) {
-                        mouse_x_abs = (touchevent->touchPoints()[0].pos().x()) / (double) width();
-                        mouse_y_abs = (touchevent->touchPoints()[0].pos().y()) / (double) height();
-                        mouse_x_abs -= rendererWindow->destinationF.left();
-                        mouse_y_abs -= rendererWindow->destinationF.top();
-
-                        if (mouse_x_abs < 0)
-                            mouse_x_abs = 0;
-                        if (mouse_y_abs < 0)
-                            mouse_y_abs = 0;
-
-                        mouse_x_abs /= rendererWindow->destinationF.width();
-                        mouse_y_abs /= rendererWindow->destinationF.height();
-
-                        if (mouse_x_abs > 1)
-                            mouse_x_abs = 1;
-                        if (mouse_y_abs > 1)
-                            mouse_y_abs = 1;
-                    }
-                    mouse_set_buttons_ex(mouse_get_buttons_ex() & ~1);
-                    touchevent->accept();
-                    return true;
-#else
                     QTouchEvent *touchevent = (QTouchEvent *) event;
                     if (mouse_input_mode == 0)
                         break;
@@ -817,7 +724,6 @@ RendererStack::event(QEvent *event)
                     mouse_set_buttons_ex(mouse_get_buttons_ex() & ~1);
                     touchevent->accept();
                     return true;
-#endif
                 }
 
             default:

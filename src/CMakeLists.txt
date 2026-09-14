@@ -164,17 +164,8 @@ if(APPLE)
     # Force using the newest library if it's installed by homebrew
     set(CMAKE_FIND_FRAMEWORK LAST)
 
-    # setting our compilation target to macOS 10.15 Catalina if targeting Qt6,
-    # macOS 10.14 Mojave for vulkan support, 10.13 High Sierra otherwise
-    if (USE_QT6)
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15")
-    else()
-        if(MOLTENVK)
-            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14")
-        else()
-            set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13")
-        endif()
-    endif()
+    # Qt 6.11 supports macOS 13 and newer.
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0")
 endif()
 
 find_package(Freetype REQUIRED)
@@ -291,7 +282,7 @@ add_subdirectory(osd)
 
 if (QT)
     add_subdirectory(qt)
-    if(WIN32 AND USE_QT6 AND NOT STATIC_BUILD)
+    if(WIN32 AND NOT STATIC_BUILD)
             # BluMach development builds are expected to run directly from
             # the build tree. Deploy Qt, its Windows platform plug-in and the
             # MinGW runtime whenever the executable is relinked, instead of
@@ -299,7 +290,7 @@ if (QT)
             get_filename_component(BLUMACH_TOOLCHAIN_RUNTIME_DIR
                                    "${CMAKE_CXX_COMPILER}" DIRECTORY)
             add_custom_command(TARGET 86Box POST_BUILD
-                COMMAND $<TARGET_FILE:Qt${QT_MAJOR}::windeployqt>
+                COMMAND $<TARGET_FILE:Qt6::windeployqt>
                         --no-translations
                         --compiler-runtime
                         "$<TARGET_FILE:86Box>"

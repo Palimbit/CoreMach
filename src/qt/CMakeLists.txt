@@ -24,12 +24,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if (USE_QT6)
-    set(QT_MAJOR 6)
-else()
-    set(QT_MAJOR 5)
-endif()
-
 if (QT6_FORCE_DYNAMIC)
     set(QT_STATIC OFF)
 else()
@@ -37,13 +31,13 @@ else()
 endif()
 
 if(QT_STATIC AND MINGW)
-    set(CMAKE_PREFIX_PATH "$ENV{MSYSTEM_PREFIX}/qt${QT_MAJOR}-static")
+    set(CMAKE_PREFIX_PATH "$ENV{MSYSTEM_PREFIX}/qt6-static")
 endif()
 
 if(VCPKG_TOOLCHAIN AND VCPKG_USE_HOST_TOOLS)
-    set(QT_HOST_PATH "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/Qt${QT_MAJOR}")
+    set(QT_HOST_PATH "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/Qt6")
     set(QT_HOST_PATH_CMAKE_DIR ${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET})
-    set(Qt${QT_MAJOR}LinguistTools_ROOT ${QT_HOST_PATH_CMAKE_DIR})
+    set(Qt6LinguistTools_ROOT ${QT_HOST_PATH_CMAKE_DIR})
 endif()
 
 # CMake is a bitch and calls the Harfbuzz config twice on MinGW + Qt6
@@ -51,8 +45,8 @@ endif()
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG OFF)
 
 find_package(Threads REQUIRED)
-find_package(Qt${QT_MAJOR} COMPONENTS Core Widgets Network OpenGL Gui REQUIRED)
-find_package(Qt${QT_MAJOR}LinguistTools REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+find_package(Qt6 COMPONENTS Core Widgets Network OpenGL Gui REQUIRED)
+find_package(Qt6LinguistTools REQUIRED NO_CMAKE_FIND_ROOT_PATH)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(BLUMACH_CATALOG_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/catalog/source")
@@ -87,7 +81,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 
 if(APPLE AND MOLTENVK)
     include(CheckCXXSourceCompiles)
-    set(CMAKE_REQUIRED_LIBRARIES Qt${QT_MAJOR}::Gui)
+    set(CMAKE_REQUIRED_LIBRARIES Qt6::Gui)
     unset(QT_HAS_VULKAN CACHE)
     check_cxx_source_compiles("#include <QtGui/qtguiglobal.h>
 #if !QT_CONFIG(vulkan)
@@ -102,20 +96,16 @@ int main() { return 0; }
     endif()
 endif()
 
-if(USE_QT6)
-    set(QT_NO_PRIVATE_MODULE_WARNING ON)
-    if(USE_QT6_BELOW10)
-        find_package(Qt6 COMPONENTS Gui)
-    else()
-        find_package(Qt6 COMPONENTS GuiPrivate)
-    endif()
+set(QT_NO_PRIVATE_MODULE_WARNING ON)
+if(Qt6_VERSION VERSION_LESS 6.10)
+    find_package(Qt6 COMPONENTS Gui)
 else()
-    include_directories(${Qt5Gui_PRIVATE_INCLUDE_DIRS})
+    find_package(Qt6 COMPONENTS GuiPrivate)
 endif()
 
 # TODO: Is this the correct way to do this, and is it required on any
-# other platforms or with Qt 5?
-if(APPLE AND USE_QT6 AND VCPKG_TOOLCHAIN)
+# other platforms?
+if(APPLE AND VCPKG_TOOLCHAIN)
     find_package(Qt6Gui/Qt6QCocoaIntegrationPlugin REQUIRED)
     find_package(Qt6Widgets/Qt6QMacStylePlugin REQUIRED)
     find_package(Qt6Gui/Qt6QICOPlugin REQUIRED)
@@ -500,17 +490,17 @@ if (WIN32)
 endif()
 
 target_link_libraries(plat PRIVATE
-    Qt${QT_MAJOR}::Widgets
-    Qt${QT_MAJOR}::Gui
-    Qt${QT_MAJOR}::Network
+    Qt6::Widgets
+    Qt6::Gui
+    Qt6::Network
     Threads::Threads
 )
 
 target_link_libraries(ui PRIVATE
-    Qt${QT_MAJOR}::Widgets
-    Qt${QT_MAJOR}::Gui
-    Qt${QT_MAJOR}::OpenGL
-    Qt${QT_MAJOR}::Network
+    Qt6::Widgets
+    Qt6::Gui
+    Qt6::OpenGL
+    Qt6::Network
     Threads::Threads
 )
 
@@ -532,32 +522,20 @@ endif()
 if(WIN32)
     if(STATIC_BUILD)
         # needed for static builds
-        qt_import_plugins(plat INCLUDE Qt${QT_MAJOR}::QWindowsIntegrationPlugin Qt${QT_MAJOR}::QICOPlugin Qt${QT_MAJOR}::QWindowsVistaStylePlugin)
+        qt_import_plugins(plat INCLUDE Qt6::QWindowsIntegrationPlugin Qt6::QICOPlugin Qt6::QWindowsVistaStylePlugin)
     else()
-        if(USE_QT6)
-            install(CODE "
-                get_filename_component(CMAKE_INSTALL_PREFIX_ABSOLUTE \${CMAKE_INSTALL_PREFIX} ABSOLUTE)
-                execute_process(
-                    COMMAND $<TARGET_FILE:Qt${QT_MAJOR}::windeployqt>
-                    \"\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/$<TARGET_FILE_NAME:86Box>\")
-            ")
-        else()
-            find_program(WINDEPLOYQT_EXECUTABLE windeployqt)
-            if(WINDEPLOYQT_EXECUTABLE)
-                install(CODE "
-                    get_filename_component(CMAKE_INSTALL_PREFIX_ABSOLUTE \${CMAKE_INSTALL_PREFIX} ABSOLUTE)
-                    execute_process(
-                        COMMAND ${WINDEPLOYQT_EXECUTABLE}
-                        \"\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/$<TARGET_FILE_NAME:86Box>\")
-                ")
-            endif()
-        endif()
+        install(CODE "
+            get_filename_component(CMAKE_INSTALL_PREFIX_ABSOLUTE \${CMAKE_INSTALL_PREFIX} ABSOLUTE)
+            execute_process(
+                COMMAND $<TARGET_FILE:Qt6::windeployqt>
+                \"\${CMAKE_INSTALL_PREFIX_ABSOLUTE}/$<TARGET_FILE_NAME:86Box>\")
+        ")
     endif()
 endif()
 
-# loads a macro to install Qt5 plugins on macOS
+# Loads a macro to install Qt plugins on macOS.
 # based on https://stackoverflow.com/questions/35612687/cmake-macos-x-bundle-with-bundleutiliies-for-qt-application
-macro(install_qt5_plugin _qt_plugin_name _runtime_plugins_var _prefix)
+macro(install_qt_plugin _qt_plugin_name _runtime_plugins_var _prefix)
     get_target_property(_qt_plugin_path "${_qt_plugin_name}" LOCATION)
     if(EXISTS "${_qt_plugin_path}")
         get_filename_component(_qt_plugin_file "${_qt_plugin_path}" NAME)
@@ -591,11 +569,11 @@ if (APPLE AND CMAKE_MACOSX_BUNDLE)
     set(INSTALL_CMAKE_DIR "${prefix}/Resources")
     set(INSTALL_LIB_DIR "${prefix}/Frameworks")
 
-    # using the install_qt5_plugin to add Qt plugins into the macOS app bundle
-    install_qt5_plugin("Qt${QT_MAJOR}::QCocoaIntegrationPlugin" RUNTIME_PLUGINS ${prefix})
-    install_qt5_plugin("Qt${QT_MAJOR}::QMacStylePlugin" RUNTIME_PLUGINS ${prefix})
-    install_qt5_plugin("Qt${QT_MAJOR}::QICOPlugin" RUNTIME_PLUGINS ${prefix})
-    install_qt5_plugin("Qt${QT_MAJOR}::QICNSPlugin" RUNTIME_PLUGINS ${prefix})
+    # Add Qt plugins to the macOS app bundle.
+    install_qt_plugin("Qt6::QCocoaIntegrationPlugin" RUNTIME_PLUGINS ${prefix})
+    install_qt_plugin("Qt6::QMacStylePlugin" RUNTIME_PLUGINS ${prefix})
+    install_qt_plugin("Qt6::QICOPlugin" RUNTIME_PLUGINS ${prefix})
+    install_qt_plugin("Qt6::QICNSPlugin" RUNTIME_PLUGINS ${prefix})
 
     # Install libraries that are loaded at runtime and not linked
     install_bundle_library("${GHOSTSCRIPT_LIB}" "libgs.dylib" RUNTIME_PLUGINS ${INSTALL_LIB_DIR})
@@ -615,7 +593,7 @@ if (APPLE AND CMAKE_MACOSX_BUNDLE)
     endif()
 
     # Append Qt's lib folder which is two levels above Qt*Widgets_DIR
-    list(APPEND DIRS "${Qt${QT_MAJOR}Widgets_DIR}/../..")
+    list(APPEND DIRS "${Qt6Widgets_DIR}/../..")
 
     include(InstallRequiredSystemLibraries)
 
@@ -672,7 +650,7 @@ if (UNIX AND NOT APPLE AND NOT HAIKU)
                 ecm_add_wayland_client_protocol(WL_SOURCE_VAR PROTOCOL ${CMAKE_SOURCE_DIR}/wl_protocols/relative-pointer-unstable-v1.xml BASENAME relative-pointer-unstable-v1)
                 ecm_add_wayland_client_protocol(WL_SOURCE_VAR PROTOCOL ${CMAKE_SOURCE_DIR}/wl_protocols/pointer-constraints-unstable-v1.xml BASENAME pointer-constraints-unstable-v1)
                 ecm_add_wayland_client_protocol(WL_SOURCE_VAR PROTOCOL ${CMAKE_SOURCE_DIR}/wl_protocols/keyboard-shortcuts-inhibit-unstable-v1.xml BASENAME keyboard-shortcuts-inhibit-unstable-v1)
-                target_include_directories(ui PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${Qt${QT_MAJOR}Gui_PRIVATE_INCLUDE_DIRS})
+                target_include_directories(ui PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${Qt6Gui_PRIVATE_INCLUDE_DIRS})
                 target_sources(ui PRIVATE ${WL_SOURCE_VAR} wl_mouse.cpp)
                 if (XKBCOMMON_FOUND)
                     target_sources(ui PRIVATE xkbcommon_wl_keyboard.cpp)
@@ -683,11 +661,11 @@ if (UNIX AND NOT APPLE AND NOT HAIKU)
         endif()
     endif()
 
-    # Add private headers for Qt5 if required.
+    # Add private Qt headers if required.
     if (DEFINED QT_PRIVATE_HEADERS)
-        find_package(Qt${QT_MAJOR}Gui)
-        if (Qt${QT_MAJOR}Gui_FOUND)
-            include_directories(${Qt${QT_MAJOR}Gui_PRIVATE_INCLUDE_DIRS})
+        find_package(Qt6Gui)
+        if (Qt6Gui_FOUND)
+            include_directories(${Qt6Gui_PRIVATE_INCLUDE_DIRS})
         endif()
     endif()
 endif()
@@ -696,7 +674,7 @@ option(EMBED_QTBASE_TRANSLATIONS "Embed the base Qt translations into the execut
 
 if (EMBED_QTBASE_TRANSLATIONS)
     # Get the Qt translations directory
-    get_target_property(QT_QMAKE_EXECUTABLE Qt${QT_MAJOR}::qmake IMPORTED_LOCATION)
+    get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     execute_process(COMMAND ${QT_QMAKE_EXECUTABLE} -query QT_INSTALL_TRANSLATIONS OUTPUT_VARIABLE QT_TRANSLATIONS_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
 endif()
 
@@ -736,7 +714,7 @@ foreach(po_file ${po_files})
     endif()
 
     add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/blumach_${PO_FILE_NAME}.qm"
-                       COMMAND "$<TARGET_FILE:Qt${QT_MAJOR}::lconvert>" -i ${po_file} -o ${CMAKE_CURRENT_BINARY_DIR}/blumach_${PO_FILE_NAME}.qm
+                       COMMAND "$<TARGET_FILE:Qt6::lconvert>" -i ${po_file} -o ${CMAKE_CURRENT_BINARY_DIR}/blumach_${PO_FILE_NAME}.qm
                        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                        DEPENDS "${po_file}")
     list(APPEND QM_FILES "${CMAKE_CURRENT_BINARY_DIR}/blumach_${PO_FILE_NAME}.qm")

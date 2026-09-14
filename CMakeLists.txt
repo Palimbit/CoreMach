@@ -76,8 +76,6 @@ if(VCPKG_TOOLCHAIN)
         set(STATIC_BUILD OFF)
     endif()
 
-    # `vcpkg.json` defaults to Qt6
-    set(USE_QT6 ON)
 endif()
 
 if(WIN32)
@@ -195,7 +193,6 @@ cmake_dependent_option(SOFTMODEM      "AC'97 Softmodem"                         
 
 # Ditto but for Qt
 if(QT)
-    option(USE_QT6 "Use Qt6 instead of Qt5" OFF)
     if(APPLE)
         option(MOLTENVK "Use MoltenVK libraries for Vulkan support on macOS. Requires a Vulkan-enabled QT." OFF)
     endif()

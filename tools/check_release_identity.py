@@ -39,6 +39,14 @@ REMOVED_FEATURE_TEXT = (
     "irc" + "notify",
 )
 
+UNSUPPORTED_QT_TEXT = (
+    "USE_" + "QT6",
+    "Qt" + "5_ROOT",
+    "Qt" + "5LinguistTools",
+    "-Qt" + "5",
+    "qt" + "5-",
+)
+
 
 def tracked_files() -> list[Path]:
     result = subprocess.run(
@@ -72,6 +80,9 @@ def main() -> int:
             for value in REMOVED_FEATURE_TEXT:
                 if value in folded_line:
                     errors.append(f"{relative}:{line_number}: removed integration {value!r}")
+            for value in UNSUPPORTED_QT_TEXT:
+                if value in line:
+                    errors.append(f"{relative}:{line_number}: unsupported Qt 5 compatibility {value!r}")
 
     if errors:
         print("BluMach release identity check failed:", file=sys.stderr)
