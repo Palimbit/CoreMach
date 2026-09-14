@@ -11,6 +11,13 @@ function(blumach_add_host_contract target source)
         "${PROJECT_SOURCE_DIR}/src/codegen_new"
         "${PROJECT_BINARY_DIR}/src/include"
     )
+    if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+        target_compile_definitions(${target} PRIVATE
+            _FILE_OFFSET_BITS=64
+            _LARGEFILE_SOURCE=1
+            _LARGEFILE64_SOURCE=1
+        )
+    endif()
 
     # The contracts use assert() as their test oracle, including in Release
     # configurations where the application itself defines NDEBUG.
