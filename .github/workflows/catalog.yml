@@ -2,6 +2,7 @@ name: Catalogue validation
 
 on:
   push:
+    branches: [ "master" ]
     paths:
       - src/qt/catalog/**
       - src/qt/CMakeLists.txt
@@ -19,6 +20,10 @@ on:
       - tools/catalog_builder.py
       - tools/tests/test_catalog_*.py
       - .github/workflows/catalog.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   audit:
