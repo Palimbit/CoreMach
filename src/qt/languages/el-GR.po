@@ -231,9 +231,6 @@ msgstr "Ή&χος"
 msgid "&Preferences…"
 msgstr "&Προτιμήσεις…"
 
-msgid "Enable &Discord integration"
-msgstr "Ενεργοποίηση διασύνδεσης &Discord"
-
 msgid "Sound &gain…"
 msgstr "&Ενίσχυση ήχου…"
 
@@ -1769,25 +1766,6 @@ msgstr "Αυτόματο-πάγωμα σε απώλεια εστίασης"
 
 msgid "Auto-pause on dialog boxes"
 msgstr "Αυτόματη παύση στα παράθυρα διαλόγου"
-
-msgid "WinBox is no longer supported"
-msgstr "Το WinBox δεν υποστηρίζεται πλέον"
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr ""
-"Η ανάπτυξη του WinBox σταμάτησε το 2022 λόγω έλλειψης maintainers. Καθώς "
-"καταβάλλουμε κάθε δυνατή προσπάθεια για να βελτιώσουμε ακόμη περισσότερο το "
-"BluMach, έχουμε λάβει την απόφαση να μην υποστηρίζουμε πλέον το WinBox ως "
-"διαχειριστή μηχανών.\n"
-"\n"
-"Δεν θα παρέχονται περαιτέρω ενημερώσεις μέσω του WinBox και ενδέχεται να "
-"αντιμετωπίσετε εσφαλμένη συμπεριφορά σε περίπτωση που συνεχίσετε να το "
-"χρησιμοποιείτε με νεότερες εκδόσεις του BluMach. Οποιεσδήποτε αναφορές "
-"σφαλμάτων που σχετίζονται με τη συμπεριφορά του WinBox θα κλείνουν ως άκυρες."
-"\n"
-"\n"
-"Μεταβείτε στο github.com/BluMach/BluMach για την λίστα με τους διαχειριστές μηχανών που "
-"μπορείτε να χρησιμοποιήσετε."
 
 msgid "Generate"
 msgstr "Δημιουργία"

@@ -231,9 +231,6 @@ msgstr "&Ses"
 msgid "&Preferences…"
 msgstr "&Tercihler…"
 
-msgid "Enable &Discord integration"
-msgstr "&Discord entegrasyonunu etkinleştir"
-
 msgid "Sound &gain…"
 msgstr "&Sesi artır…"
 
@@ -1791,22 +1788,6 @@ msgstr "Pencereye odaklanmıyorken duraklat"
 
 msgid "Auto-pause on dialog boxes"
 msgstr "Diyalog pencereleri açıkken emülasyonu duraklat"
-
-msgid "WinBox is no longer supported"
-msgstr "WinBox artık desteklenmemektedir"
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr ""
-"WinBox yöneticisinin geliştirilmesi geliştirici eksikliği nedeniyle 2022 "
-"yılında durduruldu. BluMach'u daha iyi hale getirmeye odaklanmak amacıyla bu "
-"yöneticiyi artık desteklememe kararı aldık.\n"
-"\n"
-"Artık WinBox aracılığıyla güncellemeler yayınlanmayacaktır ve onu BluMach'un "
-"yeni sürümleriyle kullanmanız halinde hatalarla karşılaşabilirsiniz. "
-"WinBox'un kullanımıyla ilgili tüm hata raporları geçersiz sayılacaktır.\n"
-"\n"
-"Kullanabileceğiniz diğer yöneticilerin bir listesi için github.com/BluMach/BluMach adresini "
-"ziyaret edin."
 
 msgid "Generate"
 msgstr "Oluştur"

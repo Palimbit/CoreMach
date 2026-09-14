@@ -160,10 +160,6 @@ def failStage() {
 pipeline {
 	agent none
 
-	environment {
-		DISCORD_WEBHOOK_URL = credentials('discord-webhook-url')
-	}
-
 	options {
 		quietPeriod(0)
 	}
@@ -322,17 +318,6 @@ pipeline {
 				/* Send out build notifications. */
 				if (commitBrowser[buildBranch]) {
 					try {
-						/* Notify Discord. */
-						def result = currentBuild.currentResult.toLowerCase()
-						discordSend webhookURL: DISCORD_WEBHOOK_URL,
-							    title: "${env.JOB_BASE_NAME} #${env.BUILD_NUMBER}",
-							    link: env.BUILD_URL,
-							    result: currentBuild.currentResult,
-							    description: "**Status:** ${result}\n\u2060", /* word joiner character forces a blank line */
-							    enableArtifactsList: false,
-							    showChangeset: true,
-							    scmWebUrl: commitBrowser[buildBranch]
-
 						/* Notify IRC, which needs a node for whatever reason. */
 						node('citadel || rg || master') {
 							ircNotify()

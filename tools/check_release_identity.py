@@ -27,7 +27,15 @@ FORBIDDEN_NAMES = {
     "86box" + ".pot",
     "net.86box." + "86Box.desktop",
     "net.86box." + "86Box.metainfo.xml",
+    "dis" + "cord.c",
+    "dis" + "cord.h",
+    "dis" + "cord_game_sdk.h",
 }
+
+REMOVED_FEATURE_TEXT = (
+    "win" + "box",
+    "dis" + "cord",
+)
 
 
 def tracked_files() -> list[Path]:
@@ -43,6 +51,8 @@ def tracked_files() -> list[Path]:
 def main() -> int:
     errors: list[str] = []
     for path in tracked_files():
+        if not path.is_file():
+            continue
         relative = path.relative_to(ROOT).as_posix()
         if path.name in FORBIDDEN_NAMES:
             errors.append(f"{relative}: obsolete release-facing filename")
@@ -56,6 +66,10 @@ def main() -> int:
             for value in FORBIDDEN_TEXT:
                 if value in line:
                     errors.append(f"{relative}:{line_number}: obsolete identity {value!r}")
+            folded_line = line.casefold()
+            for value in REMOVED_FEATURE_TEXT:
+                if value in folded_line:
+                    errors.append(f"{relative}:{line_number}: removed integration {value!r}")
 
     if errors:
         print("BluMach release identity check failed:", file=sys.stderr)

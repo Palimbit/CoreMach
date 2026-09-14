@@ -225,9 +225,6 @@ msgstr ""
 msgid "&Preferences…"
 msgstr ""
 
-msgid "Enable &Discord integration"
-msgstr ""
-
 msgid "Sound &gain…"
 msgstr ""
 
@@ -1749,12 +1746,6 @@ msgid "Auto-pause on focus loss"
 msgstr ""
 
 msgid "Auto-pause on dialog boxes"
-msgstr ""
-
-msgid "WinBox is no longer supported"
-msgstr ""
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
 msgstr ""
 
 msgid "Generate"

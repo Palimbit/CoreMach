@@ -231,9 +231,6 @@ msgstr "S&o"
 msgid "&Preferences…"
 msgstr "&Preferències…"
 
-msgid "Enable &Discord integration"
-msgstr "Activa integració amb D&iscord"
-
 msgid "Sound &gain…"
 msgstr "&Guany de so…"
 
@@ -1757,12 +1754,6 @@ msgstr "Pausa automàtica en perdre el focus"
 
 msgid "Auto-pause on dialog boxes"
 msgstr ""
-
-msgid "WinBox is no longer supported"
-msgstr "El WinBox ja no és suportat"
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr "El desenvolupament de l'administrador WinBox es va aturar el 2022 per la manca de mantenidors. Com que ara dirigim els nostres esforços a fer BluMach encara millor, hem pres la decisió de no suportar més el WinBox com a administrador.\n\nNo es proporcionaran més actualitzacions a través del WinBox, i podríeu trobar un comportament incorrecte si continua utilitzant amb versions más noves del BluMach. Qualsevol report de error relacionat amb el comportament del WinBox serà tancat com a invàlid.\n\nAneu a github.com/BluMach/BluMach per a una llista d'altres administradors que podeu utilitzar."
 
 msgid "Generate"
 msgstr "Genera"

@@ -232,9 +232,6 @@ msgstr "サウンド(&O)"
 msgid "&Preferences…"
 msgstr "環境設定(&P)…"
 
-msgid "Enable &Discord integration"
-msgstr "Discord連携機能(&D)"
-
 msgid "Sound &gain…"
 msgstr "音量調整(&G)…"
 
@@ -1753,12 +1750,6 @@ msgstr "フォーカスが奪われると自動停止"
 
 msgid "Auto-pause on dialog boxes"
 msgstr ""
-
-msgid "WinBox is no longer supported"
-msgstr "WinBoxはサポート終了"
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr "WinBoxマネージャーの開発は、メンテナ不足のため2022年に停止しました。BluMachをより良いものにするため、WinBoxをマネージャーとしてサポートしないことを決定しました。\n\nWinBoxを使ったアップデートは今後提供されませんし、BluMachの新しいバージョンでWinBoxを使い続けると、正しくない動作に遭遇するかもしれません。WinBoxの動作に関連するバグレポートは無効としてクローズされます。\n\ngithub.com/BluMach/BluMachに他のマネージャのリストがあります。"
 
 msgid "Generate"
 msgstr "生成する"

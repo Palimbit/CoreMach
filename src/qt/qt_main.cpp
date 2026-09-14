@@ -49,9 +49,6 @@ extern "C" {
 #include <86box/plat.h>
 #include <86box/ui.h>
 #include <86box/video.h>
-#ifdef DISCORD
-#    include <86box/discord.h>
-#endif
 #include <86box/gdbstub.h>
 #include <86box/version.h>
 #include <86box/renderdefs.h>
@@ -534,8 +531,6 @@ main_thread_fn()
 
 static std::thread *main_thread;
 
-QTimer discordupdate;
-
 #ifdef Q_OS_WINDOWS
 WindowsDarkModeFilter *vmm_dark_mode_filter = nullptr;
 #endif
@@ -713,28 +708,6 @@ main(int argc, char *argv[])
         }
     }
 
-#ifdef Q_OS_WINDOWS
-#    if !defined(EMU_BUILD_NUM) || (EMU_BUILD_NUM != 5624)
-    HWND winbox = FindWindowW(L"TWinBoxMain", NULL);
-    if (winbox &&
-        FindWindowExW(winbox, NULL, L"TToolBar", NULL) &&
-        FindWindowExW(winbox, NULL, L"TListBox", NULL) &&
-        FindWindowExW(winbox, NULL, L"TStatusBar", NULL) &&
-        (winbox = FindWindowExW(winbox, NULL, L"TPageControl", NULL)) && /* holds a TTabSheet even on VM pages */
-        FindWindowExW(winbox, NULL, L"TTabSheet", NULL))
-#    endif
-    {
-        QMessageBox warningbox(QMessageBox::Icon::Warning, QObject::tr("WinBox is not supported"),
-                               QObject::tr("BluMach does not support the discontinued WinBox manager. You may encounter incorrect behavior if you continue.\n\nUse BluMach's built-in virtual machine manager instead."),
-                               QMessageBox::NoButton);
-        warningbox.addButton(QObject::tr("Continue"), QMessageBox::AcceptRole);
-        warningbox.addButton(QObject::tr("Exit"), QMessageBox::RejectRole);
-        warningbox.exec();
-        if (warningbox.result() == QDialog::Accepted)
-            return 0;
-    }
-#endif
-
     if (settings_only) {
         VMManagerClientSocket manager_socket;
         if (qgetenv("VMM_86BOX_SOCKET").size()) {
@@ -760,10 +733,6 @@ main(int argc, char *argv[])
         if (warningbox.result() == QDialog::Accepted)
             return 0;
     }
-
-#ifdef DISCORD
-    discord_load();
-#endif
 
 #ifdef Q_OS_MACOS
     exit_pause();
@@ -896,24 +865,6 @@ main(int argc, char *argv[])
     });
     onesec.setTimerType(Qt::PreciseTimer);
     onesec.start(1000);
-
-#ifdef DISCORD
-    if (discord_loaded) {
-        QTimer::singleShot(1000, &app, [] {
-            if (enable_discord) {
-                discord_init();
-                discord_update_activity(dopause);
-            } else
-                discord_close();
-        });
-        QObject::connect(&discordupdate, &QTimer::timeout, &app, [] {
-            discord_run_callbacks();
-        });
-        discordupdate.setInterval(1000);
-        if (enable_discord)
-            discordupdate.start(1000);
-    }
-#endif
 
     /* Initialize the rendering window, or fullscreen. */
     QTimer::singleShot(0, &app, [] {

@@ -232,9 +232,6 @@ msgstr "&Âm thanh"
 msgid "&Preferences…"
 msgstr "&Tùy biến…"
 
-msgid "Enable &Discord integration"
-msgstr "Bật trình trạng thái cho Discord"
-
 msgid "Sound &gain…"
 msgstr "Bộ &tăng âm…"
 
@@ -1753,12 +1750,6 @@ msgstr "Tự tạm dừng giả lập khi không tập trung ở cửa sổ"
 
 msgid "Auto-pause on dialog boxes"
 msgstr "Tự tạm dừng khi các hộp thoại con mở"
-
-msgid "WinBox is no longer supported"
-msgstr "WinBox không còn được hỗ trợ"
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr "Trình quản lý phiên WinBox đã bị dừng phát triển năm 2022 do thiếu nhân sự duy trì. Vì những quyết định để cho BluMach trở nên tốt hơn, chúng tôi đã không còn hỗ trợ trình quản lý WinBox.\n\n Sẽ không có bản cập nhật mới cho WinBox nữa, và nếu bạn tiếp tục sử dụng với các bản BluMach mới hơn có thể gặp lỗi. Bất kì các bản bug report liên quan đến lỗi của WinBox sẽ bị coi là không hợp lệ và bị đóng.\n\nTruy cập BluMach.net để tìm qua các trình quản lý phiên/manager khác cho phù hợp."
 
 msgid "Generate"
 msgstr "Tạo"

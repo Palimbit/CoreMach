@@ -59,9 +59,6 @@ msgstr[1] "%n machines are currently active. Are you sure you want to exit the V
 msgid "Failed to initialize network driver:\n\n%s\n\nThe network configuration will be switched to the null driver."
 msgstr "Failed to initialise network driver:\n\n%s\n\nThe network configuration will be switched to the null driver."
 
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behaviour should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behaviour will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-
 msgid "Appl&y fullscreen stretch mode when maximized"
 msgstr "Appl&y fullscreen stretch mode when maximised"
 

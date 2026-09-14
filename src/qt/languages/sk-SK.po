@@ -231,9 +231,6 @@ msgstr "&Zvuk"
 msgid "&Preferences…"
 msgstr "&Predvoľby…"
 
-msgid "Enable &Discord integration"
-msgstr "Povolenie integrácie s &Discordem"
-
 msgid "Sound &gain…"
 msgstr "&Zosilnenie zvuku…"
 
@@ -1763,12 +1760,6 @@ msgstr "Automatická pauza pri strate fokusu okna"
 
 msgid "Auto-pause on dialog boxes"
 msgstr ""
-
-msgid "WinBox is no longer supported"
-msgstr "WinBox už nie je podporovaný"
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr "Vývoj správcu WinBox sa zastavil v roku 2022 z dôvodu nedostatku správcov. Keďže naše úsilie smerujeme k ešte lepšiemu systému BluMach, rozhodli sme sa, že správca WinBox už nebude podporovaný.\n\nProstredníctvom WinBoxu nebudú poskytované žiadne ďalšie aktualizácie a v prípade, že ho budete naďalej používať s novšími verziami programu BluMach, môžete sa stretnúť s nesprávnym správaním. Všetky hlásenia o chybách týkajúce sa správania WinBoxu budú uzavreté ako neplatné.\n\nNa stránke github.com/BluMach/BluMach nájdete zoznam iných správcov, ktoré môžete používať."
 
 msgid "Generate"
 msgstr "Generovať"

@@ -231,9 +231,6 @@ msgstr "&Ääni"
 msgid "&Preferences…"
 msgstr "&Sovellusasetukset…"
 
-msgid "Enable &Discord integration"
-msgstr "&Discord-integraatio"
-
 msgid "Sound &gain…"
 msgstr "&Äänitasot…"
 
@@ -1761,12 +1758,6 @@ msgstr "Automaattinen tauko tarkennuksen hävitessä"
 
 msgid "Auto-pause on dialog boxes"
 msgstr ""
-
-msgid "WinBox is no longer supported"
-msgstr "WinBoxia ei enää tueta"
-
-msgid "Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making BluMach even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of BluMach. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to github.com/BluMach/BluMach for a list of other managers you can use."
-msgstr "WinBox-managerin kehitys lopetettiin vuonna 2022, koska ylläpitäjiä ei ollut riittävästi. Koska suuntaamme ponnistuksemme BluMachin parantamiseen entisestään, olemme päättäneet olla enää tukematta WinBoxia managerina.\n\nWinBoxin kautta ei enää toimiteta päivityksiä, ja saatat kohdata virheellistä käyttäytymistä, jos jatkat sen käyttöä BluMachin uudemmissa versioissa. Kaikki WinBoxin käyttäytymiseen liittyvät vikailmoitukset suljetaan virheellisinä.\n\nSiirry osoitteeseen github.com/BluMach/BluMach saadaksesi luettelon muista hallintaohjelmista."
 
 msgid "Generate"
 msgstr "Luo"
