@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>86Box</string>
+   <string>BluMach</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
@@ -645,7 +645,7 @@
   </action>
   <action name="actionAbout_86Box">
    <property name="text">
-    <string>&amp;About 86Box…</string>
+    <string>&amp;About BluMach…</string>
    </property>
    <property name="menuRole">
     <enum>QAction::AboutRole</enum>

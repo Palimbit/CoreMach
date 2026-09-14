@@ -109,7 +109,7 @@ UpdateCheck::githubDownloadComplete(const QString &filename)
     auto githubReleaseList = githubReleaseListResult.value();
     // Warning: this check (using the tag name) relies on a consistent naming scheme: "v<number>"
     // where <number> is the release number. For example, 4.2 from v4.2 as the tag name.
-    // Another option would be parsing the name field which is generally "86Box <number>" but
+    // Another option would be parsing the release name, but
     // either option requires a consistent naming scheme.
     latestVersion = githubReleaseList.first().tag_name.replace("v", "");
     for (const auto &release : githubReleaseList) {
@@ -140,8 +140,8 @@ UpdateCheck::githubDownloadComplete(const QString &filename)
 QUrl
 UpdateCheck::jenkinsLatestNReleasesUrl(const int &count)
 {
-    const auto urlPath = QString("https://ci.86box.net/job/86box/api/json?tree=builds[number,result,timestamp,changeSets[items[commitId,affectedPaths,author[fullName],msg,id]]]{0,%1}").arg(count);
-    return { urlPath };
+    Q_UNUSED(count);
+    return {};
 }
 
 QString

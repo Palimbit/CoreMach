@@ -100,20 +100,20 @@ discord_update_activity(int paused)
 
     activity.timestamps.start = time(NULL);
 
-    /* Icon choosing for Discord based on 86Box.rc */
+    /* Icon choosing for the BluMach Discord application. */
 
 #ifdef RELEASE_BUILD
     /* Icon by OBattler and laciba96 (green for release builds)*/
-    strcpy(activity.assets.large_image, "86box-green");
+    strcpy(activity.assets.large_image, "blumach-green");
 #elif BETA_BUILD
     /* Icon by OBattler and laciba96 (yellow for beta builds done by Jenkins)*/
-    strcpy(activity.assets.large_image, "86box-yellow");
+    strcpy(activity.assets.large_image, "blumach-yellow");
 #elif ALPHA_BUILD
     /* Icon by OBattler and laciba96 (red for alpha builds done by Jenkins)*/
-    strcpy(activity.assets.large_image, "86box-red");
+    strcpy(activity.assets.large_image, "blumach-red");
 #else
     /* Icon by OBattler and laciba96 (gray for builds of branches and from the git master)*/
-    strcpy(activity.assets.large_image, "86box");
+    strcpy(activity.assets.large_image, "blumach");
 #endif
 
     /* End of icon choosing */
@@ -159,7 +159,7 @@ discord_init(void)
         return;
 
     DiscordCreateParamsSetDefault(&params);
-    params.client_id = 906956844956782613;
+    params.client_id = BLUMACH_DISCORD_CLIENT_ID;
     params.flags     = DiscordCreateFlags_NoRequireDiscord;
 
     result = discord_create(DISCORD_VERSION, &params, &discord_core);

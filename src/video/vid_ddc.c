@@ -192,7 +192,7 @@ ddc_create_default_edid(uint8_t **out)
     memset(&edid->descriptors[2].range_limits.padding[1], 0x20, sizeof(edid->descriptors[2].range_limits.padding) - 1);
 
     edid->descriptors[3].tag = 0xfc;                          /* display name */
-    memcpy(&edid->descriptors[3].ascii, "86Box Monitor", 13); /* exactly 13 characters (would otherwise require LF termination and space padding) */
+    memcpy(&edid->descriptors[3].ascii, "BluMach Disp.", 13); /* exactly 13 characters (would otherwise require LF termination and space padding) */
 
     edid->extensions = 1;
     for (uint8_t c = 0; c < 127; c++)

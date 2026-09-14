@@ -1,5 +1,5 @@
 # Code of Conduct
-In order for everyone to enjoy their time contributing to 86Box or otherwise being a part of the community, we kindly ask you to review and follow the below rules.
+In order for everyone to enjoy their time contributing to BluMach or otherwise being a part of the community, we kindly ask you to review and follow the rules below.
 
 ## 1. No illegal activity or GitHub ToS violations
 - 1.1. Do not distribute malware for non-research purposes. Post samples in a clearly named encrypted archive.

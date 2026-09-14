@@ -628,10 +628,7 @@ VMManagerMainWindow::on_actionHide_tool_bar_triggered()
 void
 VMManagerMainWindow::checkForUpdatesTriggered()
 {
-    auto updateChannel = UpdateCheck::UpdateChannel::CI;
-#    ifdef RELEASE_BUILD
-    updateChannel = UpdateCheck::UpdateChannel::Stable;
-#    endif
+    const auto updateChannel = UpdateCheck::UpdateChannel::Stable;
     const auto updateCheck = new UpdateCheckDialog(updateChannel, this);
     updateCheck->exec();
 }

@@ -39,13 +39,13 @@
 #     /opt/local and Intel MacPorts on /opt/intel, then tell build.sh to build for "x86_64+arm64"
 #   - port, sed and ln are called through sudo to manage dependencies; make sure those are
 #     configured as NOPASSWD in /etc/sudoers if you're doing unattended builds
-#   - Binaries are ad-hoc signed by default; specify a keychain name in ~/86box-keychain-name.txt
-#     and password in ~/86box-keychain-password.txt to sign binaries with the first developer
+#   - Binaries are ad-hoc signed by default; specify a keychain name in ~/blumach-keychain-name.txt
+#     and password in ~/blumach-keychain-password.txt to sign binaries with the first developer
 #     certificate found inside that keychain
 #   - Notarization uses credentials stored in the same keychain used for signing. To save these
 #     credentials, you must find the keychain's file path, run notarytool store-credentials with
 #     --keychain pointed at that path, and specify the profile name you passed to notarytool in
-#     ~/86box-keychain-notarytool.txt
+#     ~/blumach-keychain-notarytool.txt
 #   - The script returns exit code 50 if notarization fails or is not configured
 #
 
@@ -112,7 +112,7 @@ make_tar() {
 	return $?
 }
 
-cache_dir="$HOME/86box-build-cache"
+cache_dir="$HOME/blumach-build-cache"
 [ ! -d "$cache_dir" ] && mkdir -p "$cache_dir"
 check_buildtag() {
 	[ -z "$BUILD_TAG" -o "$BUILD_TAG" != "$(cat "$cache_dir/buildtag.$1" 2> /dev/null)" ]
@@ -126,12 +126,12 @@ save_buildtag() {
 }
 
 mac_keychain() {
-	keychain_name=$(cat ~/86box-keychain-name.txt)
+	keychain_name=$(cat ~/blumach-keychain-name.txt)
 	if [ -n "$keychain_name" ]
 	then
 		echo $keychain_name
 		security list-keychains -d user -s $(security list-keychains -d user | grep -Fv "/$keychain_name" | sed -e s/\ \*\"//g) "$keychain_name"
-		security unlock-keychain -p "$(cat ~/86box-keychain-password.txt)" "$keychain_name"
+		security unlock-keychain -p "$(cat ~/blumach-keychain-password.txt)" "$keychain_name"
 		return $?
 	fi
 }
@@ -164,7 +164,7 @@ mac_notarize() {
 	then
 		if [ -n "$keychain_name" ]
 		then
-			keychain_profile=$(cat ~/86box-keychain-notarytool.txt)
+			keychain_profile=$(cat ~/blumach-keychain-notarytool.txt)
 			if [ -n "$keychain_profile" ]
 			then
 				keychain_path=$(security list-keychains -d user | grep -F "/$keychain_name" | sed -e s/\ \*\"//g)
@@ -195,7 +195,7 @@ mac_notarize() {
 }
 
 # Set common variables.
-project=86Box
+project=BluMach
 cwd=$(pwd)
 
 # Parse arguments.

@@ -378,7 +378,7 @@ illegal_chars:
             QAction killIcon(tr("&Kill"));
             contextMenu.addAction(&killIcon);
             connect(&killIcon, &QAction::triggered, [this, parent] {
-                QMessageBox msgbox(QMessageBox::Warning, tr("Warning"), tr("Killing a virtual machine can cause data loss. Only do this if the 86Box process gets stuck.\n\nDo you really wish to kill the virtual machine \"%1\"?").arg(selected_sysconfig->displayName), QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No, parent);
+                QMessageBox msgbox(QMessageBox::Warning, tr("Warning"), tr("Killing a virtual machine can cause data loss. Only do this if the BluMach process gets stuck.\n\nDo you really wish to kill the virtual machine \"%1\"?").arg(selected_sysconfig->displayName), QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No, parent);
                 msgbox.exec();
                 if (msgbox.result() == QMessageBox::Yes) {
                     disconnect(selected_sysconfig->process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), nullptr, nullptr);
@@ -1356,10 +1356,7 @@ VMManagerMain::getActiveMachineCount()
 void
 VMManagerMain::backgroundUpdateCheckStart() const
 {
-    auto updateChannel = UpdateCheck::UpdateChannel::CI;
-#    ifdef RELEASE_BUILD
-    updateChannel = UpdateCheck::UpdateChannel::Stable;
-#    endif
+    const auto updateChannel = UpdateCheck::UpdateChannel::Stable;
     const auto updateCheck = new UpdateCheck(updateChannel);
     connect(updateCheck, &UpdateCheck::updateCheckComplete, this, &VMManagerMain::backgroundUpdateCheckComplete);
     connect(updateCheck, &UpdateCheck::updateCheckError, this, &VMManagerMain::backgroundUpdateCheckError);
@@ -1372,7 +1369,7 @@ VMManagerMain::backgroundUpdateCheckComplete(const UpdateCheck::UpdateResult &re
     qDebug() << "Check complete: update available?" << result.updateAvailable;
     if (result.updateAvailable) {
         auto       type          = result.channel == UpdateCheck::UpdateChannel::CI ? tr("build") : tr("version");
-        const auto updateMessage = tr("An update to 86Box is available: %1 %2").arg(type, result.latestVersion);
+        const auto updateMessage = tr("An update to BluMach is available: %1 %2").arg(type, result.latestVersion);
         emit       updateStatusLeft(updateMessage);
     }
 }

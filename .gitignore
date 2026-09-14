@@ -6,6 +6,7 @@ CMakeFiles
 *.a
 /src/*.exe
 /src/86Box
+/src/BluMach
 /src/include/86box/version.h
 /src/.vs
 /src/out
@@ -53,7 +54,7 @@ CMakeLists.txt.user
 /debian/*.log
 /debian/*.substvars
 /debian/.debhelper
-/debian/86box
+/debian/blumach
 /debian/debhelper-build-stamp
 /debian/files
 /obj-*-linux-gnu

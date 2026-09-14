@@ -1,7 +1,7 @@
-Source: 86box
+Source: blumach
 Section: otherosfs
 Priority: optional
-Maintainer: Jasmine Iwanek <jriwanek@gmail.com>
+Maintainer: BluMach project maintainers <blumach@users.noreply.github.com>
 Build-Depends: cmake (>= 3.21),
                debhelper-compat (= 13),
                libevdev-dev,
@@ -19,17 +19,17 @@ Build-Depends: cmake (>= 3.21),
                qt6-base-private-dev,
                libserialport-dev
 Standards-Version: 4.6.0
-Homepage: https://86box.net/
-#Vcs-Browser: https://salsa.debian.org/debian/86box
-#Vcs-Git: https://salsa.debian.org/debian/86box.git
+Homepage: https://github.com/BluMach/BluMach
+Vcs-Browser: https://github.com/BluMach/BluMach
+Vcs-Git: https://github.com/BluMach/BluMach.git
 Rules-Requires-Root: no
 
-Package: 86box
+Package: blumach
 Architecture: amd64 arm64
 Depends: ${shlibs:Depends},
          ${misc:Depends},
 Recommends: libpcap0.8-dev
 Description: An emulator for classic IBM PC clones
-             86Box is a low level x86 emulator that runs older operating systems and software
-             designed for IBM PC systems and compatibles from 1981 through
-             fairly recent system designs based on the PCI bus.
+             BluMach is a preservation-focused emulator derived from 86Box. It combines
+             low-level x86 emulation with a curated historical catalogue, explicit
+             evidence and reproducible machine configurations.

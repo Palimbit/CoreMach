@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst script for 86box
+# postinst script for BluMach
 #
 # see: dh_installdeb(1)
 
@@ -20,8 +20,8 @@ set -e
 
 case "$1" in
     configure)
-        echo You need ROM files in order to use 86Box. These can be obtained from https://github.com/86Box/roms
-        echo You can put the roms folder in, for example, /usr/share/86Box/roms or \~/.local/share/86Box/roms
+        echo BluMach does not distribute proprietary firmware. Provide firmware that you are legally entitled to use.
+        echo You can put the roms folder in, for example, /usr/share/BluMach/roms or \~/.local/share/BluMach/roms
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

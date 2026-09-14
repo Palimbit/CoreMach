@@ -1,0 +1,16 @@
+name: Release identity validation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  identity:
+    name: Reject obsolete release identifiers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate BluMach release identity
+        run: python3 -B tools/check_release_identity.py

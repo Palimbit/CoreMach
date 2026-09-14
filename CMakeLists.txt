@@ -42,7 +42,7 @@ endif()
 project(BluMach
     VERSION 7.0
     DESCRIPTION "Preservation-focused emulator of x86-based systems, derived from 86Box"
-    HOMEPAGE_URL "https://github.com/BluMachOrg/86Box"
+    HOMEPAGE_URL "https://github.com/BluMach/BluMach"
     LANGUAGES C CXX)
 
 if (NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
@@ -130,7 +130,16 @@ option(VNC          "VNC renderer"                                              
 option(MINITRACE    "Enable Chrome tracing using the modified minitrace library" OFF)
 option(GDBSTUB      "Enable GDB stub server for debugging"                       OFF)
 option(DEV_BRANCH   "Development branch"                                         OFF)
-option(DISCORD      "Discord Rich Presence support"                              ON)
+# BluMach does not reuse 86Box's Discord application identity. Keep Rich
+# Presence opt-in until BluMach has its own registered Discord application.
+option(DISCORD      "Discord Rich Presence support (requires a BluMach client ID)" OFF)
+set(BLUMACH_DISCORD_CLIENT_ID "" CACHE STRING "Discord application client ID for BluMach Rich Presence")
+if(DISCORD)
+    if(NOT BLUMACH_DISCORD_CLIENT_ID MATCHES "^[0-9]+$")
+        message(FATAL_ERROR "DISCORD requires a numeric BLUMACH_DISCORD_CLIENT_ID; the 86Box application identity must not be reused")
+    endif()
+    add_compile_definitions(BLUMACH_DISCORD_CLIENT_ID=${BLUMACH_DISCORD_CLIENT_ID})
+endif()
 option(DEBUGREGS486 "Enable debug register opeartion on 486+ CPUs"               OFF)
 option(LIBASAN      "Enable compilation with the addresss sanitizer"             OFF)
 option(QT           "Use the Qt-based user interface"                            ON)

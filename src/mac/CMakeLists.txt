@@ -21,13 +21,13 @@
 
 # Pick the bundle icon depending on the release channel
 if(RELEASE_BUILD)
-    set(APP_ICON_MACOSX icons/release/86Box.icns)
+    set(APP_ICON_MACOSX icons/release/BluMach.icns)
 elseif(BETA_BUILD)
-    set(APP_ICON_MACOSX icons/beta/86Box.icns)
+    set(APP_ICON_MACOSX icons/beta/BluMach.icns)
 elseif(ALPHA_BUILD)
-    set(APP_ICON_MACOSX icons/dev/86Box.icns)
+    set(APP_ICON_MACOSX icons/dev/BluMach.icns)
 else()
-    set(APP_ICON_MACOSX icons/branch/86Box.icns)
+    set(APP_ICON_MACOSX icons/branch/BluMach.icns)
 endif()
 
 target_link_libraries(86Box "-framework AppKit")

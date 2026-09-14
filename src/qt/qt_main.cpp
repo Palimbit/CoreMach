@@ -644,13 +644,13 @@ main(int argc, char *argv[])
     Preferences::loadTranslators(&app);
 #ifdef Q_OS_WINDOWS
     QApplication::setFont(Preferences::getUIFont());
-    SetCurrentProcessExplicitAppUserModelID(L"86Box.86Box");
+    SetCurrentProcessExplicitAppUserModelID(L"BluMach.BluMach");
 #endif
 
 #ifndef Q_OS_MACOS
     app.setWindowIcon(QIcon(EMU_ICON_PATH));
 #    ifdef Q_OS_UNIX
-    app.setDesktopFileName("net.86box.86Box");
+    app.setDesktopFileName("io.github.BluMach.BluMach");
 #    endif
 #endif
 
@@ -666,8 +666,8 @@ main(int argc, char *argv[])
     if (start_vmm) {
         // VMManagerMain vmm;
         // // Hackish until there is a proper solution
-        // QApplication::setApplicationName("86Box VM Manager");
-        // QApplication::setApplicationDisplayName("86Box VM Manager");
+        // QApplication::setApplicationName("BluMach VM Manager");
+        // QApplication::setApplicationDisplayName("BluMach VM Manager");
         // vmm.show();
         // vmm.exec();
 #ifdef Q_OS_WINDOWS
@@ -699,7 +699,7 @@ main(int argc, char *argv[])
         QMessageBox movewarnbox;
         movewarnbox.setIcon(QMessageBox::Icon::Warning);
         movewarnbox.setText(QObject::tr("This machine might have been moved or copied."));
-        movewarnbox.setInformativeText(QObject::tr("In order to ensure proper networking functionality, 86Box needs to know if this machine was moved or copied.\n\nSelect \"I Copied It\" if you are not sure."));
+        movewarnbox.setInformativeText(QObject::tr("In order to ensure proper networking functionality, BluMach needs to know if this machine was moved or copied.\n\nSelect \"I Copied It\" if you are not sure."));
         const QPushButton *movedButton  = movewarnbox.addButton(QObject::tr("I Moved It"), QMessageBox::AcceptRole);
         const QPushButton *copiedButton = movewarnbox.addButton(QObject::tr("I Copied It"), QMessageBox::DestructiveRole);
         QPushButton       *cancelButton = movewarnbox.addButton(QObject::tr("Cancel"), QMessageBox::RejectRole);
@@ -724,8 +724,8 @@ main(int argc, char *argv[])
         FindWindowExW(winbox, NULL, L"TTabSheet", NULL))
 #    endif
     {
-        QMessageBox warningbox(QMessageBox::Icon::Warning, QObject::tr("WinBox is no longer supported"),
-                               QObject::tr("Development of the WinBox manager stopped in 2022 due to a lack of maintainers. As we direct our efforts towards making 86Box even better, we have made the decision to no longer support WinBox as a manager.\n\nNo further updates will be provided through WinBox, and you may encounter incorrect behavior should you continue using it with newer versions of 86Box. Any bug reports related to WinBox behavior will be closed as invalid.\n\nGo to 86box.net for a list of other managers you can use."),
+        QMessageBox warningbox(QMessageBox::Icon::Warning, QObject::tr("WinBox is not supported"),
+                               QObject::tr("BluMach does not support the discontinued WinBox manager. You may encounter incorrect behavior if you continue.\n\nUse BluMach's built-in virtual machine manager instead."),
                                QMessageBox::NoButton);
         warningbox.addButton(QObject::tr("Continue"), QMessageBox::AcceptRole);
         warningbox.addButton(QObject::tr("Exit"), QMessageBox::RejectRole);

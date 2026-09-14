@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Language-Team: English (United States) <https://weblate.86box.net/projects/"
+"Language-Team: English (United States) <https://weblate.github.com/BluMach/BluMach/projects/"
 "86box/86box/en_US/>\n"
 "Language: en-US\n"
 "MIME-Version: 1.0\n"

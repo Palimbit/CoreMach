@@ -43,7 +43,7 @@ VMManagerAddMachine::
     setPixmap(LogoPixmap, QPixmap(":assets/addvm-logo.png"));
 #else
     setWizardStyle(MacStyle);
-    setPixmap(BackgroundPixmap, QPixmap(":/assets/86box-wizard.png"));
+    setPixmap(BackgroundPixmap, QPixmap(":/assets/addvm-watermark.png"));
 #endif
 
     // Wizard wants to resize based on image. This keeps the size
@@ -66,8 +66,7 @@ IntroPage::
 
     setPixmap(QWizard::WatermarkPixmap, QPixmap(":assets/addvm-watermark.png"));
 
-    topLabel = new QLabel(tr("This will help you add a new system to 86Box."));
-    // topLabel = new QLabel(tr("This will help you add a new system to 86Box.\n\n Choose \"New configuration\" if you'd like to create a new machine.\n\nChoose \"Use existing configuration\" if you'd like to paste in an existing configuration from elsewhere."));
+    topLabel = new QLabel(tr("This will help you add a new system to BluMach."));
     topLabel->setWordWrap(true);
 
     newConfigRadioButton = new QRadioButton(tr("New configuration"));
@@ -137,7 +136,7 @@ WithExistingConfigPage::chooseExistingConfigFile()
     const auto startDirectory     = QString(vmm_path);
     const auto selectedConfigFile = QFileDialog::getOpenFileName(this, tr("Choose configuration file"),
                                                                  startDirectory,
-                                                                 tr("86Box configuration files (86box.cfg)"));
+                                                                 tr("BluMach-compatible configuration files (86box.cfg)"));
     // Empty value means the dialog was canceled
     if (!selectedConfigFile.isEmpty()) {
         QFile configFile(selectedConfigFile);

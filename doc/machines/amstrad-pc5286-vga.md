@@ -52,7 +52,7 @@ The register index places these definitions on the missing page:
 - **XR0E — Text Mode**
 
 If you have a complete copy, a clear scan or photograph of that page would
-help. Please open an issue in the [BluMach repository](https://github.com/BluMach/86Box/issues)
+help. Please open an issue in the [BluMach repository](https://github.com/BluMach/BluMach/issues)
 mentioning **PC5286 / 82C452 missing page 72**, with the document edition and
 source or link. Including the title/revision page helps identify the copy.
 

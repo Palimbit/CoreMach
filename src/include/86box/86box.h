@@ -43,7 +43,7 @@
 #define NVR_PATH           "nvr"
 #define SCREENSHOT_PATH    "screenshots"
 #define VMM_PATH		   "Virtual Machines"
-#define VMM_PATH_WINDOWS   "86Box VMs"
+#define VMM_PATH_WINDOWS   "BluMach VMs"
 
 /* Recently used images */
 #define MAX_PREV_IMAGES    10

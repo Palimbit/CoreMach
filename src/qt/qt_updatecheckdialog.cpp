@@ -87,7 +87,7 @@ UpdateCheckDialog::upToDate()
         currentVersionString = QString("v%1").arg(currentVersion);
     else
         currentVersionString = QString("%1 %2").arg(tr("build"), currentVersion);
-    const auto statusText = tr("You are running the latest %1 version of 86Box: %2").arg(updateChannel == UpdateCheck::UpdateChannel::Stable ? tr("stable") : tr("beta"), currentVersionString);
+    const auto statusText = tr("You are running the latest %1 version of BluMach: %2").arg(updateChannel == UpdateCheck::UpdateChannel::Stable ? tr("stable") : tr("beta"), currentVersionString);
     ui->statusLabel->setText(statusText);
     ui->buttonBox->setStandardButtons(QDialogButtonBox::Ok);
 }

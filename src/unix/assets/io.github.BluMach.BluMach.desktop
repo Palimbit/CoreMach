@@ -1,9 +1,9 @@
 [Desktop Entry]
-Name=86Box
+Name=BluMach
 GenericName=Classic PC emulator
 Comment=An emulator for classic IBM PC clones
-Exec=86Box
-Icon=net.86box.86Box
+Exec=BluMach
+Icon=io.github.BluMach.BluMach
 Terminal=false
 Type=Application
 Categories=System;Emulator;

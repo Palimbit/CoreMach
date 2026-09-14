@@ -78,8 +78,8 @@ signals:
 private:
     UpdateChannel updateChannel = UpdateChannel::Stable;
 
-    const QUrl githubReleaseApi = QUrl("https://api.github.com/repos/86box/86Box/releases");
-    const QUrl jenkinsLatestApi = QUrl("https://ci.86box.net/job/86box/lastSuccessfulBuild/api/json");
+    const QUrl githubReleaseApi = QUrl("https://api.github.com/repos/BluMach/BluMach/releases");
+    const QUrl jenkinsLatestApi = QUrl();
     QString    jenkinsLatestVersion;
     QString    currentVersion;
 

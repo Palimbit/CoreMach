@@ -47,7 +47,7 @@
 #include <86box/net_event.h>
 
 #define VDE_PKT_BATCH NET_QUEUE_LEN
-#define VDE_DESCRIPTION "86Box virtual card"
+#define VDE_DESCRIPTION "BluMach virtual card"
 
 enum {
     NET_EVENT_STOP = 0,

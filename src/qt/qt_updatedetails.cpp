@@ -25,7 +25,7 @@ UpdateDetails::
     , ui(new Ui::UpdateDetails)
 {
     ui->setupUi(this);
-    ui->updateTitle->setText(tr("<b>An update to 86Box is available!</b>"));
+    ui->updateTitle->setText(tr("<b>An update to BluMach is available!</b>"));
     QString currentVersionText;
     QString latestVersionText;
     if (updateResult.channel == UpdateCheck::UpdateChannel::Stable) {
@@ -105,30 +105,10 @@ UpdateDetails::visitDownloadPage(const UpdateCheck::UpdateChannel &channel)
 {
     switch (channel) {
         case UpdateCheck::UpdateChannel::Stable:
-            QDesktopServices::openUrl(QUrl("https://github.com/86Box/86Box/releases/latest"));
+            QDesktopServices::openUrl(QUrl("https://github.com/BluMach/BluMach/releases/latest"));
             break;
         case UpdateCheck::UpdateChannel::CI:
-            QDesktopServices::openUrl(QUrl("https://86box.net/builds#"
-#ifdef Q_OS_WINDOWS
-                                           "win"
-#elif defined(Q_OS_MACOS)
-                                           "mac"
-#elif defined(Q_OS_LINUX)
-                                           "lin"
-#endif
-
-#if defined(__aarch64__) || defined(_M_ARM64)
-                                           "arm64"
-#elif defined(__x86_64) || defined(__x86_64__) || defined(__amd64) || defined(_M_X64)
-                                           "64"
-#endif
-
-#ifdef USE_NEW_DYNAREC
-                                           "ndr"
-#else
-                                           "odr"
-#endif
-                                           ));
+            QDesktopServices::openUrl(QUrl("https://github.com/BluMach/BluMach/actions"));
             break;
     }
 }

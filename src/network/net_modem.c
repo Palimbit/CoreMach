@@ -907,10 +907,10 @@ modem_do_command(modem_t *modem, int repeat)
             case 'I': // Some strings about firmware
                 switch (modem_scan_number(&scanbuf)) {
                     case 3:
-                        modem_send_line(modem, "86Box Emulated Modem Firmware V1.00");
+                        modem_send_line(modem, "BluMach Emulated Modem Firmware V1.00");
                         break;
                     case 4:
-                        modem_send_line(modem, "Modem compiled for 86Box version " EMU_VERSION);
+                        modem_send_line(modem, "Modem compiled for BluMach version " EMU_VERSION);
                         break;
                 }
                 break;
