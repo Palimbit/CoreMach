@@ -4,19 +4,9 @@ on:
 
   workflow_dispatch:
 
+  # Linux covers every mainline source change. Pull requests use the faster
+  # cross-platform build and contract-test gate.
   push:
-    branches: [ "master" ]
-    paths:
-      - src/**
-      - cmake/**
-      - "**/CMakeLists.txt"
-      - "CMakePresets.json"
-      - "!.github/workflows/**"
-      - .github/workflows/codeql_linux.yml
-      - vcpkg.json
-      - "!**/Makefile*"
-
-  pull_request:
     branches: [ "master" ]
     paths:
       - src/**
@@ -32,7 +22,7 @@ on:
     - cron: '22 11 * * 0'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
