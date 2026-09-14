@@ -71,7 +71,7 @@ static uint8_t test_read(uint32_t addr, void *priv)
 int
 main(void)
 {
-    toshiba_aform_slot_params_t params = {
+    static toshiba_aform_slot_params_t params = {
         .machine = "t5200", .signals = TOSHIBA_AFORM_T5200_SIGNALS
     };
     mem_mapping_t mapping = { 0 };

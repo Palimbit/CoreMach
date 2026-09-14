@@ -55,6 +55,7 @@ endif()
 
 include(CPack)
 include(CMakeDependentOption)
+include(CTest)
 include(FetchContent)
 
 # Basic build options
@@ -261,3 +262,7 @@ endif()
 set(CMAKE_TOP_LEVEL_PROCESSED TRUE)
 
 add_subdirectory(src)
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

@@ -8,6 +8,7 @@ on:
     branches: [ "master" ]
     paths:
       - src/**
+      - tests/**
       - cmake/**
       - "**/CMakeLists.txt"
       - "CMakePresets.json"
@@ -19,6 +20,7 @@ on:
   pull_request:
     paths:
       - src/**
+      - tests/**
       - cmake/**
       - "**/CMakeLists.txt"
       - "CMakePresets.json"
@@ -108,6 +110,9 @@ jobs:
 
       - name: Build
         run: cmake --build build
+
+      - name: Run host contract tests
+        run: ctest --test-dir build --output-on-failure
 
       - name: Show compiler cache statistics
         if: always()
