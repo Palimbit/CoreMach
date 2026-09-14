@@ -2,19 +2,9 @@ name: CodeQL Analysis (Windows)
 
 on:
 
-  push:
-    branches: [ "master" ]
-    paths:
-      - src/**
-      - cmake/**
-      - "**/CMakeLists.txt"
-      - "CMakePresets.json"
-      - "!.github/workflows/**"
-      - .github/workflows/codeql_windows_msys2.yml
-      - vcpkg.json
-      - "!**/Makefile*"
+  workflow_dispatch:
 
-  pull_request:
+  push:
     branches: [ "master" ]
     paths:
       - src/**
@@ -40,6 +30,7 @@ jobs:
     name: "${{ matrix.ui.name }}, ${{ matrix.build.name }}, ${{ matrix.dynarec.name }}, ${{ matrix.environment.msystem }}"
 
     runs-on: ${{ matrix.environment.runner }}
+    timeout-minutes: 60
 
     permissions:
       actions: read

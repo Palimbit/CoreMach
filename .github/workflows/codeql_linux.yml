@@ -2,6 +2,8 @@ name: CodeQL Analysis (Linux)
 
 on:
 
+  workflow_dispatch:
+
   push:
     branches: [ "master" ]
     paths:
@@ -40,6 +42,7 @@ jobs:
     name: "${{ matrix.ui.name }}, ${{ matrix.build.name }}, ${{ matrix.dynarec.name }}, ${{ matrix.environment.arch }}"
 
     runs-on: ubuntu-26.04
+    timeout-minutes: 45
 
     permissions:
       actions: read
