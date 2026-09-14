@@ -54,25 +54,11 @@ jobs:
         ui:
           - name: SDL GUI
             qt: off
-            qt6: off
             sdl_shader: on
             slug: -SDL
             static: on
-          - name: Qt 5 GUI
-            qt: on
-            qt6: off
-            sdl_shader: off
-            slug: -Qt5
-            packages: >-
-              qtbase5-dev
-              qtbase5-private-dev
-              qttools5-dev
-              qttranslations5-l10n
-              libevdev-dev
-              libxkbcommon-x11-dev
           - name: Qt 6 GUI
             qt: on
-            qt6: on
             sdl_shader: off
             slug: -Qt6
             packages: >-
@@ -128,7 +114,6 @@ jobs:
           cmake -S . -B build --preset ${{ matrix.build.preset }}
           -D NEW_DYNAREC=${{ matrix.dynarec.new }}
           -D QT=${{ matrix.ui.qt }}
-          -D USE_QT6=${{ matrix.ui.qt6 }}
           -D USE_SDL_SHADER=${{ matrix.ui.sdl_shader }}
 
       - name: Build

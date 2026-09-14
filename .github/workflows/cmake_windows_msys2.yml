@@ -56,15 +56,14 @@ jobs:
             new: on
             slug: -NDR
         ui:
-          - name: Qt 5 GUI
+          - name: Qt 6 GUI
             qt: on
-            slug: -Qt5
-            static: on
+            slug: -Qt6
+            static: off
             packages: >-
-              qt5-static:p
+              qt6-base:p
+              qt6-tools:p
               vulkan-headers:p
-#              qt5-base:p
-#              qt5-tools:p
         environment:
 #          - msystem: MSYS
 #            slug: "-MSYS64"
@@ -124,6 +123,7 @@ jobs:
           cmake -S . -B build --preset ${{ matrix.build.preset }}
           -D NEW_DYNAREC=${{ matrix.dynarec.new }}
           -D QT=${{ matrix.ui.qt }}
+          -D STATIC_BUILD=${{ matrix.ui.static }}
 
       - name: Build
         run: cmake --build build

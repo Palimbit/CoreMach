@@ -70,15 +70,14 @@ jobs:
             new: on
             slug: -NDR
         ui:
-          - name: Qt 5 GUI
+          - name: Qt 6 GUI
             qt: on
-            slug: -Qt5
+            slug: -Qt6
             static: off
             packages: >-
-              qt5-base:p
-              qt5-tools:p
+              qt6-base:p
+              qt6-tools:p
               vulkan-headers:p
-#              qt5-static:p
         environment:
 #          - msystem: MSYS
 #            slug: "-MSYS64"

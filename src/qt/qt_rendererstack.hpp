@@ -7,9 +7,7 @@
 #include <QLayout>
 #include <QBoxLayout>
 #include <QWidget>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#    include <QWindow>
-#endif
+#include <QWindow>
 #include <QCursor>
 #include <QScreen>
 
@@ -43,11 +41,7 @@ public:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     void enterEvent(QEnterEvent *event) override;
-#else
-    void enterEvent(QEvent *event) override;
-#endif
     void leaveEvent(QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
     void changeEvent(QEvent *event) override;
@@ -110,12 +104,10 @@ public:
 
     void (*mouse_exit_func)() = nullptr;
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     /* OpenGL/Vulkan renderers ARE QWindows; dynamic_cast returns the QWindow
      * for pointer capture (Wayland, xinput2). Software renderer returns nullptr
      * and the caller falls back to the main window. */
     QWindow *captureWindow() const { return dynamic_cast<QWindow *>(rendererWindow); }
-#endif
 
 signals:
     void blitToRenderer(int buf_idx, int x, int y, int w, int h);

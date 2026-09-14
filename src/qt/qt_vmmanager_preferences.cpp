@@ -84,12 +84,8 @@ VMManagerPreferences::
     ui->regexSearchCheckBox->setChecked(useRegexSearch);
     const auto rememberSizePosition = config->getStringValue("window_remember").toInt();
     ui->rememberSizePositionCheckBox->setChecked(rememberSizePosition);
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     const auto deleteToTrash = config->getStringValue("delete_to_trash").toInt();
     ui->deleteToTrashCheckBox->setChecked(deleteToTrash);
-#else
-    ui->deleteToTrashCheckBox->setVisible(false);
-#endif
     ui->catalogSkinDirectory->setText(QDir::toNativeSeparators(
         config->getStringValue(QStringLiteral("blumach_catalog_skin_directory"))));
     ui->catalogSkinManufacturerMarks->setChecked(
@@ -204,9 +200,7 @@ VMManagerPreferences::accept()
 #endif
     config->setStringValue("window_remember", ui->rememberSizePositionCheckBox->isChecked() ? "1" : "0");
     config->setStringValue("regex_search", ui->regexSearchCheckBox->isChecked() ? "1" : "0");
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     config->setStringValue("delete_to_trash", ui->deleteToTrashCheckBox->isChecked() ? "1" : "0");
-#endif
     config->setStringValue(QStringLiteral("blumach_catalog_skin_directory"),
                            QDir::cleanPath(ui->catalogSkinDirectory->text()));
     config->setStringValue(QStringLiteral("blumach_catalog_skin_manufacturer_marks"),
