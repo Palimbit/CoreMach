@@ -802,6 +802,37 @@ pc_show_usage(void)
 #endif
 }
 
+static int
+copy_string_checked(char *dest, size_t dest_size, const char *src)
+{
+    const size_t src_len = strlen(src);
+
+    if (src_len >= dest_size)
+        return 0;
+
+    memcpy(dest, src, src_len + 1);
+    return 1;
+}
+
+static int
+append_string_checked(char *dest, size_t dest_size, const char *src)
+{
+    size_t dest_len = 0;
+
+    while ((dest_len < dest_size) && (dest[dest_len] != '\0'))
+        dest_len++;
+
+    if (dest_len == dest_size)
+        return 0;
+
+    const size_t src_len = strlen(src);
+    if (src_len >= (dest_size - dest_len))
+        return 0;
+
+    memcpy(dest + dest_len, src, src_len + 1);
+    return 1;
+}
+
 /*
  * Perform initial startup of the PC.
  *
@@ -906,10 +937,10 @@ usage:
                Temporary solution!*/
             if ((c+1) == argc) goto usage;
             char *vp = argv[++c];
-            if ((strlen(vp) + 1) >= sizeof(vmm_path))
-                memcpy(vmm_path, vp, sizeof(vmm_path));
-            else
-                memcpy(vmm_path, vp, strlen(vp) + 1);
+            if (!copy_string_checked(vmm_path, sizeof(vmm_path), vp)) {
+                fprintf(stderr, "The VM manager path is too long.\n");
+                goto usage;
+            }
 #endif
         } else if (!strcasecmp(argv[c], "--fullscreen") || !strcasecmp(argv[c], "-F")) {
             start_in_fullscreen = 1;
@@ -917,7 +948,10 @@ usage:
             if ((c + 1) == argc)
                 goto usage;
 
-            strcpy(log_path, argv[++c]);
+            if (!copy_string_checked(log_path, sizeof(log_path), argv[++c])) {
+                fprintf(stderr, "The log file path is too long.\n");
+                goto usage;
+            }
         } else if (!strcasecmp(argv[c], "--vmpath") || !strcasecmp(argv[c], "-P")) {
             if ((c + 1) == argc)
                 goto usage;
@@ -967,7 +1001,12 @@ usage:
             if (drive >= FDD_NUM)
                 drive = FDD_NUM - 1;
             fn[(int) drive] = (char *) calloc(2048, 1);
-            strcpy(fn[(int) drive], temp2);
+            if (!copy_string_checked(fn[(int) drive], 2048, temp2)) {
+                fprintf(stderr, "The floppy image path is too long.\n");
+                free(temp2);
+                temp2 = NULL;
+                goto usage;
+            }
             pclog("Drive %c: %s\n", drive + 0x41, fn[(int) drive]);
             free(temp2);
             temp2 = NULL;
@@ -975,7 +1014,10 @@ usage:
             if ((c + 1) == argc)
                 goto usage;
 
-            strcpy(vm_name, argv[++c]);
+            if (!copy_string_checked(vm_name, sizeof(vm_name), argv[++c])) {
+                fprintf(stderr, "The VM name is too long.\n");
+                goto usage;
+            }
 #ifndef USE_SDL_UI
         } else if (!strcasecmp(argv[c], "--settings") || !strcasecmp(argv[c], "-S")) {
             settings_only = 1;
@@ -1075,13 +1117,19 @@ usage:
              * Add it to the current working directory
              * to convert it (back) to an absolute path.
              */
-            strcat(usr_path, ppath);
+            if (!append_string_checked(usr_path, sizeof(usr_path), ppath)) {
+                fprintf(stderr, "The VM path is too long.\n");
+                goto usage;
+            }
         } else {
             /*
              * The user-provided path seems like an
              * absolute path, so just use that.
              */
-            strcpy(usr_path, ppath);
+            if (!copy_string_checked(usr_path, sizeof(usr_path), ppath)) {
+                fprintf(stderr, "The VM path is too long.\n");
+                goto usage;
+            }
         }
 
         /* If the specified path does not yet exist,
@@ -1141,13 +1189,19 @@ usage:
              * Add it to the current working directory
              * to convert it (back) to an absolute path.
              */
-            strcat(rom_path, rpath);
+            if (!append_string_checked(rom_path, sizeof(rom_path), rpath)) {
+                fprintf(stderr, "The ROM path is too long.\n");
+                goto usage;
+            }
         } else {
             /*
              * The user-provided path seems like an
              * absolute path, so just use that.
              */
-            strcpy(rom_path, rpath);
+            if (!copy_string_checked(rom_path, sizeof(rom_path), rpath)) {
+                fprintf(stderr, "The ROM path is too long.\n");
+                goto usage;
+            }
         }
 
         /* If the specified path does not yet exist,
@@ -1171,13 +1225,19 @@ usage:
              * Add it to the current working directory
              * to convert it (back) to an absolute path.
              */
-            strcat(asset_path, apath);
+            if (!append_string_checked(asset_path, sizeof(asset_path), apath)) {
+                fprintf(stderr, "The asset path is too long.\n");
+                goto usage;
+            }
         } else {
             /*
              * The user-provided path seems like an
              * absolute path, so just use that.
              */
-            strcpy(asset_path, apath);
+            if (!copy_string_checked(asset_path, sizeof(asset_path), apath)) {
+                fprintf(stderr, "The asset path is too long.\n");
+                goto usage;
+            }
         }
 
         /* If the specified path does not yet exist,
@@ -1214,10 +1274,15 @@ usage:
          * Otherwise, assume the pathname given is
          * relative to whatever the usr_path is.
          */
-        if (path_abs(cfg))
-            strcpy(usr_path, cfg);
-        else
-            strcat(usr_path, cfg);
+        if (path_abs(cfg)) {
+            if (!copy_string_checked(usr_path, sizeof(usr_path), cfg)) {
+                fprintf(stderr, "The configuration path is too long.\n");
+                goto usage;
+            }
+        } else if (!append_string_checked(usr_path, sizeof(usr_path), cfg)) {
+            fprintf(stderr, "The configuration path is too long.\n");
+            goto usage;
+        }
     }
 
     /* Make sure we have a trailing backslash. */

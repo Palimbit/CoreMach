@@ -41,9 +41,6 @@ jobs:
 
     runs-on: ubuntu-26.04
 
-    env:
-      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
-
     permissions:
       actions: read
       contents: read
@@ -99,15 +96,12 @@ jobs:
           ${{ matrix.ui.packages }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
 
-      - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
-
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
@@ -120,23 +114,9 @@ jobs:
           -D USE_SDL_SHADER=${{ matrix.ui.sdl_shader }}
 
       - name: Build
-        run: |
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build build
+        run: cmake --build build
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           category: "/language:${{ matrix.language }}/ui:${{ matrix.ui.slug }}/dynarec:${{ matrix.dynarec.slug }}/platform:linux"
-
-      - name: SonarQube Scan
-        if: matrix.build.preset == 'dev_debug' && matrix.dynarec.new == 'on' && matrix.ui.qt == 'on' && env.SONAR_TOKEN != ''
-#        if: 0
-        uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#          SONAR_ROOT_CERT: ${{ secrets.SONAR_ROOT_CERT }}
-        with:
-           # Consult https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/ for more information and options
-           args: >
-             --define sonar.cfamily.compile-commands=build/compile_commands.json

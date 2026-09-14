@@ -41,7 +41,7 @@ include(GNUInstallDirs)
 
 # lzma
 if(NOT TARGET chdr-lzma)
-  add_subdirectory(deps/lzma-25.01 EXCLUDE_FROM_ALL)
+  add_subdirectory(deps/lzma-26.02 EXCLUDE_FROM_ALL)
 endif()
 list(APPEND CHDR_LIBS chdr-lzma)
 
@@ -52,7 +52,7 @@ if (WITH_SYSTEM_ZLIB)
   list(APPEND CHDR_DEFINES CHDR_SYSTEM_ZLIB)
 else()
   if(NOT TARGET miniz)
-    add_subdirectory(deps/miniz-3.1.1 EXCLUDE_FROM_ALL)
+    add_subdirectory(deps/miniz-3.1.2 EXCLUDE_FROM_ALL)
   endif()
   list(APPEND CHDR_LIBS miniz)
 endif()

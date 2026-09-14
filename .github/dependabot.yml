@@ -7,3 +7,17 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Keep the pinned native dependency baseline current.
+  - package-ecosystem: "vcpkg"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      native-dependencies:
+        patterns:
+          - "*"
