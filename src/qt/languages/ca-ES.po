@@ -804,8 +804,8 @@ msgstr "Imatges de cinta"
 msgid "Image %1"
 msgstr "Imatge %1"
 
-msgid "%1 could not find any usable ROM images.\n\nPlease <a href=\"%2\">download</a> a ROM set and extract it into the \"roms\" directory."
-msgstr "El %1 no ha pogut trobar cap de imatge ROM utilitzable.\n\nSi us plau, <a href=\"%2\">descarregueu</a> un conjunt de ROMs i extraieu-les al directori \"roms\"."
+msgid "%1 could not find any usable ROM images.\n\nProvide a local ROM directory containing firmware you are legally entitled to use. Place it in the \"roms\" directory next to the application, or start %1 with --rompath path."
+msgstr ""
 
 msgid "(empty)"
 msgstr "(buit)"

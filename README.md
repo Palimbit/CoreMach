@@ -99,13 +99,13 @@ audit checks the platform layout, starts the packaged executable with
 `--version` without requiring ROMs, and rejects unexpected size growth. It can
 be run locally with `python tools/package_audit.py --help`.
 
-The [upstream 86Box build guide](https://86box.readthedocs.io/en/latest/dev/buildguide.html)
-is a useful dependency reference, but its release paths, branding and support
-channels do not describe BluMach.
+See the [BluMach build guide](doc/building.md) for supported toolchains,
+dependencies and validation commands.
 
 To run an emulated machine, provide a local ROM directory containing firmware
-you are legally entitled to use. Firmware availability in a preservation record
-does not imply permission to redistribute it.
+you are legally entitled to use. See the [firmware policy and setup guide](doc/firmware.md).
+Firmware availability in a preservation record does not imply permission to
+redistribute it.
 
 ## Contributing
 
@@ -121,10 +121,9 @@ paths may continue to use `86Box` where changing them would break compatibility.
 This is an implementation detail and does not imply endorsement by the upstream
 project.
 
-Where a problem is reproducible in an unmodified 86Box build, consult the
-[upstream project](https://github.com/86Box/86Box). BluMach-specific changes
-should be discussed in a BluMach pull request until a dedicated public support
-channel is established.
+Report BluMach problems to this repository first. If a problem is reproducible
+in an unmodified [86Box](https://github.com/86Box/86Box) build, the BluMach
+maintainers can determine whether to coordinate a fix with the upstream project.
 
 ## License and provenance
 

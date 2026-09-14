@@ -19,6 +19,10 @@ FORBIDDEN_TEXT = (
     "https://ci." + "86box.net",
     "https://86box.net/" + "builds",
     "api.github.com/repos/86box/" + "86Box",
+    "github.com/86Box/" + "roms",
+    "86box." + "readthedocs.io",
+    "EMU_" + "ROMS_URL",
+    "download</a> a " + "ROM set",
     "Usage: " + "86box",
     "weblate.github.com/" + "BluMach/BluMach",
     "d:" + "\\\\86boxnew",
@@ -108,7 +112,6 @@ def main() -> int:
             for value in FORBIDDEN_PACKAGING_TEXT.get(relative, ()):
                 if value in line:
                     errors.append(f"{relative}:{line_number}: obsolete package dependency {value!r}")
-
     if errors:
         print("BluMach release identity check failed:", file=sys.stderr)
         print("\n".join(f"  {error}" for error in errors), file=sys.stderr)

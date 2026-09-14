@@ -804,8 +804,8 @@ msgstr "Imagens de fita"
 msgid "Image %1"
 msgstr "Imagem %1"
 
-msgid "%1 could not find any usable ROM images.\n\nPlease <a href=\"%2\">download</a> a ROM set and extract it into the \"roms\" directory."
-msgstr "O %1 não conseguiu encontrar nenhuma imagem ROM utilizável.\n\nPor favor, vá a <a href=\"%2\">descarregue</a> um pacote ROM e instale-o na pasta \"roms\"."
+msgid "%1 could not find any usable ROM images.\n\nProvide a local ROM directory containing firmware you are legally entitled to use. Place it in the \"roms\" directory next to the application, or start %1 with --rompath path."
+msgstr ""
 
 msgid "(empty)"
 msgstr "(vazio)"

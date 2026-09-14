@@ -804,8 +804,8 @@ msgstr "Páskové obrazy"
 msgid "Image %1"
 msgstr "Obraz %1"
 
-msgid "%1 could not find any usable ROM images.\n\nPlease <a href=\"%2\">download</a> a ROM set and extract it into the \"roms\" directory."
-msgstr "%1 nenalezl žádné použitelné obrazy pamětí ROM.\n\n<a href=\"%2\">Stáhněte</a> sadu obrazů ROM a extrahujte ji do složky \"roms\"."
+msgid "%1 could not find any usable ROM images.\n\nProvide a local ROM directory containing firmware you are legally entitled to use. Place it in the \"roms\" directory next to the application, or start %1 with --rompath path."
+msgstr ""
 
 msgid "(empty)"
 msgstr "(prázdné)"

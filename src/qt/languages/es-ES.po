@@ -871,8 +871,8 @@ msgstr "Imágenes de cinta"
 msgid "Image %1"
 msgstr "Imagen %1"
 
-msgid "%1 could not find any usable ROM images.\n\nPlease <a href=\"%2\">download</a> a ROM set and extract it into the \"roms\" directory."
-msgstr "%1 no pudo encontrar ninguna imagen ROM usable.\n\nPor favor <a href=\"%2\">descargue</a> un conjunte de ROMs y extráigalo en el directorio \"roms\"."
+msgid "%1 could not find any usable ROM images.\n\nProvide a local ROM directory containing firmware you are legally entitled to use. Place it in the \"roms\" directory next to the application, or start %1 with --rompath path."
+msgstr "%1 no ha encontrado ninguna imagen ROM utilizable.\n\nProporciona un directorio local de ROM que contenga firmware que tengas derecho a utilizar. Colócalo en el directorio \"roms\" junto a la aplicación o inicia %1 con --rompath ruta."
 
 msgid "(empty)"
 msgstr "(vacío)"
