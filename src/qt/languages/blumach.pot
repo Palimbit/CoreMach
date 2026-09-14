@@ -798,7 +798,7 @@ msgstr ""
 msgid "Image %1"
 msgstr ""
 
-msgid "%1 could not find any usable ROM images.\n\nPlease <a href=\"%2\">download</a> a ROM set and extract it into the \"roms\" directory."
+msgid "%1 could not find any usable ROM images.\n\nProvide a local ROM directory containing firmware you are legally entitled to use. Place it in the \"roms\" directory next to the application, or start %1 with --rompath path."
 msgstr ""
 
 msgid "(empty)"

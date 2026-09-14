@@ -804,8 +804,8 @@ msgstr "Εικόνες ταινίας"
 msgid "Image %1"
 msgstr "Εικόνα %1"
 
-msgid "%1 could not find any usable ROM images.\n\nPlease <a href=\"%2\">download</a> a ROM set and extract it into the \"roms\" directory."
-msgstr "Το %1 δεν μπόρεσε να εντοπίσει καμία ROM.\n\nΠαρακαλώ <a href=\"%2\">κατεβάστε</a> το πακέτο ROM και εξάγετέ το στον κατάλογο \"roms\"."
+msgid "%1 could not find any usable ROM images.\n\nProvide a local ROM directory containing firmware you are legally entitled to use. Place it in the \"roms\" directory next to the application, or start %1 with --rompath path."
+msgstr ""
 
 msgid "(empty)"
 msgstr "(κενό)"

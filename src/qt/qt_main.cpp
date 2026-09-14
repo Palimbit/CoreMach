@@ -647,9 +647,12 @@ main(int argc, char *argv[])
 
     if (!pc_init_roms()) {
         QMessageBox fatalbox(QMessageBox::Icon::Critical, QObject::tr("No ROMs found"),
-                             QObject::tr("%1 could not find any usable ROM images.\n\nPlease <a href=\"%2\">download</a> a ROM set and extract it into the \"roms\" directory.").arg(EMU_NAME, EMU_ROMS_URL),
+                             QObject::tr("%1 could not find any usable ROM images.\n\n"
+                                         "Provide a local ROM directory containing firmware you are legally entitled to use. "
+                                         "Place it in the \"roms\" directory next to the application, or start %1 with --rompath path.")
+                                 .arg(EMU_NAME),
                              QMessageBox::Ok);
-        fatalbox.setTextFormat(Qt::TextFormat::RichText);
+        fatalbox.setTextFormat(Qt::TextFormat::PlainText);
         fatalbox.exec();
         return 6;
     }
