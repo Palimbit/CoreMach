@@ -3,6 +3,7 @@
 #define BLUMACH_RUNTIME_RUNTIME_H
 
 #include <blumach/engine/engine.h>
+#include <blumach/engine/input.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,8 @@ typedef bm_status_t (*bm_machine_reset_fn)(void *machine);
 typedef bm_status_t (*bm_machine_inspect_fn)(const void *machine,
                                              const char *name,
                                              uint64_t *value);
+typedef bm_status_t (*bm_machine_input_fn)(void *machine,
+                                          const bm_input_event_t *event);
 typedef bm_status_t (*bm_machine_video_geometry_fn)(const void *machine,
                                                      bm_video_geometry_t *geometry);
 typedef bm_status_t (*bm_machine_video_render_fn)(const void *machine,
@@ -41,6 +44,7 @@ typedef struct bm_machine_ops {
     bm_machine_video_render_fn video_render;
     bm_machine_reset_fn reset;
     bm_machine_inspect_fn inspect;
+    bm_machine_input_fn input;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_config {
@@ -72,6 +76,8 @@ bm_status_t bm_session_render_video(const bm_session_t *session,
 bm_status_t bm_session_inspect_machine(const bm_session_t *session,
                                        const char *name,
                                        uint64_t *value);
+bm_status_t bm_session_send_input(bm_session_t *session,
+                                  const bm_input_event_t *event);
 
 #ifdef __cplusplus
 }

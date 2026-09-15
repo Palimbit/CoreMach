@@ -102,7 +102,7 @@ test_partial_initialization_cleanup(const bm_pcs86_config_t *config)
     size_t failure;
 
     /* Exercise every allocation performed while starting this machine. */
-    for (failure = 0; failure < 14; ++failure) {
+    for (failure = 0; failure < 16; ++failure) {
         allocation_tracker_t tracker = { 0, SIZE_MAX, 0 };
         bm_host_services_t host = {
             &tracker, tracked_allocate, tracked_release, tracked_time, tracked_log
@@ -177,6 +177,8 @@ main(void)
         pixels, sizeof(pixels) / sizeof(pixels[0]), 9U,
         { 0, 0, BM_PIXEL_XRGB8888 }
     };
+    const bm_input_event_t key_down = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
+    const bm_input_event_t key_up = { BM_INPUT_KEY, BM_KEY_A, 0, 0 };
 
     for (index = 0; index < sizeof(reset_jump); ++index)
         put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
@@ -212,6 +214,14 @@ main(void)
     assert(bm_session_render_video(session, &framebuffer) == BM_STATUS_OK);
     for (index = 0; index < sizeof(pixels) / sizeof(pixels[0]); ++index)
         assert(pixels[index] == 0U);
+    assert(bm_session_send_input(session, &key_down) == BM_STATUS_OK);
+    assert(bm_session_send_input(session, &key_up) == BM_STATUS_OK);
+    {
+        uint64_t value = UINT64_MAX;
+        assert(bm_session_inspect_machine(session, "keyboard_queue_depth", &value) ==
+               BM_STATUS_OK);
+        assert(value == 2U);
+    }
 
     assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xf000);
@@ -256,6 +266,9 @@ main(void)
     {
         uint64_t value = UINT64_MAX;
         assert(bm_session_inspect_machine(session, "pit0_count", &value) == BM_STATUS_OK);
+        assert(value == 0U);
+        assert(bm_session_inspect_machine(session, "keyboard_queue_depth", &value) ==
+               BM_STATUS_OK);
         assert(value == 0U);
         assert(bm_session_inspect_machine(session, "unknown", &value) ==
                BM_STATUS_INVALID_ARGUMENT);

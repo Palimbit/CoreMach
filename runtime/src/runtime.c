@@ -214,3 +214,17 @@ bm_session_inspect_machine(const bm_session_t *session,
         return BM_STATUS_UNSUPPORTED;
     return session->configuration.ops.inspect(session->machine, name, value);
 }
+
+bm_status_t
+bm_session_send_input(bm_session_t *session, const bm_input_event_t *event)
+{
+    if ((session == NULL) || (event == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.ops.input == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.ops.input(session->machine, event);
+}

@@ -29,6 +29,11 @@ target_link_libraries(portable-engine-pcs86-reset
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
+add_executable(portable-engine-pcs86-user-io pcs86_user_io_test.c)
+target_link_libraries(portable-engine-pcs86-user-io
+    PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
+)
+
 add_executable(portable-engine-pc-platform pc_platform_test.c)
 target_link_libraries(portable-engine-pc-platform
     PRIVATE blumach_pc_components blumach_platform_null
@@ -106,7 +111,12 @@ target_link_libraries(portable-engine-pcs86-firmware-probe
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform portable-engine-dma8237 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts)
+add_executable(portable-engine-legacy-io legacy_io_test.c)
+target_link_libraries(portable-engine-legacy-io
+    PRIVATE blumach_pc_components blumach_platform_null
+)
+
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -126,6 +136,7 @@ endif()
 
 add_test(NAME portable-engine.linear-memory COMMAND portable-engine-memory)
 add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-reset)
+add_test(NAME portable-engine.pcs86-user-io COMMAND portable-engine-pcs86-user-io)
 add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 add_test(NAME portable-engine.dma8237-programming COMMAND portable-engine-dma8237)
 add_test(NAME portable-engine.dma-page-registers COMMAND portable-engine-dma-pages)
@@ -136,9 +147,11 @@ add_test(NAME portable-engine.808x-rom-checksum COMMAND portable-engine-808x-che
 add_test(NAME portable-engine.808x-segment-overrides COMMAND portable-engine-808x-segments)
 add_test(NAME portable-engine.808x-byte-compare COMMAND portable-engine-808x-compare)
 add_test(NAME portable-engine.808x-rotate-shift-groups COMMAND portable-engine-808x-shifts)
+add_test(NAME portable-engine.legacy-io COMMAND portable-engine-legacy-io)
 set_tests_properties(
     portable-engine.linear-memory
     portable-engine.pcs86-reset-vector
+    portable-engine.pcs86-user-io
     portable-engine.pc-platform
     portable-engine.dma8237-programming
     portable-engine.dma-page-registers
@@ -149,5 +162,6 @@ set_tests_properties(
     portable-engine.808x-segment-overrides
     portable-engine.808x-byte-compare
     portable-engine.808x-rotate-shift-groups
+    portable-engine.legacy-io
     PROPERTIES TIMEOUT 10
 )

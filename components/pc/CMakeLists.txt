@@ -3,10 +3,12 @@
 add_library(blumach_pc_components STATIC
     src/dma8237.c
     src/dma_page_registers.c
+    src/lpt_spp.c
     src/pic8259.c
     src/pit8253.c
     src/pit8253_exact.c
     src/rtc_mm58167.c
+    src/uart16450.c
 )
 target_include_directories(blumach_pc_components
     PUBLIC
