@@ -33,6 +33,7 @@ struct bm_dma8237 {
     uint8_t mask;
     uint8_t temporary;
     uint8_t high_byte;
+    uint8_t page[4];
 };
 
 static uint8_t
@@ -225,6 +226,15 @@ bm_dma8237_set_dreq(bm_dma8237_t *dma, unsigned int channel, int asserted)
 }
 
 bm_status_t
+bm_dma8237_set_page(bm_dma8237_t *dma, unsigned int channel, uint8_t page)
+{
+    if ((dma == NULL) || (channel >= 4))
+        return BM_STATUS_INVALID_ARGUMENT;
+    dma->page[channel] = page;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
 bm_dma8237_channel_state(const bm_dma8237_t *dma,
                          unsigned int channel,
                          bm_dma8237_channel_state_t *out_state)
@@ -238,6 +248,10 @@ bm_dma8237_channel_state(const bm_dma8237_t *dma,
     out_state->base_count = dma->channel[channel].base_count;
     out_state->current_count = dma->channel[channel].current_count;
     out_state->mode = dma->channel[channel].mode;
+    out_state->page = dma->page[channel];
+    out_state->current_physical_address =
+        ((uint32_t) dma->page[channel] << 16U) |
+        dma->channel[channel].current_address;
     out_state->masked = (dma->mask & bit) != 0;
     out_state->requested = (request_bits(dma) & bit) != 0;
     out_state->terminal_count = (dma->terminal_count & bit) != 0;

@@ -97,15 +97,17 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-197,049 instructions and 103 successful I/O transactions before reporting an
-unmapped write to DMA page register `87h` at `F000:01AC`. This covers the
+197,141 instructions and 121 successful I/O transactions before reporting an
+unmapped read from PCS board-control port `B0h` at `F000:01CC`. This covers the
 reset jump, flag/register self-test, the firmware's complete 64 KiB checksum
 loop, its first conventional-memory alias check, a 64 KiB upper-memory
-clear-and-scan pass and the following segment-overridden memory-alias check.
+clear-and-scan pass, the following segment-overridden memory-alias check and
+the programming self-tests for the 8237 and its external page latches.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
-effective-address decoding, immediate word masking, byte comparison and NOT,
+effective-address decoding, immediate word and byte masking, byte comparison,
+TEST and NOT,
 segment-overridden byte loads, the checksum loop, near return,
 `MOV r/m16,imm16`, all four segment overrides and forward `REP STOSW`/`REPE
 SCASW`. Its inspection contract exposes all general and segment
@@ -120,11 +122,14 @@ Writes to the known EMS page-selector range `8400h-8403h` are also retained,
 but the aperture and backing SIMMs remain deliberately absent.
 
 The PCS 86 now owns a portable 8237 programming core with explicit address,
-count, command, mode, request, mask, status and master-clear state. It does not
-claim arbitration, bus ownership or byte transfers. After exercising those
-registers, the BIOS reaches port `87h`; the strict bus rejects this still absent
-external DMA page register. That page-register contract is the next platform
-cut before transfer semantics or a floppy device can be connected.
+count, command, mode, request, mask, status and master-clear state. A separate
+XT page-register component maps the firmware-observed `87h`, `83h`, `81h` and
+`82h` channel order, retains reserved ports as independent latches and exposes
+the resulting 20-bit DMA address. PCS 86 writes are constrained to the
+documented four-bit page value; an 8237 master clear cannot erase these
+external latches. Neither component claims arbitration, bus ownership or byte
+transfers. The strict bus now stops at the still absent PCS board-control port
+`B0h`, which is the next evidence boundary.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
