@@ -1,0 +1,70 @@
+name: Portable engine
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["architecture/portable-engine"]
+    paths:
+      - engine/**
+      - runtime/**
+      - components/**
+      - systems/**
+      - platforms/**
+      - apps/**
+      - tests/engine/**
+      - provenance/**
+      - tools/provenance_audit.py
+      - tools/tests/test_provenance_audit.py
+      - CMakeLists.txt
+      - tests/CMakeLists.txt
+      - .github/workflows/portable_engine.yml
+  pull_request:
+    branches: ["architecture/portable-engine"]
+    paths:
+      - engine/**
+      - runtime/**
+      - components/**
+      - systems/**
+      - platforms/**
+      - apps/**
+      - tests/engine/**
+      - provenance/**
+      - tools/provenance_audit.py
+      - tools/tests/test_provenance_audit.py
+      - CMakeLists.txt
+      - tests/CMakeLists.txt
+      - .github/workflows/portable_engine.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    name: Engine only (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, windows-2022, macos-14]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Configure engine-only build
+        run: >-
+          cmake -S . -B build/portable
+          -D BLUMACH_BUILD_LEGACY=OFF
+          -D BLUMACH_BUILD_ENGINE=ON
+          -D BUILD_TESTING=ON
+          -D QT=OFF
+      - name: Build
+        run: cmake --build build/portable --config Debug
+      - name: Test
+        run: ctest --test-dir build/portable -C Debug --output-on-failure
+      - name: Audit provenance
+        run: python -B tools/provenance_audit.py
+      - name: Test provenance audit
+        run: python -B -m unittest tools.tests.test_provenance_audit

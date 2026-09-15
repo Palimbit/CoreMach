@@ -27,23 +27,37 @@ set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
 
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release;UltraDebug;Optimized" CACHE STRING "")
 
-if(NOT DEFINED QT OR QT)
-    list(APPEND VCPKG_MANIFEST_FEATURES "qt-ui")
+option(BLUMACH_BUILD_LEGACY "Build the inherited BluMach product" ON)
+option(BLUMACH_BUILD_ENGINE "Build the portable BluMach engine" ON)
+
+if(NOT BLUMACH_BUILD_LEGACY AND NOT BLUMACH_BUILD_ENGINE)
+    message(FATAL_ERROR "Enable at least one BluMach implementation.")
 endif()
 
-if(NOT DEFINED OPENAL OR OPENAL)
-    list(APPEND VCPKG_MANIFEST_FEATURES "openal")
+if(BLUMACH_BUILD_LEGACY)
+    if(NOT DEFINED QT OR QT)
+        list(APPEND VCPKG_MANIFEST_FEATURES "qt-ui")
+    endif()
+
+    if(NOT DEFINED OPENAL OR OPENAL)
+        list(APPEND VCPKG_MANIFEST_FEATURES "openal")
+    endif()
+
+    if(MUNT_EXTERNAL)
+        list(APPEND VCPKG_MANIFEST_FEATURES "munt")
+    endif()
 endif()
 
-if(MUNT_EXTERNAL)
-    list(APPEND VCPKG_MANIFEST_FEATURES "munt")
+set(BLUMACH_PROJECT_LANGUAGES C)
+if(BLUMACH_BUILD_LEGACY)
+    list(APPEND BLUMACH_PROJECT_LANGUAGES CXX)
 endif()
 
 project(BluMach
     VERSION 0.1.0
     DESCRIPTION "Preservation-focused emulator of x86-based systems, derived from 86Box"
     HOMEPAGE_URL "https://github.com/BluMach/BluMach"
-    LANGUAGES C CXX)
+    LANGUAGES ${BLUMACH_PROJECT_LANGUAGES})
 
 # CMake requires a numeric project version. Keep the optional SemVer
 # prerelease identifier separate and expose one canonical display/package value.
@@ -54,11 +68,11 @@ else()
     set(BLUMACH_VERSION_FULL "${CMAKE_PROJECT_VERSION}")
 endif()
 
-if (NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
+if (BLUMACH_BUILD_LEGACY AND NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
     message(FATAL_ERROR "Only 64-bit builds are supported.")
 endif()
 
-if (CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
+if (BLUMACH_BUILD_LEGACY AND CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
     message(FATAL_ERROR "Big-endian builds are not supported.")
 endif()
 
@@ -116,8 +130,10 @@ if(HAIKU)
     set(OPENAL ON)
 endif()
 
-include(DetectTargetArch)
-include(CompilerFlags)
+if(BLUMACH_BUILD_LEGACY)
+    include(DetectTargetArch)
+    include(CompilerFlags)
+endif()
 
 # Optional features
 #
@@ -138,6 +154,10 @@ option(DEBUGREGS486 "Enable debug register opeartion on 486+ CPUs"              
 option(LIBASAN      "Enable compilation with the addresss sanitizer"             OFF)
 option(QT           "Use the Qt-based user interface"                            ON)
 option(SDL2         "Use SDL2 instead of SDL3"                                   OFF)
+
+if(NOT BLUMACH_BUILD_LEGACY)
+    set(QT OFF CACHE BOOL "Use the Qt-based user interface" FORCE)
+endif()
 
 if((ARCH STREQUAL "arm64"))
     set(NEW_DYNAREC ON)
@@ -202,7 +222,7 @@ cmake_dependent_option(VFIO           "Virtual Function I/O"                    
 cmake_dependent_option(SOFTMODEM      "AC'97 Softmodem"                          ON    "DEV_BRANCH"  OFF)
 
 # Ditto but for Qt
-if(QT)
+if(BLUMACH_BUILD_LEGACY AND QT)
     if(APPLE)
         option(MOLTENVK "Use MoltenVK libraries for Vulkan support on macOS. Requires a Vulkan-enabled QT." OFF)
     endif()
@@ -270,7 +290,17 @@ endif()
 
 set(CMAKE_TOP_LEVEL_PROCESSED TRUE)
 
-add_subdirectory(src)
+if(BLUMACH_BUILD_LEGACY)
+    add_subdirectory(src)
+endif()
+
+if(BLUMACH_BUILD_ENGINE)
+    add_subdirectory(components/buses)
+    add_subdirectory(engine)
+    add_subdirectory(runtime)
+    add_subdirectory(platforms/null)
+    add_subdirectory(apps/headless)
+endif()
 
 if(BUILD_TESTING)
     add_subdirectory(tests)
