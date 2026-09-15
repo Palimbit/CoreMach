@@ -44,9 +44,18 @@ main(void)
         0x86, 0xe9,             /* XCHG CH,CL -> CX=AA55h */
         0x89, 0x06, 0x00, 0x05, /* MOV [0500h],AX */
         0x39, 0x0e, 0x00, 0x05, /* CMP [0500h],CX */
-        0x75, 0x0d,             /* JNE failure */
+        0x75, 0x25,             /* JNE failure */
         0x24, 0x0f,             /* AND AL,0Fh */
         0x0c, 0x80,             /* OR AL,80h -> AX=AA85h */
+        0xba, 0x23, 0xf1,       /* MOV DX,F123h */
+        0x81, 0xe2, 0x00, 0xf0, /* AND DX,F000h -> DX=F000h */
+        0xbf, 0x00, 0x06,       /* MOV DI,0600h */
+        0xb9, 0x02, 0x00,       /* MOV CX,2 */
+        0xfc,                   /* CLD */
+        0xf3, 0xab,             /* REP STOSW */
+        0xbf, 0x00, 0x06,       /* MOV DI,0600h */
+        0xb9, 0x02, 0x00,       /* MOV CX,2 */
+        0xf3, 0xaf,             /* REPE SCASW */
         0x81, 0x3e, 0x00, 0x05, 0x55, 0xaa, /* CMP [0500h],AA55h */
         0x75, 0x01,             /* JNE failure */
         0xf4,                   /* success HLT */
@@ -89,11 +98,14 @@ main(void)
     assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 48) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 57) == BM_STATUS_OK);
     assert(inspect(engine, "halted") == 1);
     assert(inspect(engine, "ax") == 0xaa85U);
+    assert(inspect(engine, "dx") == 0xf000U);
+    assert(inspect(engine, "cx") == 0U);
+    assert(inspect(engine, "di") == 0x0604U);
     assert(inspect(engine, "sp") == 0x0402U);
-    assert(inspect(engine, "last_fetch") == 0xf014eU);
+    assert(inspect(engine, "last_fetch") == 0xf0166U);
     assert((inspect(engine, "flags") & 0x0040U) != 0); /* ZF from group 81h CMP. */
 
     bm_engine_destroy(engine);

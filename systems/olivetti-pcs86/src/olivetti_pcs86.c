@@ -34,6 +34,8 @@ typedef struct bm_pcs86_machine {
     uint8_t jumpers;
     uint8_t nmi_mask;
     uint8_t diagnostic_port;
+    uint8_t memory_control_latch;
+    uint8_t ems_page_selector[4];
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
 } bm_pcs86_machine_t;
@@ -51,6 +53,40 @@ pcs86_diagnostic_access(void *context, bm_bus_transaction_t *transaction)
         transaction->value = *latch;
     else
         *latch = (uint8_t) transaction->value;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_memory_control_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+
+    if ((transaction->size != 1) || (transaction->operation != BM_BUS_WRITE))
+        return BM_STATUS_UNSUPPORTED;
+
+    /*
+     * BIOS 1.09 writes 40h here while enabling the upper conventional-memory
+     * path, between accesses to the board registers at 6Ch, 6Bh and 6Fh. No
+     * surviving PCS 86 documentation currently defines the individual bits.
+     * Keep the write explicit and observable without assigning guessed AT
+     * CMOS/NMI side effects to this XT-class machine.
+     */
+    machine->memory_control_latch = (uint8_t) transaction->value;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_ems_selector_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    size_t window;
+
+    if ((transaction->size != 1) || (transaction->operation != BM_BUS_WRITE))
+        return BM_STATUS_UNSUPPORTED;
+
+    window = (size_t) (transaction->address - 0x8400U);
+    machine->ems_page_selector[window] = (uint8_t) transaction->value;
+    /* The EMS aperture and backing SIMMs deliberately remain unimplemented. */
     return BM_STATUS_OK;
 }
 
@@ -283,7 +319,7 @@ pcs86_create(bm_engine_t *engine,
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 8, &machine->bus);
+    status = bm_bus_create(host, 10, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -331,8 +367,14 @@ pcs86_create(bm_engine_t *engine,
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x00a0U, 0x00a0U,
                             pcs86_diagnostic_access, machine);
     if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0070U, 0x0070U,
+                            pcs86_memory_control_access, machine);
+    if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0378U, 0x0378U,
                             pcs86_diagnostic_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x8400U, 0x8403U,
+                            pcs86_ems_selector_access, machine);
     if (status == BM_STATUS_OK) {
         bm_808x_config_t cpu_config = {
             BM_808X_NEC_V30, 10000000U, machine->bus,
@@ -374,7 +416,7 @@ bm_pcs86_machine_config(const bm_pcs86_config_t *configuration)
         "olivetti-pcs86",
         configuration,
         { pcs86_validate, pcs86_create, pcs86_destroy },
-        { 1, 8 }
+        { 1, 10 }
     };
     return result;
 }

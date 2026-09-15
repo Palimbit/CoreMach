@@ -12,7 +12,8 @@ documented 64 KiB system-ROM window, a single 8259A, an 8253 subset and the
 minimum known motherboard-register map. It is a bring-up milestone, not a
 usable emulator: the BIOS completes its initial CPU/register checks and ROM
 checksum, passes its first conventional-memory alias check and then stops
-visibly at `F000:0B29` on an unmapped `OUT 70h,AL` with `AL=40h`.
+after clearing and scanning a selected 64 KiB memory window. The measured
+boundary is the unsupported `ES:` segment override at `F000:0137`.
 
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
 interleaving, ROM address and known firmware hashes come from the canonical
@@ -39,13 +40,14 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, ModR/M effective addresses, arithmetic flags, branches, checksum and initial memory-check operations, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, ModR/M effective addresses, arithmetic flags, branches, checksum and initial memory-check operations, `AND r/m16,imm16`, `STOSW`/`SCASW` with `REP`, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Approximate | One instruction per tick; 10 MHz is identity metadata until clock-domain timing lands |
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests, output callback, CPU acknowledge and EOI; no cascaded/level modes |
 | 8253 PIT | Derived portable subset | Deterministic binary modes 0, 2 and 3; no BCD, latching or clock-domain integration |
-| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, `A0h`, `100h` and the POST diagnostic latch at `378h`; queues and attached peripherals are absent |
+| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, `A0h`, `100h` and the POST diagnostic latch at `378h`; opaque write-only memory-control state at `70h`; queues and attached peripherals are absent |
+| EMS selectors | Deliberate boundary | Write-only page-selector latches at `8400h-8403h`; no aperture or backing SIMMs are claimed or exposed |
 | DMA, RTC and complete PPI behaviour | Unavailable | Still required before meaningful original-BIOS POST comparison |
 | Video, keyboard and storage | Unavailable | Planned as later vertical cuts |
 
@@ -91,13 +93,20 @@ instruction tick once the scheduler has explicit clock domains. DMA, RTC, the
 remaining board behaviours and sufficient V30 coverage are the exit criteria
 for meaningful comparison against original-firmware POST traces.
 
-The next measured boundary is the write of `40h` to I/O port `70h` at
-`F000:0B29`. No verified PCS 86 meaning for that port is currently recorded, so
-the engine reports `BM_STATUS_UNMAPPED` rather than ignoring the write or
-assuming the PC/AT CMOS/NMI convention. The board operation must be identified
-from stronger documentation, hardware observation or a trace from the reference
-engine before it is implemented. DMA and RTC should follow only as the executed
-firmware path reaches them.
+BIOS 1.09 writes `40h` to I/O port `70h` at `F000:0B29` while configuring the
+upper conventional-memory path, between accesses to board ports `6Ch`, `6Bh`
+and `6Fh`. No verified bit definition is currently recorded. The engine stores
+that write in an explicit opaque latch so it remains observable, but does not
+borrow the unrelated PC/AT CMOS/NMI convention. It likewise accepts the known
+EMS selector range `8400h-8403h` without claiming that the deferred EMS aperture
+or backing memory exists.
+
+With `AND r/m16,imm16` and forward `REP STOSW`/`REPE SCASW` implemented, the
+local BIOS probe executes 196,784 instructions and 27 successful I/O
+transactions before stopping at `F000:0137` on the unsupported `ES:` prefix.
+That boundary follows a complete 64 KiB clear-and-scan operation. Segment
+overrides and immediate writes through ModR/M are the next CPU work; DMA and RTC
+should follow only as the executed firmware path reaches them.
 
 The main implementation files are `components/cpu/808x/src/cpu_808x.c`,
 `components/memory/src/linear_memory.c`, `components/pc/src/pic8259.c`,

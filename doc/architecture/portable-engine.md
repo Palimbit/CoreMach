@@ -97,22 +97,24 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-196,740 instructions before reporting an unmapped I/O write at `F000:0B29`:
-`OUT 70h,AL`, with `AL=40h`. This covers the reset jump, flag/register self-test,
-the firmware's complete 64 KiB checksum loop and its first conventional-memory
-alias check. The previous measured boundary was unsupported opcode group `81h`
-at `F000:009F`.
+196,784 instructions and 27 successful I/O transactions before reporting the
+unsupported `ES:` segment override at `F000:0137`. This covers the reset jump,
+flag/register self-test, the firmware's complete 64 KiB checksum loop, its first
+conventional-memory alias check and a 64 KiB upper-memory clear-and-scan pass.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
-effective-address decoding, the checksum loop and near return. Unit tests use
-new synthetic bytes reproducing the relevant instruction paths, not Olivetti
-firmware.
+effective-address decoding, immediate word masking, the checksum loop, near
+return and forward `REP STOSW`/`REPE SCASW`. Its inspection contract exposes
+all general and segment registers. Unit tests use new synthetic bytes
+reproducing the relevant instruction paths, not Olivetti firmware.
 
-Port `70h` has no verified PCS 86 semantics in the evidence currently available.
-The machine therefore reports it as unmapped instead of silently accepting the
-write or borrowing the unrelated PC/AT CMOS convention. Resolving that board
-operation is the next evidence boundary.
+Port `70h` has no verified PCS 86 bit semantics in the evidence currently
+available. BIOS context places its `40h` write in the upper-memory setup path,
+so the machine records it as an opaque write-only board latch rather than
+silently discarding it or borrowing the unrelated PC/AT CMOS convention.
+Writes to the known EMS page-selector range `8400h-8403h` are also retained,
+but the aperture and backing SIMMs remain deliberately absent.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,

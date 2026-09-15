@@ -70,6 +70,8 @@ main(int argc, char **argv)
     uint8_t *even;
     uint8_t *odd;
     bm_status_t status;
+    uint64_t ax = 0;
+    uint64_t dx = 0;
 
     if (argc != 3) {
         fprintf(stderr, "usage: %s <even-rom> <odd-rom>\n", argv[0]);
@@ -97,10 +99,17 @@ main(int argc, char **argv)
     if (status == BM_STATUS_OK)
         status = bm_session_run_for(session, 200000U);
 
+    if (session != NULL) {
+        (void) bm_session_inspect_cpu(session, 0, "ax", &ax);
+        (void) bm_session_inspect_cpu(session, 0, "dx", &dx);
+    }
+
     printf("status=%d instructions=%" PRIu64 " io=%" PRIu64
-           " last=%04x:%04x physical=%05" PRIx32 " opcode=%02x\n",
+           " last=%04x:%04x physical=%05" PRIx32 " opcode=%02x"
+           " ax=%04" PRIx64 " dx=%04" PRIx64 "\n",
            (int) status, probe.instructions, probe.io_operations,
-           probe.last.cs, probe.last.ip, probe.last.physical_address, probe.last.opcode);
+           probe.last.cs, probe.last.ip, probe.last.physical_address, probe.last.opcode,
+           ax, dx);
 
     bm_session_destroy(session);
     free(even);

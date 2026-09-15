@@ -141,7 +141,11 @@ main(void)
         0xb0, 0x04, 0xe6, 0x40,
         0xb0, 0x00, 0xe6, 0x40,
         0xb0, 0x91, 0xe6, 0x65, /* Exercise PCS 86 board control. */
+        0xb0, 0x40, 0xe6, 0x70, /* Preserve the opaque memory-control write. */
         0xe4, 0x65,             /* IN AL,65h -> 91h. */
+        0xb0, 0x80,             /* Select EMS window 0, page 0. */
+        0xba, 0x00, 0x84,
+        0xee,
         0xba, 0x00, 0x01,       /* MOV DX,100h. */
         0xec,                   /* IN AL,DX -> jumper bank. */
         0xe4, 0x63,             /* IN AL,63h -> fixed 08h. */
@@ -187,27 +191,31 @@ main(void)
 
     assert(bm_session_run_for(session, 40) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xf000);
-    assert(inspect(session, "ip") == 0x0138);
+    assert(inspect(session, "ip") == 0x0142);
     assert(inspect(session, "ax") == 0x0008);
     assert(inspect(session, "ds") == 0);
     assert(inspect(session, "halted") == 1);
     assert(inspect(session, "dx") == 0x0100);
-    assert(trace.count == 29);
+    assert(trace.count == 34);
     assert(trace.entries[0].physical_address == 0xffff0U);
     assert(trace.entries[0].opcode == 0xea);
     assert(trace.entries[1].physical_address == 0xf0100U);
-    assert(io_trace.count == 12);
+    assert(io_trace.count == 14);
     assert(io_trace.entries[0].operation == BM_BUS_WRITE);
     assert(io_trace.entries[0].port == 0x20U && io_trace.entries[0].value == 0x11U);
     assert(io_trace.entries[7].port == 0x40U && io_trace.entries[7].value == 0x00U);
     assert(io_trace.entries[8].operation == BM_BUS_WRITE);
     assert(io_trace.entries[8].port == 0x65U && io_trace.entries[8].value == 0x91U);
-    assert(io_trace.entries[9].operation == BM_BUS_READ);
-    assert(io_trace.entries[9].port == 0x65U && io_trace.entries[9].value == 0x91U);
+    assert(io_trace.entries[9].operation == BM_BUS_WRITE);
+    assert(io_trace.entries[9].port == 0x70U && io_trace.entries[9].value == 0x40U);
     assert(io_trace.entries[10].operation == BM_BUS_READ);
-    assert(io_trace.entries[10].port == 0x100U && io_trace.entries[10].value == 0xffU);
-    assert(io_trace.entries[11].operation == BM_BUS_READ);
-    assert(io_trace.entries[11].port == 0x63U && io_trace.entries[11].value == 0x08U);
+    assert(io_trace.entries[10].port == 0x65U && io_trace.entries[10].value == 0x91U);
+    assert(io_trace.entries[11].operation == BM_BUS_WRITE);
+    assert(io_trace.entries[11].port == 0x8400U && io_trace.entries[11].value == 0x80U);
+    assert(io_trace.entries[12].operation == BM_BUS_READ);
+    assert(io_trace.entries[12].port == 0x100U && io_trace.entries[12].value == 0xffU);
+    assert(io_trace.entries[13].operation == BM_BUS_READ);
+    assert(io_trace.entries[13].port == 0x63U && io_trace.entries[13].value == 0x08U);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
