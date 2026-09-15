@@ -10,10 +10,12 @@ See also the [Olivetti PCS family overview](olivetti-pcs-family.md) and the
 The inherited product remains the only usable implementation. The parallel
 portable engine now executes the original BIOS reset, CPU-register self-test
 and complete 64 KiB ROM checksum, and passes its first conventional-memory
-alias check. It stops explicitly at `F000:0B29` when the firmware writes `40h`
-to the currently undocumented and unmapped I/O port `70h`. This is measured
-bring-up progress, not a completed POST; the write is not silently ignored or
-assigned guessed PC/AT semantics.
+alias check. It also enters the firmware's upper-memory setup, clears and scans
+the selected 64 KiB window, and stops explicitly at the unsupported `ES:`
+segment override at `F000:0137`. This is measured bring-up progress, not a
+completed POST. The preceding write of `40h` to port `70h` is retained in an
+opaque PCS 86 latch without assigning guessed PC/AT CMOS semantics, while
+`8400h-8403h` currently retain only EMS page-selector writes.
 
 ## Recommended BluMach configuration
 

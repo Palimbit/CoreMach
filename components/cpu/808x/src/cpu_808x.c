@@ -374,6 +374,39 @@ compare16(bm_808x_state_t *state, uint16_t left, uint16_t right)
         state->flags |= FLAG_OF;
 }
 
+static bm_status_t
+execute_string_word(bm_808x_state_t *state, uint8_t opcode, int repeat)
+{
+    bm_status_t status;
+
+    if ((opcode != 0xabU) && (opcode != 0xafU))
+        return BM_STATUS_UNSUPPORTED;
+    while (!repeat || (state->registers[REG_CX] != 0)) {
+        if (opcode == 0xabU) { /* STOSW: AX -> ES:DI. */
+            status = write_word(state, state->segments[0],
+                                state->registers[REG_DI], state->registers[REG_AX]);
+        } else { /* SCASW: compare AX with ES:DI. */
+            uint16_t value = 0;
+            status = read_word(state, state->segments[0],
+                               state->registers[REG_DI], &value);
+            if (status == BM_STATUS_OK)
+                compare16(state, state->registers[REG_AX], value);
+        }
+        if (status != BM_STATUS_OK)
+            return status;
+        if ((state->flags & FLAG_DF) != 0)
+            state->registers[REG_DI] = (uint16_t) (state->registers[REG_DI] - 2U);
+        else
+            state->registers[REG_DI] = (uint16_t) (state->registers[REG_DI] + 2U);
+        if (!repeat)
+            break;
+        state->registers[REG_CX] = (uint16_t) (state->registers[REG_CX] - 1U);
+        if ((opcode == 0xafU) && ((state->flags & FLAG_ZF) == 0))
+            break; /* REP/REPE SCASW stops at the first mismatch. */
+    }
+    return BM_STATUS_OK;
+}
+
 static int
 jump_condition(const bm_808x_state_t *state, unsigned int condition)
 {
@@ -512,6 +545,9 @@ execute_one(bm_808x_state_t *state)
     switch (opcode) {
         case 0x90: /* NOP */
             return BM_STATUS_OK;
+        case 0xab: /* STOSW */
+        case 0xaf: /* SCASW */
+            return execute_string_word(state, opcode, 0);
         case 0x05: { /* ADD AX,imm16 */
             uint16_t immediate = 0;
             status = fetch_word(state, &immediate);
@@ -646,23 +682,34 @@ execute_one(bm_808x_state_t *state)
             set_register_byte(state, right, temporary);
             return BM_STATUS_OK;
         }
-        case 0x81: { /* Immediate arithmetic group; CMP r/m16,imm16 subset. */
+        case 0x81: { /* Immediate arithmetic group; AND/CMP r/m16,imm16 subset. */
             uint8_t modrm;
+            unsigned int operation;
             uint16_t immediate = 0;
             uint16_t left = 0;
+            uint16_t result;
             bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
             if (status != BM_STATUS_OK)
                 return status;
-            if (((modrm >> 3U) & 7U) != 7U)
+            operation = (modrm >> 3U) & 7U;
+            if ((operation != 4U) && (operation != 7U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, &operand);
             if (status == BM_STATUS_OK)
                 status = fetch_word(state, &immediate);
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &left);
-            if (status == BM_STATUS_OK)
-                compare16(state, left, immediate);
+            if (status == BM_STATUS_OK) {
+                if (operation == 4U) {
+                    result = (uint16_t) (left & immediate);
+                    status = write_operand_word(state, &operand, result);
+                    if (status == BM_STATUS_OK)
+                        set_logic_flags(state, result, 16);
+                } else {
+                    compare16(state, left, immediate);
+                }
+            }
             return status;
         }
         case 0xea: { /* JMP ptr16:16 */
@@ -708,6 +755,13 @@ execute_one(bm_808x_state_t *state)
                 return BM_STATUS_UNSUPPORTED;
             state->registers[modrm & 7U] = (uint16_t) ~state->registers[modrm & 7U];
             return BM_STATUS_OK;
+        }
+        case 0xf3: { /* REP/REPE prefix; word string subset. */
+            uint8_t string_opcode;
+            status = fetch_byte(state, &string_opcode);
+            if (status != BM_STATUS_OK)
+                return status;
+            return execute_string_word(state, string_opcode, 1);
         }
         case 0xe9: { /* JMP rel16 */
             uint16_t displacement;
@@ -870,12 +924,26 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
         return BM_STATUS_INVALID_ARGUMENT;
     if (strcmp(name, "ax") == 0)
         *value = state->registers[REG_AX];
+    else if (strcmp(name, "bx") == 0)
+        *value = state->registers[REG_BX];
+    else if (strcmp(name, "cx") == 0)
+        *value = state->registers[REG_CX];
     else if (strcmp(name, "cs") == 0)
         *value = state->segments[1];
     else if (strcmp(name, "ds") == 0)
         *value = state->segments[3];
     else if (strcmp(name, "dx") == 0)
         *value = state->registers[REG_DX];
+    else if (strcmp(name, "es") == 0)
+        *value = state->segments[0];
+    else if (strcmp(name, "bp") == 0)
+        *value = state->registers[REG_BP];
+    else if (strcmp(name, "si") == 0)
+        *value = state->registers[REG_SI];
+    else if (strcmp(name, "di") == 0)
+        *value = state->registers[REG_DI];
+    else if (strcmp(name, "ss") == 0)
+        *value = state->segments[2];
     else if (strcmp(name, "sp") == 0)
         *value = state->registers[REG_SP];
     else if (strcmp(name, "ip") == 0)

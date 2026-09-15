@@ -42,7 +42,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic flags, conditional flow, ModR/M effective addresses, ROM-checksum and initial memory-check operations, and callback-based real-mode interrupt entry to the still-incomplete V30 subset"
+      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic flags, conditional flow, ModR/M effective addresses, ROM-checksum and memory-check operations including immediate word masking and repeated word stores/scans, full basic-register inspection, and callback-based real-mode interrupt entry to the still-incomplete V30 subset"
     },
     {
       "id": "portable-pc-platform-components",
@@ -88,7 +88,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, single PIC, PIT and minimum motherboard register map behind a typed machine factory; added explicit PIC-to-CPU interrupt routing and early BIOS diagnostic latches, while keyboard queues, RTC, DMA and peripherals remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, single PIC, PIT and minimum motherboard register map behind a typed machine factory; added explicit PIC-to-CPU interrupt routing, early BIOS diagnostic latches, an opaque port-70h memory-control latch and selector-only EMS register boundary, while the EMS aperture, keyboard queues, RTC, DMA and peripherals remain absent"
     }
   ],
   "external_dependencies": []
