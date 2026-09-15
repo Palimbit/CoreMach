@@ -56,3 +56,22 @@ The PCS 86 vertical slice starts only after this foundation is green. Its first
 stage supplies firmware as a caller-owned blob, establishes reset execution and
 memory transactions, and records instruction checkpoints without adding ROMs
 or machine media to Git.
+
+### PCS86-1 bring-up status
+
+The first real-machine cut now models the documented NEC V30 at 10 MHz, 640 KiB
+of conventional RAM and two caller-supplied 32 KiB firmware halves interleaved
+at `F0000h-FFFFFh`. The machine validates the known firmware hashes when a
+frontend supplies them, but test firmware may omit a hash so repository tests
+can use newly authored synthetic bytes.
+
+This is not yet a BIOS-capable CPU. The explicit-state interpreter implements
+only the reset-vector path and a small, documented instruction subset needed to
+prove segmented fetch, a far jump, register/segment setup, a RAM write and
+halt. Any other opcode returns `BM_STATUS_UNSUPPORTED`; it is never silently
+treated as a no-op. One scheduler tick currently represents one completed
+instruction, so cycle and bus timing remain deliberately outside this cut.
+
+The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
+the memory bus and halts. No Olivetti firmware or guest media is compiled,
+copied or executed by this test.

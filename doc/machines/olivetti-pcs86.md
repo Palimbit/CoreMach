@@ -4,12 +4,17 @@ Status as of 2026-08-27: boots Olivetti MS-DOS 3.30a and passes the currently
 exercised Resident Diagnostics 1.09 tests. Some motherboard glue, PS/2 timing,
 serial I/O and host-visible video behaviour remain incomplete.
 
-See also the [Olivetti PCS family overview](olivetti-pcs-family.md).
+See also the [Olivetti PCS family overview](olivetti-pcs-family.md) and the
+[portable-engine implementation narrative](olivetti-pcs86-implementation.md).
+
+The inherited product remains the only usable implementation. The parallel
+portable engine currently reaches a controlled synthetic reset sequence with
+the PCS 86 CPU and memory map; it does not yet execute the original BIOS.
 
 ## Recommended BluMach configuration
 
 - machine: `[8086] Olivetti PCS86` (`olivetti_pcs86`);
-- CPU: NEC V30 at 8 MHz;
+- CPU: NEC V30 at 10 MHz;
 - conventional memory: 640 KiB;
 - video: onboard Paradise-compatible implementation;
 - floppy: one internal 3.5-inch 1.44 MB drive;
@@ -22,7 +27,7 @@ presented through four 16 KiB page frames.
 
 ## Documented hardware
 
-The PCS 86 is an XT-class design built around an NEC V30 at 8 MHz, but includes
+The PCS 86 is an XT-class design built around an NEC V30 at 10 MHz, but includes
 features unusual for a conventional XT: onboard VGA-class video, a 1.44 MB
 floppy controller, an integrated XTA fixed-disk interface, two interchangeable
 PS/2-style ports and an MM58167 real-time clock.
