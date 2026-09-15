@@ -13,6 +13,11 @@ typedef struct output_sink {
     int value;
 } output_sink_t;
 
+typedef struct irq_sink {
+    unsigned int changes;
+    int asserted;
+} irq_sink_t;
+
 static bm_status_t
 write_port(bm_bus_t *bus, uint16_t port, uint8_t value)
 {
@@ -41,6 +46,14 @@ capture_output(void *context, unsigned int channel, int output)
     sink->value = output;
 }
 
+static void
+capture_irq(void *context, int asserted)
+{
+    irq_sink_t *sink = context;
+    ++sink->changes;
+    sink->asserted = asserted;
+}
+
 int
 main(void)
 {
@@ -48,7 +61,8 @@ main(void)
     bm_bus_t *bus = NULL;
     bm_pic8259_t *pic = NULL;
     bm_pit8253_t *pit = NULL;
-    bm_pic8259_config_t pic_config = { 0x20U };
+    irq_sink_t irq = { 0, 0 };
+    bm_pic8259_config_t pic_config = { 0x20U, capture_irq, &irq };
     output_sink_t output = { 0 };
     bm_pit8253_config_t pit_config = { 0x40U, capture_output, &output };
     uint8_t vector = 0;
@@ -65,9 +79,11 @@ main(void)
     assert(read_port(bus, 0x21U) == 0xfeU);
     assert(bm_pic8259_set_irq(pic, 0, 1) == BM_STATUS_OK);
     assert(bm_pic8259_pending(pic));
+    assert(irq.changes == 1U && irq.asserted == 1);
     assert(bm_pic8259_acknowledge(pic, &vector) == BM_STATUS_OK);
     assert(vector == 8U);
     assert(!bm_pic8259_pending(pic));
+    assert(irq.changes == 2U && irq.asserted == 0);
     assert(write_port(bus, 0x20U, 0x20U) == BM_STATUS_OK);
 
     /* Single-controller initialization omits ICW3. */
@@ -76,6 +92,12 @@ main(void)
     assert(write_port(bus, 0x21U, 0x01U) == BM_STATUS_OK);
     assert(write_port(bus, 0x21U, 0xfeU) == BM_STATUS_OK);
     assert(read_port(bus, 0x21U) == 0xfeU);
+    assert(bm_pic8259_set_irq(pic, 0, 0) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 0, 1) == BM_STATUS_OK);
+    assert(irq.changes == 3U && irq.asserted == 1);
+    bm_pic8259_reset(pic);
+    assert(irq.changes == 4U && irq.asserted == 0);
+    assert(!bm_pic8259_pending(pic));
 
     assert(write_port(bus, 0x43U, 0x30U) == BM_STATUS_OK); /* Channel 0, mode 0, lobyte/hibyte. */
     assert(write_port(bus, 0x40U, 0x04U) == BM_STATUS_OK);

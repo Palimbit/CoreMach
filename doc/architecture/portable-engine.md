@@ -88,6 +88,28 @@ to a debugger or frontend.
 The V30 subset now performs byte-oriented `IN` and `OUT` operations, including
 word forms as two consecutive 8-bit bus transfers, and supports CLI, STI and
 CLD. A synthetic ROM uses those paths to configure the PIC and PIT and exercise
-board registers. This validates composition and traceability only: it is not a
-claim that the original BIOS reaches POST. DMA, RTC, keyboard queues, complete
-interrupt delivery and much of the instruction set are still absent.
+board registers. That cut validated composition and traceability only; DMA,
+RTC, keyboard queues, interrupt entry and much of the instruction set were
+still absent at that boundary.
+
+### PCS86-2A BIOS execution and interrupt status
+
+The original BIOS is now a local-only diagnostic input to a manual probe; it
+is never part of CTest or a build artifact. With the two recorded revision 1.09
+EPROM hashes verified outside the executable, the portable engine executes
+196,704 instructions before reporting the next unsupported instruction at
+`F000:009F` (`81h`). This covers the reset jump, flag/register self-test and the
+firmware's complete 64 KiB checksum loop. The previous measured boundary was
+`F000:0001`.
+
+The interpreter additions are still a tested subset: arithmetic and logical
+flags, conditional and relative branches, register ModR/M forms, 8086 memory
+effective-address decoding, the checksum loop and near return. Unit tests use
+new synthetic bytes reproducing the relevant instruction paths, not Olivetti
+firmware.
+
+Maskable interrupts now have an explicit handshake. The PIC publishes its
+pending output, the machine routes that signal through the engine CPU contract,
+and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
+real-mode vector table. Neither component owns the other. DMA, RTC and complete
+V30 coverage remain subsequent cuts; POST has not completed.

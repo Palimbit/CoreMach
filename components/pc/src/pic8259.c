@@ -31,7 +31,21 @@ struct bm_pic8259 {
     uint8_t single;
     uint8_t read_isr;
     uint8_t auto_eoi;
+    int output_asserted;
+    bm_pic8259_output_fn output;
+    void *output_context;
 };
+
+static void
+update_output(bm_pic8259_t *pic)
+{
+    int asserted = (pic->irr & (uint8_t) ~pic->imr) != 0;
+    if (asserted != pic->output_asserted) {
+        pic->output_asserted = asserted;
+        if (pic->output != NULL)
+            pic->output(pic->output_context, asserted);
+    }
+}
 
 static int
 highest_priority(uint8_t value)
@@ -55,6 +69,7 @@ pic_access(void *context, bm_bus_transaction_t *transaction)
     data_port = (unsigned int) (transaction->address - pic->io_base);
     if (transaction->operation == BM_BUS_READ) {
         transaction->value = data_port ? pic->imr : (pic->read_isr ? pic->isr : pic->irr);
+        update_output(pic);
         return BM_STATUS_OK;
     }
 
@@ -94,6 +109,7 @@ pic_access(void *context, bm_bus_transaction_t *transaction)
             pic->imr = (uint8_t) transaction->value;
             break;
     }
+    update_output(pic);
     return BM_STATUS_OK;
 }
 
@@ -115,6 +131,8 @@ bm_pic8259_create(const bm_host_services_t *host,
     memset(pic, 0, sizeof(*pic));
     pic->host = *host;
     pic->io_base = config->io_base;
+    pic->output = config->output;
+    pic->output_context = config->output_context;
     bm_pic8259_reset(pic);
     status = bm_bus_map(bus, BM_ADDRESS_IO, config->io_base, config->io_base + 1U,
                         pic_access, pic);
@@ -136,8 +154,10 @@ bm_pic8259_destroy(bm_pic8259_t *pic)
 void
 bm_pic8259_reset(bm_pic8259_t *pic)
 {
+    int was_asserted;
     if (pic == NULL)
         return;
+    was_asserted = pic->output_asserted;
     pic->vector_base = 8;
     pic->imr = 0xffU;
     pic->irr = 0;
@@ -148,6 +168,9 @@ bm_pic8259_reset(bm_pic8259_t *pic)
     pic->single = 0;
     pic->read_isr = 0;
     pic->auto_eoi = 0;
+    pic->output_asserted = 0;
+    if (was_asserted && (pic->output != NULL))
+        pic->output(pic->output_context, 0);
 }
 
 bm_status_t
@@ -164,6 +187,7 @@ bm_pic8259_set_irq(bm_pic8259_t *pic, unsigned int line, int asserted)
     } else {
         pic->lines &= (uint8_t) ~mask;
     }
+    update_output(pic);
     return BM_STATUS_OK;
 }
 
@@ -188,5 +212,6 @@ bm_pic8259_acknowledge(bm_pic8259_t *pic, uint8_t *vector)
     if (!pic->auto_eoi)
         pic->isr |= (uint8_t) (1U << line);
     *vector = (uint8_t) (pic->vector_base + line);
+    update_output(pic);
     return BM_STATUS_OK;
 }

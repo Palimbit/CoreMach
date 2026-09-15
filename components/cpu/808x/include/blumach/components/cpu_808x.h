@@ -22,6 +22,7 @@ typedef struct bm_808x_trace {
 } bm_808x_trace_t;
 
 typedef void (*bm_808x_trace_fn)(void *context, const bm_808x_trace_t *trace);
+typedef bm_status_t (*bm_808x_interrupt_ack_fn)(void *context, uint8_t *vector);
 
 typedef struct bm_808x_config {
     bm_808x_model_t model;
@@ -29,6 +30,8 @@ typedef struct bm_808x_config {
     bm_bus_t *bus;
     bm_808x_trace_fn trace;
     void *trace_context;
+    bm_808x_interrupt_ack_fn interrupt_ack;
+    void *interrupt_context;
 } bm_808x_config_t;
 
 bm_status_t bm_808x_create(const bm_host_services_t *host,

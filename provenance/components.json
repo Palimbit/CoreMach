@@ -42,7 +42,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added byte-oriented IN/OUT and flag-control instructions to the still-incomplete bring-up subset"
+      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic flags, conditional flow, ModR/M effective addresses, ROM-checksum operations and callback-based real-mode interrupt entry to the still-incomplete V30 subset"
     },
     {
       "id": "portable-pc-platform-components",
@@ -53,7 +53,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global devices, host timers and direct CPU coupling with opaque single-instance 8259A and deterministic 8253 contracts; only the XT PIC path and binary PIT modes 0, 2 and 3 are implemented"
+      "local_changes": "Replaced global devices, host timers and direct CPU coupling with opaque single-instance 8259A and deterministic 8253 contracts; PIC pending output and vector acknowledge now cross explicit callbacks, while only the XT PIC path and binary PIT modes 0, 2 and 3 are implemented"
     },
     {
       "id": "portable-runtime-session",
@@ -88,7 +88,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, single PIC, PIT and minimum motherboard register map behind a typed machine factory; keyboard queues, RTC, DMA and peripherals remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, single PIC, PIT and minimum motherboard register map behind a typed machine factory; added explicit PIC-to-CPU interrupt routing and early BIOS diagnostic latches, while keyboard queues, RTC, DMA and peripherals remain absent"
     }
   ],
   "external_dependencies": []

@@ -8,8 +8,10 @@ See also the [Olivetti PCS family overview](olivetti-pcs-family.md) and the
 [portable-engine implementation narrative](olivetti-pcs86-implementation.md).
 
 The inherited product remains the only usable implementation. The parallel
-portable engine currently reaches a controlled synthetic reset sequence with
-the PCS 86 CPU and memory map; it does not yet execute the original BIOS.
+portable engine now executes the original BIOS reset, CPU-register self-test
+and complete 64 KiB ROM checksum. It stops explicitly at `F000:009F`, before
+the first conventional-memory comparison, because opcode group `81h` is not
+implemented yet. This is measured bring-up progress, not a completed POST.
 
 ## Recommended BluMach configuration
 
