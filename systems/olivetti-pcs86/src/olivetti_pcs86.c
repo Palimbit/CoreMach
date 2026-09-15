@@ -41,10 +41,33 @@ typedef struct bm_pcs86_machine {
     uint8_t nmi_mask;
     uint8_t diagnostic_port;
     uint8_t memory_control_latch;
+    uint8_t video_setup_latch;
+    uint8_t video_select_latch;
     uint8_t ems_page_selector[4];
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
 } bm_pcs86_machine_t;
+
+static bm_status_t
+pcs86_unpopulated_option_rom_access(void *context, bm_bus_transaction_t *transaction)
+{
+    uint32_t index;
+
+    (void) context;
+    if ((transaction == NULL) || (transaction->size == 0) ||
+        (transaction->size > sizeof(transaction->value)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (transaction->operation == BM_BUS_WRITE)
+        return BM_STATUS_OK;
+    if ((transaction->operation != BM_BUS_READ) &&
+        (transaction->operation != BM_BUS_FETCH))
+        return BM_STATUS_INVALID_ARGUMENT;
+
+    transaction->value = 0;
+    for (index = 0; index < transaction->size; ++index)
+        transaction->value |= UINT64_C(0xff) << (index * 8U);
+    return BM_STATUS_OK;
+}
 
 static bm_status_t
 pcs86_diagnostic_access(void *context, bm_bus_transaction_t *transaction)
@@ -78,6 +101,27 @@ pcs86_memory_control_access(void *context, bm_bus_transaction_t *transaction)
      * CMOS/NMI side effects to this XT-class machine.
      */
     machine->memory_control_latch = (uint8_t) transaction->value;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_video_arbitration_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+
+    if ((transaction->size != 1) || (transaction->operation != BM_BUS_WRITE))
+        return BM_STATUS_UNSUPPORTED;
+
+    /*
+     * BIOS 1.09 brackets writes to 102h with writes to 46E8h while choosing
+     * between internal and secondary video. The values are retained for
+     * deterministic inspection, but no undocumented arbitration side effects
+     * are assigned until the portable video device is connected.
+     */
+    if (transaction->address == 0x46e8U)
+        machine->video_setup_latch = (uint8_t) transaction->value;
+    else
+        machine->video_select_latch = (uint8_t) transaction->value;
     return BM_STATUS_OK;
 }
 
@@ -328,7 +372,7 @@ pcs86_create(bm_engine_t *engine,
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 13, &machine->bus);
+    status = bm_bus_create(host, 16, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -356,6 +400,10 @@ pcs86_create(bm_engine_t *engine,
     }
     if (combined_rom != NULL)
         host->release(host->context, combined_rom);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_MEMORY,
+                            0x000c0000U, 0x000effffU,
+                            pcs86_unpopulated_option_rom_access, machine);
     if (status == BM_STATUS_OK) {
         bm_dma8237_config_t dma_config = { 0x0000U };
         status = bm_dma8237_create(host, machine->bus, &dma_config, &machine->dma);
@@ -399,6 +447,12 @@ pcs86_create(bm_engine_t *engine,
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x8400U, 0x8403U,
                             pcs86_ems_selector_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0102U, 0x0102U,
+                            pcs86_video_arbitration_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x46e8U, 0x46e8U,
+                            pcs86_video_arbitration_access, machine);
     if (status == BM_STATUS_OK) {
         bm_808x_config_t cpu_config = {
             BM_808X_NEC_V30, 10000000U, machine->bus,

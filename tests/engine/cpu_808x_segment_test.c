@@ -63,9 +63,14 @@ main(void)
         0x1f,                   /* POP DS */
         0x07,                   /* POP ES */
         0x5b,                   /* POP BX */
+        0xfb,                   /* STI */
+        0x9c,                   /* PUSHF */
+        0xfa,                   /* CLI */
+        0x9d,                   /* POPF: restore IF. */
         0xe8, 0x01, 0x00,       /* CALL increment_bp */
         0xf4,                   /* HLT */
         0x45,                   /* increment_bp: INC BP */
+        0x83, 0xfa, 0x44,       /* CMP DX,+44h */
         0xc3                    /* RET */
     };
     bm_host_services_t host = bm_null_host_services();
@@ -98,10 +103,10 @@ main(void)
     assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 44) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 49) == BM_STATUS_OK);
 
     assert(inspect(engine, "halted") == 1U);
-    assert(inspect(engine, "last_fetch") == 0xf0072U);
+    assert(inspect(engine, "last_fetch") == 0xf0076U);
     assert(inspect(engine, "dx") == 0x0044U);
     assert(inspect(engine, "ax") == 0x4444U);
     assert(inspect(engine, "ds") == 0x4444U);
@@ -109,6 +114,8 @@ main(void)
     assert(inspect(engine, "bx") == 0x4444U);
     assert(inspect(engine, "bp") == 0x1002U);
     assert(inspect(engine, "si") == 0x0800U);
+    assert((inspect(engine, "flags") & 0x0040U) != 0U);
+    assert((inspect(engine, "flags") & 0x0200U) != 0U);
     assert(peek(memory, 0x01100U) == 0x11U && peek(memory, 0x01101U) == 0x11U);
     assert(peek(memory, 0x01104U) == 0x00U && peek(memory, 0x01105U) == 0x03U);
     assert(peek(memory, 0x01106U) == 0x44U && peek(memory, 0x01107U) == 0x44U);

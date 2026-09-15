@@ -637,6 +637,15 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x90: /* NOP */
             return BM_STATUS_OK;
+        case 0x9c: /* PUSHF (NEC V30 reserved-bit image). */
+            return push_word(state, (uint16_t) ((state->flags & 0x8fd7U) | 0x7000U));
+        case 0x9d: { /* POPF */
+            uint16_t value;
+            status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->flags = value | 0x0002U;
+            return status;
+        }
         case 0xab: /* STOSW */
         case 0xad: /* LODSW */
         case 0xaf: /* SCASW */
@@ -861,25 +870,31 @@ execute_one(bm_808x_state_t *state)
             }
             return status;
         }
-        case 0x83: { /* Immediate arithmetic group; ADD r/m16,imm8 subset. */
+        case 0x83: { /* Immediate arithmetic group; ADD/CMP r/m16,imm8 subset. */
             uint8_t modrm;
             uint8_t immediate = 0;
             uint16_t left = 0;
+            unsigned int operation;
             bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
             if (status != BM_STATUS_OK)
                 return status;
-            if (((modrm >> 3U) & 7U) != 0U)
+            operation = (modrm >> 3U) & 7U;
+            if ((operation != 0U) && (operation != 7U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &immediate);
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &left);
-            if (status == BM_STATUS_OK)
-                status = write_operand_word(state, &operand,
-                                            add16(state, left,
-                                                  (uint16_t) (int16_t) (int8_t) immediate));
+            if (status == BM_STATUS_OK) {
+                uint16_t extended = (uint16_t) (int16_t) (int8_t) immediate;
+                if (operation == 0U)
+                    status = write_operand_word(state, &operand,
+                                                add16(state, left, extended));
+                else
+                    compare16(state, left, extended);
+            }
             return status;
         }
         case 0xea: { /* JMP ptr16:16 */

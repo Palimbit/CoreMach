@@ -97,22 +97,26 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-1,377,642 instructions and 158 successful I/O transactions before reporting
-an unmapped word read from physical `C0000h` at `F000:0D0E`. This covers the
+1,377,877 instructions and 163 successful I/O transactions before reporting
+an unmapped write to VGA graphics-controller index port `3CEh` from
+`F000:6B95`. This covers the
 reset jump, flag/register self-test, the firmware's complete 64 KiB checksum
 loop, its first conventional-memory alias check, a 64 KiB upper-memory
 clear-and-scan pass, the following segment-overridden memory-alias check and
 programming self-tests for the 8237 and its external page latches, the
-MM58167 interrupt-status/control access and the following long conventional-
-memory test. The BIOS is now scanning the video/option-ROM region; no bytes are
-fabricated there while the video component remains absent.
+MM58167 interrupt-status/control access, the following long conventional-
+memory test, the complete empty option-ROM scan and the observed PCS 86 video-
+selection sequence at `46E8h` and `102h`. The option-ROM region explicitly
+models an unpopulated bus returning ones: the PCS 86 firmware already contains
+its Paradise initialization and no separate ROM is invented at `C0000h`.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
-effective-address decoding, immediate arithmetic, byte and word immediate
+effective-address decoding, immediate arithmetic including sign-extended CMP,
+byte and word immediate
 memory moves, byte comparison, TEST, AND
 and NOT, memory forms of general and segment moves, near CALL/RET, register and
-ES/DS stack operations, SHR by CL, segment-overridden loads, all four segment
+ES/DS and FLAGS stack operations, SHR by CL, segment-overridden loads, all four segment
 overrides and `LODSW`/`REP STOSW`/`REPE SCASW`. Its inspection contract exposes
 all general and segment
 registers. Unit tests use new synthetic bytes
@@ -124,6 +128,12 @@ so the machine records it as an opaque write-only board latch rather than
 silently discarding it or borrowing the unrelated PC/AT CMOS convention.
 Writes to the known EMS page-selector range `8400h-8403h` are also retained,
 but the aperture and backing SIMMs remain deliberately absent.
+
+BIOS writes to `46E8h` and `102h` are retained as write-only video-arbitration
+latches. Their observed ordering and values are testable, but the engine does
+not yet assign undocumented selection side effects to them. The strict bus now
+stops at the first PVGA1A register transaction, `OUT 3CEh,0Fh`; VGA registers,
+VRAM, rendering and a framebuffer contract remain absent.
 
 The PCS 86 now owns a portable 8237 programming core with explicit address,
 count, command, mode, request, mask, status and master-clear state. A separate
