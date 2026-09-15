@@ -41,6 +41,8 @@ main(void)
         0x3e, 0xc7, 0x06, 0x00, 0x01, 0x33, 0x33, /* MOV DS:[0100h],3333h */
         0x2e, 0xc7, 0x06, 0x00, 0x01, 0x44, 0x44, /* MOV CS:[0100h],4444h */
         0x26, 0x3e, 0xc7, 0x06, 0x02, 0x01, 0x55, 0x55, /* Last prefix wins. */
+        0xbe, 0x00, 0x01,       /* MOV SI,0100h */
+        0x2e, 0x8a, 0x14,       /* MOV DL,CS:[SI] */
         0xf4                    /* HLT */
     };
     bm_host_services_t host = bm_null_host_services();
@@ -76,7 +78,8 @@ main(void)
     assert(bm_engine_run_for(engine, 20) == BM_STATUS_OK);
 
     assert(inspect(engine, "halted") == 1U);
-    assert(inspect(engine, "last_fetch") == 0xf0033U);
+    assert(inspect(engine, "last_fetch") == 0xf0039U);
+    assert(inspect(engine, "dx") == 0x0044U);
     assert(peek(memory, 0x01100U) == 0x11U && peek(memory, 0x01101U) == 0x11U);
     assert(peek(memory, 0x02100U) == 0x22U && peek(memory, 0x02101U) == 0x22U);
     assert(peek(memory, 0x03100U) == 0x33U && peek(memory, 0x03101U) == 0x33U);

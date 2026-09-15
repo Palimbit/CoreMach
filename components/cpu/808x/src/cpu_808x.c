@@ -378,6 +378,35 @@ compare16(bm_808x_state_t *state, uint16_t left, uint16_t right)
 }
 
 static bm_status_t
+write_operand_byte(bm_808x_state_t *state, const bm_808x_operand_t *operand, uint8_t value)
+{
+    if (operand->is_register) {
+        set_register_byte(state, operand->register_index, value);
+        return BM_STATUS_OK;
+    }
+    return write_byte(state, operand->segment, operand->offset, value);
+}
+
+static void
+compare8(bm_808x_state_t *state, uint8_t left, uint8_t right)
+{
+    uint8_t result = (uint8_t) (left - right);
+    state->flags &= (uint16_t) ~(FLAG_CF | FLAG_PF | FLAG_AF | FLAG_ZF | FLAG_SF | FLAG_OF);
+    if (left < right)
+        state->flags |= FLAG_CF;
+    if (((left ^ right ^ result) & 0x10U) != 0)
+        state->flags |= FLAG_AF;
+    if (result == 0)
+        state->flags |= FLAG_ZF;
+    if ((result & 0x80U) != 0)
+        state->flags |= FLAG_SF;
+    if (even_parity(result))
+        state->flags |= FLAG_PF;
+    if ((((left ^ right) & (left ^ result)) & 0x80U) != 0)
+        state->flags |= FLAG_OF;
+}
+
+static bm_status_t
 execute_string_word(bm_808x_state_t *state, uint8_t opcode, int repeat)
 {
     bm_status_t status;
@@ -665,32 +694,42 @@ execute_one(bm_808x_state_t *state)
                 compare16(state, destination, state->registers[(modrm >> 3U) & 7U]);
             return status;
         }
-        case 0x32: { /* XOR r8,r/m8; register form. */
+        case 0x32: /* XOR r8,r/m8; register form. */
+        case 0x3a: { /* CMP r8,r/m8. */
             uint8_t modrm;
             unsigned int destination;
+            uint8_t source = 0;
             uint8_t value;
+            bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_byte(state, &operand, &source);
             if (status != BM_STATUS_OK)
                 return status;
-            if ((modrm & 0xc0U) != 0xc0U)
-                return BM_STATUS_UNSUPPORTED;
             destination = (modrm >> 3U) & 7U;
-            value = (uint8_t) (get_register_byte(state, destination) ^
-                               get_register_byte(state, modrm & 7U));
-            set_register_byte(state, destination, value);
-            set_logic_flags(state, value, 8);
+            if (opcode == 0x3aU)
+                compare8(state, get_register_byte(state, destination), source);
+            else {
+                value = (uint8_t) (get_register_byte(state, destination) ^ source);
+                set_register_byte(state, destination, value);
+                set_logic_flags(state, value, 8);
+            }
             return BM_STATUS_OK;
         }
-        case 0x8a: { /* MOV r8,r/m8; register form. */
+        case 0x8a: { /* MOV r8,r/m8. */
             uint8_t modrm;
+            uint8_t value = 0;
+            bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
-            if (status != BM_STATUS_OK)
-                return status;
-            if ((modrm & 0xc0U) != 0xc0U)
-                return BM_STATUS_UNSUPPORTED;
-            set_register_byte(state, (modrm >> 3U) & 7U,
-                              get_register_byte(state, modrm & 7U));
-            return BM_STATUS_OK;
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_byte(state, &operand, &value);
+            if (status == BM_STATUS_OK)
+                set_register_byte(state, (modrm >> 3U) & 7U, value);
+            return status;
         }
         case 0x86: { /* XCHG r8,r/m8; register form. */
             uint8_t modrm;
@@ -782,6 +821,22 @@ execute_one(bm_808x_state_t *state)
                 return BM_STATUS_UNSUPPORTED;
             state->registers[modrm & 7U] = (uint16_t) ~state->registers[modrm & 7U];
             return BM_STATUS_OK;
+        }
+        case 0xf6: { /* NOT r/m8 subset. */
+            uint8_t modrm;
+            uint8_t value = 0;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (((modrm >> 3U) & 7U) != 2U)
+                return BM_STATUS_UNSUPPORTED;
+            status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_byte(state, &operand, &value);
+            if (status == BM_STATUS_OK)
+                status = write_operand_byte(state, &operand, (uint8_t) ~value);
+            return status;
         }
         case 0xc7: { /* MOV r/m16,imm16. */
             uint8_t modrm;

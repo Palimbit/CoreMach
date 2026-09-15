@@ -12,8 +12,10 @@ portable engine now executes the original BIOS reset, CPU-register self-test
 and complete 64 KiB ROM checksum, and passes its first conventional-memory
 alias check. It also enters the firmware's upper-memory setup, clears and scans
 the selected 64 KiB window, validates segment-overridden memory aliases and
-returns to early board setup. It stops explicitly at `F000:0171` when the BIOS
-writes to the still-unmapped DMA master-clear port `0Dh`. This is measured
+returns to early board setup. It now programs and reads back the portable
+8237 register core during the firmware's DMA-controller test, then stops
+explicitly at `F000:01AC` on a write to the still-unmapped DMA page register
+`87h`. The controller does not yet perform transfers. This is measured
 bring-up progress, not a completed POST. The preceding write of `40h` to port
 `70h` is retained in an opaque PCS 86 latch without assigning guessed PC/AT
 CMOS semantics, while `8400h-8403h` currently retain only EMS page-selector
