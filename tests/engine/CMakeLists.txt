@@ -39,6 +39,11 @@ target_link_libraries(portable-engine-dma8237
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
+add_executable(portable-engine-dma-pages dma_page_registers_test.c)
+target_link_libraries(portable-engine-dma-pages
+    PRIVATE blumach_pc_components blumach_platform_null
+)
+
 add_executable(portable-engine-808x-post cpu_808x_post_test.c)
 target_link_libraries(portable-engine-808x-post
     PRIVATE
@@ -82,7 +87,7 @@ target_link_libraries(portable-engine-pcs86-firmware-probe
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform portable-engine-dma8237 portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare)
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform portable-engine-dma8237 portable-engine-dma-pages portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -104,6 +109,7 @@ add_test(NAME portable-engine.linear-memory COMMAND portable-engine-memory)
 add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-reset)
 add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 add_test(NAME portable-engine.dma8237-programming COMMAND portable-engine-dma8237)
+add_test(NAME portable-engine.dma-page-registers COMMAND portable-engine-dma-pages)
 add_test(NAME portable-engine.808x-post-self-test COMMAND portable-engine-808x-post)
 add_test(NAME portable-engine.808x-rom-checksum COMMAND portable-engine-808x-checksum)
 add_test(NAME portable-engine.808x-segment-overrides COMMAND portable-engine-808x-segments)
@@ -113,6 +119,7 @@ set_tests_properties(
     portable-engine.pcs86-reset-vector
     portable-engine.pc-platform
     portable-engine.dma8237-programming
+    portable-engine.dma-page-registers
     portable-engine.808x-post-self-test
     portable-engine.808x-rom-checksum
     portable-engine.808x-segment-overrides

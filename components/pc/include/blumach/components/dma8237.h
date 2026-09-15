@@ -27,6 +27,8 @@ typedef struct bm_dma8237_channel_state {
     uint16_t base_count;
     uint16_t current_count;
     uint8_t mode;
+    uint8_t page;
+    uint32_t current_physical_address;
     int masked;
     int requested;
     int terminal_count;
@@ -41,6 +43,9 @@ void bm_dma8237_reset(bm_dma8237_t *dma);
 bm_status_t bm_dma8237_set_dreq(bm_dma8237_t *dma,
                                 unsigned int channel,
                                 int asserted);
+bm_status_t bm_dma8237_set_page(bm_dma8237_t *dma,
+                                unsigned int channel,
+                                uint8_t page);
 bm_status_t bm_dma8237_channel_state(const bm_dma8237_t *dma,
                                      unsigned int channel,
                                      bm_dma8237_channel_state_t *out_state);

@@ -46,9 +46,23 @@ main(void)
     image[0xf0009U] = 0xab;
     image[0xf000aU] = 0x3a; /* CMP BL,AL: carry and sign. */
     image[0xf000bU] = 0xd8;
-    image[0xf000cU] = 0xf6; /* NOT BL */
-    image[0xf000dU] = 0xd3;
-    image[0xf000eU] = 0xf4; /* HLT failure */
+    image[0xf000cU] = 0x73; /* JNC failure: CMP must set carry. */
+    image[0xf000dU] = 0x0e;
+    image[0xf000eU] = 0x79; /* JNS failure: CMP must set sign. */
+    image[0xf000fU] = 0x0c;
+    image[0xf0010U] = 0xf6; /* NOT BL */
+    image[0xf0011U] = 0xd3;
+    image[0xf0012U] = 0x80; /* AND BL,0Fh */
+    image[0xf0013U] = 0xe3;
+    image[0xf0014U] = 0x0f;
+    image[0xf0015U] = 0xf6; /* TEST BL,01h */
+    image[0xf0016U] = 0xc3;
+    image[0xf0017U] = 0x01;
+    image[0xf0018U] = 0x74; /* JZ failure */
+    image[0xf0019U] = 0x02;
+    image[0xf001aU] = 0xf4; /* HLT success */
+    image[0xf001bU] = 0x90;
+    image[0xf001cU] = 0xf4; /* HLT failure */
 
     assert(bm_bus_create(&host, 1, &bus) == BM_STATUS_OK);
     {
@@ -66,12 +80,12 @@ main(void)
     }
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 20) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 32) == BM_STATUS_OK);
     assert(inspect(engine, "halted") == 1);
-    assert(inspect(engine, "last_fetch") == 0xf000eU);
-    assert(inspect(engine, "bx") == 0x0055U);
-    assert((inspect(engine, "flags") & 0x0001U) != 0); /* CF */
-    assert((inspect(engine, "flags") & 0x0080U) != 0); /* SF */
+    assert(inspect(engine, "last_fetch") == 0xf001aU);
+    assert(inspect(engine, "bx") == 0x0005U);
+    assert((inspect(engine, "flags") & 0x0001U) == 0); /* TEST clears CF. */
+    assert((inspect(engine, "flags") & 0x0040U) == 0); /* TEST result is nonzero. */
 
     bm_engine_destroy(engine);
     bm_linear_memory_destroy(memory);
