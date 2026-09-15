@@ -1,6 +1,8 @@
 # BluMach host-side contract tests. These tests exercise deterministic emulator
 # logic with bounded test doubles and do not require firmware or guest media.
 
+if(BLUMACH_BUILD_LEGACY)
+
 function(blumach_add_host_contract target source)
     add_executable(${target} ${source} ${ARGN})
     target_compile_features(${target} PRIVATE c_std_11)
@@ -66,3 +68,9 @@ blumach_add_host_contract(t3200-ags
     "${PROJECT_SOURCE_DIR}/src/io.c"
 )
 blumach_enable_dead_code_elimination(t3200-ags)
+
+endif()
+
+if(BLUMACH_BUILD_ENGINE)
+    add_subdirectory(engine)
+endif()

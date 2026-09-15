@@ -26,6 +26,19 @@
             "inherits": "base"
         },
         {
+            "name": "portable-engine",
+            "displayName": "Portable engine only",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/portable-engine",
+            "cacheVariables": {
+                "BLUMACH_BUILD_LEGACY": false,
+                "BLUMACH_BUILD_ENGINE": true,
+                "BUILD_TESTING": true,
+                "CMAKE_BUILD_TYPE": "Debug",
+                "QT": false
+            }
+        },
+        {
             "name": "optimized",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Optimized"

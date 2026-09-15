@@ -1,0 +1,54 @@
+{
+  "schema": "blumach-component-provenance-v1",
+  "coverage_roots": [
+    "engine",
+    "runtime",
+    "components",
+    "systems",
+    "platforms",
+    "apps"
+  ],
+  "components": [
+    {
+      "id": "portable-engine-core",
+      "destination": ["engine/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Initial deterministic engine, CPU contract and scheduler"
+    },
+    {
+      "id": "generic-address-bus",
+      "destination": ["components/buses/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Initial host-independent address-space bus"
+    },
+    {
+      "id": "portable-runtime-session",
+      "destination": ["runtime/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Initial opaque session lifecycle and typed machine factory"
+    },
+    {
+      "id": "null-host-platform",
+      "destination": ["platforms/null/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Deterministic host adapter for tests and headless use"
+    },
+    {
+      "id": "headless-frontend",
+      "destination": ["apps/headless/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Minimal frontend proving that Qt is optional"
+    }
+  ],
+  "external_dependencies": []
+}
