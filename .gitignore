@@ -3,6 +3,7 @@ CMakeUserPresets.json
 CMakeCache.txt
 CMakeFiles
 /build
+/dist
 *.a
 /src/*.exe
 /src/86Box
@@ -38,7 +39,7 @@ CMakeFiles
 /out
 
 # Windows resource compiler
-RC*
+/RC*
 
 # Qt Creator
 CMakeLists.txt.user

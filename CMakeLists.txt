@@ -40,10 +40,19 @@ if(MUNT_EXTERNAL)
 endif()
 
 project(BluMach
-    VERSION 7.0
+    VERSION 0.1.0
     DESCRIPTION "Preservation-focused emulator of x86-based systems, derived from 86Box"
     HOMEPAGE_URL "https://github.com/BluMach/BluMach"
     LANGUAGES C CXX)
+
+# CMake requires a numeric project version. Keep the optional SemVer
+# prerelease identifier separate and expose one canonical display/package value.
+set(BLUMACH_VERSION_PRERELEASE "rc.1")
+if(BLUMACH_VERSION_PRERELEASE)
+    set(BLUMACH_VERSION_FULL "${CMAKE_PROJECT_VERSION}-${BLUMACH_VERSION_PRERELEASE}")
+else()
+    set(BLUMACH_VERSION_FULL "${CMAKE_PROJECT_VERSION}")
+endif()
 
 if (NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
     message(FATAL_ERROR "Only 64-bit builds are supported.")

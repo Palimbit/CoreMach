@@ -6,60 +6,130 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION_PATTERN = r"[0-9]+\.[0-9]+(?:\.[0-9]+)?"
+BASE_VERSION_PATTERN = r"[0-9]+\.[0-9]+\.[0-9]+"
+PRERELEASE_PATTERN = r"[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*"
+FULL_VERSION_PATTERN = rf"{BASE_VERSION_PATTERN}(?:-{PRERELEASE_PATTERN})?"
 
 
 class VersionError(RuntimeError):
     """Raised when release metadata is missing, ambiguous, or inconsistent."""
 
 
-def metadata_patterns() -> dict[Path, re.Pattern[str]]:
+@dataclass(frozen=True)
+class ReleaseVersion:
+    base: str
+    prerelease: str = ""
+
+    @property
+    def full(self) -> str:
+        return f"{self.base}-{self.prerelease}" if self.prerelease else self.base
+
+    @property
+    def debian(self) -> str:
+        # Debian sorts '~' before the final release.
+        suffix = self.prerelease.replace(".", "")
+        return f"{self.base}~{suffix}-1" if suffix else f"{self.base}-1"
+
+    @property
+    def rpm_release(self) -> str:
+        suffix = self.prerelease.replace(".", "")
+        return f"0.{suffix}" if suffix else "1"
+
+
+def parse_version(value: str) -> ReleaseVersion:
+    match = re.fullmatch(
+        rf"(?P<base>{BASE_VERSION_PATTERN})(?:-(?P<prerelease>{PRERELEASE_PATTERN}))?",
+        value,
+    )
+    if match is None:
+        raise VersionError(
+            "version must be SemVer with three numeric components and an optional "
+            "prerelease (for example 0.1.0 or 0.1.0-rc.1)"
+        )
+    return ReleaseVersion(match.group("base"), match.group("prerelease") or "")
+
+
+def read_one(path: Path, pattern: re.Pattern[str], field: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    matches = list(pattern.finditer(text))
+    if len(matches) != 1:
+        relative = path.relative_to(ROOT)
+        raise VersionError(f"{relative}: expected one {field}, found {len(matches)}")
+    return matches[0].group(1)
+
+
+def observed_versions() -> dict[str, str]:
+    cmake = ROOT / "CMakeLists.txt"
+    spec = ROOT / "src/unix/assets/BluMach.spec"
     return {
-        ROOT / "CMakeLists.txt": re.compile(
-            rf"(?ms)(project\(BluMach\s+VERSION\s+)({VERSION_PATTERN})"
+        "cmake_base": read_one(
+            cmake,
+            re.compile(rf"(?ms)project\(BluMach\s+VERSION\s+({BASE_VERSION_PATTERN})"),
+            "project version",
         ),
-        ROOT / "vcpkg.json": re.compile(
-            rf'(?m)("version-string"\s*:\s*")({VERSION_PATTERN})(")'
+        "cmake_prerelease": read_one(
+            cmake,
+            re.compile(rf'(?m)^set\(BLUMACH_VERSION_PRERELEASE "({PRERELEASE_PATTERN}|)"\)$'),
+            "prerelease identifier",
         ),
-        ROOT / "src/unix/assets/BluMach.spec": re.compile(
-            rf"(?m)^(Version:\s*)({VERSION_PATTERN})[ \t]*$"
+        "vcpkg": read_one(
+            ROOT / "vcpkg.json",
+            re.compile(rf'(?m)"version-string"\s*:\s*"({FULL_VERSION_PATTERN})"'),
+            "version-string",
         ),
-        ROOT / "src/unix/assets/io.github.BluMach.BluMach.metainfo.xml": re.compile(
-            rf'(<release\s+version=")({VERSION_PATTERN})("\s+date="[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}"\s*/>)'
+        "rpm_version": read_one(
+            spec, re.compile(rf"(?m)^Version:\s*({BASE_VERSION_PATTERN})\s*$"), "Version"
         ),
-        ROOT / "debian/changelog": re.compile(
-            rf"(?m)^(blumach \()({VERSION_PATTERN})(\)\s+)"
+        "rpm_release": read_one(
+            spec,
+            re.compile(r"(?m)^Release:\s*([^%\s]+)%\{\?dist\}\s*$"),
+            "Release",
+        ),
+        "rpm_upstream": read_one(
+            spec,
+            re.compile(rf"(?m)^%global upstream_version\s+({FULL_VERSION_PATTERN})\s*$"),
+            "upstream_version",
+        ),
+        "metainfo": read_one(
+            ROOT / "src/unix/assets/io.github.BluMach.BluMach.metainfo.xml",
+            re.compile(rf'<release\s+version="({FULL_VERSION_PATTERN})"\s+date="[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}"\s*/>'),
+            "release version",
+        ),
+        "debian": read_one(
+            ROOT / "debian/changelog",
+            re.compile(r"(?m)^blumach \(([^)]+)\)\s+"),
+            "package version",
         ),
     }
 
 
-def read_versions() -> dict[Path, str]:
-    versions: dict[Path, str] = {}
-    for path, pattern in metadata_patterns().items():
-        text = path.read_text(encoding="utf-8")
-        matches = list(pattern.finditer(text))
-        if len(matches) != 1:
-            relative = path.relative_to(ROOT)
-            raise VersionError(f"{relative}: expected one release version, found {len(matches)}")
-        versions[path] = matches[0].group(2)
-    return versions
-
-
 def check_versions() -> str:
-    versions = read_versions()
-    unique = set(versions.values())
-    if len(unique) != 1:
-        details = ", ".join(
-            f"{path.relative_to(ROOT).as_posix()}={version}"
-            for path, version in versions.items()
-        )
-        raise VersionError(f"release versions are not synchronized: {details}")
-    return unique.pop()
+    observed = observed_versions()
+    version = ReleaseVersion(observed["cmake_base"], observed["cmake_prerelease"])
+    expected = {
+        "cmake_base": version.base,
+        "cmake_prerelease": version.prerelease,
+        "vcpkg": version.full,
+        "rpm_version": version.base,
+        "rpm_release": version.rpm_release,
+        "rpm_upstream": version.full,
+        "metainfo": version.full,
+        "debian": version.debian,
+    }
+    mismatches = [
+        f"{field}={observed[field]} (expected {value})"
+        for field, value in expected.items()
+        if observed[field] != value
+    ]
+    if mismatches:
+        raise VersionError("release versions are not synchronized: " + ", ".join(mismatches))
+    return version.full
 
 
 def replace_once(path: Path, pattern: re.Pattern[str], replacement: str) -> None:
@@ -71,25 +141,61 @@ def replace_once(path: Path, pattern: re.Pattern[str], replacement: str) -> None
     path.write_text(updated, encoding="utf-8", newline="")
 
 
-def set_version(version: str, release_date: date) -> None:
-    if re.fullmatch(VERSION_PATTERN, version) is None:
-        raise VersionError("version must contain two or three numeric components (for example 7.0 or 7.0.1)")
+def set_version(value: str, release_date: date) -> None:
+    version = parse_version(value)
 
     # Refuse to overwrite inconsistent metadata: divergence should be reviewed,
     # not silently normalized by a release command.
     check_versions()
 
-    for path, pattern in metadata_patterns().items():
-        replace_once(path, pattern, rf"\g<1>{version}\g<3>" if pattern.groups >= 3 else rf"\g<1>{version}")
+    cmake = ROOT / "CMakeLists.txt"
+    replace_once(
+        cmake,
+        re.compile(rf"(?ms)(project\(BluMach\s+VERSION\s+)({BASE_VERSION_PATTERN})"),
+        rf"\g<1>{version.base}",
+    )
+    replace_once(
+        cmake,
+        re.compile(rf'(?m)^(set\(BLUMACH_VERSION_PRERELEASE ")({PRERELEASE_PATTERN}|)("\))$'),
+        rf"\g<1>{version.prerelease}\g<3>",
+    )
+
+    replace_once(
+        ROOT / "vcpkg.json",
+        re.compile(rf'(?m)("version-string"\s*:\s*")({FULL_VERSION_PATTERN})(")'),
+        rf"\g<1>{version.full}\g<3>",
+    )
+
+    spec = ROOT / "src/unix/assets/BluMach.spec"
+    replace_once(
+        spec,
+        re.compile(rf"(?m)^(Version:\s*)({BASE_VERSION_PATTERN})\s*$"),
+        rf"\g<1>{version.base}",
+    )
+    replace_once(
+        spec,
+        re.compile(r"(?m)^(Release:\s*)([^%\s]+)(%\{\?dist\})\s*$"),
+        rf"\g<1>{version.rpm_release}\g<3>",
+    )
+    replace_once(
+        spec,
+        re.compile(rf"(?m)^(%global upstream_version\s+)({FULL_VERSION_PATTERN})\s*$"),
+        rf"\g<1>{version.full}",
+    )
 
     metainfo = ROOT / "src/unix/assets/io.github.BluMach.BluMach.metainfo.xml"
     replace_once(
         metainfo,
-        re.compile(r'(<release\s+version="[^"]+"\s+date=")[0-9]{4}-[0-9]{2}-[0-9]{2}("\s*/>)'),
-        rf"\g<1>{release_date.isoformat()}\g<2>",
+        re.compile(rf'(<release\s+version=")({FULL_VERSION_PATTERN})("\s+date=")[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}("\s*/>)'),
+        rf"\g<1>{version.full}\g<3>{release_date.isoformat()}\g<4>",
     )
 
     debian = ROOT / "debian/changelog"
+    replace_once(
+        debian,
+        re.compile(r"(?m)^(blumach \()([^)]+)(\)\s+)"),
+        rf"\g<1>{version.debian}\g<3>",
+    )
     debian_stamp = datetime(
         release_date.year, release_date.month, release_date.day, tzinfo=timezone.utc
     ).strftime("%a, %d %b %Y %H:%M:%S +0000")
@@ -99,17 +205,17 @@ def set_version(version: str, release_date: date) -> None:
         rf"\g<1>{debian_stamp}",
     )
 
-    spec = ROOT / "src/unix/assets/BluMach.spec"
     rpm_stamp = release_date.strftime("%a %b %d %Y")
     replace_once(
         spec,
-        re.compile(rf"(?m)^\* .+ BluMach project maintainers <blumach@users\.noreply\.github\.com> {VERSION_PATTERN}-1$"),
-        f"* {rpm_stamp} BluMach project maintainers <blumach@users.noreply.github.com> {version}-1",
+        re.compile(r"(?m)^\* .+ BluMach project maintainers <blumach@users\.noreply\.github\.com> [^\s]+$"),
+        f"* {rpm_stamp} BluMach project maintainers <blumach@users.noreply.github.com> "
+        f"{version.base}-{version.rpm_release}",
     )
 
     observed = check_versions()
-    if observed != version:
-        raise VersionError(f"updated metadata reports {observed}, expected {version}")
+    if observed != version.full:
+        raise VersionError(f"updated metadata reports {observed}, expected {version.full}")
 
 
 def parse_date(value: str) -> date:
@@ -122,8 +228,8 @@ def parse_date(value: str) -> date:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("check", help="verify that every release metadata file has the same version")
-    set_parser = subparsers.add_parser("set", help="set a numeric release version and explicit release date")
+    subparsers.add_parser("check", help="verify all release metadata and packaging mappings")
+    set_parser = subparsers.add_parser("set", help="set a SemVer release and explicit release date")
     set_parser.add_argument("version")
     set_parser.add_argument("--date", required=True, type=parse_date, dest="release_date")
     args = parser.parse_args(argv)

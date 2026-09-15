@@ -21,6 +21,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--qt", required=True, choices=("on", "off"))
     parser.add_argument("--max-size-mib", required=True, type=float)
+    parser.add_argument("--expected-version")
     return parser.parse_args()
 
 
@@ -124,6 +125,11 @@ def main() -> int:
     output = (result.stdout + result.stderr).strip()
     if output and "BluMach" not in output:
         raise SystemExit(f"Unexpected --version output: {output}")
+    if args.expected_version and output != f"BluMach {args.expected_version}":
+        raise SystemExit(
+            f"Unexpected --version output: {output!r}; expected "
+            f"'BluMach {args.expected_version}'"
+        )
     print(output or "Packaged executable started and exited successfully")
     return 0
 

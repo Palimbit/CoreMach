@@ -8,7 +8,7 @@
 		}
 	},
     "name": "blumach",
-    "version-string": "7.0",
+    "version-string": "0.1.0-rc.1",
     "homepage": "https://github.com/BluMach/BluMach",
     "documentation": "https://github.com/BluMach/BluMach#readme",
     "license": "GPL-2.0-or-later",
