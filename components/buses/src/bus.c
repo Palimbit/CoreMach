@@ -16,6 +16,8 @@ struct bm_bus {
     bm_bus_mapping_t *mappings;
     size_t count;
     size_t capacity;
+    bm_bus_observer_fn observer;
+    void *observer_context;
 };
 
 bm_status_t
@@ -90,8 +92,21 @@ bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction)
     for (index = 0; index < bus->count; ++index) {
         bm_bus_mapping_t *mapping = &bus->mappings[index];
         if ((mapping->space == transaction->space) && (transaction->address >= mapping->first) &&
-            (last <= mapping->last))
-            return mapping->access(mapping->context, transaction);
+            (last <= mapping->last)) {
+            bm_status_t status = mapping->access(mapping->context, transaction);
+            if ((status == BM_STATUS_OK) && (bus->observer != NULL))
+                bus->observer(bus->observer_context, transaction);
+            return status;
+        }
     }
     return BM_STATUS_UNMAPPED;
+}
+
+void
+bm_bus_set_observer(bm_bus_t *bus, bm_bus_observer_fn observer, void *context)
+{
+    if (bus == NULL)
+        return;
+    bus->observer = observer;
+    bus->observer_context = context;
 }

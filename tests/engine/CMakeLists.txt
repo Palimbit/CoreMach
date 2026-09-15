@@ -29,7 +29,12 @@ target_link_libraries(portable-engine-pcs86-reset
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset)
+add_executable(portable-engine-pc-platform pc_platform_test.c)
+target_link_libraries(portable-engine-pc-platform
+    PRIVATE blumach_pc_components blumach_platform_null
+)
+
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -41,8 +46,10 @@ endforeach()
 
 add_test(NAME portable-engine.linear-memory COMMAND portable-engine-memory)
 add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-reset)
+add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 set_tests_properties(
     portable-engine.linear-memory
     portable-engine.pcs86-reset-vector
+    portable-engine.pc-platform
     PROPERTIES TIMEOUT 10
 )

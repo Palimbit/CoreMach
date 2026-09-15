@@ -9,9 +9,14 @@
 #include <string.h>
 
 typedef struct trace_sink {
-    bm_808x_trace_t entries[16];
+    bm_808x_trace_t entries[64];
     size_t count;
 } trace_sink_t;
+
+typedef struct io_trace_sink {
+    bm_pcs86_io_trace_t entries[32];
+    size_t count;
+} io_trace_sink_t;
 
 typedef struct allocation_tracker {
     size_t calls;
@@ -67,6 +72,14 @@ capture_trace(void *context, const bm_808x_trace_t *trace)
 }
 
 static void
+capture_io_trace(void *context, const bm_pcs86_io_trace_t *trace)
+{
+    io_trace_sink_t *sink = context;
+    assert(sink->count < (sizeof(sink->entries) / sizeof(sink->entries[0])));
+    sink->entries[sink->count++] = *trace;
+}
+
+static void
 put_combined_byte(uint8_t *even, uint8_t *odd, size_t offset, uint8_t value)
 {
     if ((offset & 1U) == 0)
@@ -88,8 +101,8 @@ test_partial_initialization_cleanup(const bm_pcs86_config_t *config)
 {
     size_t failure;
 
-    /* Session start performs twelve allocations through the host contract. */
-    for (failure = 0; failure < 12; ++failure) {
+    /* Exercise every allocation performed while starting this machine. */
+    for (failure = 0; failure < 14; ++failure) {
         allocation_tracker_t tracker = { 0, SIZE_MAX, 0 };
         bm_host_services_t host = {
             &tracker, tracked_allocate, tracked_release, tracked_time, tracked_log
@@ -118,9 +131,24 @@ main(void)
         0x8e, 0xd8,       /* MOV DS,AX */
         0xb0, 0x5a,       /* MOV AL,5Ah */
         0xa2, 0x00, 0x02, /* MOV [0200h],AL */
+        0xfa,             /* CLI */
+        0xb0, 0x11, 0xe6, 0x20, /* Initialize the single 8259A. */
+        0xb0, 0x08, 0xe6, 0x21,
+        0xb0, 0x00, 0xe6, 0x21,
+        0xb0, 0x01, 0xe6, 0x21,
+        0xb0, 0xfe, 0xe6, 0x21,
+        0xb0, 0x34, 0xe6, 0x43, /* Program PIT channel 0, mode 2. */
+        0xb0, 0x04, 0xe6, 0x40,
+        0xb0, 0x00, 0xe6, 0x40,
+        0xb0, 0x91, 0xe6, 0x65, /* Exercise PCS 86 board control. */
+        0xe4, 0x65,             /* IN AL,65h -> 91h. */
+        0xba, 0x00, 0x01,       /* MOV DX,100h. */
+        0xec,                   /* IN AL,DX -> jumper bank. */
+        0xe4, 0x63,             /* IN AL,63h -> fixed 08h. */
         0xf4              /* HLT */
     };
     trace_sink_t trace = { 0 };
+    io_trace_sink_t io_trace = { 0 };
     bm_pcs86_config_t config;
     bm_machine_config_t machine;
     bm_session_t *session = NULL;
@@ -134,10 +162,12 @@ main(void)
         put_combined_byte(even, odd, 0x0100U + index, program[index]);
 
     config = (bm_pcs86_config_t) {
-        { "synthetic-even", even, sizeof(even), NULL },
-        { "synthetic-odd", odd, sizeof(odd), NULL },
-        capture_trace,
-        &trace
+        .firmware_even = { "synthetic-even", even, sizeof(even), NULL },
+        .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL },
+        .trace = capture_trace,
+        .trace_context = &trace,
+        .io_trace = capture_io_trace,
+        .io_trace_context = &io_trace
     };
     machine = bm_pcs86_machine_config(&config);
 
@@ -155,16 +185,29 @@ main(void)
     assert(inspect(session, "ip") == 0);
     assert(inspect(session, "frequency_hz") == 10000000U);
 
-    assert(bm_session_run_for(session, 12) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 40) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xf000);
-    assert(inspect(session, "ip") == 0x010b);
-    assert(inspect(session, "ax") == 0x005a);
+    assert(inspect(session, "ip") == 0x0138);
+    assert(inspect(session, "ax") == 0x0008);
     assert(inspect(session, "ds") == 0);
     assert(inspect(session, "halted") == 1);
-    assert(trace.count == 6);
+    assert(inspect(session, "dx") == 0x0100);
+    assert(trace.count == 29);
     assert(trace.entries[0].physical_address == 0xffff0U);
     assert(trace.entries[0].opcode == 0xea);
     assert(trace.entries[1].physical_address == 0xf0100U);
+    assert(io_trace.count == 12);
+    assert(io_trace.entries[0].operation == BM_BUS_WRITE);
+    assert(io_trace.entries[0].port == 0x20U && io_trace.entries[0].value == 0x11U);
+    assert(io_trace.entries[7].port == 0x40U && io_trace.entries[7].value == 0x00U);
+    assert(io_trace.entries[8].operation == BM_BUS_WRITE);
+    assert(io_trace.entries[8].port == 0x65U && io_trace.entries[8].value == 0x91U);
+    assert(io_trace.entries[9].operation == BM_BUS_READ);
+    assert(io_trace.entries[9].port == 0x65U && io_trace.entries[9].value == 0x91U);
+    assert(io_trace.entries[10].operation == BM_BUS_READ);
+    assert(io_trace.entries[10].port == 0x100U && io_trace.entries[10].value == 0xffU);
+    assert(io_trace.entries[11].operation == BM_BUS_READ);
+    assert(io_trace.entries[11].port == 0x63U && io_trace.entries[11].value == 0x08U);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);

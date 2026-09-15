@@ -23,7 +23,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Initial host-independent address-space bus"
+      "local_changes": "Host-independent address-space bus with an optional observer for deterministic external traces"
     },
     {
       "id": "generic-linear-memory",
@@ -42,7 +42,18 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; only the reset bring-up instruction subset is present"
+      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added byte-oriented IN/OUT and flag-control instructions to the still-incomplete bring-up subset"
+    },
+    {
+      "id": "portable-pc-platform-components",
+      "destination": ["components/pc/**"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "08893f4fd0392ea6e95e9abbe108f0d8f1fbbe1c",
+      "origin_paths": ["src/pic.c", "src/pit.c", "src/include/86box/pic.h", "src/include/86box/pit.h"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
+      "local_changes": "Replaced global devices, host timers and direct CPU coupling with opaque single-instance 8259A and deterministic 8253 contracts; only the XT PIC path and binary PIT modes 0, 2 and 3 are implemented"
     },
     {
       "id": "portable-runtime-session",
@@ -77,7 +88,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, 640 KiB RAM and interleaved system ROM map behind a typed machine factory"
+      "local_changes": "Isolated the documented V30, RAM, ROM, single PIC, PIT and minimum motherboard register map behind a typed machine factory; keyboard queues, RTC, DMA and peripherals remain absent"
     }
   ],
   "external_dependencies": []
