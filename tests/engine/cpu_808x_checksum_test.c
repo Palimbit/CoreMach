@@ -38,6 +38,20 @@ main(void)
         0x0a, 0xc0, /* OR AL,AL */
         0xc3        /* RET */
     };
+    static const uint8_t memory_check[] = {
+        0xb8, 0x55, 0xaa,       /* MOV AX,AA55h */
+        0xb9, 0xaa, 0x55,       /* MOV CX,55AAh */
+        0x86, 0xe9,             /* XCHG CH,CL -> CX=AA55h */
+        0x89, 0x06, 0x00, 0x05, /* MOV [0500h],AX */
+        0x39, 0x0e, 0x00, 0x05, /* CMP [0500h],CX */
+        0x75, 0x0d,             /* JNE failure */
+        0x24, 0x0f,             /* AND AL,0Fh */
+        0x0c, 0x80,             /* OR AL,80h -> AX=AA85h */
+        0x81, 0x3e, 0x00, 0x05, 0x55, 0xaa, /* CMP [0500h],AA55h */
+        0x75, 0x01,             /* JNE failure */
+        0xf4,                   /* success HLT */
+        0xf4                    /* failure HLT */
+    };
     bm_host_services_t host = bm_null_host_services();
     bm_engine_config_t engine_config = { 1, 1 };
     bm_linear_memory_config_t memory_config;
@@ -56,7 +70,7 @@ main(void)
     image[0xffff4U] = 0xf0;
     memcpy(image + 0xf0100U, setup, sizeof(setup));
     memcpy(image + 0xf0120U, checksum, sizeof(checksum));
-    image[0xf0130U] = 0xf4;
+    memcpy(image + 0xf0130U, memory_check, sizeof(memory_check));
     image[0x0300U] = 1;
     image[0x0301U] = 2;
     image[0x0302U] = 3;
@@ -75,11 +89,12 @@ main(void)
     assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 32) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 48) == BM_STATUS_OK);
     assert(inspect(engine, "halted") == 1);
-    assert(inspect(engine, "ax") == 6);
+    assert(inspect(engine, "ax") == 0xaa85U);
     assert(inspect(engine, "sp") == 0x0402U);
-    assert(inspect(engine, "last_fetch") == 0xf0130U);
+    assert(inspect(engine, "last_fetch") == 0xf014eU);
+    assert((inspect(engine, "flags") & 0x0040U) != 0); /* ZF from group 81h CMP. */
 
     bm_engine_destroy(engine);
     bm_linear_memory_destroy(memory);

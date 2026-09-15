@@ -9,9 +9,11 @@ See also the [Olivetti PCS family overview](olivetti-pcs-family.md) and the
 
 The inherited product remains the only usable implementation. The parallel
 portable engine now executes the original BIOS reset, CPU-register self-test
-and complete 64 KiB ROM checksum. It stops explicitly at `F000:009F`, before
-the first conventional-memory comparison, because opcode group `81h` is not
-implemented yet. This is measured bring-up progress, not a completed POST.
+and complete 64 KiB ROM checksum, and passes its first conventional-memory
+alias check. It stops explicitly at `F000:0B29` when the firmware writes `40h`
+to the currently undocumented and unmapped I/O port `70h`. This is measured
+bring-up progress, not a completed POST; the write is not silently ignored or
+assigned guessed PC/AT semantics.
 
 ## Recommended BluMach configuration
 
