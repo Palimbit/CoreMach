@@ -3,12 +3,15 @@
  * Copyright 2026 rtzor
  *
  * Derived rewrite of BluMach's original PCS 86 machine support. This first
- * stage contains only the documented V30, conventional RAM and system ROM map.
+ * stage contains the documented V30, conventional RAM, system ROM map and
+ * minimum motherboard I/O used to establish the platform contract.
  */
 #include <blumach/systems/olivetti_pcs86.h>
 
 #include <blumach/components/bus.h>
 #include <blumach/components/linear_memory.h>
+#include <blumach/components/pic8259.h>
+#include <blumach/components/pit8253.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -18,7 +21,132 @@ typedef struct bm_pcs86_machine {
     bm_bus_t *bus;
     bm_linear_memory_t *ram;
     bm_linear_memory_t *rom;
+    bm_pic8259_t *pic;
+    bm_pit8253_t *pit;
+    uint8_t port61;
+    uint8_t control;
+    uint8_t memory_blocks;
+    uint8_t glue[16];
+    uint8_t ps2[5];
+    uint8_t jumpers;
+    bm_pcs86_io_trace_fn io_trace;
+    void *io_trace_context;
 } bm_pcs86_machine_t;
+
+static void
+pcs86_io_observer(void *context, const bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    if ((machine->io_trace != NULL) && (transaction->space == BM_ADDRESS_IO) &&
+        (transaction->size == 1)) {
+        bm_pcs86_io_trace_t trace = {
+            transaction->operation,
+            (uint16_t) transaction->address,
+            (uint8_t) transaction->value
+        };
+        machine->io_trace(machine->io_trace_context, &trace);
+    }
+}
+
+static void
+pcs86_pit_output(void *context, unsigned int channel, int output)
+{
+    bm_pcs86_machine_t *machine = context;
+    if (channel == 0)
+        (void) bm_pic8259_set_irq(machine->pic, 0, output);
+}
+
+static bm_status_t
+pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    uint16_t port = (uint16_t) transaction->address;
+    uint8_t value = (uint8_t) transaction->value;
+    if ((transaction->size != 1) || (transaction->operation == BM_BUS_FETCH))
+        return BM_STATUS_UNSUPPORTED;
+    if (transaction->operation == BM_BUS_READ) {
+        switch (port) {
+            case 0x0060:
+                value = 0;
+                (void) bm_pic8259_set_irq(machine->pic, 1, 0);
+                break;
+            case 0x0061:
+                value = machine->port61;
+                break;
+            case 0x0062:
+                value = machine->memory_blocks >= 10 ? 0xc0U : 0;
+                break;
+            case 0x0063:
+                value = 0x08U;
+                break;
+            case 0x0064:
+                value = machine->glue[4] & 0x8fU;
+                break;
+            case 0x0065:
+                value = machine->control;
+                break;
+            case 0x0066:
+            case 0x0067:
+            case 0x0068:
+            case 0x0069:
+                value = machine->ps2[port - 0x0066U];
+                break;
+            case 0x006a:
+                value = 0;
+                break;
+            case 0x006b:
+            case 0x006c:
+            case 0x006f:
+                value = machine->glue[port & 0x0fU];
+                break;
+            default:
+                value = 0xffU;
+                break;
+        }
+        transaction->value = value;
+        return BM_STATUS_OK;
+    }
+    switch (port) {
+        case 0x0061:
+            machine->port61 = value;
+            return bm_pit8253_set_gate(machine->pit, 2, value & 1U);
+        case 0x0064:
+        case 0x006c:
+        case 0x006f:
+            machine->glue[port & 0x0fU] = value;
+            break;
+        case 0x0065:
+            machine->control = value;
+            break;
+        case 0x0066:
+            machine->ps2[0] = (value & 0xfbU) | (machine->ps2[0] & 0x04U);
+            break;
+        case 0x0067:
+        case 0x0068:
+        case 0x0069:
+        case 0x006a:
+            machine->ps2[port - 0x0066U] = value;
+            break;
+        case 0x006b:
+            machine->glue[11] = value & 0xfeU;
+            if (((value & 1U) != 0) && (machine->memory_blocks < 10))
+                ++machine->memory_blocks;
+            break;
+        default:
+            break;
+    }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_jumpers_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    if ((transaction->size != 1) || (transaction->operation != BM_BUS_READ))
+        return BM_STATUS_UNSUPPORTED;
+    transaction->value = machine->jumpers;
+    return BM_STATUS_OK;
+}
 
 static const bm_pcs86_firmware_identity_t expected_firmware[] = {
     {
@@ -80,6 +208,8 @@ pcs86_destroy(void *context)
     bm_pcs86_machine_t *machine = context;
     if (machine == NULL)
         return;
+    bm_pit8253_destroy(machine->pit);
+    bm_pic8259_destroy(machine->pic);
     bm_linear_memory_destroy(machine->rom);
     bm_linear_memory_destroy(machine->ram);
     bm_bus_destroy(machine->bus);
@@ -110,8 +240,15 @@ pcs86_create(bm_engine_t *engine,
         return BM_STATUS_OUT_OF_MEMORY;
     memset(machine, 0, sizeof(*machine));
     machine->host = *host;
+    machine->control = 0x80U;
+    machine->ps2[0] = 0x04U; /* The front-panel key lock is open. */
+    machine->jumpers = 0xffU; /* No HDD and both floppy banks open. */
+    machine->io_trace = config->io_trace;
+    machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 2, &machine->bus);
+    status = bm_bus_create(host, 6, &machine->bus);
+    if (status == BM_STATUS_OK)
+        bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
         bm_linear_memory_config_t ram_config = {
             BM_ADDRESS_MEMORY, 0, BM_PCS86_MEMORY_SIZE, 0, NULL, 0
@@ -137,6 +274,20 @@ pcs86_create(bm_engine_t *engine,
     }
     if (combined_rom != NULL)
         host->release(host->context, combined_rom);
+    if (status == BM_STATUS_OK) {
+        bm_pic8259_config_t pic_config = { 0x0020U };
+        status = bm_pic8259_create(host, machine->bus, &pic_config, &machine->pic);
+    }
+    if (status == BM_STATUS_OK) {
+        bm_pit8253_config_t pit_config = { 0x0040U, pcs86_pit_output, machine };
+        status = bm_pit8253_create(host, machine->bus, &pit_config, &machine->pit);
+    }
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0060U, 0x006fU,
+                            pcs86_board_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0100U, 0x0100U,
+                            pcs86_jumpers_access, machine);
     if (status == BM_STATUS_OK) {
         bm_808x_config_t cpu_config = {
             BM_808X_NEC_V30, 10000000U, machine->bus, config->trace, config->trace_context

@@ -4,12 +4,13 @@
 
 ## Present outcome and evidence boundary
 
-The first PCS 86 vertical slice in BluMach's portable engine executes a newly
+The current PCS 86 vertical slice in BluMach's portable engine executes a newly
 authored synthetic program from the real-mode reset address. It supplies an
-explicit NEC V30 state object, a generic address bus, 640 KiB of RAM, and the
-documented 64 KiB system-ROM window. It is a bring-up milestone, not a usable
-emulator: the original BIOS cannot run because most instructions and all board
-devices remain absent.
+explicit NEC V30 state object, a generic address bus, 640 KiB of RAM, the
+documented 64 KiB system-ROM window, a single 8259A, an 8253 subset and the
+minimum known motherboard-register map. It is a platform-contract milestone,
+not a usable emulator: the original BIOS cannot run because most V30
+instructions and several required devices remain absent.
 
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
 interleaving, ROM address and known firmware hashes come from the canonical
@@ -36,11 +37,14 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses and seven bring-up instruction forms; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, basic IN/OUT and bring-up instructions; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Approximate | One instruction per tick; 10 MHz is identity metadata until clock-domain timing lands |
-| PIC, PIT, DMA, PPI and board glue | Unavailable | Required for POST and planned for PCS86-2 |
+| Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests, acknowledge and EOI; no cascaded/level modes |
+| 8253 PIT | Derived portable subset | Deterministic binary modes 0, 2 and 3; no BCD, latching or clock-domain integration |
+| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh` and `100h`; queues and attached peripherals are absent |
+| DMA, RTC and complete PPI behaviour | Unavailable | Still required before meaningful original-BIOS POST comparison |
 | Video, keyboard and storage | Unavailable | Planned as later vertical cuts |
 
 Unsupported opcodes return a structured `BM_STATUS_UNSUPPORTED` result. They
@@ -53,12 +57,14 @@ The current automated ladder uses no historical software:
 
 1. The generic memory test checks little- and big-endian transactions, fetch,
    write protection, unmapped access and direct debug inspection.
-2. The PCS 86 test creates two synthetic 32 KiB halves in memory. Their
+2. The PC component test initializes and services the single PIC, then programs
+   an 8253 channel and advances it through a deterministic output transition.
+3. The PCS 86 test creates two synthetic 32 KiB halves in memory. Their
    interleaved reset vector performs a far jump from physical `FFFF0h` to
-   `F0100h`, initializes `DS`, writes through the bus and halts.
-3. CPU introspection verifies reset and final registers, the 10 MHz identity,
-   halt state and exact instruction-fetch checkpoints.
-4. Firmware metadata validation rejects a supplied hash that differs from the
+   `F0100h`, writes RAM, initializes the PIC, programs the PIT, exercises the
+   board-control register and reads the fixed diagnostic register before halt.
+4. CPU and I/O traces verify exact instruction and port checkpoints.
+5. Firmware metadata validation rejects a supplied hash that differs from the
    known PCS 86 identity.
 
 Original firmware is intentionally not used in CI and no ROM, disk, manual or
@@ -74,14 +80,15 @@ unknown instructions as no-ops, and claiming that the clock metadata provides
 cycle accuracy. Each would make a short demonstration easier while weakening
 auditability or the intended platform boundary.
 
-The opcode subset will be replaced incrementally by a complete portable V30
+The opcode subset will be expanded incrementally into a complete portable V30
 interpreter with conformance tests. Instruction and bus timing will replace the
-instruction tick once the scheduler has explicit clock domains. PIC, PIT, PPI
-and board glue are the exit criteria for beginning comparison against original
-firmware POST traces.
+instruction tick once the scheduler has explicit clock domains. DMA, RTC, the
+remaining board behaviours and sufficient V30 coverage are the exit criteria
+for meaningful comparison against original-firmware POST traces.
 
 The main implementation files are `components/cpu/808x/src/cpu_808x.c`,
-`components/memory/src/linear_memory.c` and
+`components/memory/src/linear_memory.c`, `components/pc/src/pic8259.c`,
+`components/pc/src/pit8253.c` and
 `systems/olivetti-pcs86/src/olivetti_pcs86.c`. The corresponding public tests
-are `tests/engine/linear_memory_test.c` and
+are `tests/engine/linear_memory_test.c`, `tests/engine/pc_platform_test.c` and
 `tests/engine/pcs86_reset_test.c`.

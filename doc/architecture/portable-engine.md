@@ -75,3 +75,19 @@ instruction, so cycle and bus timing remain deliberately outside this cut.
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
 copied or executed by this test.
+
+### PCS86-2 platform-contract status
+
+The next cut adds explicit, independently testable instances of the single
+8259A interrupt controller and the 8253 timer. The PCS 86 owns its board glue:
+known registers at `60h-6Fh` and the jumper byte at `100h` are not hidden in a
+generic PC global. PIT channel 0 raises the machine's PIC IRQ0 input, while a
+bus observer can capture successful I/O transactions without coupling devices
+to a debugger or frontend.
+
+The V30 subset now performs byte-oriented `IN` and `OUT` operations, including
+word forms as two consecutive 8-bit bus transfers, and supports CLI, STI and
+CLD. A synthetic ROM uses those paths to configure the PIC and PIT and exercise
+board registers. This validates composition and traceability only: it is not a
+claim that the original BIOS reaches POST. DMA, RTC, keyboard queues, complete
+interrupt delivery and much of the instruction set are still absent.

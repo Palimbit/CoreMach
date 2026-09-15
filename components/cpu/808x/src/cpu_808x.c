@@ -91,6 +91,49 @@ write_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint8_t va
 }
 
 static bm_status_t
+io_read_byte(bm_808x_state_t *state, uint16_t port, uint8_t *value)
+{
+    bm_bus_transaction_t transaction = {
+        BM_ADDRESS_IO, BM_BUS_READ, port, 0, 1, 1, 0, BM_ENDIAN_LITTLE, 0
+    };
+    bm_status_t status = bm_bus_transact(state->bus, &transaction);
+    if (status == BM_STATUS_OK)
+        *value = (uint8_t) transaction.value;
+    return status;
+}
+
+static bm_status_t
+io_write_byte(bm_808x_state_t *state, uint16_t port, uint8_t value)
+{
+    bm_bus_transaction_t transaction = {
+        BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 1, 1, 0, BM_ENDIAN_LITTLE, 0
+    };
+    return bm_bus_transact(state->bus, &transaction);
+}
+
+static bm_status_t
+io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
+{
+    uint8_t low = 0;
+    uint8_t high = 0;
+    bm_status_t status = io_read_byte(state, port, &low);
+    if (status == BM_STATUS_OK)
+        status = io_read_byte(state, (uint16_t) (port + 1U), &high);
+    if (status == BM_STATUS_OK)
+        *value = (uint16_t) (low | ((uint16_t) high << 8U));
+    return status;
+}
+
+static bm_status_t
+io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
+{
+    bm_status_t status = io_write_byte(state, port, (uint8_t) value);
+    if (status == BM_STATUS_OK)
+        status = io_write_byte(state, (uint16_t) (port + 1U), (uint8_t) (value >> 8U));
+    return status;
+}
+
+static bm_status_t
 cpu_reset(void *context)
 {
     bm_808x_state_t *state = context;
@@ -180,6 +223,70 @@ execute_one(bm_808x_state_t *state)
             return write_byte(state, state->segments[3], offset,
                               (uint8_t) state->registers[REG_AX]);
         }
+        case 0xe4: { /* IN AL,imm8 */
+            uint8_t port = 0;
+            uint8_t value = 0;
+            status = fetch_byte(state, &port);
+            if (status == BM_STATUS_OK)
+                status = io_read_byte(state, port, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_AX] =
+                    (uint16_t) ((state->registers[REG_AX] & 0xff00U) | value);
+            return status;
+        }
+        case 0xe5: { /* IN AX,imm8 */
+            uint8_t port = 0;
+            uint16_t value = 0;
+            status = fetch_byte(state, &port);
+            if (status == BM_STATUS_OK)
+                status = io_read_word(state, port, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_AX] = value;
+            return status;
+        }
+        case 0xe6: { /* OUT imm8,AL */
+            uint8_t port;
+            status = fetch_byte(state, &port);
+            if (status != BM_STATUS_OK)
+                return status;
+            return io_write_byte(state, port, (uint8_t) state->registers[REG_AX]);
+        }
+        case 0xe7: { /* OUT imm8,AX */
+            uint8_t port;
+            status = fetch_byte(state, &port);
+            if (status != BM_STATUS_OK)
+                return status;
+            return io_write_word(state, port, state->registers[REG_AX]);
+        }
+        case 0xec: { /* IN AL,DX */
+            uint8_t value = 0;
+            status = io_read_byte(state, state->registers[REG_DX], &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_AX] =
+                    (uint16_t) ((state->registers[REG_AX] & 0xff00U) | value);
+            return status;
+        }
+        case 0xed: { /* IN AX,DX */
+            uint16_t value = 0;
+            status = io_read_word(state, state->registers[REG_DX], &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_AX] = value;
+            return status;
+        }
+        case 0xee: /* OUT DX,AL */
+            return io_write_byte(state, state->registers[REG_DX],
+                                 (uint8_t) state->registers[REG_AX]);
+        case 0xef: /* OUT DX,AX */
+            return io_write_word(state, state->registers[REG_DX], state->registers[REG_AX]);
+        case 0xfa: /* CLI */
+            state->flags &= 0xfdffU;
+            return BM_STATUS_OK;
+        case 0xfb: /* STI */
+            state->flags |= 0x0200U;
+            return BM_STATUS_OK;
+        case 0xfc: /* CLD */
+            state->flags &= 0xfbffU;
+            return BM_STATUS_OK;
         case 0xf4: /* HLT */
             state->halted = 1;
             return BM_STATUS_OK;
@@ -234,6 +341,8 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
         *value = state->segments[1];
     else if (strcmp(name, "ds") == 0)
         *value = state->segments[3];
+    else if (strcmp(name, "dx") == 0)
+        *value = state->registers[REG_DX];
     else if (strcmp(name, "ip") == 0)
         *value = state->ip;
     else if (strcmp(name, "flags") == 0)

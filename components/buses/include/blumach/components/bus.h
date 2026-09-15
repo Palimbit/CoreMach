@@ -43,6 +43,7 @@ typedef struct bm_bus_transaction {
 } bm_bus_transaction_t;
 
 typedef bm_status_t (*bm_bus_access_fn)(void *context, bm_bus_transaction_t *transaction);
+typedef void (*bm_bus_observer_fn)(void *context, const bm_bus_transaction_t *transaction);
 
 bm_status_t bm_bus_create(const bm_host_services_t *host, size_t max_mappings, bm_bus_t **out_bus);
 void bm_bus_destroy(bm_bus_t *bus);
@@ -53,6 +54,7 @@ bm_status_t bm_bus_map(bm_bus_t *bus,
                        bm_bus_access_fn access,
                        void *context);
 bm_status_t bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction);
+void bm_bus_set_observer(bm_bus_t *bus, bm_bus_observer_fn observer, void *context);
 
 #ifdef __cplusplus
 }
