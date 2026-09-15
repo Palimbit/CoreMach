@@ -14,10 +14,14 @@ alias check. It also enters the firmware's upper-memory setup, clears and scans
 the selected 64 KiB window, validates segment-overridden memory aliases and
 returns to early board setup. It now programs and reads back the portable
 8237 register core and its separate XT page latches during the firmware's DMA
-tests, then stops explicitly at `F000:01CC` on a read from the still-unmapped
-PCS board-control port `B0h`. The controller does not yet arbitrate or perform
-transfers. This is measured
-bring-up progress, not a completed POST. The preceding write of `40h` to port
+tests. The portable MM58167 front now supplies the firmware-used interrupt
+status and control registers at `B0h-B1h`; after clearing that state, the BIOS
+completes its long conventional-memory test and reaches `F000:3B20`, where the
+strict interpreter reports the still-unsupported `MOV r/m8,imm8`. The RTC
+counter/calendar window, clock progression, alarms, interrupt generation and
+persistence remain absent. The DMA controller does not yet arbitrate or perform
+transfers. This is measured bring-up progress, not a completed POST or visible
+video. The preceding write of `40h` to port
 `70h` is retained in an opaque PCS 86 latch without assigning guessed PC/AT
 CMOS semantics, while `8400h-8403h` currently retain only EMS page-selector
 writes.

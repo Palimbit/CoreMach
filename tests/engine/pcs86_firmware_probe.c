@@ -97,7 +97,7 @@ main(int argc, char **argv)
     if (status == BM_STATUS_OK)
         status = bm_session_start(session);
     if (status == BM_STATUS_OK)
-        status = bm_session_run_for(session, 200000U);
+        status = bm_session_run_for(session, 10000000U);
 
     if (session != NULL) {
         (void) bm_session_inspect_cpu(session, 0, "ax", &ax);

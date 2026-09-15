@@ -13,10 +13,11 @@ minimum known motherboard-register map. It is a bring-up milestone, not a
 usable emulator: the BIOS completes its initial CPU/register checks and ROM
 checksum, passes its first conventional-memory alias check and then stops
 after clearing and scanning a selected 64 KiB memory window. The measured
-boundary is now an unmapped read from PCS board-control port `B0h` at
-`F000:01CC`, after the firmware also completes its segment-overridden alias
-check and exercises both the new 8237 programming registers and the separate
-XT page latches. DMA arbitration and transfers remain absent.
+boundary is now the unsupported `MOV r/m8,imm8` at `F000:3B20`, after the
+firmware also completes its segment-overridden alias check, exercises both the
+8237 programming registers and separate XT page latches, clears the MM58167
+interrupt state at `B0h-B1h` and completes its long conventional-memory test.
+DMA arbitration and transfers remain absent, and no video output exists yet.
 
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
 interleaving, ROM address and known firmware hashes come from the canonical
@@ -43,7 +44,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, arithmetic flags, branches, checksum and initial memory-check operations, byte compare/AND/TEST/NOT and memory loads, `MOV r/m16,imm16`, `AND r/m16,imm16`, `STOSW`/`SCASW` with `REP`, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, arithmetic flags, branches, checksum and memory-test operations, memory forms of register/segment moves, immediate ADD/AND/CMP, byte TEST/AND/NOT, near CALL/RET, basic stack operations, SHR by CL, `LODSW`/`STOSW`/`SCASW`, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Approximate | One instruction per tick; 10 MHz is identity metadata until clock-domain timing lands |
@@ -52,7 +53,8 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, `A0h`, `100h` and the POST diagnostic latch at `378h`; opaque write-only memory-control state at `70h`; queues and attached peripherals are absent |
 | EMS selectors | Deliberate boundary | Write-only page-selector latches at `8400h-8403h`; no aperture or backing SIMMs are claimed or exposed |
 | 8237 DMA | Programming subset derived from the inherited core | Address/count flip-flop, base/current registers, command, mode, request, masks, status and master clear; a separate XT latch block supplies four-bit pages and observable 20-bit current addresses; no arbitration, bus ownership or data transfers |
-| RTC and complete PPI behaviour | Unavailable | Still required before meaningful original-BIOS POST comparison |
+| MM58167 RTC | Interrupt front only | `B0h` returns and clears interrupt status; `B1h` stores interrupt control and clears status. `B2h-B7h`, `E0h-EFh`, clock progression, alarms, IRQ output and persistence remain unavailable |
+| Complete PPI behaviour | Unavailable | Still required before complete original-BIOS POST comparison |
 | Video, keyboard and storage | Unavailable | Planned as later vertical cuts |
 
 Unsupported opcodes return a structured `BM_STATUS_UNSUPPORTED` result. They
@@ -77,9 +79,9 @@ The current automated ladder uses no historical software:
    interleaved reset vector performs a far jump from physical `FFFF0h` to
    `F0100h`, writes RAM, initializes the PIC, programs the PIT, exercises the
    board-control register and reads the fixed diagnostic register before halt.
-5. A dedicated CPU test writes distinct words through `ES:`, `SS:`, `DS:` and
-   `CS:`, verifies that the last repeated segment prefix wins, and reads the
-   resulting physical locations without bypassing the memory component.
+5. A dedicated CPU test writes and reads words through `ES:`, `SS:`, `DS:` and
+   `CS:`, verifies that the last repeated segment prefix wins, and covers the
+   stack, near-call, shift, segment-register and string paths added for POST.
 6. CPU and I/O traces verify exact instruction and port checkpoints.
 7. Firmware metadata validation rejects a supplied hash that differs from the
    known PCS 86 identity.
@@ -111,25 +113,28 @@ borrow the unrelated PC/AT CMOS/NMI convention. It likewise accepts the known
 EMS selector range `8400h-8403h` without claiming that the deferred EMS aperture
 or backing memory exists.
 
-With the 8237 register core, the external page-latch block and the byte
-operations required by their firmware self-tests, the local BIOS probe executes
-197,141 instructions and 121 successful I/O transactions. The firmware writes
-and reads page ports in the observed channel order `87h`, `83h`, `81h`, `82h`.
+With the 8237 register core, external page-latch block, MM58167 interrupt front
+and the CPU paths required by their firmware self-tests, the local BIOS probe
+executes 1,377,620 instructions and 156 successful I/O transactions. The
+firmware writes and reads page ports in the observed channel order `87h`,
+`83h`, `81h`, `82h`.
 The PCS 86 component masks each latch to four bits and combines it with the
 8237 current offset without pretending that the controller can yet own the bus
-or move a byte. The probe then stops at `F000:01CC` on `IN AL,B0h`; the strict
-bus returns `BM_STATUS_UNMAPPED` because the semantics of this PCS-specific
-board-control register have not yet been ported. No floppy controller is
-connected. Port `B0h` is the next measured platform boundary.
+or move a byte. The MM58167 component then handles the firmware's `IN AL,B0h`
+and `OUT B1h,AL` sequence with the inherited read-to-clear and write-to-clear
+semantics. The probe completes the following long memory test and stops at
+`F000:3B20` with `BM_STATUS_UNSUPPORTED` on `MOV r/m8,imm8`. No display or
+floppy controller is connected. The rest of the RTC remains explicitly
+pending rather than being approximated.
 
 The main implementation files are `components/cpu/808x/src/cpu_808x.c`,
 `components/memory/src/linear_memory.c`, `components/pc/src/dma8237.c`,
 `components/pc/src/dma_page_registers.c`, `components/pc/src/pic8259.c`,
-`components/pc/src/pit8253.c` and
+`components/pc/src/pit8253.c`, `components/pc/src/rtc_mm58167.c` and
 `systems/olivetti-pcs86/src/olivetti_pcs86.c`. The corresponding public tests
 include the focused `cpu_808x_post_test.c`, `cpu_808x_checksum_test.c`,
 `cpu_808x_segment_test.c`, `cpu_808x_compare_test.c`, `dma8237_test.c`,
-`dma_page_registers_test.c`,
+`dma_page_registers_test.c`, `rtc_mm58167_test.c`,
 `pc_platform_test.c` and `pcs86_reset_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never
 requires ROMs.
