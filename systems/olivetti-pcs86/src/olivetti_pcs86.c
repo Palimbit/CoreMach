@@ -23,15 +23,51 @@ typedef struct bm_pcs86_machine {
     bm_linear_memory_t *rom;
     bm_pic8259_t *pic;
     bm_pit8253_t *pit;
+    bm_engine_t *engine;
+    bm_cpu_id_t cpu_id;
+    int cpu_ready;
     uint8_t port61;
     uint8_t control;
     uint8_t memory_blocks;
     uint8_t glue[16];
     uint8_t ps2[5];
     uint8_t jumpers;
+    uint8_t nmi_mask;
+    uint8_t diagnostic_port;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
 } bm_pcs86_machine_t;
+
+static bm_status_t
+pcs86_diagnostic_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    uint8_t *latch;
+    if ((transaction->size != 1) || (transaction->operation == BM_BUS_FETCH))
+        return BM_STATUS_UNSUPPORTED;
+    latch = (transaction->address == 0x00a0U) ?
+        &machine->nmi_mask : &machine->diagnostic_port;
+    if (transaction->operation == BM_BUS_READ)
+        transaction->value = *latch;
+    else
+        *latch = (uint8_t) transaction->value;
+    return BM_STATUS_OK;
+}
+
+static void
+pcs86_pic_output(void *context, int asserted)
+{
+    bm_pcs86_machine_t *machine = context;
+    if (machine->cpu_ready)
+        (void) bm_engine_signal_cpu(machine->engine, machine->cpu_id, 0, asserted);
+}
+
+static bm_status_t
+pcs86_interrupt_acknowledge(void *context, uint8_t *vector)
+{
+    bm_pcs86_machine_t *machine = context;
+    return bm_pic8259_acknowledge(machine->pic, vector);
+}
 
 static void
 pcs86_io_observer(void *context, const bm_bus_transaction_t *transaction)
@@ -240,13 +276,14 @@ pcs86_create(bm_engine_t *engine,
         return BM_STATUS_OUT_OF_MEMORY;
     memset(machine, 0, sizeof(*machine));
     machine->host = *host;
+    machine->engine = engine;
     machine->control = 0x80U;
     machine->ps2[0] = 0x04U; /* The front-panel key lock is open. */
     machine->jumpers = 0xffU; /* No HDD and both floppy banks open. */
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 6, &machine->bus);
+    status = bm_bus_create(host, 8, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -275,7 +312,9 @@ pcs86_create(bm_engine_t *engine,
     if (combined_rom != NULL)
         host->release(host->context, combined_rom);
     if (status == BM_STATUS_OK) {
-        bm_pic8259_config_t pic_config = { 0x0020U };
+        bm_pic8259_config_t pic_config = {
+            0x0020U, pcs86_pic_output, machine
+        };
         status = bm_pic8259_create(host, machine->bus, &pic_config, &machine->pic);
     }
     if (status == BM_STATUS_OK) {
@@ -288,16 +327,29 @@ pcs86_create(bm_engine_t *engine,
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0100U, 0x0100U,
                             pcs86_jumpers_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x00a0U, 0x00a0U,
+                            pcs86_diagnostic_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0378U, 0x0378U,
+                            pcs86_diagnostic_access, machine);
     if (status == BM_STATUS_OK) {
         bm_808x_config_t cpu_config = {
-            BM_808X_NEC_V30, 10000000U, machine->bus, config->trace, config->trace_context
+            BM_808X_NEC_V30, 10000000U, machine->bus,
+            config->trace, config->trace_context,
+            pcs86_interrupt_acknowledge, machine
         };
         status = bm_808x_create(host, &cpu_config, &cpu);
     }
     if (status == BM_STATUS_OK) {
-        status = bm_engine_add_cpu(engine, &cpu, NULL);
+        status = bm_engine_add_cpu(engine, &cpu, &machine->cpu_id);
         if (status != BM_STATUS_OK)
             cpu.ops.destroy(cpu.context);
+        else {
+            machine->cpu_ready = 1;
+            if (bm_pic8259_pending(machine->pic))
+                status = bm_engine_signal_cpu(engine, machine->cpu_id, 0, 1);
+        }
     }
     if (status != BM_STATUS_OK) {
         pcs86_destroy(machine);

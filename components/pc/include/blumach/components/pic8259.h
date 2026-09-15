@@ -15,9 +15,12 @@ extern "C" {
 #endif
 
 typedef struct bm_pic8259 bm_pic8259_t;
+typedef void (*bm_pic8259_output_fn)(void *context, int asserted);
 
 typedef struct bm_pic8259_config {
     uint16_t io_base;
+    bm_pic8259_output_fn output;
+    void *output_context;
 } bm_pic8259_config_t;
 
 bm_status_t bm_pic8259_create(const bm_host_services_t *host,
