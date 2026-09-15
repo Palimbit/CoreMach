@@ -12,6 +12,7 @@ target_link_libraries(blumach_system_olivetti_pcs86
         blumach_cpu_808x
         blumach_memory
         blumach_pc_components
+        blumach_video
 )
 target_compile_features(blumach_system_olivetti_pcs86 PUBLIC c_std_11)
 set_target_properties(blumach_system_olivetti_pcs86 PROPERTIES C_EXTENSIONS OFF)

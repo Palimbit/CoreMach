@@ -107,6 +107,15 @@ main(void)
     assert(bm_pit8253_advance(pit, 1) == BM_STATUS_OK);
     assert(output.changes == 2U && output.value == 1);
 
+    assert(write_port(bus, 0x43U, 0x34U) == BM_STATUS_OK); /* Channel 0, mode 2. */
+    assert(write_port(bus, 0x40U, 0x34U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x40U, 0x12U) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 0x34U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x43U, 0x00U) == BM_STATUS_OK); /* Latch current count. */
+    assert(bm_pit8253_advance(pit, 0x0100U) == BM_STATUS_OK);
+    assert(read_port(bus, 0x40U) == 0x00U);
+    assert(read_port(bus, 0x40U) == 0x12U);
+
     bm_pit8253_destroy(pit);
     bm_pic8259_destroy(pic);
     bm_bus_destroy(bus);

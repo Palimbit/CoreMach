@@ -63,14 +63,33 @@ main(void)
         0x1f,                   /* POP DS */
         0x07,                   /* POP ES */
         0x5b,                   /* POP BX */
+        0xf8,                   /* CLC */
+        0xf9,                   /* STC */
+        0xf5,                   /* CMC: carry is clear again. */
         0xfb,                   /* STI */
         0x9c,                   /* PUSHF */
         0xfa,                   /* CLI */
         0x9d,                   /* POPF: restore IF. */
-        0xe8, 0x01, 0x00,       /* CALL increment_bp */
+        0xcd, 0x10,             /* INT 10h; handler increments DL. */
+        0x25, 0xff, 0x0f,       /* AND AX,0FFFh */
+        0x08, 0xc4,             /* OR AH,AL */
+        0x83, 0xcd, 0x10,       /* OR BP,+10h */
+        0x2e, 0xff, 0x16, 0x04, 0x02, /* CALL word CS:[0204h] */
+        0xe8, 0x0a, 0x00,       /* CALL increment_bp */
+        0x2e, 0xc4, 0x1e, 0x20, 0x02, /* LES BX,CS:[0220h] */
+        0xd0, 0xef,             /* SHR BH,1 */
+        0x3c, 0x45,             /* CMP AL,45h */
         0xf4,                   /* HLT */
         0x45,                   /* increment_bp: INC BP */
+        0xfe, 0xc0,             /* INC AL */
+        0x4a,                   /* DEC DX */
+        0x8d, 0x7c, 0x02,       /* LEA DI,[SI+2] */
+        0x2b, 0xf8,             /* SUB DI,AX */
+        0xd1, 0xe7,             /* SHL DI,1 */
+        0x81, 0xef, 0x7a, 0x87, /* SUB DI,877Ah */
+        0x03, 0xf7,             /* ADD SI,DI */
         0x83, 0xfa, 0x44,       /* CMP DX,+44h */
+        0xe0, 0x00,             /* LOOPNE +0: ZF prevents the branch. */
         0xc3                    /* RET */
     };
     bm_host_services_t host = bm_null_host_services();
@@ -90,6 +109,21 @@ main(void)
     image[0xffff2U] = 0x00;
     image[0xffff3U] = 0x00;
     image[0xffff4U] = 0xf0;
+    image[0x0040U] = 0x00; /* INT 10h -> F000:0200. */
+    image[0x0041U] = 0x02;
+    image[0x0042U] = 0x00;
+    image[0x0043U] = 0xf0;
+    image[0xf0200U] = 0xfe; /* INC DL */
+    image[0xf0201U] = 0xc2;
+    image[0xf0202U] = 0xcf; /* IRET */
+    image[0xf0204U] = 0x10; /* Indirect-call target F000:0210. */
+    image[0xf0205U] = 0x02;
+    image[0xf0210U] = 0x45; /* INC BP */
+    image[0xf0211U] = 0xc3; /* RET */
+    image[0xf0220U] = 0x34; /* Far pointer 5678:1234. */
+    image[0xf0221U] = 0x12;
+    image[0xf0222U] = 0x78;
+    image[0xf0223U] = 0x56;
 
     assert(bm_bus_create(&host, 1, &bus) == BM_STATUS_OK);
     memory_config = (bm_linear_memory_config_t) {
@@ -103,17 +137,19 @@ main(void)
     assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 49) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 71) == BM_STATUS_OK);
 
     assert(inspect(engine, "halted") == 1U);
-    assert(inspect(engine, "last_fetch") == 0xf0076U);
+    assert(inspect(engine, "last_fetch") == 0xf0091U);
     assert(inspect(engine, "dx") == 0x0044U);
-    assert(inspect(engine, "ax") == 0x4444U);
+    assert(inspect(engine, "ax") == 0x4445U);
     assert(inspect(engine, "ds") == 0x4444U);
-    assert(inspect(engine, "es") == 0x0100U);
-    assert(inspect(engine, "bx") == 0x4444U);
-    assert(inspect(engine, "bp") == 0x1002U);
+    assert(inspect(engine, "es") == 0x5678U);
+    assert(inspect(engine, "bx") == 0x0934U);
+    assert(inspect(engine, "bp") == 0x1013U);
     assert(inspect(engine, "si") == 0x0800U);
+    assert(inspect(engine, "di") == 0U);
+    assert(inspect(engine, "cx") == 0x0003U);
     assert((inspect(engine, "flags") & 0x0040U) != 0U);
     assert((inspect(engine, "flags") & 0x0200U) != 0U);
     assert(peek(memory, 0x01100U) == 0x11U && peek(memory, 0x01101U) == 0x11U);

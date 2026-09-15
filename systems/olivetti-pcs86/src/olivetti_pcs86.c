@@ -14,6 +14,7 @@
 #include <blumach/components/linear_memory.h>
 #include <blumach/components/pic8259.h>
 #include <blumach/components/pit8253.h>
+#include <blumach/components/pvga1a.h>
 #include <blumach/components/rtc_mm58167.h>
 
 #include <ctype.h>
@@ -28,6 +29,7 @@ typedef struct bm_pcs86_machine {
     bm_dma_page_registers_t *dma_pages;
     bm_pic8259_t *pic;
     bm_pit8253_t *pit;
+    bm_pvga1a_t *video;
     bm_mm58167_t *rtc;
     bm_engine_t *engine;
     bm_cpu_id_t cpu_id;
@@ -333,6 +335,7 @@ pcs86_destroy(void *context)
     bm_dma_page_registers_destroy(machine->dma_pages);
     bm_dma8237_destroy(machine->dma);
     bm_mm58167_destroy(machine->rtc);
+    bm_pvga1a_destroy(machine->video);
     bm_pit8253_destroy(machine->pit);
     bm_pic8259_destroy(machine->pic);
     bm_linear_memory_destroy(machine->rom);
@@ -372,7 +375,7 @@ pcs86_create(bm_engine_t *engine,
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 16, &machine->bus);
+    status = bm_bus_create(host, 18, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -428,6 +431,10 @@ pcs86_create(bm_engine_t *engine,
     if (status == BM_STATUS_OK) {
         bm_mm58167_config_t rtc_config = { 0x00b0U };
         status = bm_mm58167_create(host, machine->bus, &rtc_config, &machine->rtc);
+    }
+    if (status == BM_STATUS_OK) {
+        bm_pvga1a_config_t video_config = { BM_PVGA1A_VRAM_SIZE };
+        status = bm_pvga1a_create(host, machine->bus, &video_config, &machine->video);
     }
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0060U, 0x006fU,

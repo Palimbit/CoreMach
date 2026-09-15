@@ -246,18 +246,12 @@ write_operand_word(bm_808x_state_t *state, const bm_808x_operand_t *operand, uin
 }
 
 static bm_status_t
-service_interrupt(bm_808x_state_t *state)
+enter_interrupt(bm_808x_state_t *state, uint8_t vector)
 {
-    uint8_t vector;
     uint16_t new_ip = 0;
     uint16_t new_cs = 0;
     bm_status_t status;
 
-    if (state->interrupt_ack == NULL)
-        return BM_STATUS_INVALID_STATE;
-    status = state->interrupt_ack(state->interrupt_context, &vector);
-    if (status != BM_STATUS_OK)
-        return status;
     status = push_word(state, state->flags);
     if (status == BM_STATUS_OK)
         status = push_word(state, state->segments[1]);
@@ -274,6 +268,20 @@ service_interrupt(bm_808x_state_t *state)
         state->halted = 0;
     }
     return status;
+}
+
+static bm_status_t
+service_interrupt(bm_808x_state_t *state)
+{
+    uint8_t vector;
+    bm_status_t status;
+
+    if (state->interrupt_ack == NULL)
+        return BM_STATUS_INVALID_STATE;
+    status = state->interrupt_ack(state->interrupt_context, &vector);
+    if (status != BM_STATUS_OK)
+        return status;
+    return enter_interrupt(state, vector);
 }
 
 static uint8_t
@@ -407,43 +415,85 @@ compare8(bm_808x_state_t *state, uint8_t left, uint8_t right)
 }
 
 static bm_status_t
-execute_string_word(bm_808x_state_t *state, uint8_t opcode, int repeat,
-                    int segment_override)
+execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
+               int segment_override)
 {
     bm_status_t status;
+    unsigned int width = (opcode & 1U) != 0U ? 2U : 1U;
+    unsigned int source_segment = (segment_override >= 0) ?
+                                  (unsigned int) segment_override : 3U;
 
-    if ((opcode != 0xabU) && (opcode != 0xadU) && (opcode != 0xafU))
+    if ((opcode != 0xa4U) && (opcode != 0xa5U) &&
+        ((opcode < 0xaaU) || (opcode > 0xafU)))
         return BM_STATUS_UNSUPPORTED;
-    while (!repeat || (state->registers[REG_CX] != 0)) {
-        if (opcode == 0xabU) { /* STOSW: AX -> ES:DI. */
-            status = write_word(state, state->segments[0],
-                                state->registers[REG_DI], state->registers[REG_AX]);
-        } else if (opcode == 0xadU) { /* LODSW: DS:SI -> AX. */
-            status = read_word(state,
-                               state->segments[(segment_override >= 0) ?
-                                               (unsigned int) segment_override : 3U],
-                               state->registers[REG_SI], &state->registers[REG_AX]);
-        } else { /* SCASW: compare AX with ES:DI. */
-            uint16_t value = 0;
-            status = read_word(state, state->segments[0],
-                               state->registers[REG_DI], &value);
-            if (status == BM_STATUS_OK)
-                compare16(state, state->registers[REG_AX], value);
+    while ((repeat_mode == 0) || (state->registers[REG_CX] != 0)) {
+        uint16_t value = 0;
+        if ((opcode == 0xa4U) || (opcode == 0xa5U)) { /* MOVS */
+            if (width == 1U) {
+                uint8_t byte = 0;
+                status = read_byte(state, state->segments[source_segment],
+                                   state->registers[REG_SI], BM_BUS_READ, &byte);
+                if (status == BM_STATUS_OK)
+                    status = write_byte(state, state->segments[0],
+                                        state->registers[REG_DI], byte);
+            } else {
+                status = read_word(state, state->segments[source_segment],
+                                   state->registers[REG_SI], &value);
+                if (status == BM_STATUS_OK)
+                    status = write_word(state, state->segments[0],
+                                        state->registers[REG_DI], value);
+            }
+        } else if ((opcode == 0xaaU) || (opcode == 0xabU)) { /* STOS */
+            if (width == 1U)
+                status = write_byte(state, state->segments[0],
+                                    state->registers[REG_DI],
+                                    (uint8_t) state->registers[REG_AX]);
+            else
+                status = write_word(state, state->segments[0],
+                                    state->registers[REG_DI], state->registers[REG_AX]);
+        } else if ((opcode == 0xacU) || (opcode == 0xadU)) { /* LODS */
+            if (width == 1U) {
+                uint8_t byte = 0;
+                status = read_byte(state, state->segments[source_segment],
+                                   state->registers[REG_SI], BM_BUS_READ, &byte);
+                if (status == BM_STATUS_OK)
+                    set_register_byte(state, 0U, byte);
+            } else {
+                status = read_word(state, state->segments[source_segment],
+                                   state->registers[REG_SI], &state->registers[REG_AX]);
+            }
+        } else { /* SCAS */
+            if (width == 1U) {
+                uint8_t byte = 0;
+                status = read_byte(state, state->segments[0],
+                                   state->registers[REG_DI], BM_BUS_READ, &byte);
+                if (status == BM_STATUS_OK)
+                    compare8(state, (uint8_t) state->registers[REG_AX], byte);
+            } else {
+                status = read_word(state, state->segments[0],
+                                   state->registers[REG_DI], &value);
+                if (status == BM_STATUS_OK)
+                    compare16(state, state->registers[REG_AX], value);
+            }
         }
         if (status != BM_STATUS_OK)
             return status;
-        {
-            unsigned int index = (opcode == 0xadU) ? REG_SI : REG_DI;
-            if ((state->flags & FLAG_DF) != 0)
-                state->registers[index] = (uint16_t) (state->registers[index] - 2U);
-            else
-                state->registers[index] = (uint16_t) (state->registers[index] + 2U);
-        }
-        if (!repeat)
+        if ((opcode == 0xa4U) || (opcode == 0xa5U) ||
+            (opcode == 0xacU) || (opcode == 0xadU))
+            state->registers[REG_SI] = (uint16_t) (state->registers[REG_SI] +
+                (((state->flags & FLAG_DF) != 0) ? -(int) width : (int) width));
+        if ((opcode == 0xa4U) || (opcode == 0xa5U) ||
+            (opcode == 0xaaU) || (opcode == 0xabU) ||
+            (opcode == 0xaeU) || (opcode == 0xafU))
+            state->registers[REG_DI] = (uint16_t) (state->registers[REG_DI] +
+                (((state->flags & FLAG_DF) != 0) ? -(int) width : (int) width));
+        if (repeat_mode == 0)
             break;
         state->registers[REG_CX] = (uint16_t) (state->registers[REG_CX] - 1U);
-        if ((opcode == 0xafU) && ((state->flags & FLAG_ZF) == 0))
-            break; /* REP/REPE SCASW stops at the first mismatch. */
+        if (((opcode == 0xaeU) || (opcode == 0xafU)) &&
+            (((repeat_mode == 1) && ((state->flags & FLAG_ZF) == 0)) ||
+             ((repeat_mode == 2) && ((state->flags & FLAG_ZF) != 0))))
+            break;
     }
     return BM_STATUS_OK;
 }
@@ -562,10 +612,11 @@ execute_one(bm_808x_state_t *state)
             case 0x2e: prefix_segment = 1; break; /* CS: */
             case 0x36: prefix_segment = 2; break; /* SS: */
             case 0x3e: prefix_segment = 3; break; /* DS: */
+            case 0xf2: repeat = 2; break;          /* REPNE */
             case 0xf3: repeat = 1; break;          /* REP/REPE */
             default: break;
         }
-        if ((prefix_segment < 0) && (opcode != 0xf3U))
+        if ((prefix_segment < 0) && (opcode != 0xf2U) && (opcode != 0xf3U))
             break;
         if (prefix_segment >= 0)
             segment_override = prefix_segment;
@@ -574,7 +625,8 @@ execute_one(bm_808x_state_t *state)
             return status;
     }
 
-    if (repeat && (opcode != 0xabU) && (opcode != 0xadU) && (opcode != 0xafU))
+    if (repeat && (opcode != 0xa4U) && (opcode != 0xa5U) &&
+        ((opcode < 0xaaU) || (opcode > 0xafU)))
         return BM_STATUS_UNSUPPORTED;
 
     if ((opcode >= 0xb8U) && (opcode <= 0xbfU)) {
@@ -606,6 +658,15 @@ execute_one(bm_808x_state_t *state)
         state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
         return BM_STATUS_OK;
     }
+    if ((opcode >= 0x48U) && (opcode <= 0x4fU)) {
+        unsigned int index = opcode - 0x48U;
+        uint16_t carry = state->flags & FLAG_CF;
+        uint16_t result = (uint16_t) (state->registers[index] - 1U);
+        compare16(state, state->registers[index], 1U);
+        state->registers[index] = result;
+        state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
+        return BM_STATUS_OK;
+    }
     if ((opcode >= 0x50U) && (opcode <= 0x57U))
         return push_word(state, state->registers[opcode - 0x50U]);
     if ((opcode >= 0x58U) && (opcode <= 0x5fU)) {
@@ -617,6 +678,36 @@ execute_one(bm_808x_state_t *state)
     }
 
     switch (opcode) {
+        case 0x05: /* ADD AX,imm16. */
+        case 0x0d: /* OR AX,imm16. */
+        case 0x25: /* AND AX,imm16. */
+        case 0x2d: /* SUB AX,imm16. */
+        case 0x35: /* XOR AX,imm16. */
+        case 0x3d: { /* CMP AX,imm16. */
+            uint16_t immediate = 0;
+            uint16_t result;
+            status = fetch_word(state, &immediate);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (opcode == 0x05U)
+                result = add16(state, state->registers[REG_AX], immediate);
+            else if (opcode == 0x2dU) {
+                result = (uint16_t) (state->registers[REG_AX] - immediate);
+                compare16(state, state->registers[REG_AX], immediate);
+            } else if (opcode == 0x3dU) {
+                compare16(state, state->registers[REG_AX], immediate);
+                return BM_STATUS_OK;
+            } else {
+                result = opcode == 0x0dU ?
+                    (uint16_t) (state->registers[REG_AX] | immediate) :
+                    opcode == 0x25U ?
+                    (uint16_t) (state->registers[REG_AX] & immediate) :
+                    (uint16_t) (state->registers[REG_AX] ^ immediate);
+                set_logic_flags(state, result, 16);
+            }
+            state->registers[REG_AX] = result;
+            return BM_STATUS_OK;
+        }
         case 0x06: /* PUSH ES */
             return push_word(state, state->segments[0]);
         case 0x1e: /* PUSH DS */
@@ -646,29 +737,43 @@ execute_one(bm_808x_state_t *state)
                 state->flags = value | 0x0002U;
             return status;
         }
+        case 0xa4: /* MOVSB */
+        case 0xa5: /* MOVSW */
+        case 0xaa: /* STOSB */
         case 0xab: /* STOSW */
+        case 0xac: /* LODSB */
         case 0xad: /* LODSW */
+        case 0xae: /* SCASB */
         case 0xaf: /* SCASW */
-            return execute_string_word(state, opcode, repeat, segment_override);
-        case 0x05: { /* ADD AX,imm16 */
-            uint16_t immediate = 0;
-            status = fetch_word(state, &immediate);
-            if (status == BM_STATUS_OK)
-                state->registers[REG_AX] = add16(state, state->registers[REG_AX], immediate);
-            return status;
-        }
+            return execute_string(state, opcode, repeat, segment_override);
+        case 0x04: /* ADD AL,imm8 */
         case 0x0c: /* OR AL,imm8 */
-        case 0x24: { /* AND AL,imm8 */
+        case 0x24: /* AND AL,imm8 */
+        case 0x2c: /* SUB AL,imm8 */
+        case 0x34: /* XOR AL,imm8 */
+        case 0x3c: { /* CMP AL,imm8 */
             uint8_t immediate;
             uint8_t result;
             status = fetch_byte(state, &immediate);
             if (status != BM_STATUS_OK)
                 return status;
-            result = (opcode == 0x0cU) ?
-                (uint8_t) (get_register_byte(state, 0) | immediate) :
-                (uint8_t) (get_register_byte(state, 0) & immediate);
+            if (opcode == 0x04U)
+                result = add8(state, get_register_byte(state, 0), immediate);
+            else if (opcode == 0x2cU) {
+                result = (uint8_t) (get_register_byte(state, 0) - immediate);
+                compare8(state, get_register_byte(state, 0), immediate);
+            } else if (opcode == 0x3cU) {
+                compare8(state, get_register_byte(state, 0), immediate);
+                return BM_STATUS_OK;
+            } else {
+                result = opcode == 0x0cU ?
+                    (uint8_t) (get_register_byte(state, 0) | immediate) :
+                    opcode == 0x24U ?
+                    (uint8_t) (get_register_byte(state, 0) & immediate) :
+                    (uint8_t) (get_register_byte(state, 0) ^ immediate);
+                set_logic_flags(state, result, 8);
+            }
             set_register_byte(state, 0, result);
-            set_logic_flags(state, result, 8);
             return BM_STATUS_OK;
         }
         case 0xa8: { /* TEST AL,imm8. */
@@ -679,6 +784,41 @@ execute_one(bm_808x_state_t *state)
                                 (uint8_t) (get_register_byte(state, 0) & immediate),
                                 8);
             return status;
+        }
+        case 0x00: /* ADD r/m8,r8 */
+        case 0x08: /* OR r/m8,r8 */
+        case 0x20: /* AND r/m8,r8 */
+        case 0x28: /* SUB r/m8,r8 */
+        case 0x30: /* XOR r/m8,r8 */
+        case 0x38: { /* CMP r/m8,r8 */
+            uint8_t modrm;
+            uint8_t destination = 0;
+            uint8_t source;
+            uint8_t result;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_byte(state, &operand, &destination);
+            if (status != BM_STATUS_OK)
+                return status;
+            source = get_register_byte(state, (modrm >> 3U) & 7U);
+            if (opcode == 0x00U)
+                result = add8(state, destination, source);
+            else if (opcode == 0x28U) {
+                result = (uint8_t) (destination - source);
+                compare8(state, destination, source);
+            } else if (opcode == 0x38U) {
+                compare8(state, destination, source);
+                return BM_STATUS_OK;
+            } else {
+                result = opcode == 0x08U ? (uint8_t) (destination | source) :
+                         opcode == 0x20U ? (uint8_t) (destination & source) :
+                                           (uint8_t) (destination ^ source);
+                set_logic_flags(state, result, 8);
+            }
+            return write_operand_byte(state, &operand, result);
         }
         case 0x02: /* ADD r8,r/m8 */
         case 0x0a: /* OR r8,r/m8 */
@@ -707,7 +847,9 @@ execute_one(bm_808x_state_t *state)
             set_register_byte(state, destination, result);
             return BM_STATUS_OK;
         }
+        case 0x03: /* ADD r16,r/m16; register form. */
         case 0x0b: /* OR r16,r/m16; register form. */
+        case 0x2b: /* SUB r16,r/m16; register form. */
         case 0x33: /* XOR r16,r/m16; register form. */
         case 0x3b: { /* CMP r16,r/m16; register form. */
             uint8_t modrm;
@@ -722,6 +864,17 @@ execute_one(bm_808x_state_t *state)
             source = modrm & 7U;
             if (opcode == 0x3bU)
                 compare16(state, state->registers[destination], state->registers[source]);
+            else if (opcode == 0x03U)
+                state->registers[destination] =
+                    add16(state, state->registers[destination],
+                          state->registers[source]);
+            else if (opcode == 0x2bU) {
+                uint16_t value = (uint16_t) (state->registers[destination] -
+                                              state->registers[source]);
+                compare16(state, state->registers[destination],
+                          state->registers[source]);
+                state->registers[destination] = value;
+            }
             else {
                 uint16_t value = (opcode == 0x0bU) ?
                     (uint16_t) (state->registers[destination] | state->registers[source]) :
@@ -734,7 +887,7 @@ execute_one(bm_808x_state_t *state)
         case 0x8b: { /* MOV r16,r/m16. */
             uint8_t modrm;
             uint16_t source = 0;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0, 0, 0, 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
@@ -742,6 +895,30 @@ execute_one(bm_808x_state_t *state)
                 status = read_operand_word(state, &operand, &source);
             if (status == BM_STATUS_OK)
                 state->registers[(modrm >> 3U) & 7U] = source;
+            return status;
+        }
+        case 0x8d: { /* LEA r16,m. */
+            uint8_t modrm;
+            bm_808x_operand_t operand = { 0, 0, 0, 0 };
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && operand.is_register)
+                return BM_STATUS_UNSUPPORTED;
+            if (status == BM_STATUS_OK)
+                state->registers[(modrm >> 3U) & 7U] = operand.offset;
+            return status;
+        }
+        case 0x88: { /* MOV r/m8,r8 */
+            uint8_t modrm;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = write_operand_byte(state, &operand,
+                                            get_register_byte(state,
+                                                              (modrm >> 3U) & 7U));
             return status;
         }
         case 0x39: /* CMP r/m16,r16 */
@@ -816,8 +993,8 @@ execute_one(bm_808x_state_t *state)
             set_register_byte(state, right, temporary);
             return BM_STATUS_OK;
         }
-        case 0x80: /* Immediate arithmetic group; AND r/m8,imm8 subset. */
-        case 0x81: { /* Immediate arithmetic group; ADD/AND/CMP r/m16,imm16 subset. */
+        case 0x80: /* Immediate arithmetic group; basic r/m8 operations. */
+        case 0x81: { /* Immediate arithmetic group; basic r/m16 operations. */
             uint8_t modrm;
             unsigned int operation;
             bm_808x_operand_t operand;
@@ -825,9 +1002,14 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
-            if (((opcode == 0x80U) && (operation != 4U)) ||
-                ((opcode == 0x81U) && (operation != 0U) &&
-                 (operation != 4U) && (operation != 7U)))
+            if (((opcode == 0x80U) && (operation != 0U) &&
+                 (operation != 1U) && (operation != 4U) &&
+                 (operation != 5U) && (operation != 6U) &&
+                 (operation != 7U)) ||
+                 ((opcode == 0x81U) && (operation != 0U) &&
+                  (operation != 1U) && (operation != 4U) &&
+                  (operation != 5U) && (operation != 6U) &&
+                  (operation != 7U)))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (opcode == 0x80U) {
@@ -839,12 +1021,21 @@ execute_one(bm_808x_state_t *state)
                 if (status == BM_STATUS_OK)
                     status = read_operand_byte(state, &operand, &left);
                 if (status == BM_STATUS_OK) {
-                    if (operation == 4U) {
-                        result = (uint8_t) (left & immediate);
-                        status = write_operand_byte(state, &operand, result);
-                        if (status == BM_STATUS_OK)
-                            set_logic_flags(state, result, 8);
+                    if (operation == 0U)
+                        result = add8(state, left, immediate);
+                    else if (operation == 5U) {
+                        result = (uint8_t) (left - immediate);
+                        compare8(state, left, immediate);
+                    } else if (operation == 7U) {
+                        compare8(state, left, immediate);
+                        return BM_STATUS_OK;
+                    } else {
+                        result = operation == 1U ? (uint8_t) (left | immediate) :
+                                 operation == 4U ? (uint8_t) (left & immediate) :
+                                                   (uint8_t) (left ^ immediate);
+                        set_logic_flags(state, result, 8);
                     }
+                    status = write_operand_byte(state, &operand, result);
                 }
             } else {
                 uint16_t immediate = 0;
@@ -858,19 +1049,25 @@ execute_one(bm_808x_state_t *state)
                     if (operation == 0U) {
                         result = add16(state, left, immediate);
                         status = write_operand_word(state, &operand, result);
-                    } else if (operation == 4U) {
-                        result = (uint16_t) (left & immediate);
+                    } else if (operation == 5U) {
+                        result = (uint16_t) (left - immediate);
+                        compare16(state, left, immediate);
+                        status = write_operand_word(state, &operand, result);
+                    } else if (operation == 7U) {
+                        compare16(state, left, immediate);
+                    } else {
+                        result = operation == 1U ? (uint16_t) (left | immediate) :
+                                 operation == 4U ? (uint16_t) (left & immediate) :
+                                                   (uint16_t) (left ^ immediate);
                         status = write_operand_word(state, &operand, result);
                         if (status == BM_STATUS_OK)
                             set_logic_flags(state, result, 16);
-                    } else {
-                        compare16(state, left, immediate);
                     }
                 }
             }
             return status;
         }
-        case 0x83: { /* Immediate arithmetic group; ADD/CMP r/m16,imm8 subset. */
+        case 0x83: { /* Sign-extended immediate arithmetic on r/m16. */
             uint8_t modrm;
             uint8_t immediate = 0;
             uint16_t left = 0;
@@ -880,7 +1077,9 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
-            if ((operation != 0U) && (operation != 7U))
+            if ((operation != 0U) && (operation != 1U) &&
+                (operation != 4U) && (operation != 5U) &&
+                (operation != 6U) && (operation != 7U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
@@ -889,11 +1088,22 @@ execute_one(bm_808x_state_t *state)
                 status = read_operand_word(state, &operand, &left);
             if (status == BM_STATUS_OK) {
                 uint16_t extended = (uint16_t) (int16_t) (int8_t) immediate;
+                uint16_t result;
                 if (operation == 0U)
-                    status = write_operand_word(state, &operand,
-                                                add16(state, left, extended));
-                else
+                    result = add16(state, left, extended);
+                else if (operation == 5U) {
+                    result = (uint16_t) (left - extended);
                     compare16(state, left, extended);
+                } else if (operation == 7U) {
+                    compare16(state, left, extended);
+                    return BM_STATUS_OK;
+                } else {
+                    result = operation == 1U ? (uint16_t) (left | extended) :
+                             operation == 4U ? (uint16_t) (left & extended) :
+                                               (uint16_t) (left ^ extended);
+                    set_logic_flags(state, result, 16);
+                }
+                status = write_operand_word(state, &operand, result);
             }
             return status;
         }
@@ -952,6 +1162,47 @@ execute_one(bm_808x_state_t *state)
             state->registers[modrm & 7U] = (uint16_t) ~state->registers[modrm & 7U];
             return BM_STATUS_OK;
         }
+        case 0xff: { /* INC/DEC/CALL/JMP/PUSH r/m16 subset. */
+            uint8_t modrm;
+            unsigned int operation;
+            uint16_t value = 0;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status != BM_STATUS_OK)
+                return status;
+            operation = (modrm >> 3U) & 7U;
+            if ((operation != 0U) && (operation != 1U) &&
+                (operation != 2U) && (operation != 4U) && (operation != 6U))
+                return BM_STATUS_UNSUPPORTED;
+            status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_word(state, &operand, &value);
+            if (status != BM_STATUS_OK)
+                return status;
+            if ((operation == 0U) || (operation == 1U)) {
+                uint16_t carry = state->flags & FLAG_CF;
+                uint16_t result;
+                if (operation == 0U)
+                    result = add16(state, value, 1U);
+                else {
+                    result = (uint16_t) (value - 1U);
+                    compare16(state, value, 1U);
+                }
+                state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
+                return write_operand_word(state, &operand, result);
+            }
+            if (operation == 2U) {
+                status = push_word(state, state->ip);
+                if (status == BM_STATUS_OK)
+                    state->ip = value;
+                return status;
+            }
+            if (operation == 4U) {
+                state->ip = value;
+                return BM_STATUS_OK;
+            }
+            return push_word(state, value);
+        }
         case 0xf6: { /* TEST/NOT r/m8 subset. */
             uint8_t modrm;
             unsigned int operation;
@@ -975,6 +1226,34 @@ execute_one(bm_808x_state_t *state)
                 status = write_operand_byte(state, &operand, (uint8_t) ~value);
             }
             return status;
+        }
+        case 0xfe: { /* INC/DEC r/m8. */
+            uint8_t modrm;
+            unsigned int operation;
+            uint16_t carry;
+            uint8_t value = 0;
+            uint8_t result;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status != BM_STATUS_OK)
+                return status;
+            operation = (modrm >> 3U) & 7U;
+            if (operation > 1U)
+                return BM_STATUS_UNSUPPORTED;
+            status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_byte(state, &operand, &value);
+            if (status != BM_STATUS_OK)
+                return status;
+            carry = state->flags & FLAG_CF;
+            if (operation == 0U)
+                result = add8(state, value, 1U);
+            else {
+                result = (uint8_t) (value - 1U);
+                compare8(state, value, 1U);
+            }
+            state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
+            return write_operand_byte(state, &operand, result);
         }
         case 0xc6: /* MOV r/m8,imm8. */
         case 0xc7: { /* MOV r/m16,imm16. */
@@ -1024,14 +1303,26 @@ execute_one(bm_808x_state_t *state)
                 state->ip = (uint16_t) (state->ip + (int8_t) displacement);
             return status;
         }
+        case 0xe0: /* LOOPNE rel8 */
+        case 0xe1: /* LOOPE rel8 */
         case 0xe2: { /* LOOP rel8 */
             uint8_t displacement;
             status = fetch_byte(state, &displacement);
             if (status == BM_STATUS_OK) {
                 state->registers[REG_CX] = (uint16_t) (state->registers[REG_CX] - 1U);
-                if (state->registers[REG_CX] != 0)
+                if ((state->registers[REG_CX] != 0) &&
+                    ((opcode == 0xe2U) ||
+                     ((opcode == 0xe0U) && ((state->flags & FLAG_ZF) == 0U)) ||
+                     ((opcode == 0xe1U) && ((state->flags & FLAG_ZF) != 0U))))
                     state->ip = (uint16_t) (state->ip + (int8_t) displacement);
             }
+            return status;
+        }
+        case 0xe3: { /* JCXZ rel8 */
+            uint8_t displacement;
+            status = fetch_byte(state, &displacement);
+            if ((status == BM_STATUS_OK) && (state->registers[REG_CX] == 0U))
+                state->ip = (uint16_t) (state->ip + (int8_t) displacement);
             return status;
         }
         case 0xc3: { /* RET near */
@@ -1041,33 +1332,135 @@ execute_one(bm_808x_state_t *state)
                 state->ip = destination;
             return status;
         }
-        case 0xd3: { /* Shift r/m16 by CL; SHR subset. */
+        case 0xc4: /* LES r16,m16:16 */
+        case 0xc5: { /* LDS r16,m16:16 */
+            uint8_t modrm;
+            uint16_t offset = 0;
+            uint16_t segment = 0;
+            bm_808x_operand_t operand = { 0, 0, 0, 0 };
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && operand.is_register)
+                return BM_STATUS_UNSUPPORTED;
+            if (status == BM_STATUS_OK)
+                status = read_word(state, operand.segment, operand.offset, &offset);
+            if (status == BM_STATUS_OK)
+                status = read_word(state, operand.segment,
+                                   (uint16_t) (operand.offset + 2U), &segment);
+            if (status == BM_STATUS_OK) {
+                state->registers[(modrm >> 3U) & 7U] = offset;
+                state->segments[opcode == 0xc4U ? 0U : 3U] = segment;
+            }
+            return status;
+        }
+        case 0xcd: { /* INT imm8 */
+            uint8_t vector;
+            status = fetch_byte(state, &vector);
+            if (status != BM_STATUS_OK)
+                return status;
+            return enter_interrupt(state, vector);
+        }
+        case 0xcf: { /* IRET */
+            uint16_t new_ip = 0;
+            uint16_t new_cs = 0;
+            uint16_t new_flags = 0;
+            status = pop_word(state, &new_ip);
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &new_cs);
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &new_flags);
+            if (status == BM_STATUS_OK) {
+                state->ip = new_ip;
+                state->segments[1] = new_cs;
+                state->flags = new_flags | 0x0002U;
+            }
+            return status;
+        }
+        case 0xd0: /* Shift r/m8 by one. */
+        case 0xd2: { /* Shift r/m8 by CL. */
+            uint8_t modrm;
+            uint8_t value = 0;
+            uint8_t original;
+            uint8_t count;
+            unsigned int operation;
+            unsigned int index;
+            uint16_t preserved;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status != BM_STATUS_OK)
+                return status;
+            operation = (modrm >> 3U) & 7U;
+            if ((operation != 4U) && (operation != 5U))
+                return BM_STATUS_UNSUPPORTED;
+            status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_byte(state, &operand, &value);
+            if (status != BM_STATUS_OK)
+                return status;
+            count = opcode == 0xd0U ? 1U : get_register_byte(state, 1U);
+            if (count == 0U)
+                return BM_STATUS_OK;
+            original = value;
+            preserved = state->flags & (FLAG_AF | FLAG_OF);
+            for (index = 0; index < count; ++index) {
+                uint8_t carry_bit = operation == 4U ? 0x80U : 1U;
+                if ((value & carry_bit) != 0U)
+                    state->flags |= FLAG_CF;
+                else
+                    state->flags &= (uint16_t) ~FLAG_CF;
+                value = operation == 4U ? (uint8_t) (value << 1U) :
+                                          (uint8_t) (value >> 1U);
+            }
+            {
+                uint16_t carry = state->flags & FLAG_CF;
+                set_logic_flags(state, value, 8);
+                state->flags = (uint16_t) ((state->flags & ~(FLAG_AF | FLAG_OF)) |
+                                          preserved | carry);
+                if (count == 1U) {
+                    state->flags &= (uint16_t) ~FLAG_OF;
+                    if ((operation == 4U) ?
+                        (((value & 0x80U) != 0U) != (carry != 0U)) :
+                        ((original & 0x80U) != 0U))
+                        state->flags |= FLAG_OF;
+                }
+            }
+            return write_operand_byte(state, &operand, value);
+        }
+        case 0xd1: /* Shift r/m16 by one. */
+        case 0xd3: { /* Shift r/m16 by CL. */
             uint8_t modrm;
             uint16_t value = 0;
             uint8_t count;
+            unsigned int operation;
             uint16_t preserved;
+            uint16_t original;
             unsigned int index;
             bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
             if (status != BM_STATUS_OK)
                 return status;
-            if (((modrm >> 3U) & 7U) != 5U)
+            operation = (modrm >> 3U) & 7U;
+            if ((operation != 4U) && (operation != 5U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
             if (status != BM_STATUS_OK)
                 return status;
-            count = get_register_byte(state, 1U);
+            count = opcode == 0xd1U ? 1U : get_register_byte(state, 1U);
             if (count == 0U)
                 return BM_STATUS_OK;
+            original = value;
             preserved = state->flags & (FLAG_AF | FLAG_OF);
             for (index = 0; index < count; ++index) {
-                if ((value & 1U) != 0U)
+                uint16_t carry_bit = operation == 4U ? 0x8000U : 1U;
+                if ((value & carry_bit) != 0U)
                     state->flags |= FLAG_CF;
                 else
                     state->flags &= (uint16_t) ~FLAG_CF;
-                value = (uint16_t) (value >> 1U);
+                value = operation == 4U ? (uint16_t) (value << 1U) :
+                                          (uint16_t) (value >> 1U);
             }
             {
                 uint16_t carry = state->flags & FLAG_CF;
@@ -1076,28 +1469,39 @@ execute_one(bm_808x_state_t *state)
                                           preserved | carry);
                 if (count == 1U) {
                     state->flags &= (uint16_t) ~FLAG_OF;
-                    if ((value & 0x4000U) != 0U)
+                    if ((operation == 4U) ?
+                        (((value & 0x8000U) != 0U) != (carry != 0U)) :
+                        ((original & 0x8000U) != 0U))
                         state->flags |= FLAG_OF;
                 }
             }
             return write_operand_word(state, &operand, value);
         }
+        case 0xa0: /* MOV AL,moffs8 */
+        case 0xa1: /* MOV AX,moffs16 */
         case 0xa2: /* MOV moffs8,AL */
         case 0xa3: { /* MOV moffs16,AX */
             uint16_t offset;
+            unsigned int segment = (segment_override >= 0) ?
+                                   (unsigned int) segment_override : 3U;
             status = fetch_word(state, &offset);
             if (status != BM_STATUS_OK)
                 return status;
+            if (opcode == 0xa0U) {
+                uint8_t value = 0;
+                status = read_byte(state, state->segments[segment], offset,
+                                   BM_BUS_READ, &value);
+                if (status == BM_STATUS_OK)
+                    set_register_byte(state, 0U, value);
+                return status;
+            }
+            if (opcode == 0xa1U)
+                return read_word(state, state->segments[segment], offset,
+                                 &state->registers[REG_AX]);
             if (opcode == 0xa2U)
-                return write_byte(state,
-                                  state->segments[(segment_override >= 0) ?
-                                                  (unsigned int) segment_override : 3U],
-                                  offset,
+                return write_byte(state, state->segments[segment], offset,
                                   (uint8_t) state->registers[REG_AX]);
-            return write_word(state,
-                              state->segments[(segment_override >= 0) ?
-                                              (unsigned int) segment_override : 3U],
-                              offset,
+            return write_word(state, state->segments[segment], offset,
                               state->registers[REG_AX]);
         }
         case 0xe4: { /* IN AL,imm8 */
@@ -1155,6 +1559,15 @@ execute_one(bm_808x_state_t *state)
                                  (uint8_t) state->registers[REG_AX]);
         case 0xef: /* OUT DX,AX */
             return io_write_word(state, state->registers[REG_DX], state->registers[REG_AX]);
+        case 0xf5: /* CMC */
+            state->flags ^= FLAG_CF;
+            return BM_STATUS_OK;
+        case 0xf8: /* CLC */
+            state->flags &= (uint16_t) ~FLAG_CF;
+            return BM_STATUS_OK;
+        case 0xf9: /* STC */
+            state->flags |= FLAG_CF;
+            return BM_STATUS_OK;
         case 0xfa: /* CLI */
             state->flags &= (uint16_t) ~FLAG_IF;
             return BM_STATUS_OK;

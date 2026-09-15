@@ -18,6 +18,9 @@ typedef struct bm_pit_channel {
     uint8_t write_low;
     uint8_t read_low;
     uint8_t pending_low;
+    uint16_t latched_count;
+    uint8_t latch_pending;
+    uint8_t latch_low_next;
     uint8_t gate;
     uint8_t output;
 } bm_pit_channel_t;
@@ -81,7 +84,21 @@ counter_write(bm_pit8253_t *pit, unsigned int channel, uint8_t value)
 static uint8_t
 counter_read(bm_pit_channel_t *counter)
 {
-    uint16_t value = (uint16_t) counter->count;
+    uint16_t value;
+    if (counter->latch_pending != 0U) {
+        value = counter->latched_count;
+        --counter->latch_pending;
+        if (counter->access == 2U)
+            return (uint8_t) (value >> 8U);
+        if (counter->access == 3U) {
+            uint8_t result = counter->latch_low_next ?
+                (uint8_t) value : (uint8_t) (value >> 8U);
+            counter->latch_low_next ^= 1U;
+            return result;
+        }
+        return (uint8_t) value;
+    }
+    value = (uint16_t) counter->count;
     if (counter->access == 2)
         return (uint8_t) (value >> 8U);
     if (counter->access != 3)
@@ -112,9 +129,15 @@ pit_access(void *context, bm_bus_transaction_t *transaction)
         if (channel >= 3)
             return BM_STATUS_UNSUPPORTED;
         counter = &pit->channels[channel];
+        if (((control >> 4U) & 3U) == 0U) {
+            if (counter->latch_pending == 0U) {
+                counter->latched_count = (uint16_t) counter->count;
+                counter->latch_pending = counter->access == 3U ? 2U : 1U;
+                counter->latch_low_next = 1U;
+            }
+            return BM_STATUS_OK;
+        }
         counter->access = (control >> 4U) & 3U;
-        if (counter->access == 0)
-            return BM_STATUS_UNSUPPORTED;
         counter->mode = (control >> 1U) & 7U;
         if (counter->mode > 5)
             counter->mode &= 3U;
@@ -123,6 +146,7 @@ pit_access(void *context, bm_bus_transaction_t *transaction)
             return BM_STATUS_UNSUPPORTED;
         counter->write_low = 0;
         counter->read_low = 0;
+        counter->latch_pending = 0;
         return BM_STATUS_OK;
     }
 }
