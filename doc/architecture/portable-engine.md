@@ -97,16 +97,18 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-1,385,830 instructions and 811 successful I/O transactions before reporting
-the next unsupported V30 instruction, `SUB r8,r/m8`, at `F000:85A1`. This covers the
+6,341,893 instructions and 2,851 successful I/O transactions before stopping
+strictly on the first unmapped RTC counter register, port `E8h`, read at
+`F000:F4B0`. This covers the
 reset jump, flag/register self-test, the firmware's complete 64 KiB checksum
 loop, its first conventional-memory alias check, a 64 KiB upper-memory
 clear-and-scan pass, the following segment-overridden memory-alias check and
 programming self-tests for the 8237 and its external page latches, the
 MM58167 interrupt-status/control access, the following long conventional-
 memory test, the complete empty option-ROM scan, the observed PCS 86 video-
-selection sequence at `46E8h` and `102h`, and the first Paradise initialization
-and memory-copy paths. The option-ROM region explicitly
+selection sequence at `46E8h` and `102h`, the first Paradise initialization and
+memory-copy paths, and enough resident diagnostics to publish a real text-mode
+frame. The option-ROM region explicitly
 models an unpopulated bus returning ones: the PCS 86 firmware already contains
 its Paradise initialization and no separate ROM is invented at `C0000h`.
 
@@ -114,8 +116,10 @@ The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
 effective-address decoding, immediate arithmetic including sign-extended CMP,
 byte and word immediate memory moves and loads, byte comparison, TEST, AND and
-NOT, memory forms of general and segment moves, direct and indirect near calls,
-software interrupts and IRET, register plus ES/DS and FLAGS stack operations,
+NOT, byte and word multiplication, unsigned word division with real-mode
+interrupt-zero faults, NEC V30 bit operations, memory forms of general and
+segment moves, direct and indirect near calls, software interrupts and IRET,
+register plus all segment and FLAGS stack operations,
 byte and word shifts, flag-control operations, segment-overridden loads, all four
 segment overrides and byte/word MOVS, STOS, LODS and SCAS operations with
 REP/REPE/REPNE. Its inspection contract exposes
@@ -135,8 +139,19 @@ latches. Their observed ordering and values are testable, but the engine does
 not yet assign undocumented selection side effects to them. A new isolated
 PVGA1A component owns the VGA and Paradise register files, DAC state and 256 KiB
 of planar VRAM behind the generic buses. Its input-status phase is deliberately
-deterministic rather than timed. Rendering, scan timing and a framebuffer
-contract remain absent, so this progress does not yet produce visible output.
+deterministic rather than timed. The engine now defines a caller-owned XRGB8888
+framebuffer value type, the runtime exposes optional geometry and rendering
+operations, and the PCS 86 publishes PVGA1A output without exposing the device
+to a frontend. The first rasterizer covers text modes only and reads the
+programmed character, attribute, font, palette and CRTC state; it does not use a
+built-in font or a synthetic diagnostic screen.
+
+At the current stop point it produces a deterministic 720x400 frame (CRC32
+`25A36A35`) containing the PCS-86 Resident Diagnostics 1.09 screen. CPU, ROM,
+DMA and interrupt-controller checks are visible as passing, 640 kB of base
+memory is reported, and the timer test is visibly failing. This is bring-up
+evidence, not a claim that POST completes. Cursor, blink phase, graphics modes
+and scan timing are still outside this cut.
 
 The PCS 86 now owns a portable 8237 programming core with explicit address,
 count, command, mode, request, mask, status and master-clear state. A separate
@@ -153,7 +168,7 @@ and stores the interrupt-control byte. This behaviour is a selective port of
 the inherited `src/device/isartc.c`, retaining Fred N. van Kempen's notice.
 Registers `B2h-B7h` and `E0h-EFh`, clock progression, alarms, IRQ generation
 and persistence remain deliberately unmapped until they can be implemented and
-tested as real RTC behaviour.
+tested as real RTC behaviour. Port `E8h` is now the observed execution boundary.
 
 The 8253 counter-latch command now snapshots a programmed counter for stable
 low/high reads; BCD operation and clock-domain timing remain unavailable.
@@ -163,4 +178,5 @@ pending output, the machine routes that signal through the engine CPU contract,
 and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
 real-mode vector table. Neither component owns the other. DMA transfers, the
 remaining RTC and complete V30 coverage remain subsequent cuts; POST has not
-completed and no video output exists yet.
+completed, although its current diagnostic screen can now be rendered and
+captured without Qt.

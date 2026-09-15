@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <blumach/components/bus.h>
+#include <blumach/engine/video.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +40,10 @@ bm_status_t bm_pvga1a_inspect_vram(const bm_pvga1a_t *video,
                                    unsigned int plane,
                                    uint16_t offset,
                                    uint8_t *value);
+bm_status_t bm_pvga1a_video_geometry(const bm_pvga1a_t *video,
+                                     bm_video_geometry_t *geometry);
+bm_status_t bm_pvga1a_render(const bm_pvga1a_t *video,
+                             bm_video_framebuffer_t *framebuffer);
 
 #ifdef __cplusplus
 }

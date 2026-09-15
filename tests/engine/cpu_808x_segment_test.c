@@ -63,6 +63,11 @@ main(void)
         0x1f,                   /* POP DS */
         0x07,                   /* POP ES */
         0x5b,                   /* POP BX */
+        0x0e,                   /* PUSH CS */
+        0x1f,                   /* POP DS */
+        0x16,                   /* PUSH SS */
+        0x17,                   /* POP SS */
+        0x8e, 0xdb,             /* MOV DS,BX: restore 4444h. */
         0xf8,                   /* CLC */
         0xf9,                   /* STC */
         0xf5,                   /* CMC: carry is clear again. */
@@ -88,6 +93,11 @@ main(void)
         0xd1, 0xe7,             /* SHL DI,1 */
         0x81, 0xef, 0x7a, 0x87, /* SUB DI,877Ah */
         0x03, 0xf7,             /* ADD SI,DI */
+        0x23, 0xff,             /* AND DI,DI */
+        0x2a, 0xed,             /* SUB CH,CH */
+        0xb1, 0x00,             /* MOV CL,0 */
+        0x0f, 0x14, 0xc0,       /* SET1 AL,CL */
+        0xb1, 0x04,             /* MOV CL,4 */
         0x83, 0xfa, 0x44,       /* CMP DX,+44h */
         0xe0, 0x00,             /* LOOPNE +0: ZF prevents the branch. */
         0xc3                    /* RET */
@@ -137,10 +147,10 @@ main(void)
     assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 71) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 81) == BM_STATUS_OK);
 
     assert(inspect(engine, "halted") == 1U);
-    assert(inspect(engine, "last_fetch") == 0xf0091U);
+    assert(inspect(engine, "last_fetch") == 0xf0097U);
     assert(inspect(engine, "dx") == 0x0044U);
     assert(inspect(engine, "ax") == 0x4445U);
     assert(inspect(engine, "ds") == 0x4444U);
