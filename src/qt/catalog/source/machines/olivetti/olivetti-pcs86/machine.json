@@ -194,6 +194,10 @@
         }
       ]
     },
+    "implementation": {
+      "document": "olivetti-pcs86-implementation.md",
+      "language": "en"
+    },
     "technical": [
       {
         "title_key": "technical.section.architecture",

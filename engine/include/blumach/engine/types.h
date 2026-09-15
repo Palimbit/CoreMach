@@ -18,7 +18,9 @@ typedef enum bm_status {
     BM_STATUS_INVALID_STATE = -3,
     BM_STATUS_CAPACITY_EXCEEDED = -4,
     BM_STATUS_UNMAPPED = -5,
-    BM_STATUS_DEVICE_ERROR = -6
+    BM_STATUS_DEVICE_ERROR = -6,
+    BM_STATUS_READ_ONLY = -7,
+    BM_STATUS_UNSUPPORTED = -8
 } bm_status_t;
 
 #ifdef __cplusplus
