@@ -619,11 +619,20 @@ execute_one(bm_808x_state_t *state)
     switch (opcode) {
         case 0x06: /* PUSH ES */
             return push_word(state, state->segments[0]);
+        case 0x1e: /* PUSH DS */
+            return push_word(state, state->segments[3]);
         case 0x07: { /* POP ES */
             uint16_t value;
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK)
                 state->segments[0] = value;
+            return status;
+        }
+        case 0x1f: { /* POP DS */
+            uint16_t value;
+            status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->segments[3] = value;
             return status;
         }
         case 0x90: /* NOP */
@@ -952,9 +961,9 @@ execute_one(bm_808x_state_t *state)
             }
             return status;
         }
+        case 0xc6: /* MOV r/m8,imm8. */
         case 0xc7: { /* MOV r/m16,imm16. */
             uint8_t modrm;
-            uint16_t immediate = 0;
             bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
             if (status != BM_STATUS_OK)
@@ -962,10 +971,19 @@ execute_one(bm_808x_state_t *state)
             if (((modrm >> 3U) & 7U) != 0U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
-            if (status == BM_STATUS_OK)
-                status = fetch_word(state, &immediate);
-            if (status == BM_STATUS_OK)
-                status = write_operand_word(state, &operand, immediate);
+            if (opcode == 0xc6U) {
+                uint8_t immediate = 0;
+                if (status == BM_STATUS_OK)
+                    status = fetch_byte(state, &immediate);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_byte(state, &operand, immediate);
+            } else {
+                uint16_t immediate = 0;
+                if (status == BM_STATUS_OK)
+                    status = fetch_word(state, &immediate);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_word(state, &operand, immediate);
+            }
             return status;
         }
         case 0xe8: { /* CALL rel16. */

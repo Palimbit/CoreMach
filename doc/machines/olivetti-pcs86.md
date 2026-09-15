@@ -16,8 +16,10 @@ returns to early board setup. It now programs and reads back the portable
 8237 register core and its separate XT page latches during the firmware's DMA
 tests. The portable MM58167 front now supplies the firmware-used interrupt
 status and control registers at `B0h-B1h`; after clearing that state, the BIOS
-completes its long conventional-memory test and reaches `F000:3B20`, where the
-strict interpreter reports the still-unsupported `MOV r/m8,imm8`. The RTC
+completes its long conventional-memory test and reaches the video/option-ROM
+scan. After 1,377,642 instructions and 158 successful I/O accesses, the strict
+bus reports the unmapped physical address `C0000h` at `F000:0D0E`. No placeholder
+ROM or video memory is fabricated. The RTC
 counter/calendar window, clock progression, alarms, interrupt generation and
 persistence remain absent. The DMA controller does not yet arbitrate or perform
 transfers. This is measured bring-up progress, not a completed POST or visible
