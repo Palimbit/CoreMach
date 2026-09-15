@@ -48,6 +48,7 @@ main(void)
         0x2e, 0x8e, 0x1e, 0x00, 0x01, /* MOV DS,CS:[0100h] */
         0x2e, 0x8b, 0x1e, 0x00, 0x01, /* MOV BX,CS:[0100h] */
         0x26, 0x8c, 0x1e, 0x06, 0x01, /* MOV ES:[0106h],DS */
+        0x26, 0xc6, 0x06, 0x08, 0x01, 0x5a, /* MOV byte ES:[0108h],5Ah */
         0x81, 0xc5, 0x00, 0x10, /* ADD BP,1000h */
         0x83, 0xc5, 0x01,       /* ADD BP,+1 */
         0xbe, 0x01, 0x80,       /* MOV SI,8001h */
@@ -55,8 +56,11 @@ main(void)
         0xd3, 0xee,             /* SHR SI,CL */
         0x53,                   /* PUSH BX */
         0x06,                   /* PUSH ES */
+        0x1e,                   /* PUSH DS */
         0xbb, 0x00, 0x00,       /* MOV BX,0 */
         0x8e, 0xc3,             /* MOV ES,BX */
+        0x8e, 0xdb,             /* MOV DS,BX */
+        0x1f,                   /* POP DS */
         0x07,                   /* POP ES */
         0x5b,                   /* POP BX */
         0xe8, 0x01, 0x00,       /* CALL increment_bp */
@@ -94,10 +98,10 @@ main(void)
     assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 36) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 44) == BM_STATUS_OK);
 
     assert(inspect(engine, "halted") == 1U);
-    assert(inspect(engine, "last_fetch") == 0xf0068U);
+    assert(inspect(engine, "last_fetch") == 0xf0072U);
     assert(inspect(engine, "dx") == 0x0044U);
     assert(inspect(engine, "ax") == 0x4444U);
     assert(inspect(engine, "ds") == 0x4444U);
@@ -108,6 +112,7 @@ main(void)
     assert(peek(memory, 0x01100U) == 0x11U && peek(memory, 0x01101U) == 0x11U);
     assert(peek(memory, 0x01104U) == 0x00U && peek(memory, 0x01105U) == 0x03U);
     assert(peek(memory, 0x01106U) == 0x44U && peek(memory, 0x01107U) == 0x44U);
+    assert(peek(memory, 0x01108U) == 0x5aU);
     assert(peek(memory, 0x02100U) == 0x22U && peek(memory, 0x02101U) == 0x22U);
     assert(peek(memory, 0x03100U) == 0x33U && peek(memory, 0x03101U) == 0x33U);
     assert(peek(memory, 0xf0100U) == 0x44U && peek(memory, 0xf0101U) == 0x44U);

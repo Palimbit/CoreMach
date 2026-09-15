@@ -97,20 +97,22 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-1,377,620 instructions and 156 successful I/O transactions before reporting
-the unsupported `MOV r/m8,imm8` at `F000:3B20`. This covers the
+1,377,642 instructions and 158 successful I/O transactions before reporting
+an unmapped word read from physical `C0000h` at `F000:0D0E`. This covers the
 reset jump, flag/register self-test, the firmware's complete 64 KiB checksum
 loop, its first conventional-memory alias check, a 64 KiB upper-memory
 clear-and-scan pass, the following segment-overridden memory-alias check and
 programming self-tests for the 8237 and its external page latches, the
 MM58167 interrupt-status/control access and the following long conventional-
-memory test.
+memory test. The BIOS is now scanning the video/option-ROM region; no bytes are
+fabricated there while the video component remains absent.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
-effective-address decoding, immediate arithmetic, byte comparison, TEST, AND
+effective-address decoding, immediate arithmetic, byte and word immediate
+memory moves, byte comparison, TEST, AND
 and NOT, memory forms of general and segment moves, near CALL/RET, register and
-ES stack operations, SHR by CL, segment-overridden loads, all four segment
+ES/DS stack operations, SHR by CL, segment-overridden loads, all four segment
 overrides and `LODSW`/`REP STOSW`/`REPE SCASW`. Its inspection contract exposes
 all general and segment
 registers. Unit tests use new synthetic bytes

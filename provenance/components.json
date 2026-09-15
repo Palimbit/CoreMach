@@ -42,7 +42,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic flags, conditional flow, ModR/M effective addresses with explicit ES/CS/SS/DS overrides, memory forms of segment and general-register moves, immediate ADD/AND/CMP and byte TEST/AND operations, near CALL/RET, register and ES stack operations, SHR by CL, LODSW/STOSW/SCASW, ROM-checksum and memory-check paths, full basic-register inspection, and callback-based real-mode interrupt entry to the still-incomplete V30 subset"
+      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic flags, conditional flow, ModR/M effective addresses with explicit ES/CS/SS/DS overrides, byte and word immediate memory moves, memory forms of segment and general-register moves, immediate ADD/AND/CMP and byte TEST/AND operations, near CALL/RET, register plus ES/DS stack operations, SHR by CL, LODSW/STOSW/SCASW, ROM-checksum and memory-check paths, full basic-register inspection, and callback-based real-mode interrupt entry to the still-incomplete V30 subset"
     },
     {
       "id": "portable-pc-platform-components",
