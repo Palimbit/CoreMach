@@ -13,13 +13,15 @@ minimum known motherboard-register map. It is a bring-up milestone, not a
 usable emulator: the BIOS completes its initial CPU/register checks and ROM
 checksum, passes its first conventional-memory alias check and then stops
 after clearing and scanning a selected 64 KiB memory window. The measured
-boundary is now an unmapped word read from physical `C0000h` at `F000:0D0E`,
-after the
+boundary is now an unmapped write to PVGA1A graphics-controller index port
+`3CEh` from `F000:6B95`, after the
 firmware also completes its segment-overridden alias check, exercises both the
 8237 programming registers and separate XT page latches, clears the MM58167
 interrupt state at `B0h-B1h`, completes its long conventional-memory test and
-enters the video/option-ROM scan. The engine does not fabricate bytes for the
-absent display device.
+completes the empty option-ROM scan and emits the observed video-selection
+writes at `46E8h` and `102h`. The unpopulated option-ROM region returns ones;
+the PCS 86 system EPROMs already contain video initialization, so the engine
+does not fabricate a separate ROM or any display registers.
 DMA arbitration and transfers remain absent, and no video output exists yet.
 
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
@@ -47,7 +49,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, arithmetic flags, branches, checksum and memory-test operations, byte/word immediate memory moves, memory forms of register/segment moves, immediate ADD/AND/CMP, byte TEST/AND/NOT, near CALL/RET, register and ES/DS stack operations, SHR by CL, `LODSW`/`STOSW`/`SCASW`, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, arithmetic flags, branches, checksum and memory-test operations, byte/word immediate memory moves, memory forms of register/segment moves, immediate ADD/AND/CMP including sign-extended short CMP, byte TEST/AND/NOT, near CALL/RET, register, segment and FLAGS stack operations, SHR by CL, `LODSW`/`STOSW`/`SCASW`, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Approximate | One instruction per tick; 10 MHz is identity metadata until clock-domain timing lands |
@@ -57,6 +59,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | EMS selectors | Deliberate boundary | Write-only page-selector latches at `8400h-8403h`; no aperture or backing SIMMs are claimed or exposed |
 | 8237 DMA | Programming subset derived from the inherited core | Address/count flip-flop, base/current registers, command, mode, request, masks, status and master clear; a separate XT latch block supplies four-bit pages and observable 20-bit current addresses; no arbitration, bus ownership or data transfers |
 | MM58167 RTC | Interrupt front only | `B0h` returns and clears interrupt status; `B1h` stores interrupt control and clears status. `B2h-B7h`, `E0h-EFh`, clock progression, alarms, IRQ output and persistence remain unavailable |
+| PCS 86 video selection | Observed write-only boundary | Empty `C0000h-EFFFFh` option-ROM space returns ones; `46E8h` and `102h` retain the BIOS-observed arbitration writes without undocumented side effects |
 | Complete PPI behaviour | Unavailable | Still required before complete original-BIOS POST comparison |
 | Video, keyboard and storage | Unavailable | Planned as later vertical cuts |
 
@@ -118,16 +121,18 @@ or backing memory exists.
 
 With the 8237 register core, external page-latch block, MM58167 interrupt front
 and the CPU paths required by their firmware self-tests, the local BIOS probe
-executes 1,377,642 instructions and 158 successful I/O transactions. The
+executes 1,377,877 instructions and 163 successful I/O transactions. The
 firmware writes and reads page ports in the observed channel order `87h`,
 `83h`, `81h`, `82h`.
 The PCS 86 component masks each latch to four bits and combines it with the
 8237 current offset without pretending that the controller can yet own the bus
 or move a byte. The MM58167 component then handles the firmware's `IN AL,B0h`
 and `OUT B1h,AL` sequence with the inherited read-to-clear and write-to-clear
-semantics. The probe completes the following long memory test and stops at
-`F000:0D0E` with `BM_STATUS_UNMAPPED` while comparing the word at `C000:0000`
-against the option-ROM signature. No display, video ROM or floppy controller
+semantics. The probe completes the following long memory test, reads ones while
+scanning the explicitly unpopulated `C0000h-EFFFFh` option-ROM region, and
+records the firmware's `46E8h=16h`, `102h=01h`, `46E8h=0Eh` selection sequence.
+It stops at `F000:6B95` with `BM_STATUS_UNMAPPED` on the first PVGA1A write,
+`OUT 3CEh,0Fh`. No VGA register file, VRAM, framebuffer or floppy controller
 is connected. The rest of the RTC remains explicitly
 pending rather than being approximated.
 

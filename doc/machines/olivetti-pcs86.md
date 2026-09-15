@@ -16,10 +16,14 @@ returns to early board setup. It now programs and reads back the portable
 8237 register core and its separate XT page latches during the firmware's DMA
 tests. The portable MM58167 front now supplies the firmware-used interrupt
 status and control registers at `B0h-B1h`; after clearing that state, the BIOS
-completes its long conventional-memory test and reaches the video/option-ROM
-scan. After 1,377,642 instructions and 158 successful I/O accesses, the strict
-bus reports the unmapped physical address `C0000h` at `F000:0D0E`. No placeholder
-ROM or video memory is fabricated. The RTC
+completes its long conventional-memory test and scans the unpopulated option-
+ROM area, whose bus explicitly returns ones. The PCS 86 needs no separate VGA
+ROM because its system EPROMs contain the Paradise initialization. After
+1,377,877 instructions and 163 successful I/O accesses, the strict bus reaches
+the first PVGA1A transaction and reports unmapped port `3CEh` at `F000:6B95`.
+The observed write-only video-selection sequence at `46E8h` and `102h` is
+retained without guessed side effects. No placeholder ROM, VGA register or
+video memory is fabricated. The RTC
 counter/calendar window, clock progression, alarms, interrupt generation and
 persistence remain absent. The DMA controller does not yet arbitrate or perform
 transfers. This is measured bring-up progress, not a completed POST or visible

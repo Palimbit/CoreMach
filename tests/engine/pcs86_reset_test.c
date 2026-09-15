@@ -131,6 +131,12 @@ main(void)
         0x8e, 0xd8,       /* MOV DS,AX */
         0xb0, 0x5a,       /* MOV AL,5Ah */
         0xa2, 0x00, 0x02, /* MOV [0200h],AL */
+        0xb8, 0x00, 0xc0, /* MOV AX,C000h */
+        0x8e, 0xd8,       /* MOV DS,AX */
+        0x8b, 0x06, 0x00, 0x00, /* MOV AX,[0000h] -> open bus FFFFh. */
+        0x89, 0xc1,       /* MOV CX,AX */
+        0xbb, 0x00, 0x00, /* MOV BX,0 */
+        0x8e, 0xdb,       /* MOV DS,BX */
         0xfa,             /* CLI */
         0xb0, 0x11, 0xe6, 0x20, /* Initialize the single 8259A. */
         0xb0, 0x08, 0xe6, 0x21,
@@ -141,6 +147,12 @@ main(void)
         0xb0, 0x04, 0xe6, 0x40,
         0xb0, 0x00, 0xe6, 0x40,
         0xb0, 0x91, 0xe6, 0x65, /* Exercise PCS 86 board control. */
+        0xb0, 0x16,             /* Begin the observed video-selection sequence. */
+        0xba, 0xe8, 0x46,
+        0xee,
+        0xb0, 0x01,
+        0xba, 0x02, 0x01,
+        0xee,
         0xb0, 0x40, 0xe6, 0x70, /* Preserve the opaque memory-control write. */
         0xe4, 0x65,             /* IN AL,65h -> 91h. */
         0xb0, 0x80,             /* Select EMS window 0, page 0. */
@@ -189,33 +201,40 @@ main(void)
     assert(inspect(session, "ip") == 0);
     assert(inspect(session, "frequency_hz") == 10000000U);
 
-    assert(bm_session_run_for(session, 40) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xf000);
-    assert(inspect(session, "ip") == 0x0142);
-    assert(inspect(session, "ax") == 0x0008);
+    assert(inspect(session, "ip") == 0x015e);
+    assert(inspect(session, "ax") == 0xff08U);
     assert(inspect(session, "ds") == 0);
     assert(inspect(session, "halted") == 1);
     assert(inspect(session, "dx") == 0x0100);
-    assert(trace.count == 34);
+    assert(inspect(session, "cx") == 0xffffU);
+    assert(trace.count == 46);
+    assert(trace.entries[7].physical_address == 0xf010fU);
+    assert(trace.entries[7].opcode == 0x8bU);
     assert(trace.entries[0].physical_address == 0xffff0U);
     assert(trace.entries[0].opcode == 0xea);
     assert(trace.entries[1].physical_address == 0xf0100U);
-    assert(io_trace.count == 14);
+    assert(io_trace.count == 16);
     assert(io_trace.entries[0].operation == BM_BUS_WRITE);
     assert(io_trace.entries[0].port == 0x20U && io_trace.entries[0].value == 0x11U);
     assert(io_trace.entries[7].port == 0x40U && io_trace.entries[7].value == 0x00U);
     assert(io_trace.entries[8].operation == BM_BUS_WRITE);
     assert(io_trace.entries[8].port == 0x65U && io_trace.entries[8].value == 0x91U);
     assert(io_trace.entries[9].operation == BM_BUS_WRITE);
-    assert(io_trace.entries[9].port == 0x70U && io_trace.entries[9].value == 0x40U);
-    assert(io_trace.entries[10].operation == BM_BUS_READ);
-    assert(io_trace.entries[10].port == 0x65U && io_trace.entries[10].value == 0x91U);
+    assert(io_trace.entries[9].port == 0x46e8U && io_trace.entries[9].value == 0x16U);
+    assert(io_trace.entries[10].operation == BM_BUS_WRITE);
+    assert(io_trace.entries[10].port == 0x102U && io_trace.entries[10].value == 0x01U);
     assert(io_trace.entries[11].operation == BM_BUS_WRITE);
-    assert(io_trace.entries[11].port == 0x8400U && io_trace.entries[11].value == 0x80U);
+    assert(io_trace.entries[11].port == 0x70U && io_trace.entries[11].value == 0x40U);
     assert(io_trace.entries[12].operation == BM_BUS_READ);
-    assert(io_trace.entries[12].port == 0x100U && io_trace.entries[12].value == 0xffU);
-    assert(io_trace.entries[13].operation == BM_BUS_READ);
-    assert(io_trace.entries[13].port == 0x63U && io_trace.entries[13].value == 0x08U);
+    assert(io_trace.entries[12].port == 0x65U && io_trace.entries[12].value == 0x91U);
+    assert(io_trace.entries[13].operation == BM_BUS_WRITE);
+    assert(io_trace.entries[13].port == 0x8400U && io_trace.entries[13].value == 0x80U);
+    assert(io_trace.entries[14].operation == BM_BUS_READ);
+    assert(io_trace.entries[14].port == 0x100U && io_trace.entries[14].value == 0xffU);
+    assert(io_trace.entries[15].operation == BM_BUS_READ);
+    assert(io_trace.entries[15].port == 0x63U && io_trace.entries[15].value == 0x08U);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
