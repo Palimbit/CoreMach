@@ -18,6 +18,14 @@ inspect(bm_engine_t *engine, const char *name)
     return value;
 }
 
+static uint8_t
+peek(const bm_linear_memory_t *memory, uint64_t address)
+{
+    uint8_t value = 0;
+    assert(bm_linear_memory_peek(memory, address, &value) == BM_STATUS_OK);
+    return value;
+}
+
 int
 main(void)
 {
@@ -56,6 +64,13 @@ main(void)
         0xbf, 0x00, 0x06,       /* MOV DI,0600h */
         0xb9, 0x02, 0x00,       /* MOV CX,2 */
         0xf3, 0xaf,             /* REPE SCASW */
+        0xbe, 0x00, 0x05,       /* MOV SI,0500h */
+        0xbf, 0x10, 0x06,       /* MOV DI,0610h */
+        0xb9, 0x02, 0x00,       /* MOV CX,2 */
+        0xf3, 0xa4,             /* REP MOVSB */
+        0xa1, 0x00, 0x05,       /* MOV AX,[0500h] */
+        0xa0, 0x10, 0x06,       /* MOV AL,[0610h] */
+        0x88, 0x06, 0x12, 0x06, /* MOV [0612h],AL */
         0x81, 0x3e, 0x00, 0x05, 0x55, 0xaa, /* CMP [0500h],AA55h */
         0x75, 0x01,             /* JNE failure */
         0xf4,                   /* success HLT */
@@ -98,15 +113,17 @@ main(void)
     assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
     assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 57) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 64) == BM_STATUS_OK);
     assert(inspect(engine, "halted") == 1);
-    assert(inspect(engine, "ax") == 0xaa85U);
+    assert(inspect(engine, "ax") == 0xaa55U);
     assert(inspect(engine, "dx") == 0xf000U);
     assert(inspect(engine, "cx") == 0U);
-    assert(inspect(engine, "di") == 0x0604U);
+    assert(inspect(engine, "di") == 0x0612U);
     assert(inspect(engine, "sp") == 0x0402U);
-    assert(inspect(engine, "last_fetch") == 0xf0166U);
+    assert(inspect(engine, "last_fetch") == 0xf017bU);
     assert((inspect(engine, "flags") & 0x0040U) != 0); /* ZF from group 81h CMP. */
+    assert(peek(memory, 0x0610U) == 0x55U && peek(memory, 0x0611U) == 0xaaU);
+    assert(peek(memory, 0x0612U) == 0x55U);
 
     bm_engine_destroy(engine);
     bm_linear_memory_destroy(memory);

@@ -97,27 +97,28 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-1,377,877 instructions and 163 successful I/O transactions before reporting
-an unmapped write to VGA graphics-controller index port `3CEh` from
-`F000:6B95`. This covers the
+1,385,830 instructions and 811 successful I/O transactions before reporting
+the next unsupported V30 instruction, `SUB r8,r/m8`, at `F000:85A1`. This covers the
 reset jump, flag/register self-test, the firmware's complete 64 KiB checksum
 loop, its first conventional-memory alias check, a 64 KiB upper-memory
 clear-and-scan pass, the following segment-overridden memory-alias check and
 programming self-tests for the 8237 and its external page latches, the
 MM58167 interrupt-status/control access, the following long conventional-
-memory test, the complete empty option-ROM scan and the observed PCS 86 video-
-selection sequence at `46E8h` and `102h`. The option-ROM region explicitly
+memory test, the complete empty option-ROM scan, the observed PCS 86 video-
+selection sequence at `46E8h` and `102h`, and the first Paradise initialization
+and memory-copy paths. The option-ROM region explicitly
 models an unpopulated bus returning ones: the PCS 86 firmware already contains
 its Paradise initialization and no separate ROM is invented at `C0000h`.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
 effective-address decoding, immediate arithmetic including sign-extended CMP,
-byte and word immediate
-memory moves, byte comparison, TEST, AND
-and NOT, memory forms of general and segment moves, near CALL/RET, register and
-ES/DS and FLAGS stack operations, SHR by CL, segment-overridden loads, all four segment
-overrides and `LODSW`/`REP STOSW`/`REPE SCASW`. Its inspection contract exposes
+byte and word immediate memory moves and loads, byte comparison, TEST, AND and
+NOT, memory forms of general and segment moves, direct and indirect near calls,
+software interrupts and IRET, register plus ES/DS and FLAGS stack operations,
+byte and word shifts, flag-control operations, segment-overridden loads, all four
+segment overrides and byte/word MOVS, STOS, LODS and SCAS operations with
+REP/REPE/REPNE. Its inspection contract exposes
 all general and segment
 registers. Unit tests use new synthetic bytes
 reproducing the relevant instruction paths, not Olivetti firmware.
@@ -131,9 +132,11 @@ but the aperture and backing SIMMs remain deliberately absent.
 
 BIOS writes to `46E8h` and `102h` are retained as write-only video-arbitration
 latches. Their observed ordering and values are testable, but the engine does
-not yet assign undocumented selection side effects to them. The strict bus now
-stops at the first PVGA1A register transaction, `OUT 3CEh,0Fh`; VGA registers,
-VRAM, rendering and a framebuffer contract remain absent.
+not yet assign undocumented selection side effects to them. A new isolated
+PVGA1A component owns the VGA and Paradise register files, DAC state and 256 KiB
+of planar VRAM behind the generic buses. Its input-status phase is deliberately
+deterministic rather than timed. Rendering, scan timing and a framebuffer
+contract remain absent, so this progress does not yet produce visible output.
 
 The PCS 86 now owns a portable 8237 programming core with explicit address,
 count, command, mode, request, mask, status and master-clear state. A separate
@@ -151,6 +154,9 @@ the inherited `src/device/isartc.c`, retaining Fred N. van Kempen's notice.
 Registers `B2h-B7h` and `E0h-EFh`, clock progression, alarms, IRQ generation
 and persistence remain deliberately unmapped until they can be implemented and
 tested as real RTC behaviour.
+
+The 8253 counter-latch command now snapshots a programmed counter for stable
+low/high reads; BCD operation and clock-domain timing remain unavailable.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,

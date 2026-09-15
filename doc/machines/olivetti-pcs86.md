@@ -18,9 +18,11 @@ tests. The portable MM58167 front now supplies the firmware-used interrupt
 status and control registers at `B0h-B1h`; after clearing that state, the BIOS
 completes its long conventional-memory test and scans the unpopulated option-
 ROM area, whose bus explicitly returns ones. The PCS 86 needs no separate VGA
-ROM because its system EPROMs contain the Paradise initialization. After
-1,377,877 instructions and 163 successful I/O accesses, the strict bus reaches
-the first PVGA1A transaction and reports unmapped port `3CEh` at `F000:6B95`.
+ROM because its system EPROMs contain the Paradise initialization. The portable
+machine now owns an isolated PVGA1A register and 256 KiB planar-VRAM core. After
+1,385,830 instructions and 811 successful I/O accesses, the strict interpreter
+passes the first Paradise initialization and memory-copy paths and stops on its
+next unsupported instruction, `SUB r8,r/m8`, at `F000:85A1`.
 The observed write-only video-selection sequence at `46E8h` and `102h` is
 retained without guessed side effects. No placeholder ROM, VGA register or
 video memory is fabricated. The RTC
@@ -30,7 +32,8 @@ transfers. This is measured bring-up progress, not a completed POST or visible
 video. The preceding write of `40h` to port
 `70h` is retained in an opaque PCS 86 latch without assigning guessed PC/AT
 CMOS semantics, while `8400h-8403h` currently retain only EMS page-selector
-writes.
+writes. PVGA1A scan timing, framebuffer generation and frontend presentation
+remain absent, so this is still measured bring-up rather than visible video.
 
 ## Recommended BluMach configuration
 

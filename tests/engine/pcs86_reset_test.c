@@ -247,6 +247,7 @@ main(void)
 
     memset(even, 0, sizeof(even));
     memset(odd, 0, sizeof(odd));
+    even[sizeof(even) - 8U] = 0x2aU; /* Explicit unsupported-opcode sentinel at FFFF0h. */
     config.firmware_even.sha256 = NULL;
     trace.count = 0;
     machine = bm_pcs86_machine_config(&config);
@@ -255,7 +256,7 @@ main(void)
     assert(bm_session_start(session) == BM_STATUS_OK);
     assert(bm_session_run_for(session, 1) == BM_STATUS_UNSUPPORTED);
     assert(inspect(session, "last_fetch") == 0xffff0U);
-    assert(inspect(session, "last_opcode") == 0);
+    assert(inspect(session, "last_opcode") == 0x2aU);
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
     return 0;
