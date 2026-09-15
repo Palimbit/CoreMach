@@ -30,6 +30,12 @@ void bm_pit8253_destroy(bm_pit8253_t *pit);
 void bm_pit8253_reset(bm_pit8253_t *pit);
 bm_status_t bm_pit8253_set_gate(bm_pit8253_t *pit, unsigned int channel, int asserted);
 bm_status_t bm_pit8253_advance(bm_pit8253_t *pit, uint32_t input_ticks);
+bm_status_t bm_pit8253_count(const bm_pit8253_t *pit,
+                             unsigned int channel,
+                             uint16_t *count);
+bm_status_t bm_pit8253_output(const bm_pit8253_t *pit,
+                              unsigned int channel,
+                              int *output);
 
 #ifdef __cplusplus
 }

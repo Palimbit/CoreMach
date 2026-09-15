@@ -65,12 +65,11 @@ at `F0000h-FFFFFh`. The machine validates the known firmware hashes when a
 frontend supplies them, but test firmware may omit a hash so repository tests
 can use newly authored synthetic bytes.
 
-This is not yet a BIOS-capable CPU. The explicit-state interpreter implements
-only the reset-vector path and a small, documented instruction subset needed to
-prove segmented fetch, a far jump, register/segment setup, a RAM write and
-halt. Any other opcode returns `BM_STATUS_UNSUPPORTED`; it is never silently
-treated as a no-op. One scheduler tick currently represents one completed
-instruction, so cycle and bus timing remain deliberately outside this cut.
+The explicit-state interpreter remains an incomplete V30 implementation. Any
+unknown opcode returns `BM_STATUS_UNSUPPORTED`; it is never silently treated as
+a no-op. One scheduler tick currently represents one completed instruction, so
+cycle and bus timing remain deliberately outside this stage even though the
+implemented subset can execute a substantial original-BIOS path.
 
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
@@ -92,11 +91,11 @@ board registers. That cut validated composition and traceability only; DMA,
 RTC, keyboard queues, interrupt entry and much of the instruction set were
 still absent at that boundary.
 
-### PCS86-2A BIOS execution and interrupt status
+### PCS86-2A earlier BIOS execution milestone
 
-The original BIOS is now a local-only diagnostic input to a manual probe; it
-is never part of CTest or a build artifact. With the two recorded revision 1.09
-EPROM hashes verified outside the executable, the portable engine executes
+The original BIOS is a local-only diagnostic input to a manual probe; it is
+never part of CTest or a build artifact. Before the later timekeeping and video
+work, the two recorded revision 1.09 EPROM hashes verified that the engine could execute
 6,341,893 instructions and 2,851 successful I/O transactions before stopping
 strictly on the first unmapped RTC counter register, port `E8h`, read at
 `F000:F4B0`. This covers the
@@ -147,11 +146,12 @@ programmed character, attribute, font, palette and CRTC state; it does not use a
 built-in font or a synthetic diagnostic screen.
 
 At the current stop point it produces a deterministic 720x400 frame (CRC32
-`25A36A35`) containing the PCS-86 Resident Diagnostics 1.09 screen. CPU, ROM,
-DMA and interrupt-controller checks are visible as passing, 640 kB of base
-memory is reported, and the timer test is visibly failing. This is bring-up
-evidence, not a claim that POST completes. Cursor, blink phase, graphics modes
-and scan timing are still outside this cut.
+`680D0FA8`) containing the PCS-86 Resident Diagnostics 1.09 screen. CPU, ROM,
+DMA, interrupt-controller, Timer 0 and Clock/Calendar checks are visible as
+passing, and 640 kB of base memory is reported. Execution continues beyond the
+diagnostics until the first unimplemented parallel-port status read at `37Ah`.
+This is bring-up evidence, not a claim that POST completes. Cursor, blink phase,
+graphics modes and scan timing are still outside this cut.
 
 The PCS 86 now owns a portable 8237 programming core with explicit address,
 count, command, mode, request, mask, status and master-clear state. A separate
@@ -162,21 +162,27 @@ documented four-bit page value; an 8237 master clear cannot erase these
 external latches. Neither component claims arbitration, bus ownership or byte
 transfers.
 
-The first MM58167 cut maps only the firmware-used interrupt front. Reading
-`B0h` returns and clears the pending status; writing `B1h` clears that status
-and stores the interrupt-control byte. This behaviour is a selective port of
-the inherited `src/device/isartc.c`, retaining Fred N. van Kempen's notice.
-Registers `B2h-B7h` and `E0h-EFh`, clock progression, alarms, IRQ generation
-and persistence remain deliberately unmapped until they can be implemented and
-tested as real RTC behaviour. Port `E8h` is now the observed execution boundary.
+The MM58167 maps the PCS 86 control window at `B0h-B7h` and its counter/alarm
+RAM at `E0h-EFh`. It advances a deterministic BCD millisecond calendar, matches
+alarms, raises enabled interrupt sources and saves or restores its caller-owned
+32-byte state. Counter and RAM reset commands, GO, standby and the PCS 86
+checksum repair path are covered by focused tests. This is a selective port of
+the inherited `src/device/isartc.c`, retaining Fred N. van Kempen's notice. A
+yearless calendar and instruction-domain scheduling are explicit fidelity
+limits; this is not a crystal- or battery-level simulation.
 
-The 8253 counter-latch command now snapshots a programmed counter for stable
-low/high reads; BCD operation and clock-domain timing remain unavailable.
+The 8253 is a selective port of the measured edge-state core, retaining Daniel
+Balsom and Clara's attribution. It covers modes 0-5, binary and BCD counts,
+gates, stable latches and output edges. Rational accumulators drive the PIT and
+RTC from scheduler time without floating point. Until CPU cycle accounting is
+part of the engine contract, the PCS 86 uses a measured functional instruction
+rate for those domains and does not claim cycle accuracy.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
 and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
-real-mode vector table. Neither component owns the other. DMA transfers, the
-remaining RTC and complete V30 coverage remain subsequent cuts; POST has not
-completed, although its current diagnostic screen can now be rendered and
-captured without Qt.
+real-mode vector table. A withdrawn edge request no longer survives as its
+original IRQ before the first interrupt acknowledgement. Neither component
+owns the other. DMA transfers, parallel I/O, keyboard delivery, storage and
+complete V30 coverage remain subsequent cuts; POST has not completed, although
+its current diagnostic screen can be rendered and captured without Qt.

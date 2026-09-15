@@ -90,6 +90,15 @@ target_link_libraries(portable-engine-808x-compare
         blumach_platform_null
 )
 
+add_executable(portable-engine-808x-shifts cpu_808x_shift_test.c)
+target_link_libraries(portable-engine-808x-shifts
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
 # Manual, ROM-free diagnostic utility. It is intentionally not a CTest because
 # firmware remains a local-only input and must never be present in CI artifacts.
 add_executable(portable-engine-pcs86-firmware-probe pcs86_firmware_probe.c)
@@ -97,7 +106,7 @@ target_link_libraries(portable-engine-pcs86-firmware-probe
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform portable-engine-dma8237 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare)
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform portable-engine-dma8237 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -126,6 +135,7 @@ add_test(NAME portable-engine.808x-post-self-test COMMAND portable-engine-808x-p
 add_test(NAME portable-engine.808x-rom-checksum COMMAND portable-engine-808x-checksum)
 add_test(NAME portable-engine.808x-segment-overrides COMMAND portable-engine-808x-segments)
 add_test(NAME portable-engine.808x-byte-compare COMMAND portable-engine-808x-compare)
+add_test(NAME portable-engine.808x-rotate-shift-groups COMMAND portable-engine-808x-shifts)
 set_tests_properties(
     portable-engine.linear-memory
     portable-engine.pcs86-reset-vector
@@ -138,5 +148,6 @@ set_tests_properties(
     portable-engine.808x-rom-checksum
     portable-engine.808x-segment-overrides
     portable-engine.808x-byte-compare
+    portable-engine.808x-rotate-shift-groups
     PROPERTIES TIMEOUT 10
 )

@@ -71,6 +71,8 @@ bm_session_start(bm_session_t *session)
         status = BM_STATUS_DEVICE_ERROR;
     if (status == BM_STATUS_OK)
         status = bm_engine_reset(session->engine);
+    if ((status == BM_STATUS_OK) && (session->configuration.ops.reset != NULL))
+        status = session->configuration.ops.reset(session->machine);
     if (status != BM_STATUS_OK) {
         bm_engine_destroy(session->engine);
         session->engine = NULL;
@@ -118,11 +120,16 @@ bm_session_resume(bm_session_t *session)
 bm_status_t
 bm_session_reset(bm_session_t *session)
 {
+    bm_status_t status;
+
     if (session == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
     if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
         return BM_STATUS_INVALID_STATE;
-    return bm_engine_reset(session->engine);
+    status = bm_engine_reset(session->engine);
+    if ((status == BM_STATUS_OK) && (session->configuration.ops.reset != NULL))
+        status = session->configuration.ops.reset(session->machine);
+    return status;
 }
 
 bm_status_t
@@ -192,4 +199,18 @@ bm_session_render_video(const bm_session_t *session, bm_video_framebuffer_t *fra
     if ((session->machine == NULL) || (session->configuration.ops.video_render == NULL))
         return BM_STATUS_UNSUPPORTED;
     return session->configuration.ops.video_render(session->machine, framebuffer);
+}
+
+bm_status_t
+bm_session_inspect_machine(const bm_session_t *session,
+                           const char *name,
+                           uint64_t *value)
+{
+    if ((session == NULL) || (name == NULL) || (value == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) || (session->configuration.ops.inspect == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.ops.inspect(session->machine, name, value);
 }

@@ -42,18 +42,56 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic and logical operations including byte/word multiply and unsigned word divide with interrupt-zero faults, conditional flow, ModR/M memory operands, explicit ES/CS/SS/DS overrides and stack operations, NEC V30 TEST1/CLR1/SET1/NOT1 bit operations, direct and indirect near calls, software and callback-based real-mode interrupts, shifts, flag-control operations, byte and word string operations with REP/REPE/REPNE, ROM-checksum and memory-check paths and full basic-register inspection to the still-incomplete V30 subset"
+      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic and logical operations including byte/word multiply and unsigned word divide with interrupt-zero faults, conditional flow, ModR/M memory operands, explicit ES/CS/SS/DS overrides and stack operations, NEC V30 TEST1/CLR1/SET1/NOT1 bit operations, direct and indirect near calls, software and callback-based real-mode interrupts, complete D0-D3 rotate/shift groups, TEST r/m8,r8 and r/m16,r16, XCHG AX,r16, flag-control operations, byte and word string operations with REP/REPE/REPNE, ROM-checksum and memory-check paths and full basic-register inspection to the still-incomplete V30 subset"
     },
     {
       "id": "portable-pc-platform-components",
-      "destination": ["components/pc/**"],
+      "destination": [
+        "components/pc/CMakeLists.txt",
+        "components/pc/include/blumach/components/dma_page_registers.h",
+        "components/pc/include/blumach/components/dma8237.h",
+        "components/pc/include/blumach/components/pic8259.h",
+        "components/pc/src/dma_page_registers.c",
+        "components/pc/src/dma8237.c",
+        "components/pc/src/pic8259.c"
+      ],
       "origin_repository": "https://github.com/BluMach/BluMach",
-      "origin_commit": "08893f4fd0392ea6e95e9abbe108f0d8f1fbbe1c",
-      "origin_paths": ["src/dma.c", "src/pic.c", "src/pit.c", "src/device/isartc.c", "src/include/86box/dma.h", "src/include/86box/pic.h", "src/include/86box/pit.h"],
+      "origin_commit": "fbedd9ba7d4bad5e506fe45367b63ffcd2af864e",
+      "origin_paths": ["src/dma.c", "src/pic.c", "src/include/86box/dma.h", "src/include/86box/pic.h"],
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
-      "copyright_holders": ["Sarah Walker", "Andrew Jenner", "Miran Grca", "Fred N. van Kempen", "BluMach contributors"],
-      "local_changes": "Replaced global devices, host timers and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core, its external XT page latches with explicit channel mapping and effective addresses, a single 8259A, a deterministic 8253 with counter latching, and the B0h/B1h interrupt-status/control front of the MM58167 RTC; the RTC counter window, clock progression, alarm, IRQ generation and persistence remain absent, as do DMA transfer ownership and device data movement"
+      "copyright_holders": ["Sarah Walker", "Andrew Jenner", "Miran Grca", "BluMach contributors"],
+      "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core, external XT page latches with explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement. DMA transfer ownership and device data movement remain absent"
+    },
+    {
+      "id": "portable-intel-8253",
+      "destination": [
+        "components/pc/include/blumach/components/pit8253.h",
+        "components/pc/src/pit8253.c",
+        "components/pc/src/pit8253_exact.c",
+        "components/pc/src/pit8253_exact.h"
+      ],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "fbedd9ba7d4bad5e506fe45367b63ffcd2af864e",
+      "origin_paths": ["src/pit.c", "src/pit_exact.c", "src/include/86box/pit.h", "src/include/86box/pit_exact.h"],
+      "method": "selective-port",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Miran Grca", "Daniel Balsom", "Clara", "BluMach contributors"],
+      "local_changes": "Ported the measured 8253 edge-state core behind an opaque bus component, removing legacy globals, host timers and platform callbacks while retaining modes 0-5, BCD, gates, latches and output transitions"
+    },
+    {
+      "id": "portable-mm58167",
+      "destination": [
+        "components/pc/include/blumach/components/rtc_mm58167.h",
+        "components/pc/src/rtc_mm58167.c"
+      ],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "fbedd9ba7d4bad5e506fe45367b63ffcd2af864e",
+      "origin_paths": ["src/device/isartc.c"],
+      "method": "selective-port",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Fred N. van Kempen", "BluMach contributors"],
+      "local_changes": "Ported the PCS 86 B0h-B7h control window and E0h-EFh counter/alarm RAM to an opaque, deterministic component with BCD calendar progression, IRQ generation, checksum repair and caller-owned persistence"
     },
     {
       "id": "paradise-pvga1a-portable-video-core",
@@ -72,7 +110,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Opaque session lifecycle, typed machine factory and optional host-neutral framebuffer discovery/rendering operations"
+      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, and optional host-neutral framebuffer discovery/rendering operations"
     },
     {
       "id": "null-host-platform",
@@ -99,7 +137,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, 8237 programming core and four-bit XT page registers, single PIC, PIT, MM58167 interrupt-status/control front, PVGA1A core and minimum motherboard register map behind a typed machine factory; added explicit PIC-to-CPU interrupt routing, early BIOS diagnostic latches, an opaque port-70h memory-control latch, selector-only EMS register boundary, explicit open-bus behaviour for the unpopulated option-ROM space, observed write-only video-arbitration latches at 102h/46E8h and optional runtime framebuffer publication, while DMA transfers, the EMS aperture, keyboard queues and the remainder of the RTC remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, 8237 programming core and four-bit XT page registers, single PIC, scheduler-driven PIT and MM58167, PVGA1A core and minimum motherboard register map behind a typed machine factory; added explicit reset, diagnostic inspection, PIC-to-CPU interrupt routing, rational instruction-domain clock accumulation, early BIOS diagnostic latches, an opaque port-70h memory-control latch, selector-only EMS register boundary, explicit open-bus behaviour for the unpopulated option-ROM space, observed write-only video-arbitration latches at 102h/46E8h and optional runtime framebuffer publication, while DMA transfers, the EMS aperture, keyboard queues and cycle-accurate timing remain absent"
     }
   ],
   "external_dependencies": []

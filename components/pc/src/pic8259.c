@@ -186,6 +186,13 @@ bm_pic8259_set_irq(bm_pic8259_t *pic, unsigned int line, int asserted)
         pic->lines |= mask;
     } else {
         pic->lines &= (uint8_t) ~mask;
+        /* In edge-triggered mode the source must hold IR high until the first
+         * interrupt-acknowledge pulse.  If it drops first, the request input
+         * latch is cleared instead of delivering the original IRQ.  This is
+         * also the behaviour required when a PIT control word withdraws an
+         * old OUT pulse before the BIOS unmasks IRQ0. */
+        if ((pic->isr & mask) == 0U)
+            pic->irr &= (uint8_t) ~mask;
     }
     update_output(pic);
     return BM_STATUS_OK;
@@ -213,5 +220,17 @@ bm_pic8259_acknowledge(bm_pic8259_t *pic, uint8_t *vector)
         pic->isr |= (uint8_t) (1U << line);
     *vector = (uint8_t) (pic->vector_base + line);
     update_output(pic);
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_pic8259_state(const bm_pic8259_t *pic, bm_pic8259_state_t *state)
+{
+    if ((pic == NULL) || (state == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    state->interrupt_mask = pic->imr;
+    state->interrupt_requests = pic->irr;
+    state->in_service = pic->isr;
+    state->input_lines = pic->lines;
     return BM_STATUS_OK;
 }

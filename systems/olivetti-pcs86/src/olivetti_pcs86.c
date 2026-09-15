@@ -46,9 +46,19 @@ typedef struct bm_pcs86_machine {
     uint8_t video_setup_latch;
     uint8_t video_select_latch;
     uint8_t ems_page_selector[4];
+    bm_tick_t last_clock_time;
+    uint64_t pit_clock_remainder;
+    uint64_t rtc_clock_remainder;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
 } bm_pcs86_machine_t;
+
+/* The current interpreter reports retired instructions, not V30 clock cycles.
+ * Use the measured functional scheduler rate until cycle accounting becomes
+ * part of the CPU contract; this is not a claim of cycle accuracy. */
+#define PCS86_SCHEDULER_TICKS_PER_SECOND UINT64_C(2000000)
+#define PCS86_PIT_TICKS_PER_SECOND UINT64_C(1193182)
+#define PCS86_CLOCK_QUANTUM UINT64_C(64)
 
 static bm_status_t
 pcs86_unpopulated_option_rom_access(void *context, bm_bus_transaction_t *transaction)
@@ -344,6 +354,33 @@ pcs86_destroy(void *context)
     machine->host.release(machine->host.context, machine);
 }
 
+static void
+pcs86_clock_event(bm_engine_t *engine, void *context)
+{
+    bm_pcs86_machine_t *machine = context;
+    bm_tick_t now = bm_engine_now(engine);
+    bm_tick_t elapsed = now - machine->last_clock_time;
+    uint64_t pit_ticks;
+    uint64_t rtc_microseconds;
+
+    machine->last_clock_time = now;
+    machine->pit_clock_remainder += elapsed * PCS86_PIT_TICKS_PER_SECOND;
+    pit_ticks = machine->pit_clock_remainder / PCS86_SCHEDULER_TICKS_PER_SECOND;
+    machine->pit_clock_remainder %= PCS86_SCHEDULER_TICKS_PER_SECOND;
+    if (pit_ticks != 0U)
+        (void) bm_pit8253_advance(machine->pit, (uint32_t) pit_ticks);
+
+    machine->rtc_clock_remainder += elapsed * UINT64_C(1000000);
+    rtc_microseconds = machine->rtc_clock_remainder / PCS86_SCHEDULER_TICKS_PER_SECOND;
+    machine->rtc_clock_remainder %= PCS86_SCHEDULER_TICKS_PER_SECOND;
+    if (rtc_microseconds != 0U)
+        (void) bm_mm58167_advance_microseconds(machine->rtc, rtc_microseconds);
+
+    if (now <= UINT64_MAX - PCS86_CLOCK_QUANTUM)
+        (void) bm_engine_schedule_at(engine, now + PCS86_CLOCK_QUANTUM,
+                                     pcs86_clock_event, machine);
+}
+
 static bm_status_t
 pcs86_video_geometry(const void *context, bm_video_geometry_t *geometry)
 {
@@ -393,7 +430,7 @@ pcs86_create(bm_engine_t *engine,
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 18, &machine->bus);
+    status = bm_bus_create(host, 19, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -447,7 +484,9 @@ pcs86_create(bm_engine_t *engine,
         status = bm_pit8253_create(host, machine->bus, &pit_config, &machine->pit);
     }
     if (status == BM_STATUS_OK) {
-        bm_mm58167_config_t rtc_config = { 0x00b0U };
+        bm_mm58167_config_t rtc_config = {
+            0x00b0U, 0x00e0U, NULL, NULL, NULL, 0U
+        };
         status = bm_mm58167_create(host, machine->bus, &rtc_config, &machine->rtc);
     }
     if (status == BM_STATUS_OK) {
@@ -504,6 +543,79 @@ pcs86_create(bm_engine_t *engine,
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+pcs86_reset(void *context)
+{
+    bm_pcs86_machine_t *machine = context;
+    bm_tick_t now;
+    if (machine == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+
+    bm_dma8237_reset(machine->dma);
+    bm_dma_page_registers_reset(machine->dma_pages);
+    bm_pic8259_reset(machine->pic);
+    bm_pit8253_reset(machine->pit);
+    bm_mm58167_reset(machine->rtc);
+    bm_pvga1a_reset(machine->video);
+    machine->port61 = 0U;
+    machine->control = 0x80U;
+    machine->memory_blocks = 0U;
+    memset(machine->glue, 0, sizeof(machine->glue));
+    memset(machine->ps2, 0, sizeof(machine->ps2));
+    machine->ps2[0] = 0x04U;
+    machine->nmi_mask = 0U;
+    machine->diagnostic_port = 0U;
+    machine->memory_control_latch = 0U;
+    machine->video_setup_latch = 0U;
+    machine->video_select_latch = 0U;
+    memset(machine->ems_page_selector, 0, sizeof(machine->ems_page_selector));
+    machine->pit_clock_remainder = 0U;
+    machine->rtc_clock_remainder = 0U;
+    now = bm_engine_now(machine->engine);
+    machine->last_clock_time = now;
+    return bm_engine_schedule_at(machine->engine, now + PCS86_CLOCK_QUANTUM,
+                                 pcs86_clock_event, machine);
+}
+
+static bm_status_t
+pcs86_inspect(const void *context, const char *name, uint64_t *value)
+{
+    const bm_pcs86_machine_t *machine = context;
+    uint16_t count;
+    int output;
+    if ((machine == NULL) || (name == NULL) || (value == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (strcmp(name, "pit0_count") == 0) {
+        if (bm_pit8253_count(machine->pit, 0U, &count) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = count;
+    } else if (strcmp(name, "pit0_output") == 0) {
+        if (bm_pit8253_output(machine->pit, 0U, &output) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = (uint64_t) output;
+    } else if (strcmp(name, "pic_pending") == 0) {
+        *value = (uint64_t) bm_pic8259_pending(machine->pic);
+    } else if ((strcmp(name, "pic_mask") == 0) ||
+               (strcmp(name, "pic_requests") == 0) ||
+               (strcmp(name, "pic_in_service") == 0) ||
+               (strcmp(name, "pic_lines") == 0)) {
+        bm_pic8259_state_t state;
+        if (bm_pic8259_state(machine->pic, &state) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        if (strcmp(name, "pic_mask") == 0)
+            *value = state.interrupt_mask;
+        else if (strcmp(name, "pic_requests") == 0)
+            *value = state.interrupt_requests;
+        else if (strcmp(name, "pic_in_service") == 0)
+            *value = state.in_service;
+        else
+            *value = state.input_lines;
+    } else {
+        return BM_STATUS_INVALID_ARGUMENT;
+    }
+    return BM_STATUS_OK;
+}
+
 const bm_pcs86_firmware_identity_t *
 bm_pcs86_expected_firmware(size_t *count)
 {
@@ -523,7 +635,9 @@ bm_pcs86_machine_config(const bm_pcs86_config_t *configuration)
             pcs86_create,
             pcs86_destroy,
             pcs86_video_geometry,
-            pcs86_video_render
+            pcs86_video_render,
+            pcs86_reset,
+            pcs86_inspect
         },
         { 1, 10 }
     };

@@ -8,32 +8,25 @@ See also the [Olivetti PCS family overview](olivetti-pcs-family.md) and the
 [portable-engine implementation narrative](olivetti-pcs86-implementation.md).
 
 The inherited product remains the only usable implementation. The parallel
-portable engine now executes the original BIOS reset, CPU-register self-test
-and complete 64 KiB ROM checksum, and passes its first conventional-memory
-alias check. It also enters the firmware's upper-memory setup, clears and scans
-the selected 64 KiB window, validates segment-overridden memory aliases and
-returns to early board setup. It now programs and reads back the portable
-8237 register core and its separate XT page latches during the firmware's DMA
-tests. The portable MM58167 front now supplies the firmware-used interrupt
-status and control registers at `B0h-B1h`; after clearing that state, the BIOS
-completes its long conventional-memory test and scans the unpopulated option-
-ROM area, whose bus explicitly returns ones. The PCS 86 needs no separate VGA
-ROM because its system EPROMs contain the Paradise initialization. The portable
-machine now owns an isolated PVGA1A register and 256 KiB planar-VRAM core. After
-1,385,830 instructions and 811 successful I/O accesses, the strict interpreter
-passes the first Paradise initialization and memory-copy paths and stops on its
-next unsupported instruction, `SUB r8,r/m8`, at `F000:85A1`.
+portable engine now executes enough of the original revision 1.09 BIOS to show
+its Resident Diagnostics screen and visibly pass CPU, ROM, DMA, interrupt-
+controller, Timer 0 and Clock/Calendar checks while reporting 640 kB. It owns
+portable 8237/page-latch, 8259A, exact-state 8253, functional MM58167 and PVGA1A
+text-rendering components. The PCS 86 needs no separate VGA ROM because its
+system EPROMs contain the Paradise initialization. After 6,256,860 retired
+instructions and 2,960 successful I/O accesses, the strict interpreter reaches
+the first unimplemented parallel-port status read at `37Ah`. The captured
+720x400 text framebuffer has CRC32 `680D0FA8`.
 The observed write-only video-selection sequence at `46E8h` and `102h` is
 retained without guessed side effects. No placeholder ROM, VGA register or
-video memory is fabricated. The RTC
-counter/calendar window, clock progression, alarms, interrupt generation and
-persistence remain absent. The DMA controller does not yet arbitrate or perform
-transfers. This is measured bring-up progress, not a completed POST or visible
-video. The preceding write of `40h` to port
+video memory is fabricated. The MM58167 counter/calendar window, alarms, IRQs
+and caller-owned persistence are implemented and tested; its yearless calendar
+and scheduler rate remain explicit approximations. The DMA controller does not
+yet arbitrate or perform transfers. This is measured bring-up progress, not a
+completed POST or usable machine. The preceding write of `40h` to port
 `70h` is retained in an opaque PCS 86 latch without assigning guessed PC/AT
 CMOS semantics, while `8400h-8403h` currently retain only EMS page-selector
-writes. PVGA1A scan timing, framebuffer generation and frontend presentation
-remain absent, so this is still measured bring-up rather than visible video.
+writes. PVGA1A graphics modes, cursor/blink and scan timing remain absent.
 
 ## Recommended BluMach configuration
 

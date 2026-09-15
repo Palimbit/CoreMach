@@ -12,6 +12,19 @@ typedef struct probe_trace {
     bm_808x_trace_t last;
     uint64_t instructions;
     uint64_t io_operations;
+    uint32_t diagnostic_paths;
+    bm_session_t *session;
+    uint16_t timer0_failure_cx;
+    uint64_t timer_irq_handler_instruction;
+    uint64_t timer0_program_instruction;
+    uint64_t timer0_irq_instruction;
+    uint16_t timer0_failure_count;
+    uint8_t timer0_failure_output;
+    uint8_t timer0_failure_pic_pending;
+    uint8_t timer0_failure_pic_mask;
+    uint8_t timer0_failure_pic_requests;
+    uint8_t timer0_failure_pic_in_service;
+    uint8_t timer0_failure_pic_lines;
 } probe_trace_t;
 
 static void
@@ -20,6 +33,44 @@ capture_instruction(void *context, const bm_808x_trace_t *trace)
     probe_trace_t *probe = context;
     probe->last = *trace;
     ++probe->instructions;
+    if ((trace->physical_address == 0xff100U) &&
+        (probe->timer_irq_handler_instruction == 0U))
+        probe->timer_irq_handler_instruction = probe->instructions;
+    if (trace->physical_address == 0xf03e0U)
+        probe->timer0_program_instruction = probe->instructions;
+    if ((trace->physical_address == 0xff100U) &&
+        (probe->timer0_program_instruction != 0U) &&
+        (probe->timer0_irq_instruction == 0U))
+        probe->timer0_irq_instruction = probe->instructions;
+    if (trace->physical_address == 0xf03f0U) {
+        uint64_t cx = 0U;
+        probe->diagnostic_paths |= 0x01U; /* Timer 0 timeout/range failure. */
+        if ((probe->session != NULL) &&
+            (bm_session_inspect_cpu(probe->session, 0, "cx", &cx) == BM_STATUS_OK))
+            probe->timer0_failure_cx = (uint16_t) cx;
+        if (probe->session != NULL) {
+            uint64_t value = 0U;
+            if (bm_session_inspect_machine(probe->session, "pit0_count", &value) == BM_STATUS_OK)
+                probe->timer0_failure_count = (uint16_t) value;
+            if (bm_session_inspect_machine(probe->session, "pit0_output", &value) == BM_STATUS_OK)
+                probe->timer0_failure_output = (uint8_t) value;
+            if (bm_session_inspect_machine(probe->session, "pic_pending", &value) == BM_STATUS_OK)
+                probe->timer0_failure_pic_pending = (uint8_t) value;
+            if (bm_session_inspect_machine(probe->session, "pic_mask", &value) == BM_STATUS_OK)
+                probe->timer0_failure_pic_mask = (uint8_t) value;
+            if (bm_session_inspect_machine(probe->session, "pic_requests", &value) == BM_STATUS_OK)
+                probe->timer0_failure_pic_requests = (uint8_t) value;
+            if (bm_session_inspect_machine(probe->session, "pic_in_service", &value) == BM_STATUS_OK)
+                probe->timer0_failure_pic_in_service = (uint8_t) value;
+            if (bm_session_inspect_machine(probe->session, "pic_lines", &value) == BM_STATUS_OK)
+                probe->timer0_failure_pic_lines = (uint8_t) value;
+        }
+    } else if (trace->physical_address == 0xf043bU)
+        probe->diagnostic_paths |= 0x02U; /* PIT channel 1 readback failure. */
+    else if (trace->physical_address == 0xf047bU)
+        probe->diagnostic_paths |= 0x04U; /* PIT channel 2 readback failure. */
+    else if (trace->physical_address == 0xf048cU)
+        probe->diagnostic_paths |= 0x08U; /* PIT diagnostic success path. */
 }
 
 static void
@@ -119,7 +170,7 @@ main(int argc, char **argv)
     bm_pcs86_config_t config;
     bm_machine_config_t machine;
     bm_session_t *session = NULL;
-    probe_trace_t probe = { { 0, 0, 0, 0 }, 0, 0 };
+    probe_trace_t probe = { 0 };
     uint8_t *even;
     uint8_t *odd;
     bm_status_t status;
@@ -131,10 +182,20 @@ main(int argc, char **argv)
     size_t pixel_count = 0;
     size_t nonblack = 0;
     uint32_t frame_crc = 0;
+    uint64_t run_ticks = UINT64_C(10000000);
 
-    if ((argc != 3) && (argc != 4)) {
-        fprintf(stderr, "usage: %s <even-rom> <odd-rom> [frame.ppm]\n", argv[0]);
+    if ((argc < 3) || (argc > 5)) {
+        fprintf(stderr, "usage: %s <even-rom> <odd-rom> [frame.ppm [ticks]]\n", argv[0]);
         return 2;
+    }
+    if (argc == 5) {
+        char *end = NULL;
+        unsigned long long parsed = strtoull(argv[4], &end, 10);
+        if ((argv[4][0] == '\0') || (end == NULL) || (*end != '\0') || (parsed == 0U)) {
+            fputs("ticks must be a positive decimal integer\n", stderr);
+            return 2;
+        }
+        run_ticks = (uint64_t) parsed;
     }
     even = read_firmware(argv[1]);
     odd = read_firmware(argv[2]);
@@ -155,8 +216,9 @@ main(int argc, char **argv)
         status = bm_session_configure(session, &machine);
     if (status == BM_STATUS_OK)
         status = bm_session_start(session);
+    probe.session = session;
     if (status == BM_STATUS_OK)
-        status = bm_session_run_for(session, 10000000U);
+        status = bm_session_run_for(session, run_ticks);
 
     if (session != NULL) {
         (void) bm_session_inspect_cpu(session, 0, "ax", &ax);
@@ -179,7 +241,7 @@ main(int argc, char **argv)
                             ++nonblack;
                     }
                     frame_crc = crc32_pixels(pixels, pixel_count);
-                    if ((argc == 4) && !write_ppm(argv[3], &framebuffer)) {
+                    if ((argc >= 4) && !write_ppm(argv[3], &framebuffer)) {
                         fputs("could not write framebuffer capture\n", stderr);
                         video_status = BM_STATUS_DEVICE_ERROR;
                     }
@@ -194,10 +256,22 @@ main(int argc, char **argv)
            (int) status, probe.instructions, probe.io_operations,
            probe.last.cs, probe.last.ip, probe.last.physical_address, probe.last.opcode,
            ax, dx);
+    printf("diagnostic_paths=%02" PRIx32 " timer0_failure_cx=%04x"
+           " timer_program_at=%" PRIu64 " timer_irq_at=%" PRIu64
+           " timer0_irq_at=%" PRIu64 "\n",
+           probe.diagnostic_paths, probe.timer0_failure_cx,
+           probe.timer0_program_instruction,
+           probe.timer_irq_handler_instruction, probe.timer0_irq_instruction);
+    printf("timer0_failure_count=%04x output=%u pic_pending=%u"
+           " mask=%02x requests=%02x in_service=%02x lines=%02x\n",
+           probe.timer0_failure_count, probe.timer0_failure_output,
+           probe.timer0_failure_pic_pending, probe.timer0_failure_pic_mask,
+           probe.timer0_failure_pic_requests, probe.timer0_failure_pic_in_service,
+           probe.timer0_failure_pic_lines);
     printf("video_status=%d width=%" PRIu32 " height=%" PRIu32
            " nonblack=%zu crc32=%08" PRIx32 " capture=%s\n",
            (int) video_status, geometry.width, geometry.height,
-           nonblack, frame_crc, (argc == 4 && video_status == BM_STATUS_OK) ? argv[3] : "");
+           nonblack, frame_crc, (argc >= 4 && video_status == BM_STATUS_OK) ? argv[3] : "");
 
     bm_session_destroy(session);
     free(pixels);
