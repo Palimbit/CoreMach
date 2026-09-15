@@ -11,7 +11,8 @@ explicit NEC V30 state object, a generic address bus, 640 KiB of RAM, the
 documented 64 KiB system-ROM window, a single 8259A, an 8253 subset and the
 minimum known motherboard-register map. It is a bring-up milestone, not a
 usable emulator: the BIOS completes its initial CPU/register checks and ROM
-checksum, then stops visibly on unsupported opcode `81h` at `F000:009F`.
+checksum, passes its first conventional-memory alias check and then stops
+visibly at `F000:0B29` on an unmapped `OUT 70h,AL` with `AL=40h`.
 
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
 interleaving, ROM address and known firmware hashes come from the canonical
@@ -38,7 +39,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, ModR/M effective addresses, arithmetic flags, branches, checksum loop, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, ModR/M effective addresses, arithmetic flags, branches, checksum and initial memory-check operations, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Approximate | One instruction per tick; 10 MHz is identity metadata until clock-domain timing lands |
@@ -90,9 +91,13 @@ instruction tick once the scheduler has explicit clock domains. DMA, RTC, the
 remaining board behaviours and sufficient V30 coverage are the exit criteria
 for meaningful comparison against original-firmware POST traces.
 
-The next measured CPU boundary is the `81h` immediate arithmetic group used by
-the BIOS memory check at `F000:009F`. DMA and RTC should follow only as the
-executed firmware path reaches them.
+The next measured boundary is the write of `40h` to I/O port `70h` at
+`F000:0B29`. No verified PCS 86 meaning for that port is currently recorded, so
+the engine reports `BM_STATUS_UNMAPPED` rather than ignoring the write or
+assuming the PC/AT CMOS/NMI convention. The board operation must be identified
+from stronger documentation, hardware observation or a trace from the reference
+engine before it is implemented. DMA and RTC should follow only as the executed
+firmware path reaches them.
 
 The main implementation files are `components/cpu/808x/src/cpu_808x.c`,
 `components/memory/src/linear_memory.c`, `components/pc/src/pic8259.c`,

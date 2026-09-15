@@ -223,6 +223,26 @@ read_operand_byte(bm_808x_state_t *state, const bm_808x_operand_t *operand, uint
 }
 
 static bm_status_t
+read_operand_word(bm_808x_state_t *state, const bm_808x_operand_t *operand, uint16_t *value)
+{
+    if (operand->is_register) {
+        *value = state->registers[operand->register_index];
+        return BM_STATUS_OK;
+    }
+    return read_word(state, operand->segment, operand->offset, value);
+}
+
+static bm_status_t
+write_operand_word(bm_808x_state_t *state, const bm_808x_operand_t *operand, uint16_t value)
+{
+    if (operand->is_register) {
+        state->registers[operand->register_index] = value;
+        return BM_STATUS_OK;
+    }
+    return write_word(state, operand->segment, operand->offset, value);
+}
+
+static bm_status_t
 service_interrupt(bm_808x_state_t *state)
 {
     uint8_t vector;
@@ -493,11 +513,25 @@ execute_one(bm_808x_state_t *state)
         case 0x90: /* NOP */
             return BM_STATUS_OK;
         case 0x05: { /* ADD AX,imm16 */
-            uint16_t immediate;
+            uint16_t immediate = 0;
             status = fetch_word(state, &immediate);
             if (status == BM_STATUS_OK)
                 state->registers[REG_AX] = add16(state, state->registers[REG_AX], immediate);
             return status;
+        }
+        case 0x0c: /* OR AL,imm8 */
+        case 0x24: { /* AND AL,imm8 */
+            uint8_t immediate;
+            uint8_t result;
+            status = fetch_byte(state, &immediate);
+            if (status != BM_STATUS_OK)
+                return status;
+            result = (opcode == 0x0cU) ?
+                (uint8_t) (get_register_byte(state, 0) | immediate) :
+                (uint8_t) (get_register_byte(state, 0) & immediate);
+            set_register_byte(state, 0, result);
+            set_logic_flags(state, result, 8);
+            return BM_STATUS_OK;
         }
         case 0x02: /* ADD r8,r/m8 */
         case 0x0a: { /* OR r8,r/m8 */
@@ -550,6 +584,24 @@ execute_one(bm_808x_state_t *state)
             }
             return BM_STATUS_OK;
         }
+        case 0x39: /* CMP r/m16,r16 */
+        case 0x89: { /* MOV r/m16,r16 */
+            uint8_t modrm;
+            uint16_t destination = 0;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, &operand);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (opcode == 0x89U)
+                return write_operand_word(state, &operand,
+                                          state->registers[(modrm >> 3U) & 7U]);
+            status = read_operand_word(state, &operand, &destination);
+            if (status == BM_STATUS_OK)
+                compare16(state, destination, state->registers[(modrm >> 3U) & 7U]);
+            return status;
+        }
         case 0x32: { /* XOR r8,r/m8; register form. */
             uint8_t modrm;
             unsigned int destination;
@@ -576,6 +628,42 @@ execute_one(bm_808x_state_t *state)
             set_register_byte(state, (modrm >> 3U) & 7U,
                               get_register_byte(state, modrm & 7U));
             return BM_STATUS_OK;
+        }
+        case 0x86: { /* XCHG r8,r/m8; register form. */
+            uint8_t modrm;
+            unsigned int left;
+            unsigned int right;
+            uint8_t temporary;
+            status = fetch_byte(state, &modrm);
+            if (status != BM_STATUS_OK)
+                return status;
+            if ((modrm & 0xc0U) != 0xc0U)
+                return BM_STATUS_UNSUPPORTED;
+            left = (modrm >> 3U) & 7U;
+            right = modrm & 7U;
+            temporary = get_register_byte(state, left);
+            set_register_byte(state, left, get_register_byte(state, right));
+            set_register_byte(state, right, temporary);
+            return BM_STATUS_OK;
+        }
+        case 0x81: { /* Immediate arithmetic group; CMP r/m16,imm16 subset. */
+            uint8_t modrm;
+            uint16_t immediate = 0;
+            uint16_t left = 0;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (((modrm >> 3U) & 7U) != 7U)
+                return BM_STATUS_UNSUPPORTED;
+            status = decode_rm_operand(state, modrm, &operand);
+            if (status == BM_STATUS_OK)
+                status = fetch_word(state, &immediate);
+            if (status == BM_STATUS_OK)
+                status = read_operand_word(state, &operand, &left);
+            if (status == BM_STATUS_OK)
+                compare16(state, left, immediate);
+            return status;
         }
         case 0xea: { /* JMP ptr16:16 */
             uint16_t offset = 0;

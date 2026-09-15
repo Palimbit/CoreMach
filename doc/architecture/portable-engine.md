@@ -97,16 +97,22 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-196,704 instructions before reporting the next unsupported instruction at
-`F000:009F` (`81h`). This covers the reset jump, flag/register self-test and the
-firmware's complete 64 KiB checksum loop. The previous measured boundary was
-`F000:0001`.
+196,740 instructions before reporting an unmapped I/O write at `F000:0B29`:
+`OUT 70h,AL`, with `AL=40h`. This covers the reset jump, flag/register self-test,
+the firmware's complete 64 KiB checksum loop and its first conventional-memory
+alias check. The previous measured boundary was unsupported opcode group `81h`
+at `F000:009F`.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
 effective-address decoding, the checksum loop and near return. Unit tests use
 new synthetic bytes reproducing the relevant instruction paths, not Olivetti
 firmware.
+
+Port `70h` has no verified PCS 86 semantics in the evidence currently available.
+The machine therefore reports it as unmapped instead of silently accepting the
+write or borrowing the unrelated PC/AT CMOS convention. Resolving that board
+operation is the next evidence boundary.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
