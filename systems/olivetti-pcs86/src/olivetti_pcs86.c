@@ -345,6 +345,24 @@ pcs86_destroy(void *context)
 }
 
 static bm_status_t
+pcs86_video_geometry(const void *context, bm_video_geometry_t *geometry)
+{
+    const bm_pcs86_machine_t *machine = context;
+    if (machine == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    return bm_pvga1a_video_geometry(machine->video, geometry);
+}
+
+static bm_status_t
+pcs86_video_render(const void *context, bm_video_framebuffer_t *framebuffer)
+{
+    const bm_pcs86_machine_t *machine = context;
+    if (machine == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    return bm_pvga1a_render(machine->video, framebuffer);
+}
+
+static bm_status_t
 pcs86_create(bm_engine_t *engine,
              const bm_host_services_t *host,
              const void *configuration,
@@ -500,7 +518,13 @@ bm_pcs86_machine_config(const bm_pcs86_config_t *configuration)
     bm_machine_config_t result = {
         "olivetti-pcs86",
         configuration,
-        { pcs86_validate, pcs86_create, pcs86_destroy },
+        {
+            pcs86_validate,
+            pcs86_create,
+            pcs86_destroy,
+            pcs86_video_geometry,
+            pcs86_video_render
+        },
         { 1, 10 }
     };
     return result;

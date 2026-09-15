@@ -46,6 +46,9 @@ main(void)
     bm_pvga1a_config_t config = { BM_PVGA1A_VRAM_SIZE };
     uint8_t value = 0;
     unsigned int plane;
+    bm_video_geometry_t geometry;
+    uint32_t pixels[16];
+    bm_video_framebuffer_t framebuffer = { pixels, 16U, 8U, { 0, 0, BM_PIXEL_XRGB8888 } };
 
     assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_pvga1a_create(&host, bus, &config, &video) == BM_STATUS_OK);
@@ -88,6 +91,57 @@ main(void)
     assert(io_write(bus, 0x03c0U, 0x34U) == BM_STATUS_OK);
     assert(bm_pvga1a_inspect_register(video, BM_PVGA1A_ATTRIBUTE, 0x12U,
                                       &value) == BM_STATUS_OK && value == 0x34U);
+
+    /* A real text cell is rasterized from planes 0/1 and its plane-2 glyph. */
+    assert(io_write(bus, 0x03c4U, 1U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c5U, 1U) == BM_STATUS_OK); /* Eight-dot characters. */
+    assert(io_write(bus, 0x03c4U, 3U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c5U, 0U) == BM_STATUS_OK); /* Font map A at zero. */
+    assert(io_write(bus, 0x03d4U, 1U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03d5U, 0U) == BM_STATUS_OK); /* One column. */
+    assert(io_write(bus, 0x03d4U, 9U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03d5U, 1U) == BM_STATUS_OK); /* Two scanlines. */
+    assert(io_write(bus, 0x03d4U, 0x12U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03d5U, 1U) == BM_STATUS_OK); /* Two visible lines. */
+    assert(io_write(bus, 0x03d4U, 0x13U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03d5U, 1U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03d4U, 0x17U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03d5U, 0x80U) == BM_STATUS_OK);
+
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c0U, 0U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c0U, 0U) == BM_STATUS_OK);
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c0U, 2U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c0U, 2U) == BM_STATUS_OK);
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c0U, 0x20U) == BM_STATUS_OK); /* Display enabled. */
+
+    assert(io_write(bus, 0x03c8U, 0U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, 0U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, 0U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, 0U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c8U, 2U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, 63U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, 0U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, 0U) == BM_STATUS_OK);
+
+    assert(io_write(bus, 0x03c4U, 2U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c5U, 1U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0000U, 1U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c5U, 2U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0000U, 2U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c5U, 4U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0020U, 0x80U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0021U, 0x40U) == BM_STATUS_OK);
+
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.width == 8U && geometry.height == 2U &&
+           geometry.format == BM_PIXEL_XRGB8888);
+    assert(bm_pvga1a_render(video, &framebuffer) == BM_STATUS_OK);
+    assert(framebuffer.geometry.width == 8U && framebuffer.geometry.height == 2U);
+    assert(pixels[0] == 0x00ff0000U && pixels[1] == 0U);
+    assert(pixels[8] == 0U && pixels[9] == 0x00ff0000U);
 
     bm_pvga1a_destroy(video);
     bm_bus_destroy(bus);

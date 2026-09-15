@@ -169,3 +169,27 @@ bm_session_inspect_cpu(const bm_session_t *session, bm_cpu_id_t id, const char *
         return BM_STATUS_INVALID_STATE;
     return bm_engine_inspect_cpu(session->engine, id, name, value);
 }
+
+bm_status_t
+bm_session_video_geometry(const bm_session_t *session, bm_video_geometry_t *geometry)
+{
+    if ((session == NULL) || (geometry == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) || (session->configuration.ops.video_geometry == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.ops.video_geometry(session->machine, geometry);
+}
+
+bm_status_t
+bm_session_render_video(const bm_session_t *session, bm_video_framebuffer_t *framebuffer)
+{
+    if ((session == NULL) || (framebuffer == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) || (session->configuration.ops.video_render == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.ops.video_render(session->machine, framebuffer);
+}

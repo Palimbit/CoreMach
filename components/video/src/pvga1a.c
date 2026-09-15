@@ -500,3 +500,155 @@ bm_pvga1a_inspect_vram(const bm_pvga1a_t *video,
     *value = video->vram[plane_address(plane, offset)];
     return BM_STATUS_OK;
 }
+
+static uint32_t
+text_character_width(const bm_pvga1a_t *video)
+{
+    uint32_t width = (video->sequencer[1] & 1U) ? 8U : 9U;
+    if ((video->sequencer[1] & 8U) != 0U)
+        width *= 2U;
+    return width;
+}
+
+static uint16_t
+vertical_display_lines(const bm_pvga1a_t *video)
+{
+    uint16_t lines = video->crtc[0x12];
+    if ((video->crtc[7] & 0x02U) != 0U)
+        lines |= 0x0100U;
+    if ((video->crtc[7] & 0x40U) != 0U)
+        lines |= 0x0200U;
+    return (uint16_t) (lines + 1U);
+}
+
+bm_status_t
+bm_pvga1a_video_geometry(const bm_pvga1a_t *video, bm_video_geometry_t *geometry)
+{
+    uint32_t columns;
+    uint32_t width;
+    uint32_t height;
+
+    if ((video == NULL) || (geometry == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (((video->graphics[6] | video->attribute[0x10]) & 1U) != 0U)
+        return BM_STATUS_UNSUPPORTED;
+    columns = (uint32_t) video->crtc[1] + 1U;
+    width = columns * text_character_width(video);
+    height = vertical_display_lines(video);
+    if ((columns > 160U) || (width == 0U) || (width > 2880U) ||
+        (height == 0U) || (height > 1024U))
+        return BM_STATUS_DEVICE_ERROR;
+    geometry->width = width;
+    geometry->height = height;
+    geometry->format = BM_PIXEL_XRGB8888;
+    return BM_STATUS_OK;
+}
+
+static uint8_t
+text_palette_index(const bm_pvga1a_t *video, uint8_t color)
+{
+    uint8_t index;
+    if ((video->attribute[0x10] & 0x80U) != 0U)
+        index = (video->attribute[color & 0x0fU] & 0x0fU) |
+                (uint8_t) ((video->attribute[0x14] & 0x0fU) << 4U);
+    else
+        index = (video->attribute[color & 0x0fU] & 0x3fU) |
+                (uint8_t) ((video->attribute[0x14] & 0x0cU) << 4U);
+    return index & video->dac_mask;
+}
+
+static uint32_t
+palette_color(const bm_pvga1a_t *video, uint8_t color)
+{
+    uint8_t index = text_palette_index(video, color);
+    uint32_t red = (uint32_t) ((video->palette[index][0] << 2U) |
+                               (video->palette[index][0] >> 4U));
+    uint32_t green = (uint32_t) ((video->palette[index][1] << 2U) |
+                                 (video->palette[index][1] >> 4U));
+    uint32_t blue = (uint32_t) ((video->palette[index][2] << 2U) |
+                                (video->palette[index][2] >> 4U));
+    return (red << 16U) | (green << 8U) | blue;
+}
+
+static uint16_t
+font_base(const bm_pvga1a_t *video, int use_map_b)
+{
+    uint8_t select = video->sequencer[3];
+    if (use_map_b)
+        return (uint16_t) ((((select >> 2U) & 3U) << 14U) |
+                           ((select & 0x20U) ? 0x2000U : 0U));
+    return (uint16_t) (((select & 3U) << 14U) |
+                       ((select & 0x10U) ? 0x2000U : 0U));
+}
+
+bm_status_t
+bm_pvga1a_render(const bm_pvga1a_t *video, bm_video_framebuffer_t *framebuffer)
+{
+    bm_video_geometry_t geometry;
+    uint32_t columns;
+    uint32_t character_width;
+    uint32_t character_height;
+    uint32_t row_stride;
+    uint16_t start;
+    uint32_t y;
+    bm_status_t status;
+
+    if ((video == NULL) || (framebuffer == NULL) || (framebuffer->pixels == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    status = bm_pvga1a_video_geometry(video, &geometry);
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((framebuffer->stride < geometry.width) ||
+        (framebuffer->pixel_capacity / framebuffer->stride < geometry.height))
+        return BM_STATUS_CAPACITY_EXCEEDED;
+    framebuffer->geometry = geometry;
+    columns = (uint32_t) video->crtc[1] + 1U;
+    character_width = text_character_width(video);
+    character_height = (uint32_t) (video->crtc[9] & 0x1fU) + 1U;
+    row_stride = (uint32_t) video->crtc[0x13] * 2U;
+    if (row_stride == 0U)
+        row_stride = columns;
+    start = (uint16_t) (((uint16_t) video->crtc[0x0c] << 8U) | video->crtc[0x0d]);
+
+    for (y = 0; y < geometry.height; ++y) {
+        uint32_t *line = framebuffer->pixels + (size_t) y * framebuffer->stride;
+        uint32_t column;
+        if (((video->sequencer[1] & 0x20U) != 0U) ||
+            ((video->crtc[0x17] & 0x80U) == 0U) ||
+            (video->attribute_palette_enable == 0U)) {
+            memset(line, 0, (size_t) geometry.width * sizeof(*line));
+            continue;
+        }
+        for (column = 0; column < columns; ++column) {
+            uint32_t row = y / character_height;
+            uint32_t scanline = y % character_height;
+            uint16_t cell = (uint16_t) (start + row * row_stride + column);
+            uint8_t character = video->vram[plane_address(0, cell)];
+            uint8_t attribute = video->vram[plane_address(1, cell)];
+            uint8_t foreground = attribute & 0x0fU;
+            uint8_t background = attribute >> 4U;
+            uint16_t glyph_address;
+            uint8_t glyph;
+            uint32_t x;
+            if (((video->attribute[0x10] & 8U) != 0U) &&
+                ((attribute & 0x80U) != 0U))
+                background &= 7U;
+            glyph_address = (uint16_t) (font_base(video, (attribute & 8U) != 0U) +
+                                        (uint16_t) character * 32U + scanline);
+            glyph = video->vram[plane_address(2, glyph_address)];
+            for (x = 0; x < character_width; ++x) {
+                uint32_t source_x = ((video->sequencer[1] & 8U) != 0U) ? x / 2U : x;
+                int set;
+                if (source_x < 8U)
+                    set = (glyph & (0x80U >> source_x)) != 0U;
+                else
+                    set = ((character & 0xe0U) == 0xc0U) &&
+                          ((video->attribute[0x10] & 4U) != 0U) &&
+                          ((glyph & 1U) != 0U);
+                line[column * character_width + x] =
+                    palette_color(video, set ? foreground : background);
+            }
+        }
+    }
+    return BM_STATUS_OK;
+}

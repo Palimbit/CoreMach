@@ -59,6 +59,59 @@ read_firmware(const char *path)
     return data;
 }
 
+static uint32_t
+crc32_pixels(const uint32_t *pixels, size_t count)
+{
+    uint32_t crc = 0xffffffffU;
+    size_t index;
+    for (index = 0; index < count; ++index) {
+        unsigned int byte_index;
+        for (byte_index = 0; byte_index < 4U; ++byte_index) {
+            unsigned int bit;
+            crc ^= (pixels[index] >> (byte_index * 8U)) & 0xffU;
+            for (bit = 0; bit < 8U; ++bit)
+                crc = (crc >> 1U) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+        }
+    }
+    return ~crc;
+}
+
+static int
+write_ppm(const char *path, const bm_video_framebuffer_t *framebuffer)
+{
+    FILE *file;
+    uint32_t y;
+#ifdef _MSC_VER
+    if (fopen_s(&file, path, "wb") != 0)
+        file = NULL;
+#else
+    file = fopen(path, "wb");
+#endif
+    if (file == NULL)
+        return 0;
+    if (fprintf(file, "P6\n%" PRIu32 " %" PRIu32 "\n255\n",
+                framebuffer->geometry.width, framebuffer->geometry.height) < 0) {
+        fclose(file);
+        return 0;
+    }
+    for (y = 0; y < framebuffer->geometry.height; ++y) {
+        uint32_t x;
+        const uint32_t *line = framebuffer->pixels + (size_t) y * framebuffer->stride;
+        for (x = 0; x < framebuffer->geometry.width; ++x) {
+            uint8_t rgb[3] = {
+                (uint8_t) (line[x] >> 16U),
+                (uint8_t) (line[x] >> 8U),
+                (uint8_t) line[x]
+            };
+            if (fwrite(rgb, 1, sizeof(rgb), file) != sizeof(rgb)) {
+                fclose(file);
+                return 0;
+            }
+        }
+    }
+    return fclose(file) == 0;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -72,9 +125,15 @@ main(int argc, char **argv)
     bm_status_t status;
     uint64_t ax = 0;
     uint64_t dx = 0;
+    bm_video_geometry_t geometry = { 0, 0, BM_PIXEL_XRGB8888 };
+    bm_status_t video_status = BM_STATUS_INVALID_STATE;
+    uint32_t *pixels = NULL;
+    size_t pixel_count = 0;
+    size_t nonblack = 0;
+    uint32_t frame_crc = 0;
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s <even-rom> <odd-rom>\n", argv[0]);
+    if ((argc != 3) && (argc != 4)) {
+        fprintf(stderr, "usage: %s <even-rom> <odd-rom> [frame.ppm]\n", argv[0]);
         return 2;
     }
     even = read_firmware(argv[1]);
@@ -102,6 +161,31 @@ main(int argc, char **argv)
     if (session != NULL) {
         (void) bm_session_inspect_cpu(session, 0, "ax", &ax);
         (void) bm_session_inspect_cpu(session, 0, "dx", &dx);
+        video_status = bm_session_video_geometry(session, &geometry);
+        if (video_status == BM_STATUS_OK) {
+            pixel_count = (size_t) geometry.width * geometry.height;
+            pixels = calloc(pixel_count, sizeof(*pixels));
+            if (pixels == NULL)
+                video_status = BM_STATUS_OUT_OF_MEMORY;
+            else {
+                bm_video_framebuffer_t framebuffer = {
+                    pixels, pixel_count, geometry.width, geometry
+                };
+                size_t index;
+                video_status = bm_session_render_video(session, &framebuffer);
+                if (video_status == BM_STATUS_OK) {
+                    for (index = 0; index < pixel_count; ++index) {
+                        if (pixels[index] != 0U)
+                            ++nonblack;
+                    }
+                    frame_crc = crc32_pixels(pixels, pixel_count);
+                    if ((argc == 4) && !write_ppm(argv[3], &framebuffer)) {
+                        fputs("could not write framebuffer capture\n", stderr);
+                        video_status = BM_STATUS_DEVICE_ERROR;
+                    }
+                }
+            }
+        }
     }
 
     printf("status=%d instructions=%" PRIu64 " io=%" PRIu64
@@ -110,8 +194,13 @@ main(int argc, char **argv)
            (int) status, probe.instructions, probe.io_operations,
            probe.last.cs, probe.last.ip, probe.last.physical_address, probe.last.opcode,
            ax, dx);
+    printf("video_status=%d width=%" PRIu32 " height=%" PRIu32
+           " nonblack=%zu crc32=%08" PRIx32 " capture=%s\n",
+           (int) video_status, geometry.width, geometry.height,
+           nonblack, frame_crc, (argc == 4 && video_status == BM_STATUS_OK) ? argv[3] : "");
 
     bm_session_destroy(session);
+    free(pixels);
     free(even);
     free(odd);
     return (status == BM_STATUS_OK) ? 0 : 3;

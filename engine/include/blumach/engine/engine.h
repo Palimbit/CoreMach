@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <blumach/engine/cpu.h>
 #include <blumach/engine/host.h>
+#include <blumach/engine/video.h>
 
 #ifdef __cplusplus
 extern "C" {

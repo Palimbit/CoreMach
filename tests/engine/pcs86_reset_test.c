@@ -171,6 +171,12 @@ main(void)
     const bm_pcs86_firmware_identity_t *identities;
     size_t identity_count = 0;
     size_t index;
+    bm_video_geometry_t geometry;
+    uint32_t pixels[9];
+    bm_video_framebuffer_t framebuffer = {
+        pixels, sizeof(pixels) / sizeof(pixels[0]), 9U,
+        { 0, 0, BM_PIXEL_XRGB8888 }
+    };
 
     for (index = 0; index < sizeof(reset_jump); ++index)
         put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
@@ -200,6 +206,12 @@ main(void)
     assert(inspect(session, "cs") == 0xffff);
     assert(inspect(session, "ip") == 0);
     assert(inspect(session, "frequency_hz") == 10000000U);
+    assert(bm_session_video_geometry(session, &geometry) == BM_STATUS_OK);
+    assert(geometry.width == 9U && geometry.height == 1U);
+    memset(pixels, 0xff, sizeof(pixels));
+    assert(bm_session_render_video(session, &framebuffer) == BM_STATUS_OK);
+    for (index = 0; index < sizeof(pixels) / sizeof(pixels[0]); ++index)
+        assert(pixels[index] == 0U);
 
     assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xf000);
@@ -247,7 +259,7 @@ main(void)
 
     memset(even, 0, sizeof(even));
     memset(odd, 0, sizeof(odd));
-    even[sizeof(even) - 8U] = 0x2aU; /* Explicit unsupported-opcode sentinel at FFFF0h. */
+    even[sizeof(even) - 8U] = 0xd6U; /* Explicit unsupported-opcode sentinel at FFFF0h. */
     config.firmware_even.sha256 = NULL;
     trace.count = 0;
     machine = bm_pcs86_machine_config(&config);
@@ -256,7 +268,7 @@ main(void)
     assert(bm_session_start(session) == BM_STATUS_OK);
     assert(bm_session_run_for(session, 1) == BM_STATUS_UNSUPPORTED);
     assert(inspect(session, "last_fetch") == 0xffff0U);
-    assert(inspect(session, "last_opcode") == 0x2aU);
+    assert(inspect(session, "last_opcode") == 0xd6U);
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
     return 0;
