@@ -13,14 +13,14 @@
 #  sudo dnf install RPMS/$(uname -m)/blumach-*
 
 Name:		blumach
-Version:	7.0
-Release:	1%{?dist}
+Version:	0.1.0
+Release:	0.rc1%{?dist}
+%global upstream_version 0.1.0-rc.1
 Summary:	Classic PC emulator
 License:	GPLv2+
 URL:		https://github.com/BluMach/BluMach
 
-Source0:	https://github.com/BluMach/BluMach/archive/refs/tags/v%{version}.tar.gz
-
+Source0:	https://github.com/BluMach/BluMach/archive/refs/tags/v%{upstream_version}.tar.gz
 BuildRequires: cmake
 BuildRequires: desktop-file-utils
 BuildRequires: extra-cmake-modules
@@ -51,7 +51,7 @@ low-level x86 emulation with a curated historical catalogue, explicit evidence
 and reproducible machine configurations. Firmware is not included.
 
 %prep
-%autosetup -p1 -n BluMach-%{version}
+%autosetup -p1 -n BluMach-%{upstream_version}
 
 %build
 %ifarch x86_64
@@ -92,5 +92,5 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.BluM
 %{_datadir}/icons/hicolor/*/apps/io.github.BluMach.BluMach.png
 
 %changelog
-* Sat Jun 20 2026 BluMach project maintainers <blumach@users.noreply.github.com> 7.0-1
+* Tue Sep 15 2026 BluMach project maintainers <blumach@users.noreply.github.com> 0.1.0-0.rc1
 - Bump release

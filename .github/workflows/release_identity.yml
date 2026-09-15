@@ -30,4 +30,6 @@ jobs:
         run: python3 -B tools/release_version.py check
 
       - name: Test release tooling
-        run: python3 -B -m unittest discover -s tools/tests -p "test_release_version.py"
+        run: |
+          python3 -B -m unittest discover -s tools/tests -p "test_release_*.py"
+          python3 -B -m unittest discover -s tools/tests -p "test_rc_*.py"

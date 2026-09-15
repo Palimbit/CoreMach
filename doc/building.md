@@ -31,5 +31,16 @@ Installed artifacts can be checked without firmware using:
 python tools/package_audit.py --help
 ```
 
+The private `0.1.0-rc.1` reference build has a stricter Windows wrapper which
+builds, tests, installs, audits and produces a file-by-file manifest plus an
+archive SHA-256 from a clean commit:
+
+```text
+powershell -ExecutionPolicy Bypass -File tools/build-private-rc.ps1
+```
+
+See [the private RC validation record](releases/0.1.0-rc.1.md) for the evidence
+that must be captured before portable-engine work begins.
+
 Never add a local ROM directory, guest media or restricted research material to
 a build artifact or commit.
