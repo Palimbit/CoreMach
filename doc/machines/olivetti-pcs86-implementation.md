@@ -13,7 +13,9 @@ minimum known motherboard-register map. It is a bring-up milestone, not a
 usable emulator: the BIOS completes its initial CPU/register checks and ROM
 checksum, passes its first conventional-memory alias check and then stops
 after clearing and scanning a selected 64 KiB memory window. The measured
-boundary is the unsupported `ES:` segment override at `F000:0137`.
+boundary is now an unmapped write to DMA master-clear port `0Dh` at
+`F000:0171`, after the firmware also completes its segment-overridden alias
+check and returns to early board setup.
 
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
 interleaving, ROM address and known firmware hashes come from the canonical
@@ -40,7 +42,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, ModR/M effective addresses, arithmetic flags, branches, checksum and initial memory-check operations, `AND r/m16,imm16`, `STOSW`/`SCASW` with `REP`, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, arithmetic flags, branches, checksum and initial memory-check operations, `MOV r/m16,imm16`, `AND r/m16,imm16`, `STOSW`/`SCASW` with `REP`, basic IN/OUT and interrupt entry; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Approximate | One instruction per tick; 10 MHz is identity metadata until clock-domain timing lands |
@@ -70,8 +72,11 @@ The current automated ladder uses no historical software:
    interleaved reset vector performs a far jump from physical `FFFF0h` to
    `F0100h`, writes RAM, initializes the PIC, programs the PIT, exercises the
    board-control register and reads the fixed diagnostic register before halt.
-5. CPU and I/O traces verify exact instruction and port checkpoints.
-6. Firmware metadata validation rejects a supplied hash that differs from the
+5. A dedicated CPU test writes distinct words through `ES:`, `SS:`, `DS:` and
+   `CS:`, verifies that the last repeated segment prefix wins, and reads the
+   resulting physical locations without bypassing the memory component.
+6. CPU and I/O traces verify exact instruction and port checkpoints.
+7. Firmware metadata validation rejects a supplied hash that differs from the
    known PCS 86 identity.
 
 Original firmware is intentionally not used in CI and no ROM, disk, manual or
@@ -101,17 +106,20 @@ borrow the unrelated PC/AT CMOS/NMI convention. It likewise accepts the known
 EMS selector range `8400h-8403h` without claiming that the deferred EMS aperture
 or backing memory exists.
 
-With `AND r/m16,imm16` and forward `REP STOSW`/`REPE SCASW` implemented, the
-local BIOS probe executes 196,784 instructions and 27 successful I/O
-transactions before stopping at `F000:0137` on the unsupported `ES:` prefix.
-That boundary follows a complete 64 KiB clear-and-scan operation. Segment
-overrides and immediate writes through ModR/M are the next CPU work; DMA and RTC
-should follow only as the executed firmware path reaches them.
+With the four segment overrides and `MOV r/m16,imm16` added to the existing
+memory-check subset, the local BIOS probe executes 196,819 instructions and 37
+successful I/O transactions. It completes the upper-memory alias check and
+stops at `F000:0171` on `OUT 0Dh,AL`. Port `0Dh` is the 8237 DMA master-clear
+register, but no DMA component is mapped yet; the access therefore returns
+`BM_STATUS_UNMAPPED` instead of being ignored. A portable 8237 subset is the
+next platform component. RTC should follow only when the executed firmware path
+reaches it.
 
 The main implementation files are `components/cpu/808x/src/cpu_808x.c`,
 `components/memory/src/linear_memory.c`, `components/pc/src/pic8259.c`,
 `components/pc/src/pit8253.c` and
 `systems/olivetti-pcs86/src/olivetti_pcs86.c`. The corresponding public tests
 include the focused `cpu_808x_post_test.c`, `cpu_808x_checksum_test.c`,
-`pc_platform_test.c` and `pcs86_reset_test.c`. The unregistered
-`pcs86_firmware_probe.c` utility is manual by design so CI never requires ROMs.
+`cpu_808x_segment_test.c`, `pc_platform_test.c` and `pcs86_reset_test.c`. The
+unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never
+requires ROMs.

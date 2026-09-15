@@ -52,6 +52,15 @@ target_link_libraries(portable-engine-808x-checksum
         blumach_platform_null
 )
 
+add_executable(portable-engine-808x-segments cpu_808x_segment_test.c)
+target_link_libraries(portable-engine-808x-segments
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
 # Manual, ROM-free diagnostic utility. It is intentionally not a CTest because
 # firmware remains a local-only input and must never be present in CI artifacts.
 add_executable(portable-engine-pcs86-firmware-probe pcs86_firmware_probe.c)
@@ -59,7 +68,7 @@ target_link_libraries(portable-engine-pcs86-firmware-probe
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform portable-engine-808x-post portable-engine-808x-checksum)
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pc-platform portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -82,11 +91,13 @@ add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-r
 add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 add_test(NAME portable-engine.808x-post-self-test COMMAND portable-engine-808x-post)
 add_test(NAME portable-engine.808x-rom-checksum COMMAND portable-engine-808x-checksum)
+add_test(NAME portable-engine.808x-segment-overrides COMMAND portable-engine-808x-segments)
 set_tests_properties(
     portable-engine.linear-memory
     portable-engine.pcs86-reset-vector
     portable-engine.pc-platform
     portable-engine.808x-post-self-test
     portable-engine.808x-rom-checksum
+    portable-engine.808x-segment-overrides
     PROPERTIES TIMEOUT 10
 )
