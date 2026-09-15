@@ -9,6 +9,7 @@
 #include <blumach/systems/olivetti_pcs86.h>
 
 #include <blumach/components/bus.h>
+#include <blumach/components/dma8237.h>
 #include <blumach/components/linear_memory.h>
 #include <blumach/components/pic8259.h>
 #include <blumach/components/pit8253.h>
@@ -21,6 +22,7 @@ typedef struct bm_pcs86_machine {
     bm_bus_t *bus;
     bm_linear_memory_t *ram;
     bm_linear_memory_t *rom;
+    bm_dma8237_t *dma;
     bm_pic8259_t *pic;
     bm_pit8253_t *pit;
     bm_engine_t *engine;
@@ -280,6 +282,7 @@ pcs86_destroy(void *context)
     bm_pcs86_machine_t *machine = context;
     if (machine == NULL)
         return;
+    bm_dma8237_destroy(machine->dma);
     bm_pit8253_destroy(machine->pit);
     bm_pic8259_destroy(machine->pic);
     bm_linear_memory_destroy(machine->rom);
@@ -319,7 +322,7 @@ pcs86_create(bm_engine_t *engine,
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 10, &machine->bus);
+    status = bm_bus_create(host, 11, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -347,6 +350,10 @@ pcs86_create(bm_engine_t *engine,
     }
     if (combined_rom != NULL)
         host->release(host->context, combined_rom);
+    if (status == BM_STATUS_OK) {
+        bm_dma8237_config_t dma_config = { 0x0000U };
+        status = bm_dma8237_create(host, machine->bus, &dma_config, &machine->dma);
+    }
     if (status == BM_STATUS_OK) {
         bm_pic8259_config_t pic_config = {
             0x0020U, pcs86_pic_output, machine

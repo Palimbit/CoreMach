@@ -97,17 +97,18 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-196,819 instructions and 37 successful I/O transactions before reporting an
-unmapped write to DMA master-clear port `0Dh` at `F000:0171`. This covers the
+197,049 instructions and 103 successful I/O transactions before reporting an
+unmapped write to DMA page register `87h` at `F000:01AC`. This covers the
 reset jump, flag/register self-test, the firmware's complete 64 KiB checksum
 loop, its first conventional-memory alias check, a 64 KiB upper-memory
 clear-and-scan pass and the following segment-overridden memory-alias check.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
-effective-address decoding, immediate word masking, the checksum loop, near
-return, `MOV r/m16,imm16`, all four segment overrides and forward `REP
-STOSW`/`REPE SCASW`. Its inspection contract exposes all general and segment
+effective-address decoding, immediate word masking, byte comparison and NOT,
+segment-overridden byte loads, the checksum loop, near return,
+`MOV r/m16,imm16`, all four segment overrides and forward `REP STOSW`/`REPE
+SCASW`. Its inspection contract exposes all general and segment
 registers. Unit tests use new synthetic bytes
 reproducing the relevant instruction paths, not Olivetti firmware.
 
@@ -118,13 +119,15 @@ silently discarding it or borrowing the unrelated PC/AT CMOS convention.
 Writes to the known EMS page-selector range `8400h-8403h` are also retained,
 but the aperture and backing SIMMs remain deliberately absent.
 
-The next boundary is a real missing device rather than a CPU decoding shortcut:
-the BIOS writes to 8237 master-clear port `0Dh`, and the strict bus rejects the
-unmapped transaction. The next platform cut must introduce an explicit portable
-DMA component and its reset/programming contract before that access can succeed.
+The PCS 86 now owns a portable 8237 programming core with explicit address,
+count, command, mode, request, mask, status and master-clear state. It does not
+claim arbitration, bus ownership or byte transfers. After exercising those
+registers, the BIOS reaches port `87h`; the strict bus rejects this still absent
+external DMA page register. That page-register contract is the next platform
+cut before transfer semantics or a floppy device can be connected.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
 and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
-real-mode vector table. Neither component owns the other. DMA, RTC and complete
+real-mode vector table. Neither component owns the other. DMA transfers, RTC and complete
 V30 coverage remain subsequent cuts; POST has not completed.

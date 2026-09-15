@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 add_library(blumach_pc_components STATIC
+    src/dma8237.c
     src/pic8259.c
     src/pit8253.c
 )

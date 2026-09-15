@@ -42,18 +42,18 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic flags, conditional flow, ModR/M effective addresses with explicit ES/CS/SS/DS overrides, ROM-checksum and memory-check operations including immediate word moves and masking and repeated word stores/scans, full basic-register inspection, and callback-based real-mode interrupt entry to the still-incomplete V30 subset"
+      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic flags, conditional flow, ModR/M effective addresses with explicit ES/CS/SS/DS overrides, byte compares, byte NOT, segment-overridden byte loads, ROM-checksum and memory-check operations including immediate word moves and masking and repeated word stores/scans, full basic-register inspection, and callback-based real-mode interrupt entry to the still-incomplete V30 subset"
     },
     {
       "id": "portable-pc-platform-components",
       "destination": ["components/pc/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "08893f4fd0392ea6e95e9abbe108f0d8f1fbbe1c",
-      "origin_paths": ["src/pic.c", "src/pit.c", "src/include/86box/pic.h", "src/include/86box/pit.h"],
+      "origin_paths": ["src/dma.c", "src/pic.c", "src/pit.c", "src/include/86box/dma.h", "src/include/86box/pic.h", "src/include/86box/pit.h"],
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
-      "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global devices, host timers and direct CPU coupling with opaque single-instance 8259A and deterministic 8253 contracts; PIC pending output and vector acknowledge now cross explicit callbacks, while only the XT PIC path and binary PIT modes 0, 2 and 3 are implemented"
+      "copyright_holders": ["Sarah Walker", "Andrew Jenner", "Miran Grca", "Fred N. van Kempen", "BluMach contributors"],
+      "local_changes": "Replaced global devices, host timers and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core, a single 8259A and a deterministic 8253; DMA transfer ownership and device data movement remain explicitly unavailable, the PIC uses callbacks for pending output and vector acknowledge, and only the XT PIC path and binary PIT modes 0, 2 and 3 are implemented"
     },
     {
       "id": "portable-runtime-session",
@@ -88,7 +88,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, single PIC, PIT and minimum motherboard register map behind a typed machine factory; added explicit PIC-to-CPU interrupt routing, early BIOS diagnostic latches, an opaque port-70h memory-control latch and selector-only EMS register boundary, while the EMS aperture, keyboard queues, RTC, DMA and peripherals remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, 8237 programming core, single PIC, PIT and minimum motherboard register map behind a typed machine factory; added explicit PIC-to-CPU interrupt routing, early BIOS diagnostic latches, an opaque port-70h memory-control latch and selector-only EMS register boundary, while DMA page registers and transfers, the EMS aperture, keyboard queues, RTC and peripherals remain absent"
     }
   ],
   "external_dependencies": []
