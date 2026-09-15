@@ -97,20 +97,22 @@ still absent at that boundary.
 The original BIOS is now a local-only diagnostic input to a manual probe; it
 is never part of CTest or a build artifact. With the two recorded revision 1.09
 EPROM hashes verified outside the executable, the portable engine executes
-197,141 instructions and 121 successful I/O transactions before reporting an
-unmapped read from PCS board-control port `B0h` at `F000:01CC`. This covers the
+1,377,620 instructions and 156 successful I/O transactions before reporting
+the unsupported `MOV r/m8,imm8` at `F000:3B20`. This covers the
 reset jump, flag/register self-test, the firmware's complete 64 KiB checksum
 loop, its first conventional-memory alias check, a 64 KiB upper-memory
 clear-and-scan pass, the following segment-overridden memory-alias check and
-the programming self-tests for the 8237 and its external page latches.
+programming self-tests for the 8237 and its external page latches, the
+MM58167 interrupt-status/control access and the following long conventional-
+memory test.
 
 The interpreter additions are still a tested subset: arithmetic and logical
 flags, conditional and relative branches, register ModR/M forms, 8086 memory
-effective-address decoding, immediate word and byte masking, byte comparison,
-TEST and NOT,
-segment-overridden byte loads, the checksum loop, near return,
-`MOV r/m16,imm16`, all four segment overrides and forward `REP STOSW`/`REPE
-SCASW`. Its inspection contract exposes all general and segment
+effective-address decoding, immediate arithmetic, byte comparison, TEST, AND
+and NOT, memory forms of general and segment moves, near CALL/RET, register and
+ES stack operations, SHR by CL, segment-overridden loads, all four segment
+overrides and `LODSW`/`REP STOSW`/`REPE SCASW`. Its inspection contract exposes
+all general and segment
 registers. Unit tests use new synthetic bytes
 reproducing the relevant instruction paths, not Olivetti firmware.
 
@@ -128,11 +130,19 @@ XT page-register component maps the firmware-observed `87h`, `83h`, `81h` and
 the resulting 20-bit DMA address. PCS 86 writes are constrained to the
 documented four-bit page value; an 8237 master clear cannot erase these
 external latches. Neither component claims arbitration, bus ownership or byte
-transfers. The strict bus now stops at the still absent PCS board-control port
-`B0h`, which is the next evidence boundary.
+transfers.
+
+The first MM58167 cut maps only the firmware-used interrupt front. Reading
+`B0h` returns and clears the pending status; writing `B1h` clears that status
+and stores the interrupt-control byte. This behaviour is a selective port of
+the inherited `src/device/isartc.c`, retaining Fred N. van Kempen's notice.
+Registers `B2h-B7h` and `E0h-EFh`, clock progression, alarms, IRQ generation
+and persistence remain deliberately unmapped until they can be implemented and
+tested as real RTC behaviour.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
 and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
-real-mode vector table. Neither component owns the other. DMA transfers, RTC and complete
-V30 coverage remain subsequent cuts; POST has not completed.
+real-mode vector table. Neither component owns the other. DMA transfers, the
+remaining RTC and complete V30 coverage remain subsequent cuts; POST has not
+completed and no video output exists yet.

@@ -58,11 +58,15 @@ main(void)
     image[0xf0015U] = 0xf6; /* TEST BL,01h */
     image[0xf0016U] = 0xc3;
     image[0xf0017U] = 0x01;
-    image[0xf0018U] = 0x74; /* JZ failure */
-    image[0xf0019U] = 0x02;
-    image[0xf001aU] = 0xf4; /* HLT success */
-    image[0xf001bU] = 0x90;
-    image[0xf001cU] = 0xf4; /* HLT failure */
+    image[0xf0018U] = 0xa8; /* TEST AL,01h */
+    image[0xf0019U] = 0x01;
+    image[0xf001aU] = 0x74; /* JZ failure */
+    image[0xf001bU] = 0x04;
+    image[0xf001cU] = 0x22; /* AND AH,BL */
+    image[0xf001dU] = 0xe3;
+    image[0xf001eU] = 0xf4; /* HLT success */
+    image[0xf001fU] = 0x90;
+    image[0xf0020U] = 0xf4; /* HLT failure */
 
     assert(bm_bus_create(&host, 1, &bus) == BM_STATUS_OK);
     {
@@ -82,10 +86,11 @@ main(void)
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
     assert(bm_engine_run_for(engine, 32) == BM_STATUS_OK);
     assert(inspect(engine, "halted") == 1);
-    assert(inspect(engine, "last_fetch") == 0xf001aU);
+    assert(inspect(engine, "last_fetch") == 0xf001eU);
     assert(inspect(engine, "bx") == 0x0005U);
+    assert(inspect(engine, "ax") == 0x00abU);
     assert((inspect(engine, "flags") & 0x0001U) == 0); /* TEST clears CF. */
-    assert((inspect(engine, "flags") & 0x0040U) == 0); /* TEST result is nonzero. */
+    assert((inspect(engine, "flags") & 0x0040U) != 0); /* Final AND result is zero. */
 
     bm_engine_destroy(engine);
     bm_linear_memory_destroy(memory);
