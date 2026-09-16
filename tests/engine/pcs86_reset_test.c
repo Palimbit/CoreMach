@@ -123,6 +123,7 @@ main(void)
     io_trace_sink_t io_trace = { 0 };
     bm_pcs86_config_t config;
     bm_machine_config_t machine;
+    const bm_machine_definition_t *definition;
     bm_session_t *session = NULL;
     const bm_pcs86_firmware_identity_t *identities;
     size_t identity_count = 0;
@@ -154,6 +155,14 @@ main(void)
         .geometry = { 80U, 2U, 9U, 512U }
     };
     machine = bm_pcs86_machine_config(&config);
+    definition = bm_pcs86_machine_definition();
+    assert(definition != NULL);
+    assert(strcmp(definition->id, "olivetti-pcs86") == 0);
+    assert(strcmp(definition->configuration.type, BM_PCS86_CONFIG_TYPE) == 0);
+    assert(definition->configuration.version == BM_PCS86_CONFIG_VERSION);
+    assert(definition->configuration.size == sizeof(config));
+    assert(machine.definition == definition);
+    assert(machine.configuration.data == &config);
 
     test_partial_initialization_cleanup(&config);
 

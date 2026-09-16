@@ -213,20 +213,28 @@ synthetic_cpu_inspect(const void *context, const char *name, uint64_t *value)
 }
 
 static bm_status_t
-synthetic_validate(const void *configuration)
+synthetic_validate(const bm_configuration_view_t *configuration)
 {
-    const synthetic_config_t *config = configuration;
-    return ((config != NULL) && (config->sink != NULL)) ? BM_STATUS_OK : BM_STATUS_INVALID_ARGUMENT;
+    const synthetic_config_t *config;
+
+    if ((configuration == NULL) || (configuration->type == NULL) ||
+        (strcmp(configuration->type, "test.synthetic-config") != 0) ||
+        (configuration->version != 1U) ||
+        (configuration->size != sizeof(synthetic_config_t)) ||
+        (configuration->data == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    config = configuration->data;
+    return (config->sink != NULL) ? BM_STATUS_OK : BM_STATUS_INVALID_ARGUMENT;
 }
 
 static bm_status_t
 synthetic_create(bm_engine_t *engine,
                  const bm_host_services_t *host,
-                 const void *configuration,
+                 const bm_configuration_view_t *configuration,
                  void **out_machine)
 {
-    const synthetic_config_t *config = configuration;
-    synthetic_machine_t *machine = host->allocate(host->context, sizeof(*machine));
+    const synthetic_config_t *config;
+    synthetic_machine_t *machine;
     bm_cpu_t cpu;
     bm_status_t status;
     static const uint8_t program[] = {
@@ -239,6 +247,10 @@ synthetic_create(bm_engine_t *engine,
     };
 
     *out_machine = NULL;
+    if (synthetic_validate(configuration) != BM_STATUS_OK)
+        return BM_STATUS_INVALID_ARGUMENT;
+    config = configuration->data;
+    machine = host->allocate(host->context, sizeof(*machine));
     if (machine == NULL)
         return BM_STATUS_OUT_OF_MEMORY;
     memset(machine, 0, sizeof(*machine));
@@ -298,12 +310,18 @@ synthetic_input(void *context, const bm_input_event_t *event)
 static bm_machine_config_t
 machine_config(const synthetic_config_t *configuration)
 {
+    static const bm_machine_definition_t definition = {
+        .id = "test.synthetic-four-instruction",
+        .configuration = { "test.synthetic-config", 1U,
+                           sizeof(synthetic_config_t) },
+        .ops = { synthetic_validate, synthetic_create, synthetic_destroy,
+                 NULL, NULL, NULL, NULL, synthetic_input },
+        .engine = { 1U, 4U }
+    };
     bm_machine_config_t result = {
-        "test.synthetic-four-instruction",
-        configuration,
-        { synthetic_validate, synthetic_create, synthetic_destroy,
-          NULL, NULL, NULL, NULL, synthetic_input },
-        { 1, 4 }
+        .definition = &definition,
+        .configuration = { "test.synthetic-config", 1U,
+                           sizeof(*configuration), configuration }
     };
     return result;
 }

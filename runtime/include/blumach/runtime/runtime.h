@@ -19,10 +19,23 @@ typedef enum bm_session_state {
     BM_SESSION_STOPPED
 } bm_session_state_t;
 
-typedef bm_status_t (*bm_machine_validate_fn)(const void *configuration);
+typedef struct bm_configuration_view {
+    const char *type;
+    uint32_t version;
+    size_t size;
+    const void *data;
+} bm_configuration_view_t;
+
+typedef struct bm_configuration_contract {
+    const char *type;
+    uint32_t version;
+    size_t size;
+} bm_configuration_contract_t;
+
+typedef bm_status_t (*bm_machine_validate_fn)(const bm_configuration_view_t *configuration);
 typedef bm_status_t (*bm_machine_create_fn)(bm_engine_t *engine,
                                             const bm_host_services_t *host,
-                                            const void *configuration,
+                                            const bm_configuration_view_t *configuration,
                                             void **out_machine);
 typedef void (*bm_machine_destroy_fn)(void *machine);
 typedef bm_status_t (*bm_machine_reset_fn)(void *machine);
@@ -47,11 +60,18 @@ typedef struct bm_machine_ops {
     bm_machine_input_fn input;
 } bm_machine_ops_t;
 
-typedef struct bm_machine_config {
-    const char *definition;
-    const void *configuration;
+typedef struct bm_machine_definition {
+    const char *id;
+    bm_configuration_contract_t configuration;
     bm_machine_ops_t ops;
     bm_engine_config_t engine;
+} bm_machine_definition_t;
+
+typedef struct bm_machine_config {
+    /* The definition, configuration metadata and data remain caller-owned and
+     * valid until the session is reconfigured or destroyed. */
+    const bm_machine_definition_t *definition;
+    bm_configuration_view_t configuration;
 } bm_machine_config_t;
 
 bm_status_t bm_session_create(const bm_host_services_t *host, bm_session_t **out_session);

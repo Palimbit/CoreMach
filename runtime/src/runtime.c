@@ -32,17 +32,34 @@ bm_session_create(const bm_host_services_t *host, bm_session_t **out_session)
 bm_status_t
 bm_session_configure(bm_session_t *session, const bm_machine_config_t *configuration)
 {
+    const bm_machine_definition_t *definition;
     bm_status_t status;
 
-    if ((session == NULL) || (configuration == NULL) || (configuration->definition == NULL) ||
-        (configuration->ops.create == NULL) || (configuration->ops.destroy == NULL) ||
-        (configuration->engine.max_cpus == 0) || (configuration->engine.max_events == 0))
+    if ((session == NULL) || (configuration == NULL) ||
+        (configuration->definition == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    definition = configuration->definition;
+    if ((definition->id == NULL) || (definition->id[0] == '\0') ||
+        (definition->configuration.type == NULL) ||
+        (definition->configuration.type[0] == '\0') ||
+        (definition->configuration.version == 0U) ||
+        (definition->configuration.size == 0U) ||
+        (definition->ops.create == NULL) || (definition->ops.destroy == NULL) ||
+        (definition->engine.max_cpus == 0U) ||
+        (definition->engine.max_events == 0U) ||
+        (configuration->configuration.type == NULL) ||
+        (configuration->configuration.data == NULL) ||
+        (strcmp(configuration->configuration.type,
+                definition->configuration.type) != 0) ||
+        (configuration->configuration.version !=
+         definition->configuration.version) ||
+        (configuration->configuration.size != definition->configuration.size))
         return BM_STATUS_INVALID_ARGUMENT;
     if ((session->state != BM_SESSION_NEW) && (session->state != BM_SESSION_STOPPED) &&
         (session->state != BM_SESSION_CONFIGURED))
         return BM_STATUS_INVALID_STATE;
-    if (configuration->ops.validate != NULL) {
-        status = configuration->ops.validate(configuration->configuration);
+    if (definition->ops.validate != NULL) {
+        status = definition->ops.validate(&configuration->configuration);
         if (status != BM_STATUS_OK)
             return status;
     }
@@ -60,24 +77,26 @@ bm_session_start(bm_session_t *session)
         return BM_STATUS_INVALID_ARGUMENT;
     if (session->state != BM_SESSION_CONFIGURED)
         return BM_STATUS_INVALID_STATE;
-    status = bm_engine_create(&session->host, &session->configuration.engine, &session->engine);
+    status = bm_engine_create(&session->host,
+                              &session->configuration.definition->engine,
+                              &session->engine);
     if (status != BM_STATUS_OK)
         return status;
-    status = session->configuration.ops.create(session->engine,
-                                               &session->host,
-                                               session->configuration.configuration,
-                                               &session->machine);
+    status = session->configuration.definition->ops.create(
+        session->engine, &session->host, &session->configuration.configuration,
+        &session->machine);
     if ((status == BM_STATUS_OK) && (session->machine == NULL))
         status = BM_STATUS_DEVICE_ERROR;
     if (status == BM_STATUS_OK)
         status = bm_engine_reset(session->engine);
-    if ((status == BM_STATUS_OK) && (session->configuration.ops.reset != NULL))
-        status = session->configuration.ops.reset(session->machine);
+    if ((status == BM_STATUS_OK) &&
+        (session->configuration.definition->ops.reset != NULL))
+        status = session->configuration.definition->ops.reset(session->machine);
     if (status != BM_STATUS_OK) {
         bm_engine_destroy(session->engine);
         session->engine = NULL;
         if (session->machine != NULL)
-            session->configuration.ops.destroy(session->machine);
+            session->configuration.definition->ops.destroy(session->machine);
         session->machine = NULL;
         return status;
     }
@@ -127,8 +146,9 @@ bm_session_reset(bm_session_t *session)
     if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
         return BM_STATUS_INVALID_STATE;
     status = bm_engine_reset(session->engine);
-    if ((status == BM_STATUS_OK) && (session->configuration.ops.reset != NULL))
-        status = session->configuration.ops.reset(session->machine);
+    if ((status == BM_STATUS_OK) &&
+        (session->configuration.definition->ops.reset != NULL))
+        status = session->configuration.definition->ops.reset(session->machine);
     return status;
 }
 
@@ -141,7 +161,7 @@ bm_session_stop(bm_session_t *session)
         return BM_STATUS_INVALID_STATE;
     bm_engine_destroy(session->engine);
     session->engine = NULL;
-    session->configuration.ops.destroy(session->machine);
+    session->configuration.definition->ops.destroy(session->machine);
     session->machine = NULL;
     session->state = BM_SESSION_STOPPED;
     return BM_STATUS_OK;
@@ -186,9 +206,11 @@ bm_session_video_geometry(const bm_session_t *session, bm_video_geometry_t *geom
         return BM_STATUS_INVALID_ARGUMENT;
     if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
         return BM_STATUS_INVALID_STATE;
-    if ((session->machine == NULL) || (session->configuration.ops.video_geometry == NULL))
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.video_geometry == NULL))
         return BM_STATUS_UNSUPPORTED;
-    return session->configuration.ops.video_geometry(session->machine, geometry);
+    return session->configuration.definition->ops.video_geometry(session->machine,
+                                                                  geometry);
 }
 
 bm_status_t
@@ -198,9 +220,11 @@ bm_session_render_video(const bm_session_t *session, bm_video_framebuffer_t *fra
         return BM_STATUS_INVALID_ARGUMENT;
     if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
         return BM_STATUS_INVALID_STATE;
-    if ((session->machine == NULL) || (session->configuration.ops.video_render == NULL))
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.video_render == NULL))
         return BM_STATUS_UNSUPPORTED;
-    return session->configuration.ops.video_render(session->machine, framebuffer);
+    return session->configuration.definition->ops.video_render(session->machine,
+                                                                framebuffer);
 }
 
 bm_status_t
@@ -212,9 +236,11 @@ bm_session_inspect_machine(const bm_session_t *session,
         return BM_STATUS_INVALID_ARGUMENT;
     if ((session->state != BM_SESSION_RUNNING) && (session->state != BM_SESSION_PAUSED))
         return BM_STATUS_INVALID_STATE;
-    if ((session->machine == NULL) || (session->configuration.ops.inspect == NULL))
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.inspect == NULL))
         return BM_STATUS_UNSUPPORTED;
-    return session->configuration.ops.inspect(session->machine, name, value);
+    return session->configuration.definition->ops.inspect(session->machine,
+                                                           name, value);
 }
 
 bm_status_t
@@ -226,7 +252,7 @@ bm_session_send_input(bm_session_t *session, const bm_input_event_t *event)
         (session->state != BM_SESSION_PAUSED))
         return BM_STATUS_INVALID_STATE;
     if ((session->machine == NULL) ||
-        (session->configuration.ops.input == NULL))
+        (session->configuration.definition->ops.input == NULL))
         return BM_STATUS_UNSUPPORTED;
-    return session->configuration.ops.input(session->machine, event);
+    return session->configuration.definition->ops.input(session->machine, event);
 }

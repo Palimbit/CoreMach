@@ -36,12 +36,17 @@ initialize_machine(test_machine_t *machine)
 }
 
 static bm_status_t
-test_validate(const void *configuration)
+test_validate(const bm_configuration_view_t *configuration)
 {
-    test_machine_t *machine = (test_machine_t *) configuration;
+    test_machine_t *machine;
 
-    if (machine == NULL)
+    if ((configuration == NULL) || (configuration->type == NULL) ||
+        (strcmp(configuration->type, "test.runtime-session.config") != 0) ||
+        (configuration->version != 1U) ||
+        (configuration->size != sizeof(test_machine_t)) ||
+        (configuration->data == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
+    machine = (test_machine_t *) configuration->data;
     ++machine->validate_calls;
     return machine->validate_status;
 }
@@ -49,15 +54,17 @@ test_validate(const void *configuration)
 static bm_status_t
 test_create(bm_engine_t *engine,
             const bm_host_services_t *host,
-            const void *configuration,
+            const bm_configuration_view_t *configuration,
             void **out_machine)
 {
-    test_machine_t *machine = (test_machine_t *) configuration;
+    test_machine_t *machine;
 
     assert(engine != NULL);
     assert(host != NULL);
-    assert(machine != NULL);
+    assert(configuration != NULL);
+    assert(configuration->data != NULL);
     assert(out_machine != NULL);
+    machine = (test_machine_t *) configuration->data;
     ++machine->create_calls;
     machine->engine = engine;
     *out_machine = machine->return_machine ? machine : NULL;
@@ -143,20 +150,34 @@ test_video_render(const void *context, bm_video_framebuffer_t *framebuffer)
 static bm_machine_config_t
 make_configuration(test_machine_t *machine, int optional_operations)
 {
-    bm_machine_config_t configuration = {
-        "test.runtime-session",
-        machine,
-        {
+    static const bm_machine_definition_t full_definition = {
+        .id = "test.runtime-session",
+        .configuration = { "test.runtime-session.config", 1U,
+                           sizeof(test_machine_t) },
+        .ops = {
             test_validate,
             test_create,
             test_destroy,
-            optional_operations ? test_video_geometry : NULL,
-            optional_operations ? test_video_render : NULL,
-            optional_operations ? test_reset : NULL,
-            optional_operations ? test_inspect : NULL,
-            optional_operations ? test_input : NULL
+            test_video_geometry,
+            test_video_render,
+            test_reset,
+            test_inspect,
+            test_input
         },
-        { 1U, 2U }
+        .engine = { 1U, 2U }
+    };
+    static const bm_machine_definition_t required_definition = {
+        .id = "test.runtime-session.required-only",
+        .configuration = { "test.runtime-session.config", 1U,
+                           sizeof(test_machine_t) },
+        .ops = { test_validate, test_create, test_destroy,
+                 NULL, NULL, NULL, NULL, NULL },
+        .engine = { 1U, 2U }
+    };
+    bm_machine_config_t configuration = {
+        .definition = optional_operations ? &full_definition : &required_definition,
+        .configuration = { "test.runtime-session.config", 1U,
+                           sizeof(*machine), machine }
     };
     return configuration;
 }
@@ -187,6 +208,7 @@ test_null_and_configuration_contracts(void)
     bm_machine_config_t valid;
     bm_machine_config_t invalid;
     bm_machine_config_t rejected;
+    bm_machine_definition_t invalid_definition;
     uint64_t value = 0U;
 
     initialize_machine(&first_machine);
@@ -208,14 +230,42 @@ test_null_and_configuration_contracts(void)
     invalid = valid;
     invalid.definition = NULL;
     assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+
+    invalid_definition = *valid.definition;
     invalid = valid;
-    invalid.ops.create = NULL;
+    invalid.definition = &invalid_definition;
+    invalid_definition.id = NULL;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid_definition = *valid.definition;
+    invalid_definition.configuration.type = NULL;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid_definition = *valid.definition;
+    invalid_definition.configuration.version = 0U;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid_definition = *valid.definition;
+    invalid_definition.configuration.size = 0U;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid_definition = *valid.definition;
+    invalid_definition.ops.create = NULL;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid_definition = *valid.definition;
+    invalid_definition.ops.destroy = NULL;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid_definition = *valid.definition;
+    invalid_definition.engine.max_events = 0U;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+
+    invalid = valid;
+    invalid.configuration.type = "test.wrong-config";
     assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
     invalid = valid;
-    invalid.ops.destroy = NULL;
+    invalid.configuration.version = 2U;
     assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
     invalid = valid;
-    invalid.engine.max_events = 0U;
+    invalid.configuration.size -= 1U;
+    assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid = valid;
+    invalid.configuration.data = NULL;
     assert(bm_session_configure(session, &invalid) == BM_STATUS_INVALID_ARGUMENT);
 
     assert(bm_session_configure(session, &valid) == BM_STATUS_OK);
