@@ -14,6 +14,8 @@ extern "C" {
 #define BM_PCS86_MEMORY_SIZE (640U * 1024U)
 #define BM_PCS86_ROM_BASE 0xf0000U
 #define BM_PCS86_ROM_SIZE 65536U
+#define BM_PCS86_CONFIG_TYPE "blumach.system.olivetti-pcs86.config"
+#define BM_PCS86_CONFIG_VERSION 1U
 
 typedef struct bm_pcs86_io_trace {
     bm_bus_operation_t operation;
@@ -41,6 +43,7 @@ typedef struct bm_pcs86_firmware_identity {
 } bm_pcs86_firmware_identity_t;
 
 const bm_pcs86_firmware_identity_t *bm_pcs86_expected_firmware(size_t *count);
+const bm_machine_definition_t *bm_pcs86_machine_definition(void);
 bm_machine_config_t bm_pcs86_machine_config(const bm_pcs86_config_t *configuration);
 
 #ifdef __cplusplus

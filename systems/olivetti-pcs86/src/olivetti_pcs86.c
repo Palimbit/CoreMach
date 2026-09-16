@@ -652,14 +652,19 @@ validate_blob(const bm_blob_view_t *blob, const bm_pcs86_firmware_identity_t *id
 }
 
 static bm_status_t
-pcs86_validate(const void *configuration)
+pcs86_validate(const bm_configuration_view_t *configuration)
 {
-    const bm_pcs86_config_t *config = configuration;
+    const bm_pcs86_config_t *config;
     bm_status_t status;
     size_t index;
 
-    if (config == NULL)
+    if ((configuration == NULL) || (configuration->type == NULL) ||
+        (strcmp(configuration->type, BM_PCS86_CONFIG_TYPE) != 0) ||
+        (configuration->version != BM_PCS86_CONFIG_VERSION) ||
+        (configuration->size != sizeof(bm_pcs86_config_t)) ||
+        (configuration->data == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
+    config = configuration->data;
     status = validate_blob(&config->firmware_even, &expected_firmware[0]);
     if (status == BM_STATUS_OK)
         status = validate_blob(&config->firmware_odd, &expected_firmware[1]);
@@ -758,10 +763,10 @@ pcs86_video_render(const void *context, bm_video_framebuffer_t *framebuffer)
 static bm_status_t
 pcs86_create(bm_engine_t *engine,
              const bm_host_services_t *host,
-             const void *configuration,
+             const bm_configuration_view_t *configuration,
              void **out_machine)
 {
-    const bm_pcs86_config_t *config = configuration;
+    const bm_pcs86_config_t *config;
     bm_pcs86_machine_t *machine;
     uint8_t *combined_rom = NULL;
     bm_cpu_t cpu;
@@ -771,9 +776,10 @@ pcs86_create(bm_engine_t *engine,
     if ((engine == NULL) || (out_machine == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     *out_machine = NULL;
-    status = pcs86_validate(config);
+    status = pcs86_validate(configuration);
     if (status != BM_STATUS_OK)
         return status;
+    config = configuration->data;
     machine = host->allocate(host->context, sizeof(*machine));
     if (machine == NULL)
         return BM_STATUS_OUT_OF_MEMORY;
@@ -1063,23 +1069,43 @@ bm_pcs86_expected_firmware(size_t *count)
     return expected_firmware;
 }
 
+static const bm_machine_definition_t pcs86_definition = {
+    .id = "olivetti-pcs86",
+    .configuration = {
+        BM_PCS86_CONFIG_TYPE,
+        BM_PCS86_CONFIG_VERSION,
+        sizeof(bm_pcs86_config_t)
+    },
+    .ops = {
+        pcs86_validate,
+        pcs86_create,
+        pcs86_destroy,
+        pcs86_video_geometry,
+        pcs86_video_render,
+        pcs86_reset,
+        pcs86_inspect,
+        pcs86_input
+    },
+    .engine = { 1U, 10U }
+};
+
+const bm_machine_definition_t *
+bm_pcs86_machine_definition(void)
+{
+    return &pcs86_definition;
+}
+
 bm_machine_config_t
 bm_pcs86_machine_config(const bm_pcs86_config_t *configuration)
 {
     bm_machine_config_t result = {
-        "olivetti-pcs86",
-        configuration,
-        {
-            pcs86_validate,
-            pcs86_create,
-            pcs86_destroy,
-            pcs86_video_geometry,
-            pcs86_video_render,
-            pcs86_reset,
-            pcs86_inspect,
-            pcs86_input
-        },
-        { 1, 10 }
+        .definition = &pcs86_definition,
+        .configuration = {
+            BM_PCS86_CONFIG_TYPE,
+            BM_PCS86_CONFIG_VERSION,
+            sizeof(*configuration),
+            configuration
+        }
     };
     return result;
 }
