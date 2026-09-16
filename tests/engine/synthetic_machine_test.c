@@ -3,9 +3,10 @@
 #include <blumach/platforms/null_host.h>
 #include <blumach/runtime/runtime.h>
 
+#include "failure_injection_host.h"
+
 #include <assert.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 enum synthetic_event_kind {
@@ -41,51 +42,6 @@ typedef struct synthetic_machine {
     int halted;
 } synthetic_machine_t;
 
-typedef struct allocation_tracker {
-    size_t calls;
-    size_t fail_on_call;
-    size_t outstanding;
-} allocation_tracker_t;
-
-static void *
-tracked_allocate(void *context, size_t size)
-{
-    allocation_tracker_t *tracker = context;
-    void *result;
-    if (tracker->calls++ == tracker->fail_on_call)
-        return NULL;
-    result = malloc(size);
-    if (result != NULL)
-        ++tracker->outstanding;
-    return result;
-}
-
-static void
-tracked_release(void *context, void *allocation)
-{
-    allocation_tracker_t *tracker = context;
-    if (allocation != NULL) {
-        assert(tracker->outstanding > 0);
-        --tracker->outstanding;
-    }
-    free(allocation);
-}
-
-static bm_tick_t
-tracked_time(void *context)
-{
-    (void) context;
-    return 0;
-}
-
-static void
-tracked_log(void *context, bm_log_level_t level, const char *message)
-{
-    (void) context;
-    (void) level;
-    (void) message;
-}
-
 static void
 test_partial_initialization_cleanup(void)
 {
@@ -93,14 +49,16 @@ test_partial_initialization_cleanup(void)
     bm_engine_config_t configuration = { 1, 1 };
 
     for (failure = 0; failure < 3; ++failure) {
-        allocation_tracker_t tracker = { 0, failure, 0 };
-        bm_host_services_t host = {
-            &tracker, tracked_allocate, tracked_release, tracked_time, tracked_log
-        };
+        failure_injection_host_t tracker;
+        bm_host_services_t host;
         bm_engine_t *engine = NULL;
+
+        failure_injection_host_initialize(&tracker);
+        failure_injection_host_fail_on(&tracker, failure);
+        host = failure_injection_host_services(&tracker);
         assert(bm_engine_create(&host, &configuration, &engine) == BM_STATUS_OUT_OF_MEMORY);
         assert(engine == NULL);
-        assert(tracker.outstanding == 0);
+        assert(tracker.outstanding_allocations == 0U);
     }
 }
 

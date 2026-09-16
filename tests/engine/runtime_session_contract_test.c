@@ -2,6 +2,8 @@
 #include <blumach/platforms/null_host.h>
 #include <blumach/runtime/runtime.h>
 
+#include "failure_injection_host.h"
+
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -157,6 +159,21 @@ make_configuration(test_machine_t *machine, int optional_operations)
         { 1U, 2U }
     };
     return configuration;
+}
+
+static void
+test_session_allocation_failure(void)
+{
+    failure_injection_host_t tracker;
+    bm_host_services_t host;
+    bm_session_t *session = NULL;
+
+    failure_injection_host_initialize(&tracker);
+    failure_injection_host_fail_on(&tracker, 0U);
+    host = failure_injection_host_services(&tracker);
+    assert(bm_session_create(&host, &session) == BM_STATUS_OUT_OF_MEMORY);
+    assert(session == NULL);
+    assert(tracker.outstanding_allocations == 0U);
 }
 
 static void
@@ -408,6 +425,7 @@ test_start_failure_cleanup_and_retry(void)
 int
 main(void)
 {
+    test_session_allocation_failure();
     test_null_and_configuration_contracts();
     test_session_state_machine();
     test_optional_operations();
