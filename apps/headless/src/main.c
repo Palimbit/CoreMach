@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "pcs86_frontend.h"
+#include "scenario_file.h"
 
 #include <blumach/engine/version.h>
 #include <blumach/platforms/null_host.h>
@@ -35,8 +36,11 @@ print_usage(const char *program)
             " --firmware-odd <path> [--floppy <path>] [--ticks <count>]"
             " [--frame <path>] [--type-at <tick> --type-text <text>]..."
             " [--key-ticks <count>] [--expect-frame-crc32 <hex>]\n"
+            "  %s --machine <machine-id> --firmware-even <path>"
+            " --firmware-odd <path> [--floppy <path>]"
+            " --scenario <path> [--frame <path>]\n"
             "     text accepts \\n, \\r, \\t, \\b and \\\\ escapes\n",
-            program, program, program, program);
+            program, program, program, program, program);
 }
 
 static int
@@ -105,6 +109,7 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
     int pending_type_at = 0;
     int key_ticks_was_set = 0;
     int frame_crc_was_set = 0;
+    int scenario_was_set = 0;
 
     *options = (headless_run_options_t) { 0 };
     options->ticks = UINT64_C(10000000);
@@ -130,6 +135,10 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
         } else if (strcmp(argument, "--frame") == 0) {
             if (!assign_once(&options->frame_path, value))
                 return 0;
+        } else if (strcmp(argument, "--scenario") == 0) {
+            if (!assign_once(&options->scenario_path, value))
+                return 0;
+            scenario_was_set = 1;
         } else if (strcmp(argument, "--type-text") == 0) {
             if (!pending_type_at ||
                 !assign_once(&options->text_actions[
@@ -162,8 +171,17 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
             return 0;
         }
     }
-    return !pending_type_at &&
-           (!key_ticks_was_set || (options->text_action_count != 0U)) &&
+    if (pending_type_at ||
+        (scenario_was_set &&
+         (ticks_was_set || key_ticks_was_set || frame_crc_was_set ||
+          (options->text_action_count != 0U))) ||
+        (!scenario_was_set && key_ticks_was_set &&
+         (options->text_action_count == 0U)))
+        return 0;
+    if (scenario_was_set &&
+        !headless_scenario_load(options->scenario_path, options))
+        return 0;
+    return
            (options->machine_id != NULL) &&
            (options->firmware_even_path != NULL) &&
            (options->firmware_odd_path != NULL);
