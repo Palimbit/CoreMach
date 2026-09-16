@@ -74,6 +74,7 @@ bm_frontend_machine_open(const bm_frontend_adapter_t *adapter,
         return BM_STATUS_INVALID_ARGUMENT;
     *out_machine = NULL;
     for (binding_index = 0U; binding_index < binding_count; ++binding_index) {
+        const bm_frontend_asset_requirement_t *matched = NULL;
         size_t matches = 0U;
         for (requirement_index = 0U;
              requirement_index < adapter->asset_count; ++requirement_index) {
@@ -82,10 +83,36 @@ bm_frontend_machine_open(const bm_frontend_adapter_t *adapter,
                         adapter->assets[requirement_index].role) == 0) &&
                 (bindings[binding_index].kind ==
                  adapter->assets[requirement_index].kind))
-                ++matches;
+                {
+                    matched = &adapter->assets[requirement_index];
+                    ++matches;
+                }
         }
         if (matches != 1U)
             return BM_STATUS_INVALID_ARGUMENT;
+        if (matched->accepted_size_count != 0U) {
+            uint64_t byte_size;
+            size_t size_index;
+            int accepted = 0;
+            if (bindings[binding_index].kind == BM_FRONTEND_ASSET_BLOB) {
+                byte_size = bindings[binding_index].value.blob.size;
+            } else {
+                const bm_block_media_t *media =
+                    &bindings[binding_index].value.media;
+                if ((matched->block_size == 0U) ||
+                    (media->block_size != matched->block_size) ||
+                    (media->block_count > UINT64_MAX / media->block_size))
+                    return BM_STATUS_INVALID_ARGUMENT;
+                byte_size = media->block_count * media->block_size;
+            }
+            for (size_index = 0U;
+                 size_index < matched->accepted_size_count; ++size_index) {
+                if (byte_size == matched->accepted_sizes[size_index])
+                    accepted = 1;
+            }
+            if (!accepted)
+                return BM_STATUS_INVALID_ARGUMENT;
+        }
         for (requirement_index = binding_index + 1U;
              requirement_index < binding_count; ++requirement_index) {
             if ((bindings[requirement_index].role != NULL) &&

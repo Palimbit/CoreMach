@@ -22,6 +22,9 @@ typedef struct bm_frontend_asset_requirement {
     const char *label;
     bm_frontend_asset_kind_t kind;
     int required;
+    const uint64_t *accepted_sizes;
+    size_t accepted_size_count;
+    uint32_t block_size;
 } bm_frontend_asset_requirement_t;
 
 typedef struct bm_frontend_asset_binding {

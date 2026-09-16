@@ -55,9 +55,13 @@ main(void)
     assert(asset_count == 3U);
     assert(strcmp(assets[0].role, "firmware-even") == 0);
     assert(assets[0].required);
+    assert(assets[0].accepted_size_count == 1U);
+    assert(assets[0].accepted_sizes[0] == 32768U);
     assert(strcmp(assets[2].role, "floppy-0") == 0);
     assert(!assets[2].required);
     assert(assets[2].kind == BM_FRONTEND_ASSET_READ_ONLY_MEDIA);
+    assert(assets[2].accepted_size_count == 2U);
+    assert(assets[2].block_size == 512U);
 
     assert(bm_machine_registry_create(&host, bm_frontend_adapter_count(),
                                       &registry) == BM_STATUS_OK);

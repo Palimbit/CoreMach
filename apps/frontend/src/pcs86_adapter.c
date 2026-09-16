@@ -11,11 +11,16 @@ typedef struct pcs86_frontend_machine {
     bm_pcs86_config_t pcs86;
 } pcs86_frontend_machine_t;
 
+static const uint64_t firmware_sizes[] = { BM_PCS86_FIRMWARE_HALF_SIZE };
+static const uint64_t floppy_sizes[] = { 737280U, 1474560U };
+
 static const bm_frontend_asset_requirement_t assets[] = {
-    { "firmware-even", "Even firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1 },
-    { "firmware-odd", "Odd firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1 },
+    { "firmware-even", "Even firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1,
+      firmware_sizes, sizeof(firmware_sizes) / sizeof(firmware_sizes[0]), 0U },
+    { "firmware-odd", "Odd firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1,
+      firmware_sizes, sizeof(firmware_sizes) / sizeof(firmware_sizes[0]), 0U },
     { "floppy-0", "Drive A floppy image", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
-      0 }
+      0, floppy_sizes, sizeof(floppy_sizes) / sizeof(floppy_sizes[0]), 512U }
 };
 
 static const bm_pcs86_firmware_identity_t *
