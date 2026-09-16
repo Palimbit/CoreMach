@@ -55,6 +55,11 @@ target_link_libraries(portable-engine-scheduler-contracts
     PRIVATE blumach_engine blumach_platform_null
 )
 
+add_executable(portable-host-capability-contracts host_capability_contract_test.c)
+target_link_libraries(portable-host-capability-contracts
+    PRIVATE blumach_engine blumach_platform_null
+)
+
 add_executable(portable-engine-pcs86-reset pcs86_reset_test.c)
 target_link_libraries(portable-engine-pcs86-reset
     PRIVATE
@@ -249,7 +254,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-runtime-session-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-legacy-io)
+foreach(target portable-runtime-session-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -271,6 +276,7 @@ add_test(NAME portable-engine.linear-memory COMMAND portable-engine-memory)
 add_test(NAME portable-engine.bus-contracts COMMAND portable-engine-bus-contracts)
 add_test(NAME portable-runtime.session-contracts COMMAND portable-runtime-session-contracts)
 add_test(NAME portable-engine.scheduler-contracts COMMAND portable-engine-scheduler-contracts)
+add_test(NAME portable-host.capability-contracts COMMAND portable-host-capability-contracts)
 add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-reset)
 add_test(NAME portable-engine.pcs86-user-io COMMAND portable-engine-pcs86-user-io)
 add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
@@ -304,6 +310,7 @@ set_tests_properties(
     portable-engine.bus-contracts
     portable-runtime.session-contracts
     portable-engine.scheduler-contracts
+    portable-host.capability-contracts
     portable-engine.pcs86-reset-vector
     portable-engine.pcs86-user-io
     portable-engine.pc-platform
