@@ -2,6 +2,7 @@
 
 add_library(blumach_engine STATIC
     src/engine.c
+    src/storage.c
 )
 
 target_include_directories(blumach_engine

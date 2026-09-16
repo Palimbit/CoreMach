@@ -11,6 +11,8 @@
 #include <blumach/components/bus.h>
 #include <blumach/components/dma8237.h>
 #include <blumach/components/dma_page_registers.h>
+#include <blumach/components/fdc765.h>
+#include <blumach/components/floppy_drive.h>
 #include <blumach/components/linear_memory.h>
 #include <blumach/components/lpt_spp.h>
 #include <blumach/components/pic8259.h>
@@ -29,6 +31,8 @@ typedef struct bm_pcs86_machine {
     bm_linear_memory_t *rom;
     bm_dma8237_t *dma;
     bm_dma_page_registers_t *dma_pages;
+    bm_floppy_drive_t *floppy[2];
+    bm_fdc765_t *fdc;
     bm_pic8259_t *pic;
     bm_pit8253_t *pit;
     bm_pvga1a_t *video;
@@ -102,6 +106,13 @@ pcs86_uart_irq(void *context, int asserted)
     bm_pcs86_machine_t *machine = context;
     (void) bm_pic8259_set_irq(machine->pic, 4U,
                               ((machine->control & 0x10U) != 0) && asserted);
+}
+
+static void
+pcs86_fdc_irq(void *context, int asserted)
+{
+    bm_pcs86_machine_t *machine = context;
+    (void) bm_pic8259_set_irq(machine->pic, 6U, asserted);
 }
 
 static bm_status_t
@@ -378,15 +389,18 @@ static bm_status_t
 pcs86_diagnostic_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
-    uint8_t *latch;
     if ((transaction->size != 1) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
-    latch = (transaction->address == 0x00a0U) ?
-        &machine->nmi_mask : &machine->diagnostic_port;
-    if (transaction->operation == BM_BUS_READ)
-        transaction->value = *latch;
-    else
-        *latch = (uint8_t) transaction->value;
+    if (transaction->operation == BM_BUS_READ) {
+        /* The inherited PCS 86 maps A0h-AEh as a write-only NMI-mask
+         * aperture. Reads therefore see the PC open-bus value. */
+        transaction->value = 0xffU;
+    } else {
+        uint8_t value = (uint8_t) transaction->value;
+        machine->nmi_mask = value & 0x80U;
+        if (transaction->address == 0x00a0U)
+            machine->diagnostic_port = value;
+    }
     return BM_STATUS_OK;
 }
 
@@ -642,13 +656,35 @@ pcs86_validate(const void *configuration)
 {
     const bm_pcs86_config_t *config = configuration;
     bm_status_t status;
+    size_t index;
 
     if (config == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
     status = validate_blob(&config->firmware_even, &expected_firmware[0]);
     if (status == BM_STATUS_OK)
         status = validate_blob(&config->firmware_odd, &expected_firmware[1]);
+    for (index = 0U; (status == BM_STATUS_OK) && (index < 2U); ++index)
+        status = bm_floppy_drive_config_validate(&config->floppy[index]);
     return status;
+}
+
+static uint8_t
+pcs86_floppy_jumper_code(const bm_floppy_drive_config_t *config)
+{
+    const bm_floppy_geometry_t *geometry = &config->geometry;
+
+    if (!config->installed)
+        return 3U;
+    if ((geometry->cylinders == 40U) && (geometry->heads == 2U) &&
+        (geometry->sectors_per_track == 9U))
+        return 0U; /* 360 KiB. */
+    if ((geometry->cylinders == 80U) && (geometry->heads == 2U) &&
+        (geometry->sectors_per_track == 15U))
+        return 2U; /* 1.2 MiB. */
+    if ((geometry->cylinders == 80U) && (geometry->heads == 2U) &&
+        (geometry->sectors_per_track == 9U))
+        return 1U; /* 720 KiB. */
+    return 3U; /* 1.44 MiB, or the board's open/no-drive encoding. */
 }
 
 static void
@@ -657,6 +693,9 @@ pcs86_destroy(void *context)
     bm_pcs86_machine_t *machine = context;
     if (machine == NULL)
         return;
+    bm_fdc765_destroy(machine->fdc);
+    bm_floppy_drive_destroy(machine->floppy[1]);
+    bm_floppy_drive_destroy(machine->floppy[0]);
     bm_dma_page_registers_destroy(machine->dma_pages);
     bm_dma8237_destroy(machine->dma);
     bm_uart16450_destroy(machine->uart);
@@ -743,7 +782,9 @@ pcs86_create(bm_engine_t *engine,
     machine->engine = engine;
     machine->control = 0x80U;
     machine->ps2[0] = 0x04U; /* The front-panel key lock is open. */
-    machine->jumpers = 0xffU; /* No HDD and both floppy banks open. */
+    machine->jumpers = (uint8_t) (
+        0xf0U | pcs86_floppy_jumper_code(&config->floppy[0]) |
+        (uint8_t) (pcs86_floppy_jumper_code(&config->floppy[1]) << 2U));
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
@@ -796,6 +837,25 @@ pcs86_create(bm_engine_t *engine,
         };
         status = bm_pic8259_create(host, machine->bus, &pic_config, &machine->pic);
     }
+    for (index = 0U; (status == BM_STATUS_OK) && (index < 2U); ++index) {
+        if (config->floppy[index].installed)
+            status = bm_floppy_drive_create(host, &config->floppy[index],
+                                            &machine->floppy[index]);
+    }
+    if (status == BM_STATUS_OK) {
+        bm_fdc765_config_t fdc_config;
+        memset(&fdc_config, 0, sizeof(fdc_config));
+        fdc_config.io_base = 0x03f0U;
+        fdc_config.dma_channel = 2U;
+        fdc_config.disk_change_active_low = 1;
+        fdc_config.dma = machine->dma;
+        fdc_config.drives[0] = machine->floppy[0];
+        fdc_config.drives[1] = machine->floppy[1];
+        fdc_config.irq = pcs86_fdc_irq;
+        fdc_config.irq_context = machine;
+        status = bm_fdc765_create(host, machine->bus, &fdc_config,
+                                  &machine->fdc);
+    }
     if (status == BM_STATUS_OK) {
         bm_pit8253_config_t pit_config = { 0x0040U, pcs86_pit_output, machine };
         status = bm_pit8253_create(host, machine->bus, &pit_config, &machine->pit);
@@ -825,7 +885,7 @@ pcs86_create(bm_engine_t *engine,
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0100U, 0x0100U,
                             pcs86_jumpers_access, machine);
     if (status == BM_STATUS_OK)
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x00a0U, 0x00a0U,
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x00a0U, 0x00aeU,
                             pcs86_diagnostic_access, machine);
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0070U, 0x0070U,
@@ -888,6 +948,7 @@ pcs86_reset(void *context)
     bm_dma8237_reset(machine->dma);
     bm_dma_page_registers_reset(machine->dma_pages);
     bm_pic8259_reset(machine->pic);
+    bm_fdc765_reset(machine->fdc);
     bm_pit8253_reset(machine->pit);
     bm_mm58167_reset(machine->rtc);
     bm_lpt_spp_reset(machine->lpt);
@@ -952,6 +1013,22 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
             *value = state.in_service;
         else
             *value = state.input_lines;
+    } else if ((strcmp(name, "fdc_dor") == 0) ||
+               (strcmp(name, "fdc_msr") == 0) ||
+               (strcmp(name, "fdc_irq") == 0)) {
+        bm_fdc765_state_t state;
+        if (bm_fdc765_state(machine->fdc, &state) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        if (strcmp(name, "fdc_dor") == 0)
+            *value = state.digital_output;
+        else if (strcmp(name, "fdc_msr") == 0)
+            *value = state.main_status;
+        else
+            *value = (uint64_t) state.interrupt_asserted;
+    } else if (strcmp(name, "floppy0_cylinder") == 0) {
+        if (machine->floppy[0] == NULL)
+            return BM_STATUS_INVALID_STATE;
+        *value = bm_floppy_drive_cylinder(machine->floppy[0]);
     } else if (strcmp(name, "keyboard_queue_depth") == 0) {
         *value = (uint8_t) ((machine->scan_queue_end -
                             machine->scan_queue_start) & 0x3fU);

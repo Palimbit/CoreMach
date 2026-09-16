@@ -6,9 +6,9 @@
  * Copyright 2026 BluMach contributors
  *
  * Derived rewrite of the inherited PC/XT 8237 path. This stage models the
- * controller's programming interface and request state. DMA bus ownership and
- * byte transfers are intentionally not exposed until their device contract is
- * implemented.
+ * controller's programming interface, request state and synchronous
+ * peripheral DACK transfers. Host scheduling and HOLD/HLDA timing remain the
+ * responsibility of the machine adapter.
  */
 #include <blumach/components/dma8237.h>
 
@@ -24,6 +24,7 @@ typedef struct bm_dma8237_channel {
 
 struct bm_dma8237 {
     bm_host_services_t host;
+    bm_bus_t *bus;
     uint16_t io_base;
     bm_dma8237_channel_t channel[4];
     uint8_t command;
@@ -180,6 +181,7 @@ bm_dma8237_create(const bm_host_services_t *host,
         return BM_STATUS_OUT_OF_MEMORY;
     memset(dma, 0, sizeof(*dma));
     dma->host = *host;
+    dma->bus = bus;
     dma->io_base = config->io_base;
     bm_dma8237_reset(dma);
     status = bm_bus_map(bus, BM_ADDRESS_IO, config->io_base, end,
@@ -256,6 +258,92 @@ bm_dma8237_channel_state(const bm_dma8237_t *dma,
     out_state->requested = (request_bits(dma) & bit) != 0;
     out_state->terminal_count = (dma->terminal_count & bit) != 0;
     return BM_STATUS_OK;
+}
+
+static bm_status_t
+transfer_byte(bm_dma8237_t *dma,
+              unsigned int channel,
+              uint8_t *value,
+              int device_to_memory,
+              int *terminal_count)
+{
+    bm_dma8237_channel_t *state;
+    bm_bus_transaction_t transaction;
+    uint8_t bit;
+    uint8_t transfer_type;
+    int terminal;
+    bm_status_t status;
+
+    if ((dma == NULL) || (channel >= 4U) || (value == NULL) ||
+        (terminal_count == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *terminal_count = 0;
+    bit = (uint8_t) (1U << channel);
+    if (((dma->command & 0x04U) != 0U) || ((dma->mask & bit) != 0U) ||
+        ((request_bits(dma) & bit) == 0U))
+        return BM_STATUS_INVALID_STATE;
+
+    state = &dma->channel[channel];
+    transfer_type = state->mode & 0x0cU;
+    if ((transfer_type != 0x00U) &&
+        (transfer_type != (device_to_memory ? 0x04U : 0x08U)))
+        return BM_STATUS_INVALID_STATE;
+
+    if (transfer_type != 0x00U) {
+        transaction = (bm_bus_transaction_t) {
+            BM_ADDRESS_MEMORY,
+            device_to_memory ? BM_BUS_WRITE : BM_BUS_READ,
+            ((uint64_t) dma->page[channel] << 16U) | state->current_address,
+            device_to_memory ? *value : 0U,
+            1U,
+            1U,
+            0U,
+            BM_ENDIAN_LITTLE,
+            0
+        };
+        status = bm_bus_transact(dma->bus, &transaction);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (!device_to_memory)
+            *value = (uint8_t) transaction.value;
+    }
+    dma->temporary = *value;
+
+    if ((state->mode & 0x20U) != 0U)
+        --state->current_address;
+    else
+        ++state->current_address;
+
+    terminal = state->current_count == 0U;
+    --state->current_count;
+    if (terminal) {
+        dma->terminal_count |= bit;
+        dma->software_request &= (uint8_t) ~bit;
+        if ((state->mode & 0x10U) != 0U) {
+            state->current_address = state->base_address;
+            state->current_count = state->base_count;
+        }
+    }
+    *terminal_count = terminal;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_dma8237_device_write(bm_dma8237_t *dma,
+                        unsigned int channel,
+                        uint8_t value,
+                        int *terminal_count)
+{
+    return transfer_byte(dma, channel, &value, 1, terminal_count);
+}
+
+bm_status_t
+bm_dma8237_device_read(bm_dma8237_t *dma,
+                       unsigned int channel,
+                       uint8_t *value,
+                       int *terminal_count)
+{
+    return transfer_byte(dma, channel, value, 0, terminal_count);
 }
 
 uint8_t

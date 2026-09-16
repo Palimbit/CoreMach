@@ -41,7 +41,16 @@ target_link_libraries(portable-engine-pc-platform
 
 add_executable(portable-engine-dma8237 dma8237_test.c)
 target_link_libraries(portable-engine-dma8237
-    PRIVATE blumach_pc_components blumach_platform_null
+    PRIVATE blumach_pc_components blumach_memory blumach_platform_null
+)
+
+add_executable(portable-engine-fdc765 fdc765_test.c)
+target_link_libraries(portable-engine-fdc765
+    PRIVATE
+        blumach_pc_components
+        blumach_storage
+        blumach_memory
+        blumach_platform_null
 )
 
 add_executable(portable-engine-dma-pages dma_page_registers_test.c)
@@ -104,6 +113,15 @@ target_link_libraries(portable-engine-808x-shifts
         blumach_platform_null
 )
 
+add_executable(portable-engine-808x-returns cpu_808x_return_test.c)
+target_link_libraries(portable-engine-808x-returns
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
 # Manual, ROM-free diagnostic utility. It is intentionally not a CTest because
 # firmware remains a local-only input and must never be present in CI artifacts.
 add_executable(portable-engine-pcs86-firmware-probe pcs86_firmware_probe.c)
@@ -116,7 +134,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-legacy-io)
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -139,6 +157,7 @@ add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-r
 add_test(NAME portable-engine.pcs86-user-io COMMAND portable-engine-pcs86-user-io)
 add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 add_test(NAME portable-engine.dma8237-programming COMMAND portable-engine-dma8237)
+add_test(NAME portable-engine.fdc765-dma COMMAND portable-engine-fdc765)
 add_test(NAME portable-engine.dma-page-registers COMMAND portable-engine-dma-pages)
 add_test(NAME portable-engine.mm58167-irq-control COMMAND portable-engine-mm58167-irq)
 add_test(NAME portable-engine.pvga1a-registers-memory COMMAND portable-engine-pvga1a)
@@ -147,6 +166,7 @@ add_test(NAME portable-engine.808x-rom-checksum COMMAND portable-engine-808x-che
 add_test(NAME portable-engine.808x-segment-overrides COMMAND portable-engine-808x-segments)
 add_test(NAME portable-engine.808x-byte-compare COMMAND portable-engine-808x-compare)
 add_test(NAME portable-engine.808x-rotate-shift-groups COMMAND portable-engine-808x-shifts)
+add_test(NAME portable-engine.808x-return-forms COMMAND portable-engine-808x-returns)
 add_test(NAME portable-engine.legacy-io COMMAND portable-engine-legacy-io)
 set_tests_properties(
     portable-engine.linear-memory
@@ -154,6 +174,7 @@ set_tests_properties(
     portable-engine.pcs86-user-io
     portable-engine.pc-platform
     portable-engine.dma8237-programming
+    portable-engine.fdc765-dma
     portable-engine.dma-page-registers
     portable-engine.mm58167-irq-control
     portable-engine.pvga1a-registers-memory
@@ -162,6 +183,7 @@ set_tests_properties(
     portable-engine.808x-segment-overrides
     portable-engine.808x-byte-compare
     portable-engine.808x-rotate-shift-groups
+    portable-engine.808x-return-forms
     portable-engine.legacy-io
     PROPERTIES TIMEOUT 10
 )

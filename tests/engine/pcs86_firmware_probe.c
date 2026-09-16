@@ -7,6 +7,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+typedef struct probe_media {
+    uint8_t *bytes;
+    size_t size;
+} probe_media_t;
 
 typedef struct probe_trace {
     bm_808x_trace_t last;
@@ -110,6 +116,54 @@ read_firmware(const char *path)
     return data;
 }
 
+static uint8_t *
+read_disk_image(const char *path, size_t *size)
+{
+    FILE *file;
+    long length;
+    uint8_t *data;
+
+    *size = 0U;
+#ifdef _MSC_VER
+    if (fopen_s(&file, path, "rb") != 0)
+        file = NULL;
+#else
+    file = fopen(path, "rb");
+#endif
+    if (file == NULL)
+        return NULL;
+    if ((fseek(file, 0L, SEEK_END) != 0) || ((length = ftell(file)) <= 0L) ||
+        (fseek(file, 0L, SEEK_SET) != 0)) {
+        fclose(file);
+        return NULL;
+    }
+    data = malloc((size_t) length);
+    if ((data == NULL) ||
+        (fread(data, 1U, (size_t) length, file) != (size_t) length)) {
+        free(data);
+        fclose(file);
+        return NULL;
+    }
+    fclose(file);
+    *size = (size_t) length;
+    return data;
+}
+
+static bm_status_t
+probe_media_read(void *context, uint64_t first_block, uint32_t block_count,
+                 uint8_t *destination)
+{
+    probe_media_t *media = context;
+    size_t offset = (size_t) first_block * 512U;
+    size_t count = (size_t) block_count * 512U;
+
+    if ((destination == NULL) || (offset > media->size) ||
+        (count > media->size - offset))
+        return BM_STATUS_INVALID_ARGUMENT;
+    memcpy(destination, media->bytes + offset, count);
+    return BM_STATUS_OK;
+}
+
 static uint32_t
 crc32_pixels(const uint32_t *pixels, size_t count)
 {
@@ -173,6 +227,7 @@ main(int argc, char **argv)
     probe_trace_t probe = { 0 };
     uint8_t *even;
     uint8_t *odd;
+    probe_media_t disk = { NULL, 0U };
     bm_status_t status;
     uint64_t ax = 0;
     uint64_t dx = 0;
@@ -183,12 +238,16 @@ main(int argc, char **argv)
     size_t nonblack = 0;
     uint32_t frame_crc = 0;
     uint64_t run_ticks = UINT64_C(10000000);
+    uint64_t fdc_dor = 0U;
+    uint64_t fdc_msr = 0U;
+    uint64_t fdc_irq = 0U;
 
-    if ((argc < 3) || (argc > 5)) {
-        fprintf(stderr, "usage: %s <even-rom> <odd-rom> [frame.ppm [ticks]]\n", argv[0]);
+    if ((argc < 3) || (argc > 6)) {
+        fprintf(stderr, "usage: %s <even-rom> <odd-rom>"
+                        " [frame.ppm [ticks [floppy.img]]]\n", argv[0]);
         return 2;
     }
-    if (argc == 5) {
+    if (argc >= 5) {
         char *end = NULL;
         unsigned long long parsed = strtoull(argv[4], &end, 10);
         if ((argv[4][0] == '\0') || (end == NULL) || (*end != '\0') || (parsed == 0U)) {
@@ -205,11 +264,37 @@ main(int argc, char **argv)
         free(odd);
         return 2;
     }
+    if (argc == 6) {
+        disk.bytes = read_disk_image(argv[5], &disk.size);
+        if ((disk.bytes == NULL) ||
+            ((disk.size != 737280U) && (disk.size != 1474560U))) {
+            fputs("floppy image must be a raw 720 KiB or 1.44 MiB image\n",
+                  stderr);
+            free(disk.bytes);
+            free(even);
+            free(odd);
+            return 2;
+        }
+    }
     config = (bm_pcs86_config_t) {
-        { "bios-even-109", even, BM_PCS86_FIRMWARE_HALF_SIZE, NULL },
-        { "bios-odd-109", odd, BM_PCS86_FIRMWARE_HALF_SIZE, NULL },
-        capture_instruction, &probe, capture_io, &probe
+        .firmware_even = {
+            "bios-even-109", even, BM_PCS86_FIRMWARE_HALF_SIZE, NULL
+        },
+        .firmware_odd = {
+            "bios-odd-109", odd, BM_PCS86_FIRMWARE_HALF_SIZE, NULL
+        },
+        .trace = capture_instruction,
+        .trace_context = &probe,
+        .io_trace = capture_io,
+        .io_trace_context = &probe
     };
+    if (disk.bytes != NULL) {
+        config.floppy[0] = (bm_floppy_drive_config_t) {
+            1, 1, 1,
+            { 80U, 2U, (uint8_t) (disk.size == 737280U ? 9U : 18U), 512U },
+            { &disk, disk.size / 512U, 512U, 1, probe_media_read, NULL }
+        };
+    }
     machine = bm_pcs86_machine_config(&config);
     status = bm_session_create(&host, &session);
     if (status == BM_STATUS_OK)
@@ -223,6 +308,9 @@ main(int argc, char **argv)
     if (session != NULL) {
         (void) bm_session_inspect_cpu(session, 0, "ax", &ax);
         (void) bm_session_inspect_cpu(session, 0, "dx", &dx);
+        (void) bm_session_inspect_machine(session, "fdc_dor", &fdc_dor);
+        (void) bm_session_inspect_machine(session, "fdc_msr", &fdc_msr);
+        (void) bm_session_inspect_machine(session, "fdc_irq", &fdc_irq);
         video_status = bm_session_video_geometry(session, &geometry);
         if (video_status == BM_STATUS_OK) {
             pixel_count = (size_t) geometry.width * geometry.height;
@@ -272,10 +360,14 @@ main(int argc, char **argv)
            " nonblack=%zu crc32=%08" PRIx32 " capture=%s\n",
            (int) video_status, geometry.width, geometry.height,
            nonblack, frame_crc, (argc >= 4 && video_status == BM_STATUS_OK) ? argv[3] : "");
+    printf("floppy_bytes=%zu fdc_dor=%02" PRIx64 " fdc_msr=%02" PRIx64
+           " fdc_irq=%" PRIu64 "\n",
+           disk.size, fdc_dor, fdc_msr, fdc_irq);
 
     bm_session_destroy(session);
     free(pixels);
     free(even);
     free(odd);
+    free(disk.bytes);
     return (status == BM_STATUS_OK) ? 0 : 3;
 }

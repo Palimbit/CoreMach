@@ -37,6 +37,8 @@ those facilities without exposing them to an emulated component.
 - Buses model memory, I/O, program and data spaces independently.
 - Debug access is an attribute of a transaction, not a second hidden bus.
 - Host allocation, time and logging arrive through explicit capabilities.
+- Storage components consume caller-owned block media; host paths and file
+  handles stay outside the engine.
 - Frontends submit stable physical-key events; guest machines own scan-code and
   controller-protocol translation.
 - The null platform makes tests and GUI-free targets first-class builds.
@@ -157,23 +159,24 @@ keyboard/mouse command queues. Runtime keyboard input uses stable physical-key
 identifiers and the machine translates supported keys to IBM Set 1 bytes on
 IRQ1; Qt, Win32 and host scan codes remain outside the engine.
 
-With those components the local BIOS probe executes 6,272,717 instructions and
-3,251 successful I/O transactions, completes its parallel and serial probes,
-and stops strictly at its first access to the absent floppy controller,
-`OUT 3F2h,AL` at `F000:352C`. The no-printer SPP status and disconnected UART
-are honest device states, not forced diagnostic-success values. This remains
-bring-up evidence rather than completed POST. FDC operation and DMA transfers,
-mouse input, complete keyboard command coverage, cursor/blink, graphics modes
-and scan timing remain outside this cut.
+With those components the preceding local BIOS probe executed 6,272,717
+instructions and 3,251 successful I/O transactions, completed its parallel and
+serial probes, and stopped strictly at its first access to the then-absent
+floppy controller, `OUT 3F2h,AL` at `F000:352C`. The no-printer SPP status and
+disconnected UART remain honest device states, not forced diagnostic-success
+values. The floppy cut below advances beyond that recorded boundary; mouse
+input, complete keyboard command coverage, cursor/blink, graphics modes and
+scan timing remain outside the current implementation.
 
-The PCS 86 now owns a portable 8237 programming core with explicit address,
+The PCS 86 now owns a portable 8237 core with explicit address,
 count, command, mode, request, mask, status and master-clear state. A separate
 XT page-register component maps the firmware-observed `87h`, `83h`, `81h` and
 `82h` channel order, retains reserved ports as independent latches and exposes
 the resulting 20-bit DMA address. PCS 86 writes are constrained to the
 documented four-bit page value; an 8237 master clear cannot erase these
-external latches. Neither component claims arbitration, bus ownership or byte
-transfers.
+external latches. Devices can transfer bytes synchronously through an explicit
+channel API; asynchronous arbitration, cycle stealing and bus-ownership timing
+remain outside this cut.
 
 The MM58167 maps the PCS 86 control window at `B0h-B7h` and its counter/alarm
 RAM at `E0h-EFh`. It advances a deterministic BCD millisecond calendar, matches
@@ -198,6 +201,29 @@ real-mode vector table. A withdrawn edge request no longer survives as its
 original IRQ before the first interrupt acknowledgement. Neither component
 owns the other. The added SPP, NS16450 and keyboard paths follow the same
 ownership rule and communicate only through explicit callbacks and runtime
-events. DMA transfers, floppy storage, mouse delivery and complete V30 coverage
-remain subsequent cuts; POST has not completed, although its current diagnostic
-screen can be rendered and captured without Qt.
+events. Mouse delivery and complete V30 coverage remain subsequent cuts.
+
+### PCS86-4 floppy/bootstrap status
+
+Storage remains a composition of small contracts. The engine defines a
+caller-owned block medium with no host path or `FILE *`; a floppy drive owns
+geometry and mechanical state; the uPD765-compatible component owns the AT
+register front, command/result phases, active-low change indication and its
+explicit links to IRQ6 and DMA2. The PCS 86 machine chooses the documented
+jumper encoding from the configured drive geometry. No layer reaches into a
+global drive table.
+
+The public tests use newly authored in-memory sectors. They verify a complete
+512-byte DMA read into guest RAM, terminal count, result bytes, reset/sense
+interrupts and write protection. Original firmware and media remain local-only
+manual inputs. With BIOS 1.09 and the preserved 720 KiB system diskette, the
+engine completes a 10,000,000-tick run without error, all visible resident
+diagnostics report `Pass`, and the BIOS detects one floppy and enters primary
+bootstrap. The boot sector is executed and prints its own `Non-system disk or
+disk error` message; this is observed boot-sector execution, not a claim that
+the mounted disk contains a bootable installed operating system.
+
+The FDC deliberately omits rotational and command latency, non-DMA transfer,
+format-track, deleted-data distinction, flux/weak-sector formats and dynamic
+media insertion. Those are explicit future fidelity work, while raw-sector
+read boot is the validated boundary of this cut.

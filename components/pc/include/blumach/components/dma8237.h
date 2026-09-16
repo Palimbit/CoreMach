@@ -49,6 +49,17 @@ bm_status_t bm_dma8237_set_page(bm_dma8237_t *dma,
 bm_status_t bm_dma8237_channel_state(const bm_dma8237_t *dma,
                                      unsigned int channel,
                                      bm_dma8237_channel_state_t *out_state);
+/* Device-facing DACK operations. A device must assert DREQ first. The write
+ * direction moves one byte from the device into guest memory; the read
+ * direction moves one byte from guest memory into the device. */
+bm_status_t bm_dma8237_device_write(bm_dma8237_t *dma,
+                                    unsigned int channel,
+                                    uint8_t value,
+                                    int *terminal_count);
+bm_status_t bm_dma8237_device_read(bm_dma8237_t *dma,
+                                   unsigned int channel,
+                                   uint8_t *value,
+                                   int *terminal_count);
 uint8_t bm_dma8237_command(const bm_dma8237_t *dma);
 uint8_t bm_dma8237_mask(const bm_dma8237_t *dma);
 
