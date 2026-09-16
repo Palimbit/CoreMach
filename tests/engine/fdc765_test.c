@@ -94,6 +94,9 @@ main(void)
     fdc765_test_config_t config = { 0 };
     uint8_t reset_sense[2];
     uint8_t read_params[8] = { 0U, 0U, 0U, 1U, 2U, 9U, 0x2aU, 0xffU };
+    uint8_t extended_eot_params[8] = {
+        0U, 0U, 0U, 1U, 2U, 18U, 0x1bU, 0xffU
+    };
     uint8_t oversized_params[8] = {
         1U, 0U, 0U, 1U, 6U, 1U, 0x2aU, 0xffU
     };
@@ -139,6 +142,18 @@ main(void)
            results[6] == 2U);
     for (index = 0U; index < 512U; ++index) {
         assert(fdc765_test_memory_read(&machine, 0x2000U + index) ==
+               media.bytes[index]);
+    }
+
+    /* EOT may exceed this track when DMA TC ends after a complete sector. */
+    fdc765_test_program_dma(&machine, 0x2400U, 0x01ffU, 0x46U);
+    fdc765_test_send_command(&machine, 0xe6U, extended_eot_params, 8U);
+    fdc765_test_read_results(&machine, results, 7U);
+    assert(results[0] == 0U && results[1] == 0U && results[2] == 0U);
+    assert(results[3] == 0U && results[4] == 0U && results[5] == 1U &&
+           results[6] == 2U);
+    for (index = 0U; index < 512U; ++index) {
+        assert(fdc765_test_memory_read(&machine, 0x2400U + index) ==
                media.bytes[index]);
     }
 

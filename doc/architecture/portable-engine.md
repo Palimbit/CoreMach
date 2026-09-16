@@ -214,17 +214,18 @@ jumper encoding from the configured drive geometry. No layer reaches into a
 global drive table.
 
 The public tests use newly authored in-memory sectors. They verify complete
-512-byte DMA read and write paths, terminal count, result bytes, reset/sense
+512-byte DMA read and write paths, terminal count, including completion before
+an EOT beyond the mounted track, result bytes, reset/sense
 interrupts and write protection. The controller contract limits a sector
 payload to 4096 bytes; read and write commands for an otherwise valid 8192-byte
 generic drive are rejected before DMA or media callbacks. Original firmware
 and media remain local-only manual inputs. With BIOS 1.09 and the preserved
-720 KiB system diskette, the engine completes a 10,000,000-tick run without
-error, all visible resident
-diagnostics report `Pass`, and the BIOS detects one floppy and enters primary
-bootstrap. The boot sector is executed and prints its own `Non-system disk or
-disk error` message; this is observed boot-sector execution, not a claim that
-the mounted disk contains a bootable installed operating system.
+720 KiB system diskette, all visible resident diagnostics report `Pass`, and
+the BIOS detects one floppy and enters primary bootstrap. The boot sector and
+system files execute far enough to display the Microsoft MS-DOS 3.30a banner.
+The run then stops explicitly with `BM_STATUS_UNMAPPED` at `OUT 02F2h,AL` after
+6,935,257 retired instructions and 14,031 I/O accesses. This is observed DOS
+initialization, not a completed boot to a command prompt.
 
 A CPU architecture cut adds tested, general 808x semantics for
 sign extension, string comparison and repeat conditions, direct and indirect
@@ -238,5 +239,6 @@ addresses, image contents or host services.
 
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
 format-track, deleted-data distinction, flux/weak-sector formats and dynamic
-media insertion. Those are explicit future fidelity work, while raw-sector
-read boot is the validated boundary of this cut.
+media insertion. Those are explicit future fidelity work, while deterministic
+raw-sector loading through the DOS banner is the validated boundary of this
+cut.
