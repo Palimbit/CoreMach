@@ -122,6 +122,105 @@ target_link_libraries(portable-engine-808x-returns
         blumach_platform_null
 )
 
+add_executable(portable-engine-808x-sign-extend cpu_808x_sign_extend_test.c)
+target_link_libraries(portable-engine-808x-sign-extend
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-string-compare cpu_808x_string_compare_test.c)
+target_link_libraries(portable-engine-808x-string-compare
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-trace cpu_808x_trace_test.c)
+target_link_libraries(portable-engine-808x-trace
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-indirect-far-call cpu_808x_indirect_far_call_test.c)
+target_link_libraries(portable-engine-808x-indirect-far-call
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-pop-rm cpu_808x_pop_rm_test.c)
+target_link_libraries(portable-engine-808x-pop-rm
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-exchange cpu_808x_exchange_test.c)
+target_link_libraries(portable-engine-808x-exchange
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-negate cpu_808x_negate_test.c)
+target_link_libraries(portable-engine-808x-negate
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-xlat cpu_808x_xlat_test.c)
+target_link_libraries(portable-engine-808x-xlat
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-immediate-carry cpu_808x_immediate_carry_test.c)
+target_link_libraries(portable-engine-808x-immediate-carry
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-byte-divide cpu_808x_byte_divide_test.c)
+target_link_libraries(portable-engine-808x-byte-divide
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
+add_executable(portable-engine-808x-reverse-carry cpu_808x_reverse_carry_test.c)
+target_link_libraries(portable-engine-808x-reverse-carry
+    PRIVATE
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+
 # Manual, ROM-free diagnostic utility. It is intentionally not a CTest because
 # firmware remains a local-only input and must never be present in CI artifacts.
 add_executable(portable-engine-pcs86-firmware-probe pcs86_firmware_probe.c)
@@ -134,7 +233,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-legacy-io)
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -167,6 +266,17 @@ add_test(NAME portable-engine.808x-segment-overrides COMMAND portable-engine-808
 add_test(NAME portable-engine.808x-byte-compare COMMAND portable-engine-808x-compare)
 add_test(NAME portable-engine.808x-rotate-shift-groups COMMAND portable-engine-808x-shifts)
 add_test(NAME portable-engine.808x-return-forms COMMAND portable-engine-808x-returns)
+add_test(NAME portable-engine.808x-sign-extension COMMAND portable-engine-808x-sign-extend)
+add_test(NAME portable-engine.808x-string-compare COMMAND portable-engine-808x-string-compare)
+add_test(NAME portable-engine.808x-decode-trace COMMAND portable-engine-808x-trace)
+add_test(NAME portable-engine.808x-indirect-far-control-flow COMMAND portable-engine-808x-indirect-far-call)
+add_test(NAME portable-engine.808x-pop-rm COMMAND portable-engine-808x-pop-rm)
+add_test(NAME portable-engine.808x-exchange COMMAND portable-engine-808x-exchange)
+add_test(NAME portable-engine.808x-negate COMMAND portable-engine-808x-negate)
+add_test(NAME portable-engine.808x-xlat COMMAND portable-engine-808x-xlat)
+add_test(NAME portable-engine.808x-immediate-carry COMMAND portable-engine-808x-immediate-carry)
+add_test(NAME portable-engine.808x-byte-divide COMMAND portable-engine-808x-byte-divide)
+add_test(NAME portable-engine.808x-reverse-carry COMMAND portable-engine-808x-reverse-carry)
 add_test(NAME portable-engine.legacy-io COMMAND portable-engine-legacy-io)
 set_tests_properties(
     portable-engine.linear-memory
@@ -184,6 +294,17 @@ set_tests_properties(
     portable-engine.808x-byte-compare
     portable-engine.808x-rotate-shift-groups
     portable-engine.808x-return-forms
+    portable-engine.808x-sign-extension
+    portable-engine.808x-string-compare
+    portable-engine.808x-decode-trace
+    portable-engine.808x-indirect-far-control-flow
+    portable-engine.808x-pop-rm
+    portable-engine.808x-exchange
+    portable-engine.808x-negate
+    portable-engine.808x-xlat
+    portable-engine.808x-immediate-carry
+    portable-engine.808x-byte-divide
+    portable-engine.808x-reverse-carry
     portable-engine.legacy-io
     PROPERTIES TIMEOUT 10
 )

@@ -41,15 +41,15 @@ main(void)
     image[0xf0004U] = 0x3a; /* CMP BL,AL */
     image[0xf0005U] = 0xd8;
     image[0xf0006U] = 0x75; /* JNE failure */
-    image[0xf0007U] = 0x1b;
+    image[0xf0007U] = 0x20;
     image[0xf0008U] = 0xb0; /* MOV AL,ABh */
     image[0xf0009U] = 0xab;
     image[0xf000aU] = 0x3a; /* CMP BL,AL: carry and sign. */
     image[0xf000bU] = 0xd8;
     image[0xf000cU] = 0x73; /* JNC failure: CMP must set carry. */
-    image[0xf000dU] = 0x15;
+    image[0xf000dU] = 0x1a;
     image[0xf000eU] = 0x79; /* JNS failure: CMP must set sign. */
-    image[0xf000fU] = 0x13;
+    image[0xf000fU] = 0x18;
     image[0xf0010U] = 0xf6; /* NOT BL */
     image[0xf0011U] = 0xd3;
     image[0xf0012U] = 0x80; /* AND BL,0Fh */
@@ -61,15 +61,20 @@ main(void)
     image[0xf0018U] = 0xa8; /* TEST AL,01h */
     image[0xf0019U] = 0x01;
     image[0xf001aU] = 0x74; /* JZ failure */
-    image[0xf001bU] = 0x07;
+    image[0xf001bU] = 0x0c;
     image[0xf001cU] = 0x80; /* OR AH,20h */
     image[0xf001dU] = 0xcc;
     image[0xf001eU] = 0x20;
     image[0xf001fU] = 0x22; /* AND AH,BL */
     image[0xf0020U] = 0xe3;
-    image[0xf0021U] = 0xf4; /* HLT success */
-    image[0xf0022U] = 0x90;
-    image[0xf0023U] = 0xf4; /* HLT failure */
+    image[0xf0021U] = 0xa9; /* TEST AX,FF00h: zero, AX unchanged. */
+    image[0xf0022U] = 0x00;
+    image[0xf0023U] = 0xff;
+    image[0xf0024U] = 0x75; /* JNZ failure. */
+    image[0xf0025U] = 0x02;
+    image[0xf0026U] = 0xf4; /* HLT success */
+    image[0xf0027U] = 0x90;
+    image[0xf0028U] = 0xf4; /* HLT failure */
 
     assert(bm_bus_create(&host, 1, &bus) == BM_STATUS_OK);
     {
@@ -89,7 +94,7 @@ main(void)
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
     assert(bm_engine_run_for(engine, 32) == BM_STATUS_OK);
     assert(inspect(engine, "halted") == 1);
-    assert(inspect(engine, "last_fetch") == 0xf0021U);
+    assert(inspect(engine, "last_fetch") == 0xf0026U);
     assert(inspect(engine, "bx") == 0x0005U);
     assert(inspect(engine, "ax") == 0x00abU);
     assert((inspect(engine, "flags") & 0x0001U) == 0); /* TEST clears CF. */

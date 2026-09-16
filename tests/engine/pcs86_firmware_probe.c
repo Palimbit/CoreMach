@@ -231,6 +231,8 @@ main(int argc, char **argv)
     bm_status_t status;
     uint64_t ax = 0;
     uint64_t dx = 0;
+    uint64_t instruction_bytes = 0;
+    uint64_t instruction_length = 0;
     bm_video_geometry_t geometry = { 0, 0, BM_PIXEL_XRGB8888 };
     bm_status_t video_status = BM_STATUS_INVALID_STATE;
     uint32_t *pixels = NULL;
@@ -308,6 +310,10 @@ main(int argc, char **argv)
     if (session != NULL) {
         (void) bm_session_inspect_cpu(session, 0, "ax", &ax);
         (void) bm_session_inspect_cpu(session, 0, "dx", &dx);
+        (void) bm_session_inspect_cpu(session, 0, "last_instruction_bytes",
+                                      &instruction_bytes);
+        (void) bm_session_inspect_cpu(session, 0, "last_instruction_length",
+                                      &instruction_length);
         (void) bm_session_inspect_machine(session, "fdc_dor", &fdc_dor);
         (void) bm_session_inspect_machine(session, "fdc_msr", &fdc_msr);
         (void) bm_session_inspect_machine(session, "fdc_irq", &fdc_irq);
@@ -339,11 +345,21 @@ main(int argc, char **argv)
     }
 
     printf("status=%d instructions=%" PRIu64 " io=%" PRIu64
-           " last=%04x:%04x physical=%05" PRIx32 " opcode=%02x"
-           " ax=%04" PRIx64 " dx=%04" PRIx64 "\n",
+           " last=%04x:%04x physical=%05" PRIx32
+           " opcode=%02x effective=%02x prefixes=%u bytes=",
            (int) status, probe.instructions, probe.io_operations,
-           probe.last.cs, probe.last.ip, probe.last.physical_address, probe.last.opcode,
-           ax, dx);
+           probe.last.cs, probe.last.ip, probe.last.physical_address,
+           probe.last.opcode, probe.last.effective_opcode, probe.last.prefix_count);
+    {
+        uint64_t index;
+        uint64_t captured = instruction_length < 8U ? instruction_length : 8U;
+        for (index = 0U; index < captured; ++index)
+            printf("%s%02" PRIx64, index == 0U ? "" : ",",
+                   (instruction_bytes >> (index * 8U)) & 0xffU);
+        if (instruction_length > captured)
+            printf(",...(%" PRIu64 " bytes)", instruction_length);
+    }
+    printf(" ax=%04" PRIx64 " dx=%04" PRIx64 "\n", ax, dx);
     printf("diagnostic_paths=%02" PRIx32 " timer0_failure_cx=%04x"
            " timer_program_at=%" PRIu64 " timer_irq_at=%" PRIu64
            " timer0_irq_at=%" PRIu64 "\n",
