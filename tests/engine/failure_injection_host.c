@@ -59,11 +59,13 @@ bm_host_services_t
 failure_injection_host_services(failure_injection_host_t *host)
 {
     bm_host_services_t services = {
-        host,
-        failure_allocate,
-        failure_release,
-        failure_monotonic_time,
-        failure_log
+        .context = host,
+        .allocate = failure_allocate,
+        .release = failure_release,
+        .monotonic_time = failure_monotonic_time,
+        .log = failure_log,
+        .capabilities = NULL,
+        .capability_count = 0U
     };
 
     assert(host != NULL);

@@ -31,10 +31,60 @@ struct bm_engine {
 bm_status_t
 bm_host_services_validate(const bm_host_services_t *services)
 {
+    size_t index;
+
     if ((services == NULL) || (services->allocate == NULL) || (services->release == NULL) ||
         (services->monotonic_time == NULL) || (services->log == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
+    if (((services->capabilities == NULL) != (services->capability_count == 0U)) ||
+        (services->capability_count > (size_t) BM_HOST_CAPABILITY_COUNT))
+        return BM_STATUS_INVALID_ARGUMENT;
+    for (index = 0U; index < services->capability_count; ++index) {
+        const bm_host_capability_t *capability = &services->capabilities[index];
+        size_t previous;
+
+        if (((int) capability->id < 0) ||
+            (capability->id >= BM_HOST_CAPABILITY_COUNT) ||
+            (capability->version == 0U) || (capability->services_size == 0U) ||
+            (capability->services == NULL))
+            return BM_STATUS_INVALID_ARGUMENT;
+        for (previous = 0U; previous < index; ++previous) {
+            if (services->capabilities[previous].id == capability->id)
+                return BM_STATUS_INVALID_ARGUMENT;
+        }
+    }
     return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_host_capability_lookup(const bm_host_services_t *services,
+                          bm_host_capability_id_t id,
+                          uint32_t minimum_version,
+                          size_t minimum_services_size,
+                          const bm_host_capability_t **out_capability)
+{
+    size_t index;
+
+    if (out_capability == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    *out_capability = NULL;
+    if ((bm_host_services_validate(services) != BM_STATUS_OK) ||
+        ((int) id < 0) || (id >= BM_HOST_CAPABILITY_COUNT) ||
+        (minimum_version == 0U) || (minimum_services_size == 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+
+    for (index = 0U; index < services->capability_count; ++index) {
+        const bm_host_capability_t *capability = &services->capabilities[index];
+
+        if (capability->id != id)
+            continue;
+        if ((capability->version < minimum_version) ||
+            (capability->services_size < minimum_services_size))
+            return BM_STATUS_UNSUPPORTED;
+        *out_capability = capability;
+        return BM_STATUS_OK;
+    }
+    return BM_STATUS_UNSUPPORTED;
 }
 
 static void *
