@@ -89,6 +89,26 @@ def require_unique_ids(
     return indexed
 
 
+def validate_portable_adapters(
+    platforms: dict[str, dict[str, Any]], errors: list[str]
+) -> None:
+    owners: dict[str, str] = {}
+    for platform_id, platform in platforms.items():
+        adapter_id = platform.get("portable_adapter_id")
+        if adapter_id is None:
+            continue
+        location = f"catalog.json: platform {platform_id!r}.portable_adapter_id"
+        if not isinstance(adapter_id, str) or not ENTITY_ID.fullmatch(adapter_id):
+            errors.append(f"{location} must be a lowercase hyphenated identifier")
+            continue
+        if adapter_id in owners:
+            errors.append(
+                f"{location} duplicates platform {owners[adapter_id]!r} adapter {adapter_id!r}"
+            )
+            continue
+        owners[adapter_id] = platform_id
+
+
 def translation_references(value: Any) -> Iterable[tuple[str, str]]:
     def walk(item: Any, path: str) -> Iterable[tuple[str, str]]:
         if isinstance(item, list):
@@ -282,6 +302,7 @@ def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
     families = require_unique_ids(catalog.get("families"), "families", errors)
     platforms = require_unique_ids(catalog.get("platforms"), "platforms", errors)
     products = require_unique_ids(catalog.get("products"), "products", errors)
+    validate_portable_adapters(platforms, errors)
 
     for family_id, family in families.items():
         manufacturer_id = family.get("manufacturer_id")

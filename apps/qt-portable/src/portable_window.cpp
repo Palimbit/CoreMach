@@ -41,9 +41,11 @@ PortableWindow::PortableWindow(QWidget *parent)
             [this] { stopMachine(); });
     display_->setKeyHandler(
         [this](QKeyEvent *event, bool pressed) { sendKey(event, pressed); });
+    (void) catalog_.load(&catalogError_);
     resize(960, 600);
     updateActions();
-    showStatus(tr("Open a machine to begin"));
+    showStatus(catalogError_.isEmpty() ? tr("Open a machine to begin") :
+               tr("Catalogue unavailable: %1").arg(catalogError_));
 }
 
 PortableWindow::~PortableWindow()
@@ -60,10 +62,22 @@ PortableWindow::openInitial(const QString &machineId,
     return adapter != nullptr && openMachine(adapter, paths);
 }
 
+bool
+PortableWindow::openInitialProduct(const QString &productId,
+                                   const QHash<QString, QString> &paths)
+{
+    const PortableCatalogMachine *product = catalog_.product(productId);
+    return product != nullptr && openInitial(product->adapterId, paths);
+}
+
 void
 PortableWindow::chooseMachine()
 {
-    MachineDialog dialog(this);
+    if (!catalogError_.isEmpty()) {
+        QMessageBox::critical(this, tr("Catalogue unavailable"), catalogError_);
+        return;
+    }
+    MachineDialog dialog(catalog_, this);
     if (dialog.exec() == QDialog::Accepted)
         (void) openMachine(dialog.adapter(), dialog.paths());
 }

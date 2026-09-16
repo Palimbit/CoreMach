@@ -8,17 +8,20 @@
 #include <QHash>
 #include <QString>
 
+class PortableCatalog;
 class QComboBox;
 class QFormLayout;
 class QLineEdit;
 
 class MachineDialog final : public QDialog {
 public:
-    explicit MachineDialog(QWidget *parent = nullptr);
+    explicit MachineDialog(const PortableCatalog &catalog,
+                           QWidget *parent = nullptr);
 
     const bm_frontend_adapter_t *adapter() const;
     QHash<QString, QString> paths() const;
     void selectMachine(const QString &machineId);
+    void selectProduct(const QString &productId);
     void setPaths(const QHash<QString, QString> &paths);
 
 protected:
