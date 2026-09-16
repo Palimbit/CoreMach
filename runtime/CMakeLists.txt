@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-add_library(blumach_runtime STATIC src/runtime.c)
+add_library(blumach_runtime STATIC
+    src/machine_registry.c
+    src/runtime.c
+)
 target_include_directories(blumach_runtime
     PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"

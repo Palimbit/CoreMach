@@ -30,24 +30,33 @@ bm_session_create(const bm_host_services_t *host, bm_session_t **out_session)
 }
 
 bm_status_t
-bm_session_configure(bm_session_t *session, const bm_machine_config_t *configuration)
+bm_machine_definition_validate(const bm_machine_definition_t *definition)
 {
-    const bm_machine_definition_t *definition;
-    bm_status_t status;
-
-    if ((session == NULL) || (configuration == NULL) ||
-        (configuration->definition == NULL))
-        return BM_STATUS_INVALID_ARGUMENT;
-    definition = configuration->definition;
-    if ((definition->id == NULL) || (definition->id[0] == '\0') ||
+    if ((definition == NULL) || (definition->id == NULL) ||
+        (definition->id[0] == '\0') ||
         (definition->configuration.type == NULL) ||
         (definition->configuration.type[0] == '\0') ||
         (definition->configuration.version == 0U) ||
         (definition->configuration.size == 0U) ||
-        (definition->ops.create == NULL) || (definition->ops.destroy == NULL) ||
+        (definition->ops.create == NULL) ||
+        (definition->ops.destroy == NULL) ||
         (definition->engine.max_cpus == 0U) ||
-        (definition->engine.max_events == 0U) ||
-        (configuration->configuration.type == NULL) ||
+        (definition->engine.max_events == 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_machine_config_validate(const bm_machine_config_t *configuration)
+{
+    const bm_machine_definition_t *definition;
+
+    if ((configuration == NULL) ||
+        (bm_machine_definition_validate(configuration->definition) !=
+         BM_STATUS_OK))
+        return BM_STATUS_INVALID_ARGUMENT;
+    definition = configuration->definition;
+    if ((configuration->configuration.type == NULL) ||
         (configuration->configuration.data == NULL) ||
         (strcmp(configuration->configuration.type,
                 definition->configuration.type) != 0) ||
@@ -55,6 +64,19 @@ bm_session_configure(bm_session_t *session, const bm_machine_config_t *configura
          definition->configuration.version) ||
         (configuration->configuration.size != definition->configuration.size))
         return BM_STATUS_INVALID_ARGUMENT;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_session_configure(bm_session_t *session, const bm_machine_config_t *configuration)
+{
+    const bm_machine_definition_t *definition;
+    bm_status_t status;
+
+    if ((session == NULL) ||
+        (bm_machine_config_validate(configuration) != BM_STATUS_OK))
+        return BM_STATUS_INVALID_ARGUMENT;
+    definition = configuration->definition;
     if ((session->state != BM_SESSION_NEW) && (session->state != BM_SESSION_STOPPED) &&
         (session->state != BM_SESSION_CONFIGURED))
         return BM_STATUS_INVALID_STATE;

@@ -10,6 +10,7 @@ extern "C" {
 #endif
 
 typedef struct bm_session bm_session_t;
+typedef struct bm_machine_registry bm_machine_registry_t;
 
 typedef enum bm_session_state {
     BM_SESSION_NEW = 0,
@@ -73,6 +74,24 @@ typedef struct bm_machine_config {
     const bm_machine_definition_t *definition;
     bm_configuration_view_t configuration;
 } bm_machine_config_t;
+
+bm_status_t bm_machine_definition_validate(const bm_machine_definition_t *definition);
+bm_status_t bm_machine_config_validate(const bm_machine_config_t *configuration);
+/* Registered definitions remain caller-owned and valid until the registry is
+ * destroyed. Registration order is stable for deterministic enumeration. */
+bm_status_t bm_machine_registry_create(const bm_host_services_t *host,
+                                       size_t capacity,
+                                       bm_machine_registry_t **out_registry);
+void bm_machine_registry_destroy(bm_machine_registry_t *registry);
+bm_status_t bm_machine_registry_register(bm_machine_registry_t *registry,
+                                         const bm_machine_definition_t *definition);
+bm_status_t bm_machine_registry_find(const bm_machine_registry_t *registry,
+                                     const char *id,
+                                     const bm_machine_definition_t **out_definition);
+bm_status_t bm_machine_registry_at(const bm_machine_registry_t *registry,
+                                   size_t index,
+                                   const bm_machine_definition_t **out_definition);
+size_t bm_machine_registry_count(const bm_machine_registry_t *registry);
 
 bm_status_t bm_session_create(const bm_host_services_t *host, bm_session_t **out_session);
 bm_status_t bm_session_configure(bm_session_t *session, const bm_machine_config_t *configuration);
