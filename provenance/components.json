@@ -190,6 +190,14 @@
       "local_changes": "Frontend-neutral machine adapter registry, declarative asset requirements and typed configuration preparation over caller-owned blobs and block media; optional file helpers remain separate from the adapter contract"
     },
     {
+      "id": "portable-qt-frontend",
+      "destination": ["apps/qt-portable/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Qt6 application shell generated from frontend adapter metadata, with scaled XRGB8888 display, normalized keyboard input and explicit session lifecycle controls"
+    },
+    {
       "id": "headless-frontend",
       "destination": ["apps/headless/**"],
       "method": "new",
