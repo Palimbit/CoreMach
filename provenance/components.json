@@ -187,7 +187,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Minimal frontend proving that Qt is optional"
+      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, deterministic execution reporting and framebuffer capture; machine-specific setup is isolated behind adapters that use only public system and runtime contracts"
     },
     {
       "id": "olivetti-pcs86-portable-system",
