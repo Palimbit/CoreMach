@@ -103,17 +103,30 @@ cpu_808x_test_peek(const cpu_808x_test_machine_t *machine, uint64_t address)
 }
 
 void
+cpu_808x_test_write(cpu_808x_test_machine_t *machine,
+                    uint64_t address,
+                    const uint8_t *data,
+                    size_t size)
+{
+    size_t offset;
+
+    assert(machine != NULL);
+    assert(data != NULL || size == 0U);
+    assert(address <= CPU_808X_TEST_IMAGE_SIZE);
+    assert(size <= CPU_808X_TEST_IMAGE_SIZE - address);
+    for (offset = 0U; offset < size; ++offset) {
+        bm_bus_transaction_t transaction = {
+            BM_ADDRESS_MEMORY, BM_BUS_WRITE, address + offset, data[offset],
+            1U, 1U, 0U, BM_ENDIAN_LITTLE, 0
+        };
+        assert(bm_bus_transact(machine->bus, &transaction) == BM_STATUS_OK);
+    }
+}
+
+void
 cpu_808x_test_poke(cpu_808x_test_machine_t *machine,
                    uint64_t address,
                    uint8_t value)
 {
-    bm_bus_transaction_t transaction;
-
-    assert(machine != NULL);
-    assert(address < CPU_808X_TEST_IMAGE_SIZE);
-    transaction = (bm_bus_transaction_t) {
-        BM_ADDRESS_MEMORY, BM_BUS_WRITE, address, value, 1U, 1U, 0U,
-        BM_ENDIAN_LITTLE, 0
-    };
-    assert(bm_bus_transact(machine->bus, &transaction) == BM_STATUS_OK);
+    cpu_808x_test_write(machine, address, &value, 1U);
 }

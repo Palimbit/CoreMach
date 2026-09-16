@@ -174,29 +174,17 @@ target_link_libraries(portable-engine-808x-indirect-far-call
 
 add_executable(portable-engine-808x-pop-rm cpu_808x_pop_rm_test.c)
 target_link_libraries(portable-engine-808x-pop-rm
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-exchange cpu_808x_exchange_test.c)
 target_link_libraries(portable-engine-808x-exchange
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-negate cpu_808x_negate_test.c)
 target_link_libraries(portable-engine-808x-negate
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-xlat cpu_808x_xlat_test.c)
@@ -206,29 +194,17 @@ target_link_libraries(portable-engine-808x-xlat
 
 add_executable(portable-engine-808x-immediate-carry cpu_808x_immediate_carry_test.c)
 target_link_libraries(portable-engine-808x-immediate-carry
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-byte-divide cpu_808x_byte_divide_test.c)
 target_link_libraries(portable-engine-808x-byte-divide
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-reverse-carry cpu_808x_reverse_carry_test.c)
 target_link_libraries(portable-engine-808x-reverse-carry
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 # Manual, ROM-free diagnostic utility. It is intentionally not a CTest because

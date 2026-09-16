@@ -39,6 +39,10 @@ uint64_t cpu_808x_test_inspect(const cpu_808x_test_machine_t *machine,
                                const char *name);
 uint8_t cpu_808x_test_peek(const cpu_808x_test_machine_t *machine,
                            uint64_t address);
+void cpu_808x_test_write(cpu_808x_test_machine_t *machine,
+                         uint64_t address,
+                         const uint8_t *data,
+                         size_t size);
 void cpu_808x_test_poke(cpu_808x_test_machine_t *machine,
                         uint64_t address,
                         uint8_t value);
