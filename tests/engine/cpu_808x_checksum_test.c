@@ -1,30 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include <blumach/components/bus.h>
-#include <blumach/components/cpu_808x.h>
-#include <blumach/components/linear_memory.h>
-#include <blumach/engine/engine.h>
-#include <blumach/platforms/null_host.h>
+#include "cpu_808x_test_harness.h"
 
 #include <assert.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
-static uint64_t
-inspect(bm_engine_t *engine, const char *name)
-{
-    uint64_t value = UINT64_MAX;
-    assert(bm_engine_inspect_cpu(engine, 0, name, &value) == BM_STATUS_OK);
-    return value;
-}
-
-static uint8_t
-peek(const bm_linear_memory_t *memory, uint64_t address)
-{
-    uint8_t value = 0;
-    assert(bm_linear_memory_peek(memory, address, &value) == BM_STATUS_OK);
-    return value;
-}
 
 int
 main(void)
@@ -82,59 +60,36 @@ main(void)
         0xf4,                   /* success HLT */
         0xf4                    /* failure HLT */
     };
-    bm_host_services_t host = bm_null_host_services();
-    bm_engine_config_t engine_config = { 1, 1 };
-    bm_linear_memory_config_t memory_config;
-    bm_808x_config_t cpu_config;
-    bm_engine_t *engine = NULL;
-    bm_bus_t *bus = NULL;
-    bm_linear_memory_t *memory = NULL;
-    bm_cpu_t cpu;
-    uint8_t *image = calloc(1, 0x100000U);
+    static const uint8_t reset_vector[] = { 0xeaU, 0x00U, 0x01U, 0x00U, 0xf0U };
+    static const uint8_t checksum_input[] = { 1U, 2U, 3U };
+    static const uint8_t return_address[] = { 0x30U, 0x01U };
+    cpu_808x_test_machine_t machine;
 
-    assert(image != NULL);
-    image[0xffff0U] = 0xea;
-    image[0xffff1U] = 0x00;
-    image[0xffff2U] = 0x01;
-    image[0xffff3U] = 0x00;
-    image[0xffff4U] = 0xf0;
-    memcpy(image + 0xf0100U, setup, sizeof(setup));
-    memcpy(image + 0xf0120U, checksum, sizeof(checksum));
-    memcpy(image + 0xf0130U, memory_check, sizeof(memory_check));
-    image[0x0300U] = 1;
-    image[0x0301U] = 2;
-    image[0x0302U] = 3;
-    image[0x0400U] = 0x30;
-    image[0x0401U] = 0x01;
+    cpu_808x_test_machine_create(&machine, NULL, NULL, 0U);
+    cpu_808x_test_write(&machine, 0xffff0U, reset_vector,
+                        sizeof(reset_vector));
+    cpu_808x_test_write(&machine, 0xf0100U, setup, sizeof(setup));
+    cpu_808x_test_write(&machine, 0xf0120U, checksum, sizeof(checksum));
+    cpu_808x_test_write(&machine, 0xf0130U, memory_check,
+                        sizeof(memory_check));
+    cpu_808x_test_write(&machine, 0x0300U, checksum_input,
+                        sizeof(checksum_input));
+    cpu_808x_test_write(&machine, 0x0400U, return_address,
+                        sizeof(return_address));
+    assert(cpu_808x_test_run(&machine, 70U) == BM_STATUS_OK);
+    assert(cpu_808x_test_inspect(&machine, "halted") == 1U);
+    assert(cpu_808x_test_inspect(&machine, "ax") == 0x00aaU);
+    assert(cpu_808x_test_inspect(&machine, "dx") == 0U);
+    assert(cpu_808x_test_inspect(&machine, "cx") == 0U);
+    assert(cpu_808x_test_inspect(&machine, "di") == 0x0612U);
+    assert(cpu_808x_test_inspect(&machine, "sp") == 0x0402U);
+    assert(cpu_808x_test_inspect(&machine, "last_fetch") == 0xf0191U);
+    assert((cpu_808x_test_inspect(&machine, "flags") & 0x0040U) != 0U);
+    assert((cpu_808x_test_inspect(&machine, "flags") & 0x0801U) == 0x0801U);
+    assert(cpu_808x_test_peek(&machine, 0x0610U) == 0x55U &&
+           cpu_808x_test_peek(&machine, 0x0611U) == 0xaaU);
+    assert(cpu_808x_test_peek(&machine, 0x0612U) == 0x55U);
 
-    assert(bm_bus_create(&host, 1, &bus) == BM_STATUS_OK);
-    memory_config = (bm_linear_memory_config_t) {
-        BM_ADDRESS_MEMORY, 0, 0x100000U, 0, image, 0x100000U
-    };
-    assert(bm_linear_memory_create(&host, bus, &memory_config, &memory) == BM_STATUS_OK);
-    assert(bm_engine_create(&host, &engine_config, &engine) == BM_STATUS_OK);
-    cpu_config = (bm_808x_config_t) {
-        BM_808X_NEC_V30, 10000000U, bus, NULL, NULL, NULL, NULL
-    };
-    assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
-    assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
-    assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 70) == BM_STATUS_OK);
-    assert(inspect(engine, "halted") == 1);
-    assert(inspect(engine, "ax") == 0x00aaU);
-    assert(inspect(engine, "dx") == 0U);
-    assert(inspect(engine, "cx") == 0U);
-    assert(inspect(engine, "di") == 0x0612U);
-    assert(inspect(engine, "sp") == 0x0402U);
-    assert(inspect(engine, "last_fetch") == 0xf0191U);
-    assert((inspect(engine, "flags") & 0x0040U) != 0); /* ZF from group 81h CMP. */
-    assert((inspect(engine, "flags") & 0x0801U) == 0x0801U); /* MUL sets OF and CF. */
-    assert(peek(memory, 0x0610U) == 0x55U && peek(memory, 0x0611U) == 0xaaU);
-    assert(peek(memory, 0x0612U) == 0x55U);
-
-    bm_engine_destroy(engine);
-    bm_linear_memory_destroy(memory);
-    bm_bus_destroy(bus);
-    free(image);
+    cpu_808x_test_machine_destroy(&machine);
     return 0;
 }

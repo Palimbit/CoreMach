@@ -68,157 +68,111 @@ target_link_libraries(portable-engine-pvga1a
     PRIVATE blumach_video blumach_platform_null
 )
 
-add_executable(portable-engine-808x-post cpu_808x_post_test.c)
-target_link_libraries(portable-engine-808x-post
-    PRIVATE
+add_library(portable-engine-808x-test-support STATIC cpu_808x_test_harness.c)
+target_link_libraries(portable-engine-808x-test-support
+    PUBLIC
         blumach_cpu_808x
         blumach_memory
         blumach_engine
         blumach_platform_null
+)
+target_compile_features(portable-engine-808x-test-support PRIVATE c_std_11)
+set_target_properties(portable-engine-808x-test-support
+    PROPERTIES C_EXTENSIONS OFF
+)
+if(MSVC)
+    target_compile_options(portable-engine-808x-test-support
+        PRIVATE /W4 /WX /UNDEBUG
+    )
+else()
+    target_compile_options(portable-engine-808x-test-support
+        PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+    )
+endif()
+
+add_executable(portable-engine-808x-post cpu_808x_post_test.c)
+target_link_libraries(portable-engine-808x-post
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-checksum cpu_808x_checksum_test.c)
 target_link_libraries(portable-engine-808x-checksum
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-segments cpu_808x_segment_test.c)
 target_link_libraries(portable-engine-808x-segments
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-compare cpu_808x_compare_test.c)
 target_link_libraries(portable-engine-808x-compare
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-shifts cpu_808x_shift_test.c)
 target_link_libraries(portable-engine-808x-shifts
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-returns cpu_808x_return_test.c)
 target_link_libraries(portable-engine-808x-returns
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-sign-extend cpu_808x_sign_extend_test.c)
 target_link_libraries(portable-engine-808x-sign-extend
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-string-compare cpu_808x_string_compare_test.c)
 target_link_libraries(portable-engine-808x-string-compare
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-trace cpu_808x_trace_test.c)
 target_link_libraries(portable-engine-808x-trace
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-indirect-far-call cpu_808x_indirect_far_call_test.c)
 target_link_libraries(portable-engine-808x-indirect-far-call
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-pop-rm cpu_808x_pop_rm_test.c)
 target_link_libraries(portable-engine-808x-pop-rm
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-exchange cpu_808x_exchange_test.c)
 target_link_libraries(portable-engine-808x-exchange
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-negate cpu_808x_negate_test.c)
 target_link_libraries(portable-engine-808x-negate
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-xlat cpu_808x_xlat_test.c)
 target_link_libraries(portable-engine-808x-xlat
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-immediate-carry cpu_808x_immediate_carry_test.c)
 target_link_libraries(portable-engine-808x-immediate-carry
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-byte-divide cpu_808x_byte_divide_test.c)
 target_link_libraries(portable-engine-808x-byte-divide
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-reverse-carry cpu_808x_reverse_carry_test.c)
 target_link_libraries(portable-engine-808x-reverse-carry
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 # Manual, ROM-free diagnostic utility. It is intentionally not a CTest because
