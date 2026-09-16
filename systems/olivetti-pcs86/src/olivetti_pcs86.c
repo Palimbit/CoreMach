@@ -903,6 +903,13 @@ pcs86_create(bm_engine_t *engine,
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0278U, 0x027aU,
                             pcs86_open_bus_access, machine);
     if (status == BM_STATUS_OK)
+        /* IBM DOS rearms the AT shared IRQ chain through 2F2h-2F7h while
+         * initializing its standard character devices. The PCS 86 is not an
+         * AT and has no such latch, so these addresses are an explicitly
+         * absent device: writes have no effect and reads see the open bus. */
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x02f2U, 0x02f7U,
+                            pcs86_open_bus_access, machine);
+    if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x03f8U, 0x03ffU,
                             pcs86_uart_access, machine);
     if (status == BM_STATUS_OK)
