@@ -1,11 +1,24 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+add_library(portable-failure-injection-host STATIC failure_injection_host.c)
+target_link_libraries(portable-failure-injection-host PUBLIC blumach_engine)
+target_compile_features(portable-failure-injection-host PRIVATE c_std_11)
+set_target_properties(portable-failure-injection-host PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-failure-injection-host PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-failure-injection-host
+        PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+    )
+endif()
+
 add_executable(portable-engine-contract synthetic_machine_test.c)
 target_link_libraries(portable-engine-contract
     PRIVATE
         blumach_runtime
         blumach_bus
         blumach_platform_null
+        portable-failure-injection-host
 )
 target_compile_features(portable-engine-contract PRIVATE c_std_11)
 set_target_properties(portable-engine-contract PROPERTIES C_EXTENSIONS OFF)
@@ -21,7 +34,10 @@ set_tests_properties(portable-engine.synthetic-machine PROPERTIES TIMEOUT 10)
 
 add_executable(portable-runtime-session-contracts runtime_session_contract_test.c)
 target_link_libraries(portable-runtime-session-contracts
-    PRIVATE blumach_runtime blumach_platform_null
+    PRIVATE
+        blumach_runtime
+        blumach_platform_null
+        portable-failure-injection-host
 )
 
 add_executable(portable-engine-memory linear_memory_test.c)
@@ -31,7 +47,7 @@ target_link_libraries(portable-engine-memory
 
 add_executable(portable-engine-bus-contracts bus_contract_test.c)
 target_link_libraries(portable-engine-bus-contracts
-    PRIVATE blumach_bus blumach_platform_null
+    PRIVATE blumach_bus blumach_platform_null portable-failure-injection-host
 )
 
 add_executable(portable-engine-scheduler-contracts engine_scheduler_contract_test.c)
@@ -41,7 +57,10 @@ target_link_libraries(portable-engine-scheduler-contracts
 
 add_executable(portable-engine-pcs86-reset pcs86_reset_test.c)
 target_link_libraries(portable-engine-pcs86-reset
-    PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
+    PRIVATE
+        blumach_system_olivetti_pcs86
+        blumach_platform_null
+        portable-failure-injection-host
 )
 
 add_executable(portable-engine-pcs86-user-io pcs86_user_io_test.c)

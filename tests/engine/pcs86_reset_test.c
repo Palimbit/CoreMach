@@ -3,9 +3,10 @@
 #include <blumach/runtime/runtime.h>
 #include <blumach/systems/olivetti_pcs86.h>
 
+#include "failure_injection_host.h"
+
 #include <assert.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 typedef struct trace_sink {
@@ -17,51 +18,6 @@ typedef struct io_trace_sink {
     bm_pcs86_io_trace_t entries[32];
     size_t count;
 } io_trace_sink_t;
-
-typedef struct allocation_tracker {
-    size_t calls;
-    size_t fail_on_call;
-    size_t outstanding;
-} allocation_tracker_t;
-
-static void *
-tracked_allocate(void *context, size_t size)
-{
-    allocation_tracker_t *tracker = context;
-    void *allocation;
-    if (tracker->calls++ == tracker->fail_on_call)
-        return NULL;
-    allocation = malloc(size);
-    if (allocation != NULL)
-        ++tracker->outstanding;
-    return allocation;
-}
-
-static void
-tracked_release(void *context, void *allocation)
-{
-    allocation_tracker_t *tracker = context;
-    if (allocation != NULL) {
-        assert(tracker->outstanding > 0);
-        --tracker->outstanding;
-    }
-    free(allocation);
-}
-
-static bm_tick_t
-tracked_time(void *context)
-{
-    (void) context;
-    return 0;
-}
-
-static void
-tracked_log(void *context, bm_log_level_t level, const char *message)
-{
-    (void) context;
-    (void) level;
-    (void) message;
-}
 
 static void
 capture_trace(void *context, const bm_808x_trace_t *trace)
@@ -103,19 +59,19 @@ test_partial_initialization_cleanup(const bm_pcs86_config_t *config)
 
     /* Exercise every allocation performed while starting this machine. */
     for (failure = 0; failure < 16; ++failure) {
-        allocation_tracker_t tracker = { 0, SIZE_MAX, 0 };
-        bm_host_services_t host = {
-            &tracker, tracked_allocate, tracked_release, tracked_time, tracked_log
-        };
+        failure_injection_host_t tracker;
+        bm_host_services_t host;
         bm_machine_config_t machine = bm_pcs86_machine_config(config);
         bm_session_t *session = NULL;
 
+        failure_injection_host_initialize(&tracker);
+        host = failure_injection_host_services(&tracker);
         assert(bm_session_create(&host, &session) == BM_STATUS_OK);
         assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
-        tracker.fail_on_call = tracker.calls + failure;
+        failure_injection_host_fail_after(&tracker, failure);
         assert(bm_session_start(session) == BM_STATUS_OUT_OF_MEMORY);
         bm_session_destroy(session);
-        assert(tracker.outstanding == 0);
+        assert(tracker.outstanding_allocations == 0U);
     }
 }
 

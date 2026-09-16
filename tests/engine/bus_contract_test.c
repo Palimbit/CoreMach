@@ -2,16 +2,11 @@
 #include <blumach/components/bus.h>
 #include <blumach/platforms/null_host.h>
 
+#include "failure_injection_host.h"
+
 #include <assert.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
-
-typedef struct allocation_tracker {
-    size_t calls;
-    size_t fail_on_call;
-    size_t outstanding;
-} allocation_tracker_t;
 
 typedef struct access_sink {
     bm_status_t status;
@@ -25,47 +20,6 @@ typedef struct observer_sink {
     size_t calls;
     bm_bus_transaction_t last;
 } observer_sink_t;
-
-static void *
-tracked_allocate(void *context, size_t size)
-{
-    allocation_tracker_t *tracker = context;
-    void *allocation;
-
-    if (tracker->calls++ == tracker->fail_on_call)
-        return NULL;
-    allocation = malloc(size);
-    if (allocation != NULL)
-        ++tracker->outstanding;
-    return allocation;
-}
-
-static void
-tracked_release(void *context, void *allocation)
-{
-    allocation_tracker_t *tracker = context;
-
-    if (allocation != NULL) {
-        assert(tracker->outstanding > 0U);
-        --tracker->outstanding;
-    }
-    free(allocation);
-}
-
-static bm_tick_t
-tracked_time(void *context)
-{
-    (void) context;
-    return 0U;
-}
-
-static void
-tracked_log(void *context, bm_log_level_t level, const char *message)
-{
-    (void) context;
-    (void) level;
-    (void) message;
-}
 
 static bm_status_t
 capture_access(void *context, bm_bus_transaction_t *transaction)
@@ -129,19 +83,16 @@ test_creation_and_partial_cleanup(void)
     assert(bm_bus_create(&host, 1U, NULL) == BM_STATUS_INVALID_ARGUMENT);
 
     for (failure = 0U; failure < 2U; ++failure) {
-        allocation_tracker_t tracker = { 0U, failure, 0U };
-        bm_host_services_t tracked_host = {
-            &tracker,
-            tracked_allocate,
-            tracked_release,
-            tracked_time,
-            tracked_log
-        };
+        failure_injection_host_t tracker;
+        bm_host_services_t tracked_host;
 
+        failure_injection_host_initialize(&tracker);
+        failure_injection_host_fail_on(&tracker, failure);
+        tracked_host = failure_injection_host_services(&tracker);
         assert(bm_bus_create(&tracked_host, 1U, &bus) ==
                BM_STATUS_OUT_OF_MEMORY);
         assert(bus == NULL);
-        assert(tracker.outstanding == 0U);
+        assert(tracker.outstanding_allocations == 0U);
     }
 
     assert(bm_bus_create(&host, 1U, &bus) == BM_STATUS_OK);
