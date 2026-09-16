@@ -6,12 +6,18 @@
 #include <blumach/engine/types.h>
 #include <blumach/runtime/runtime.h>
 
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct headless_text_key {
     bm_key_code_t key;
     int shifted;
 } headless_text_key_t;
+
+typedef struct headless_text_action {
+    const char *text;
+    uint64_t at;
+} headless_text_action_t;
 
 /* Decode one US-layout ASCII key from a command-line string. Backslash
  * escapes are accepted for newline, carriage return, tab, backspace and a
@@ -22,5 +28,11 @@ bm_status_t headless_text_duration(const char *text, uint64_t key_ticks,
                                    uint64_t *duration);
 bm_status_t headless_type_text(bm_session_t *session, const char *text,
                                uint64_t key_ticks);
+bm_status_t headless_text_schedule_validate(
+    const headless_text_action_t *actions, size_t action_count,
+    uint64_t key_ticks, uint64_t total_ticks);
+bm_status_t headless_run_text_schedule(
+    bm_session_t *session, const headless_text_action_t *actions,
+    size_t action_count, uint64_t key_ticks);
 
 #endif

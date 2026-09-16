@@ -129,24 +129,22 @@ headless_run_pcs86(const headless_run_options_t *options)
     size_t pixel_count = 0U;
     size_t nonblack = 0U;
     uint32_t frame_crc = 0U;
+    int frame_matches = !options->expect_frame_crc32;
     size_t identity_count = 0U;
     const bm_pcs86_firmware_identity_t *identities;
     const bm_pcs86_firmware_identity_t *even_identity;
     const bm_pcs86_firmware_identity_t *odd_identity;
     int frame_written = options->frame_path == NULL;
     int result = 3;
-    uint64_t typing_duration = 0U;
 
-    if (options->type_text != NULL) {
-        status = headless_text_duration(options->type_text, options->key_ticks,
-                                        &typing_duration);
-        if ((status != BM_STATUS_OK) || (options->type_at >= options->ticks) ||
-            (typing_duration > options->ticks - options->type_at)) {
-            fputs("typed text must be valid ASCII and fit within --ticks\n",
-                  stderr);
-            result = 2;
-            goto cleanup;
-        }
+    status = headless_text_schedule_validate(
+        options->text_actions, options->text_action_count, options->key_ticks,
+        options->ticks);
+    if (status != BM_STATUS_OK) {
+        fputs("typed actions must be valid, ordered, and fit within --ticks\n",
+              stderr);
+        result = 2;
+        goto cleanup;
     }
 
     if (!headless_blob_read_exact(options->firmware_even_path,
@@ -197,11 +195,10 @@ headless_run_pcs86(const headless_run_options_t *options)
         status = bm_session_configure(session, &machine);
     if (status == BM_STATUS_OK)
         status = bm_session_start(session);
-    if ((status == BM_STATUS_OK) && (options->type_text != NULL))
-        status = bm_session_run_for(session, options->type_at);
-    if ((status == BM_STATUS_OK) && (options->type_text != NULL))
-        status = headless_type_text(session, options->type_text,
-                                    options->key_ticks);
+    if (status == BM_STATUS_OK)
+        status = headless_run_text_schedule(
+            session, options->text_actions, options->text_action_count,
+            options->key_ticks);
     if ((status == BM_STATUS_OK) &&
         (bm_session_time(session) < options->ticks))
         status = bm_session_run_for(session,
@@ -228,6 +225,8 @@ headless_run_pcs86(const headless_run_options_t *options)
                             ++nonblack;
                     }
                     frame_crc = crc32_pixels(pixels, pixel_count);
+                    frame_matches = !options->expect_frame_crc32 ||
+                                    (frame_crc == options->expected_frame_crc32);
                     if (options->frame_path != NULL)
                         frame_written = write_ppm(options->frame_path, &framebuffer);
                 }
@@ -253,14 +252,16 @@ headless_run_pcs86(const headless_run_options_t *options)
                       options->frame_path : "");
     printf("firmware_hash=unchecked floppy_bytes=%zu floppy_read_only=%d\n",
            floppy.size, floppy.file != NULL ? 1 : 0);
-    if (options->type_text != NULL)
-        printf("input=scheduled type_at=%" PRIu64 " key_ticks=%" PRIu64
-               " duration=%" PRIu64 "\n",
-               options->type_at, options->key_ticks, typing_duration);
+    if (options->text_action_count != 0U)
+        printf("input_actions=%zu key_ticks=%" PRIu64 "\n",
+               options->text_action_count, options->key_ticks);
+    if (options->expect_frame_crc32)
+        printf("expected_frame_crc32=%08" PRIx32 " matched=%d\n",
+               options->expected_frame_crc32, frame_matches);
     if (!frame_written)
         fputs("could not write framebuffer capture\n", stderr);
     if ((status == BM_STATUS_OK) && (video_status == BM_STATUS_OK) &&
-        frame_written)
+        frame_written && frame_matches)
         result = 0;
 
 cleanup:
