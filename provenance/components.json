@@ -94,7 +94,7 @@
         "Toni Riikonen",
         "BluMach contributors"
       ],
-      "local_changes": "Reworked the inherited uPD765-compatible command path into an opaque AT-register component with explicit drives, IRQ6 callback, DMA channel 2 transfers and raw-sector media; removed global drive tables, host files, UI state and real-time timers"
+      "local_changes": "Reworked the inherited uPD765-compatible command path into an opaque AT-register component with explicit drives, IRQ6 callback, DMA channel 2 transfers and raw-sector media; removed global drive tables, host files, UI state and real-time timers; declared and enforced a 4096-byte maximum sector payload before DMA or media access"
     },
     {
       "id": "portable-spp-parallel-port",

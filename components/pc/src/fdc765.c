@@ -17,8 +17,6 @@
 
 #define FDC765_MAX_PARAMS 8U
 #define FDC765_MAX_RESULTS 10U
-#define FDC765_MAX_SECTOR_SIZE 4096U
-
 struct bm_fdc765 {
     bm_host_services_t host;
     bm_dma8237_t *dma;
@@ -43,7 +41,7 @@ struct bm_fdc765 {
     uint8_t pending_st0;
     uint8_t pending_pcn;
     uint8_t reset_sense_remaining;
-    uint8_t transfer_buffer[FDC765_MAX_SECTOR_SIZE];
+    uint8_t transfer_buffer[BM_FDC765_MAX_SECTOR_SIZE];
     int interrupt_pending;
     int interrupt_asserted;
 };
@@ -151,6 +149,10 @@ transfer_sector_to_memory(bm_fdc765_t *fdc,
     size_t index;
     bm_status_t status;
 
+    if ((geometry == NULL) ||
+        (geometry->bytes_per_sector > sizeof(fdc->transfer_buffer)))
+        return BM_STATUS_CAPACITY_EXCEEDED;
+
     status = bm_floppy_drive_read_sector(drive, cylinder, head, sector,
                                          fdc->transfer_buffer,
                                          geometry->bytes_per_sector);
@@ -176,6 +178,10 @@ transfer_sector_from_memory(bm_fdc765_t *fdc,
     const bm_floppy_geometry_t *geometry = bm_floppy_drive_geometry(drive);
     size_t index;
     bm_status_t status;
+
+    if ((geometry == NULL) ||
+        (geometry->bytes_per_sector > sizeof(fdc->transfer_buffer)))
+        return BM_STATUS_CAPACITY_EXCEEDED;
 
     for (index = 0U; index < geometry->bytes_per_sector; ++index) {
         status = bm_dma8237_device_read(fdc->dma, fdc->dma_channel,
@@ -240,6 +246,7 @@ execute_data_command(bm_fdc765_t *fdc, int write)
         return;
     }
     if ((expected_size_code == 0xffU) || (size_code != expected_size_code) ||
+        (geometry->bytes_per_sector > sizeof(fdc->transfer_buffer)) ||
         (head >= geometry->heads) || (sector == 0U) ||
         (sector > geometry->sectors_per_track) || (eot == 0U) ||
         (eot > geometry->sectors_per_track)) {
