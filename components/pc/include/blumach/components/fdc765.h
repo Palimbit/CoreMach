@@ -21,6 +21,9 @@ extern "C" {
 typedef struct bm_fdc765 bm_fdc765_t;
 typedef void (*bm_fdc765_irq_fn)(void *context, int asserted);
 
+/* Maximum sector payload accepted by this controller implementation. */
+#define BM_FDC765_MAX_SECTOR_SIZE 4096U
+
 typedef struct bm_fdc765_config {
     uint16_t io_base;
     unsigned int dma_channel;

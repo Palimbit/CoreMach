@@ -213,11 +213,14 @@ explicit links to IRQ6 and DMA2. The PCS 86 machine chooses the documented
 jumper encoding from the configured drive geometry. No layer reaches into a
 global drive table.
 
-The public tests use newly authored in-memory sectors. They verify a complete
-512-byte DMA read into guest RAM, terminal count, result bytes, reset/sense
-interrupts and write protection. Original firmware and media remain local-only
-manual inputs. With BIOS 1.09 and the preserved 720 KiB system diskette, the
-engine completes a 10,000,000-tick run without error, all visible resident
+The public tests use newly authored in-memory sectors. They verify complete
+512-byte DMA read and write paths, terminal count, result bytes, reset/sense
+interrupts and write protection. The controller contract limits a sector
+payload to 4096 bytes; read and write commands for an otherwise valid 8192-byte
+generic drive are rejected before DMA or media callbacks. Original firmware
+and media remain local-only manual inputs. With BIOS 1.09 and the preserved
+720 KiB system diskette, the engine completes a 10,000,000-tick run without
+error, all visible resident
 diagnostics report `Pass`, and the BIOS detects one floppy and enters primary
 bootstrap. The boot sector is executed and prints its own `Non-system disk or
 disk error` message; this is observed boot-sector execution, not a claim that
