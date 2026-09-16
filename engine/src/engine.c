@@ -170,7 +170,8 @@ next_event_time(const bm_engine_t *engine, bm_tick_t limit)
     bm_tick_t next = limit;
 
     for (index = 0; index < engine->max_events; ++index) {
-        if (engine->events[index].active && (engine->events[index].when < next))
+        /* The requested boundary is inclusive for scheduled events. */
+        if (engine->events[index].active && (engine->events[index].when <= next))
             next = engine->events[index].when;
     }
     return next;
