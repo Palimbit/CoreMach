@@ -29,6 +29,11 @@ set(CMAKE_CONFIGURATION_TYPES "Debug;Release;UltraDebug;Optimized" CACHE STRING 
 
 option(BLUMACH_BUILD_LEGACY "Build the inherited BluMach product" ON)
 option(BLUMACH_BUILD_ENGINE "Build the portable BluMach engine" ON)
+option(BLUMACH_BUILD_PORTABLE_QT "Build the portable Qt6 frontend" OFF)
+
+if(BLUMACH_BUILD_PORTABLE_QT AND NOT BLUMACH_BUILD_ENGINE)
+    message(FATAL_ERROR "The portable Qt6 frontend requires the portable engine.")
+endif()
 
 if(NOT BLUMACH_BUILD_LEGACY AND NOT BLUMACH_BUILD_ENGINE)
     message(FATAL_ERROR "Enable at least one BluMach implementation.")
@@ -49,7 +54,7 @@ if(BLUMACH_BUILD_LEGACY)
 endif()
 
 set(BLUMACH_PROJECT_LANGUAGES C)
-if(BLUMACH_BUILD_LEGACY)
+if(BLUMACH_BUILD_LEGACY OR BLUMACH_BUILD_PORTABLE_QT)
     list(APPEND BLUMACH_PROJECT_LANGUAGES CXX)
 endif()
 
@@ -307,6 +312,9 @@ if(BLUMACH_BUILD_ENGINE)
     add_subdirectory(platforms/null)
     add_subdirectory(apps/frontend)
     add_subdirectory(apps/headless)
+    if(BLUMACH_BUILD_PORTABLE_QT)
+        add_subdirectory(apps/qt-portable)
+    endif()
 endif()
 
 if(BUILD_TESTING)
