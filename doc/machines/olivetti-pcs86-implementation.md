@@ -10,21 +10,26 @@ the original revision 1.09 BIOS from the real-mode reset address. It supplies an
 explicit NEC V30 state object, a generic address bus, 640 KiB of RAM, the
 documented 64 KiB system-ROM window, a single 8259A, a complete 8253 mode model,
 a functional MM58167, isolated SPP and NS16450 components and the known
-motherboard-register map. It is a
-bring-up milestone, not a usable emulator: the BIOS now visibly passes CPU,
-ROM, DMA, interrupt-controller, Timer 0 and Clock/Calendar diagnostics and
-reports 640 kB. The measured boundary is the first unimplemented floppy-control
-write at `3F2h`, after 6,272,717 retired instructions and 3,251 successful I/O
-accesses. Before reaching it, the firmware also completes its memory and
-option-ROM scans, programs the PVGA1A and renders a real 720x400 diagnostic
-frame. The unpopulated option-ROM region returns ones;
+motherboard-register map. The current cut also supplies a caller-owned block
+medium, an independent floppy drive, real 8237 device transfers and a portable
+uPD765-compatible controller at `3F0h-3F7h` using IRQ6 and DMA2. It remains an
+incomplete emulator, but it is no longer stopped at the storage boundary: the
+BIOS visibly passes CPU, ROM, DMA, interrupt-controller, Timer,
+Clock/Calendar and keyboard diagnostics, reports 640 kB and one floppy drive,
+then enters its primary bootstrap. With the preserved 720 KiB system-diskette
+image mounted read-only, the BIOS transfers and executes its boot sector, which
+prints `Non-system disk or disk error`. A 10,000,000-tick manual run completes
+without an engine error after 9,999,858 retired instructions and 10,919
+successful I/O accesses; its 720x400 frame has CRC32 `C6163480`. The
+unpopulated option-ROM region returns ones;
 the PCS 86 system EPROMs already contain video initialization, so the engine
 does not fabricate a separate ROM. The PVGA1A component owns VGA/Paradise
 register state and 256 KiB of planar VRAM and publishes a deterministic
 host-neutral text framebuffer. It then exercises the enabled parallel and
 serial register paths. Host-neutral keyboard events and the board's dual
-keyboard/mouse queues are present, while DMA arbitration and transfers, FDC
-operation, mouse input and storage remain absent.
+keyboard/mouse queues are present. FDC rotational/command timing, asynchronous
+DMA arbitration, mouse input and writable-media product integration remain
+absent.
 
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
 interleaving, ROM address and known firmware hashes come from the canonical
@@ -51,23 +56,23 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, tested arithmetic/logical and shift paths, direct/indirect near calls, software and maskable interrupt entry, IRET, stack and flag control, byte/word MOVS/STOS/LODS/SCAS with REP/REPE/REPNE and basic IN/OUT; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, tested arithmetic/logical and shift paths including ADC/SBB, direct/indirect near calls, near/far returns with cleanup, software and maskable interrupt entry, IRET, stack, SAHF/LAHF and flag control, byte/word MOVS/STOS/LODS/SCAS with REP/REPE/REPNE and basic IN/OUT; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; rational PIT/RTC clock accumulators use a measured functional instruction rate, not V30 cycle accounting |
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, output callback, CPU acknowledge and EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven from scheduler time without claiming cycle accuracy |
-| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, `A0h`, `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues and IRQ1 scan queue |
+| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture/open-bus reads at `A0h-AEh`, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues and IRQ1 scan queue |
 | EMS selectors | Deliberate boundary | Write-only page-selector latches at `8400h-8403h`; no aperture or backing SIMMs are claimed or exposed |
-| 8237 DMA | Programming subset derived from the inherited core | Address/count flip-flop, base/current registers, command, mode, request, masks, status and master clear; a separate XT latch block supplies four-bit pages and observable 20-bit current addresses; no arbitration, bus ownership or data transfers |
+| 8237 DMA | Functional synchronous subset derived from the inherited core | Address/count flip-flop, base/current registers, command, mode, request, masks, status, master clear and device-facing byte transfers; a separate XT latch block supplies four-bit pages and 20-bit current addresses; no asynchronous arbitration or cycle stealing |
 | MM58167 RTC | Functional portable component | PCS 86 `B0h-B7h` controls and `E0h-EFh` counter/alarm RAM, BCD millisecond calendar, alarm and periodic IRQs, reset/GO/standby commands, checksum repair and 32-byte caller-owned persistence; yearless calendar and physical crystal/battery behaviour remain approximate |
 | SPP parallel port | Derived portable register core | Data, status and control at gated `378h-37Ah`, disconnected-printer status, output callback and ACK-driven IRQ7; no EPP/ECP, printer backend, DMA or host threads |
 | NS16450 UART | Derived portable register core | Divisor latch, IER/IIR, LCR/MCR, LSR/MSR, scratch, modem/data loopback and IRQ4 at gated `3F8h-3FFh`; no 16550 FIFO, host serial backend or baud scheduling |
 | Keyboard input | New runtime contract plus PCS 86 translation | Stable physical-key events, supported IBM Set 1 make/break bytes and IRQ1; no host scan codes in the engine, mouse input, electrical timing or complete command set |
 | PCS 86 video selection | Observed write-only boundary | Empty `C0000h-EFFFFh` option-ROM space returns ones; `46E8h` and `102h` retain the BIOS-observed arbitration writes without undocumented side effects |
 | Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer and host-neutral XRGB8888 framebuffer, but no graphics modes or scan timing |
-| Complete PPI behaviour | Unavailable | Still required before complete original-BIOS POST comparison |
-| Floppy controller and storage | Unavailable | Next vertical cut begins at the observed `3F2h` write |
+| Complete PPI behaviour | Partial board glue | Sufficient for the validated resident diagnostics and bootstrap path; electrical/timing fidelity and undocumented bits remain unclaimed |
+| Floppy controller and storage | Functional boot subset | Caller-owned raw block media, independent 360 KiB/1.2 MiB/720 KiB/1.44 MiB drive geometry, PCS 86 jumpers, active-low disk change, reset/sense/specify/seek/recalibrate/read-ID and DMA read/write-data paths; no rotational timing, flux/track formats, formatting or weak-sector behaviour |
 
 Unsupported opcodes return a structured `BM_STATUS_UNSUPPORTED` result. They
 are not skipped, approximated as NOPs or redirected to the inherited engine.
@@ -81,8 +86,8 @@ The current automated ladder uses no historical software:
    write protection, unmapped access and direct debug inspection.
 2. The PC component tests initialize and service the single PIC, cover withdrawn
    edge requests and all six 8253 modes, gates, BCD and latching, and verify the
-   8237 register, mask, request, status, byte-pointer
-   and master-clear contracts without attaching a storage device. A separate
+   8237 register, mask, request, status, byte-pointer, master-clear and real
+   device-to-memory/memory-to-device transfer contracts. A separate
    test verifies the page-port-to-channel map, four-bit masking, reserved
    latches, effective 20-bit addresses and independent reset semantics.
 3. The V30 tests reproduce the BIOS register/flag self-test, exercise its
@@ -104,10 +109,15 @@ The current automated ladder uses no historical software:
    behaviour. A PCS 86 integration ROM enables both gated devices, performs a
    UART data loopback and reads the keyboard identify response. The session
    test also verifies normalized make/break delivery and reset cleanup.
+9. The FDC test releases reset, drains the four sense-interrupt results, reads
+   a complete 512-byte sector through DMA2 into guest RAM and verifies
+   write-protect reporting. The PCS 86 integration test verifies a configured
+   720 KiB drive's jumper encoding and reset state.
 
 Original firmware is intentionally not used in CI and no ROM, disk, manual or
 diagnostic asset is present in these public files. The manual firmware probe
-accepts two external 32 KiB halves and reports the exact instruction boundary;
+accepts two external 32 KiB halves and an optional external raw floppy image,
+reports the exact instruction boundary and can emit a framebuffer capture;
 it does not weaken the rule that firmware is caller-owned local data.
 
 ## Rejected shortcuts and replacement criteria
@@ -121,7 +131,8 @@ auditability or the intended platform boundary.
 The opcode subset will be expanded incrementally into a complete portable V30
 interpreter with conformance tests. CPU cycle accounting will replace the
 measured instruction-domain rate while preserving the existing rational clock
-adapters. DMA transfer semantics, the remaining board behaviours and sufficient V30 coverage are the exit criteria
+adapters. Asynchronous DMA timing, the remaining board behaviours and
+sufficient V30 coverage are the exit criteria
 for meaningful comparison against original-firmware POST traces.
 
 BIOS 1.09 writes `40h` to I/O port `70h` at `F000:0B29` while configuring the
@@ -150,24 +161,28 @@ It then programs the isolated PVGA1A registers and renders the firmware's real
 diagnostic text. The subsequent interactive-I/O cut provides a disconnected SPP
 register model, a disconnected NS16450 with internal loopback, their port-65h
 gates and IRQ routes, the board's two protocol queues and host-neutral keyboard
-delivery. The same local firmware then reaches `F000:352C`, where
-`OUT 3F2h,AL` stops on the absent floppy controller after 6,272,717 instructions
-and 3,251 successful I/O transactions. The PVGA1A status phase, scheduler rate
-and PS/2 response timing remain deterministic bring-up approximations; no
-printer/serial backend, mouse input, floppy controller or DMA transfer path is
-connected.
+delivery. The next local validation adds a read-only 720 KiB raw image and
+reaches the primary bootstrap. All visible resident diagnostics report `Pass`;
+the BIOS detects one floppy, reads its boot sector through DMA2 and transfers
+execution to it. The boot sector's own `Non-system disk or disk error` message
+is visible in the captured frame. The PVGA1A status phase, scheduler rate, FDC
+timing and PS/2 response timing remain deterministic bring-up approximations;
+no printer/serial backend or mouse input is connected.
 
 The main implementation files are `components/cpu/808x/src/cpu_808x.c`,
 `components/memory/src/linear_memory.c`, `components/pc/src/dma8237.c`,
-`components/pc/src/dma_page_registers.c`, `components/pc/src/pic8259.c`,
+`components/pc/src/dma_page_registers.c`, `components/pc/src/fdc765.c`,
+`components/pc/src/pic8259.c`,
 `components/pc/src/pit8253.c`, `components/pc/src/rtc_mm58167.c`,
 `components/pc/src/lpt_spp.c`, `components/pc/src/uart16450.c`,
+`components/storage/src/floppy_drive.c`,
 `components/video/src/pvga1a.c` and
 `systems/olivetti-pcs86/src/olivetti_pcs86.c`. The corresponding public tests
 include the focused `cpu_808x_post_test.c`, `cpu_808x_checksum_test.c`,
 `cpu_808x_segment_test.c`, `cpu_808x_compare_test.c`, `dma8237_test.c`,
 `dma_page_registers_test.c`, `rtc_mm58167_test.c`,
-`pc_platform_test.c`, `cpu_808x_shift_test.c`, `pvga1a_test.c`,
+`pc_platform_test.c`, `cpu_808x_shift_test.c`, `cpu_808x_return_test.c`,
+`fdc765_test.c`, `pvga1a_test.c`,
 `legacy_io_test.c`, `pcs86_reset_test.c` and `pcs86_user_io_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never
 requires ROMs.

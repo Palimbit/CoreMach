@@ -3,6 +3,7 @@
 #define BLUMACH_SYSTEMS_OLIVETTI_PCS86_H
 
 #include <blumach/components/cpu_808x.h>
+#include <blumach/components/floppy_drive.h>
 #include <blumach/runtime/runtime.h>
 
 #ifdef __cplusplus
@@ -29,6 +30,7 @@ typedef struct bm_pcs86_config {
     void *trace_context;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
+    bm_floppy_drive_config_t floppy[2];
 } bm_pcs86_config_t;
 
 typedef struct bm_pcs86_firmware_identity {

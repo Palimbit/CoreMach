@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <blumach/components/bus.h>
 #include <blumach/components/dma8237.h>
+#include <blumach/components/linear_memory.h>
 #include <blumach/platforms/null_host.h>
 
 #include <assert.h>
@@ -37,7 +38,7 @@ main(void)
     bm_dma8237_channel_state_t channel;
     uint8_t value;
 
-    assert(bm_bus_create(&host, 1, &bus) == BM_STATUS_OK);
+    assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_dma8237_create(&host, bus, &config, &dma) == BM_STATUS_OK);
     assert(bm_dma8237_mask(dma) == 0x0fU);
 
@@ -91,6 +92,62 @@ main(void)
 
     assert(read_port(bus, 0x09U, &value) == BM_STATUS_UNSUPPORTED);
     assert(bm_dma8237_set_dreq(dma, 4, 1) == BM_STATUS_INVALID_ARGUMENT);
+
+    {
+        bm_linear_memory_t *memory = NULL;
+        bm_linear_memory_config_t memory_config = {
+            BM_ADDRESS_MEMORY, 0U, 0x10000U, 0, NULL, 0U
+        };
+        bm_bus_transaction_t transaction;
+        int terminal = 0;
+        uint8_t transferred_value = 0U;
+
+        /* The first DMA instance already owns the I/O mapping, so memory can
+         * share the same bus and exercise real device-facing transfers. */
+        assert(bm_linear_memory_create(&host, bus, &memory_config, &memory) ==
+               BM_STATUS_OK);
+        bm_dma8237_reset(dma);
+        assert(write_port(bus, 0x0cU, 0U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x04U, 0x00U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x04U, 0x20U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x05U, 0x03U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x05U, 0x00U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x0bU, 0x46U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x0aU, 0x02U) == BM_STATUS_OK);
+        assert(bm_dma8237_set_dreq(dma, 2U, 1) == BM_STATUS_OK);
+        assert(bm_dma8237_device_write(dma, 2U, 0x11U, &terminal) == BM_STATUS_OK);
+        assert(!terminal);
+        assert(bm_dma8237_device_write(dma, 2U, 0x22U, &terminal) == BM_STATUS_OK);
+        assert(!terminal);
+        assert(bm_dma8237_device_write(dma, 2U, 0x33U, &terminal) == BM_STATUS_OK);
+        assert(!terminal);
+        assert(bm_dma8237_device_write(dma, 2U, 0x44U, &terminal) == BM_STATUS_OK);
+        assert(terminal);
+        transaction = (bm_bus_transaction_t) {
+            BM_ADDRESS_MEMORY, BM_BUS_READ, 0x2000U, 0U, 4U, 1U, 0U,
+            BM_ENDIAN_LITTLE, 0
+        };
+        assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+        assert(transaction.value == UINT64_C(0x44332211));
+        assert(bm_dma8237_channel_state(dma, 2U, &channel) == BM_STATUS_OK);
+        assert(channel.current_address == 0x2004U);
+        assert(channel.current_count == 0xffffU);
+        assert(channel.terminal_count);
+
+        assert(bm_dma8237_set_dreq(dma, 2U, 0) == BM_STATUS_OK);
+        assert(write_port(bus, 0x0cU, 0U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x04U, 0x00U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x04U, 0x20U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x05U, 0x00U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x05U, 0x00U) == BM_STATUS_OK);
+        assert(write_port(bus, 0x0bU, 0x4aU) == BM_STATUS_OK);
+        assert(write_port(bus, 0x0aU, 0x02U) == BM_STATUS_OK);
+        assert(bm_dma8237_set_dreq(dma, 2U, 1) == BM_STATUS_OK);
+        assert(bm_dma8237_device_read(dma, 2U, &transferred_value, &terminal) ==
+               BM_STATUS_OK);
+        assert(transferred_value == 0x11U && terminal);
+        bm_linear_memory_destroy(memory);
+    }
 
     bm_dma8237_destroy(dma);
     bm_bus_destroy(bus);

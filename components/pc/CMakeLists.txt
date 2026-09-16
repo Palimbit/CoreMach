@@ -3,6 +3,7 @@
 add_library(blumach_pc_components STATIC
     src/dma8237.c
     src/dma_page_registers.c
+    src/fdc765.c
     src/lpt_spp.c
     src/pic8259.c
     src/pit8253.c
@@ -15,7 +16,7 @@ target_include_directories(blumach_pc_components
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
         "$<INSTALL_INTERFACE:include>"
 )
-target_link_libraries(blumach_pc_components PUBLIC blumach_bus)
+target_link_libraries(blumach_pc_components PUBLIC blumach_bus blumach_storage)
 target_compile_features(blumach_pc_components PUBLIC c_std_11)
 set_target_properties(blumach_pc_components PROPERTIES C_EXTENSIONS OFF)
 

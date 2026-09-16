@@ -193,6 +193,10 @@ main(void)
         .io_trace = capture_io_trace,
         .io_trace_context = &io_trace
     };
+    config.floppy[0] = (bm_floppy_drive_config_t) {
+        .installed = 1,
+        .geometry = { 80U, 2U, 9U, 512U }
+    };
     machine = bm_pcs86_machine_config(&config);
 
     test_partial_initialization_cleanup(&config);
@@ -254,7 +258,7 @@ main(void)
     assert(io_trace.entries[13].operation == BM_BUS_WRITE);
     assert(io_trace.entries[13].port == 0x8400U && io_trace.entries[13].value == 0x80U);
     assert(io_trace.entries[14].operation == BM_BUS_READ);
-    assert(io_trace.entries[14].port == 0x100U && io_trace.entries[14].value == 0xffU);
+    assert(io_trace.entries[14].port == 0x100U && io_trace.entries[14].value == 0xfdU);
     assert(io_trace.entries[15].operation == BM_BUS_READ);
     assert(io_trace.entries[15].port == 0x63U && io_trace.entries[15].value == 0x08U);
 
@@ -268,6 +272,15 @@ main(void)
         assert(bm_session_inspect_machine(session, "pit0_count", &value) == BM_STATUS_OK);
         assert(value == 0U);
         assert(bm_session_inspect_machine(session, "keyboard_queue_depth", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0U);
+        assert(bm_session_inspect_machine(session, "fdc_dor", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0U);
+        assert(bm_session_inspect_machine(session, "fdc_msr", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x80U);
+        assert(bm_session_inspect_machine(session, "floppy0_cylinder", &value) ==
                BM_STATUS_OK);
         assert(value == 0U);
         assert(bm_session_inspect_machine(session, "unknown", &value) ==

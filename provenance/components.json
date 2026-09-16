@@ -15,7 +15,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Initial deterministic engine, CPU contract, scheduler and host-neutral XRGB8888 framebuffer value types"
+      "local_changes": "Initial deterministic engine, CPU contract, scheduler, host-neutral XRGB8888 framebuffer value types and caller-owned block-media contract"
     },
     {
       "id": "generic-address-bus",
@@ -34,6 +34,14 @@
       "local_changes": "Host-allocated RAM and ROM regions with endian-neutral bus transactions"
     },
     {
+      "id": "portable-floppy-drive",
+      "destination": ["components/storage/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Independent floppy-drive geometry, change state and raw-sector access over the host-neutral block-media contract"
+    },
+    {
       "id": "nec-v30-bring-up-interpreter",
       "destination": ["components/cpu/808x/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
@@ -42,7 +50,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic and logical operations including byte/word multiply and unsigned word divide with interrupt-zero faults, conditional flow, ModR/M memory operands, explicit ES/CS/SS/DS overrides and stack operations, NEC V30 TEST1/CLR1/SET1/NOT1 bit operations, direct and indirect near calls, software and callback-based real-mode interrupts, complete D0-D3 rotate/shift groups, TEST r/m8,r8 and r/m16,r16, XCHG AX,r16, flag-control operations, byte and word string operations with REP/REPE/REPNE, ROM-checksum and memory-check paths and full basic-register inspection to the still-incomplete V30 subset"
+      "local_changes": "Replaced global CPU state and legacy memory coupling with explicit state and bus transactions; added tested arithmetic and logical operations including ADC/SBB and destination ModR/M word forms, byte/word multiply and unsigned word divide with interrupt-zero faults, conditional flow, ModR/M memory operands, explicit ES/CS/SS/DS overrides and stack operations, near/far return forms with caller cleanup, SAHF/LAHF, NEC V30 TEST1/CLR1/SET1/NOT1 bit operations, direct and indirect near calls, software and callback-based real-mode interrupts, complete D0-D3 rotate/shift groups, TEST r/m8,r8 and r/m16,r16, XCHG AX,r16, flag-control operations, byte and word string operations with REP/REPE/REPNE, ROM-checksum and memory-check paths and full basic-register inspection to the still-incomplete V30 subset"
     },
     {
       "id": "portable-pc-platform-components",
@@ -61,7 +69,32 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Sarah Walker", "Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core, external XT page latches with explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement. DMA transfer ownership and device data movement remain absent"
+      "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core with synchronous device-facing memory transfers, external XT page latches with explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement"
+    },
+    {
+      "id": "portable-upd765-fdc",
+      "destination": [
+        "components/pc/include/blumach/components/fdc765.h",
+        "components/pc/src/fdc765.c"
+      ],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "7d9cd2332475c4928b7ff1c157e8e31fe953c4f2",
+      "origin_paths": [
+        "src/floppy/fdc.c",
+        "src/floppy/fdd.c",
+        "src/include/86box/fdc.h",
+        "src/include/86box/fdd.h"
+      ],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": [
+        "Sarah Walker",
+        "Miran Grca",
+        "Fred N. van Kempen",
+        "Toni Riikonen",
+        "BluMach contributors"
+      ],
+      "local_changes": "Reworked the inherited uPD765-compatible command path into an opaque AT-register component with explicit drives, IRQ6 callback, DMA channel 2 transfers and raw-sector media; removed global drive tables, host files, UI state and real-time timers"
     },
     {
       "id": "portable-spp-parallel-port",
@@ -165,7 +198,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, 8237 programming core and four-bit XT page registers, single PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, diagnostic and memory-control latches, selector-only EMS, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues and normalized Set 1 keyboard delivery, while FDC operation, DMA transfers, the EMS aperture, mouse input and cycle-accurate timing remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, selector-only EMS, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and a configured uPD765-compatible controller with IRQ6, DMA2, active-low disk change and PCS 86 floppy jumpers. The EMS aperture, mouse input and cycle-accurate timing remain absent"
     }
   ],
   "external_dependencies": []
