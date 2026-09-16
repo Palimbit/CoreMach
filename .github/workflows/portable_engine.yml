@@ -71,3 +71,26 @@ jobs:
         run: python -B tools/provenance_audit.py
       - name: Test provenance audit
         run: python -B -m unittest tools.tests.test_provenance_audit
+
+  qt-frontend:
+    name: Portable Qt6 frontend (ubuntu-26.04)
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Qt6 development packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes qt6-base-dev
+      - name: Configure portable Qt6 build
+        run: >-
+          cmake -S . -B build/portable-qt
+          -D BLUMACH_BUILD_LEGACY=OFF
+          -D BLUMACH_BUILD_ENGINE=ON
+          -D BLUMACH_BUILD_PORTABLE_QT=ON
+          -D BUILD_TESTING=ON
+          -D CMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/portable-qt --parallel 4
+      - name: Test
+        run: ctest --test-dir build/portable-qt --output-on-failure
