@@ -172,7 +172,9 @@ bm_session_time(const bm_session_t *session)
 bm_status_t
 bm_session_inspect_cpu(const bm_session_t *session, bm_cpu_id_t id, const char *name, uint64_t *value)
 {
-    if ((session == NULL) || (session->engine == NULL))
+    if ((session == NULL) || (name == NULL) || (value == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (session->engine == NULL)
         return BM_STATUS_INVALID_STATE;
     return bm_engine_inspect_cpu(session->engine, id, name, value);
 }
