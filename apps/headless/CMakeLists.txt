@@ -4,6 +4,7 @@ add_executable(blumach_headless
     src/file_inputs.c
     src/main.c
     src/pcs86_frontend.c
+    src/text_input.c
 )
 target_link_libraries(blumach_headless PRIVATE
     blumach_runtime
@@ -20,6 +21,27 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(blumach_headless_text_input_test
+        src/text_input.c
+        tests/text_input_test.c
+    )
+    target_include_directories(blumach_headless_text_input_test PRIVATE src)
+    target_link_libraries(blumach_headless_text_input_test PRIVATE
+        blumach_runtime
+    )
+    target_compile_features(blumach_headless_text_input_test PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(blumach_headless_text_input_test PRIVATE
+            /W4 /WX /UNDEBUG
+        )
+    else()
+        target_compile_options(blumach_headless_text_input_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+        )
+    endif()
+    add_test(NAME portable-headless.text-input
+        COMMAND blumach_headless_text_input_test
+    )
     add_test(NAME portable-headless.version COMMAND blumach_headless --version)
     set_tests_properties(portable-headless.version PROPERTIES
         PASS_REGULAR_EXPRESSION "BluMach portable engine"

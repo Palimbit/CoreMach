@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "pcs86_frontend.h"
 #include "file_inputs.h"
+#include "text_input.h"
 
 #include <blumach/platforms/null_host.h>
 #include <blumach/runtime/runtime.h>
@@ -134,6 +135,19 @@ headless_run_pcs86(const headless_run_options_t *options)
     const bm_pcs86_firmware_identity_t *odd_identity;
     int frame_written = options->frame_path == NULL;
     int result = 3;
+    uint64_t typing_duration = 0U;
+
+    if (options->type_text != NULL) {
+        status = headless_text_duration(options->type_text, options->key_ticks,
+                                        &typing_duration);
+        if ((status != BM_STATUS_OK) || (options->type_at >= options->ticks) ||
+            (typing_duration > options->ticks - options->type_at)) {
+            fputs("typed text must be valid ASCII and fit within --ticks\n",
+                  stderr);
+            result = 2;
+            goto cleanup;
+        }
+    }
 
     if (!headless_blob_read_exact(options->firmware_even_path,
                                   BM_PCS86_FIRMWARE_HALF_SIZE, &even) ||
@@ -183,8 +197,15 @@ headless_run_pcs86(const headless_run_options_t *options)
         status = bm_session_configure(session, &machine);
     if (status == BM_STATUS_OK)
         status = bm_session_start(session);
-    if (status == BM_STATUS_OK)
-        status = bm_session_run_for(session, options->ticks);
+    if ((status == BM_STATUS_OK) && (options->type_text != NULL))
+        status = bm_session_run_for(session, options->type_at);
+    if ((status == BM_STATUS_OK) && (options->type_text != NULL))
+        status = headless_type_text(session, options->type_text,
+                                    options->key_ticks);
+    if ((status == BM_STATUS_OK) &&
+        (bm_session_time(session) < options->ticks))
+        status = bm_session_run_for(session,
+                                    options->ticks - bm_session_time(session));
 
     if (session != NULL) {
         video_status = bm_session_video_geometry(session, &geometry);
@@ -232,6 +253,10 @@ headless_run_pcs86(const headless_run_options_t *options)
                       options->frame_path : "");
     printf("firmware_hash=unchecked floppy_bytes=%zu floppy_read_only=%d\n",
            floppy.size, floppy.file != NULL ? 1 : 0);
+    if (options->type_text != NULL)
+        printf("input=scheduled type_at=%" PRIu64 " key_ticks=%" PRIu64
+               " duration=%" PRIu64 "\n",
+               options->type_at, options->key_ticks, typing_duration);
     if (!frame_written)
         fputs("could not write framebuffer capture\n", stderr);
     if ((status == BM_STATUS_OK) && (video_status == BM_STATUS_OK) &&

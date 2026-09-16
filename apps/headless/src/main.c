@@ -33,7 +33,9 @@ print_usage(const char *program)
             "  %s --describe <machine-id>\n"
             "  %s --machine <machine-id> --firmware-even <path>"
             " --firmware-odd <path> [--floppy <path>] [--ticks <count>]"
-            " [--frame <path>]\n",
+            " [--frame <path>] [--type-at <tick> --type-text <text>"
+            " [--key-ticks <count>]]\n"
+            "     text accepts \\n, \\r, \\t, \\b and \\\\ escapes\n",
             program, program, program, program);
 }
 
@@ -73,9 +75,12 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
 {
     int index;
     int ticks_was_set = 0;
+    int type_at_was_set = 0;
+    int key_ticks_was_set = 0;
 
     *options = (headless_run_options_t) {
-        NULL, NULL, NULL, NULL, NULL, UINT64_C(10000000)
+        NULL, NULL, NULL, NULL, NULL, NULL, UINT64_C(10000000), 0U,
+        UINT64_C(2000)
     };
     for (index = 1; index < argc; ++index) {
         const char *argument = argv[index];
@@ -98,15 +103,28 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
         } else if (strcmp(argument, "--frame") == 0) {
             if (!assign_once(&options->frame_path, value))
                 return 0;
+        } else if (strcmp(argument, "--type-text") == 0) {
+            if (!assign_once(&options->type_text, value))
+                return 0;
         } else if (strcmp(argument, "--ticks") == 0) {
             if (ticks_was_set || !parse_ticks(value, &options->ticks))
                 return 0;
             ticks_was_set = 1;
+        } else if (strcmp(argument, "--type-at") == 0) {
+            if (type_at_was_set || !parse_ticks(value, &options->type_at))
+                return 0;
+            type_at_was_set = 1;
+        } else if (strcmp(argument, "--key-ticks") == 0) {
+            if (key_ticks_was_set || !parse_ticks(value, &options->key_ticks))
+                return 0;
+            key_ticks_was_set = 1;
         } else {
             return 0;
         }
     }
-    return (options->machine_id != NULL) &&
+    return ((options->type_text != NULL) == type_at_was_set) &&
+           (!key_ticks_was_set || type_at_was_set) &&
+           (options->machine_id != NULL) &&
            (options->firmware_even_path != NULL) &&
            (options->firmware_odd_path != NULL);
 }
