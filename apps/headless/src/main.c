@@ -1,28 +1,17 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include "pcs86_frontend.h"
+#include "machine_runner.h"
 #include "scenario_file.h"
 
 #include <blumach/engine/version.h>
+#include <blumach/frontend/frontend.h>
 #include <blumach/platforms/null_host.h>
 #include <blumach/runtime/runtime.h>
-#include <blumach/systems/olivetti_pcs86.h>
 
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-typedef int (*headless_run_fn)(const headless_run_options_t *options);
-
-typedef struct headless_machine_adapter {
-    const bm_machine_definition_t *(*definition)(void);
-    headless_run_fn run;
-} headless_machine_adapter_t;
-
-static const headless_machine_adapter_t machine_adapters[] = {
-    { bm_pcs86_machine_definition, headless_run_pcs86 }
-};
 
 static void
 print_usage(const char *program)
@@ -187,31 +176,13 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
            (options->firmware_odd_path != NULL);
 }
 
-static const headless_machine_adapter_t *
-find_adapter(const bm_machine_definition_t *definition)
-{
-    size_t index;
-    for (index = 0U;
-         index < sizeof(machine_adapters) / sizeof(machine_adapters[0]);
-         ++index) {
-        if (machine_adapters[index].definition() == definition)
-            return &machine_adapters[index];
-    }
-    return NULL;
-}
-
 static int
 create_registry(const bm_host_services_t *host, bm_machine_registry_t **registry)
 {
-    size_t index;
     bm_status_t status = bm_machine_registry_create(
-        host, sizeof(machine_adapters) / sizeof(machine_adapters[0]), registry);
-    for (index = 0U;
-         (status == BM_STATUS_OK) &&
-         (index < sizeof(machine_adapters) / sizeof(machine_adapters[0]));
-         ++index)
-        status = bm_machine_registry_register(
-            *registry, machine_adapters[index].definition());
+        host, bm_frontend_adapter_count(), registry);
+    if (status == BM_STATUS_OK)
+        status = bm_frontend_register_machines(*registry);
     if (status != BM_STATUS_OK) {
         bm_machine_registry_destroy(*registry);
         *registry = NULL;
@@ -226,7 +197,7 @@ main(int argc, char **argv)
     bm_host_services_t host = bm_null_host_services();
     bm_machine_registry_t *registry = NULL;
     const bm_machine_definition_t *definition = NULL;
-    const headless_machine_adapter_t *adapter;
+    const bm_frontend_adapter_t *adapter;
     headless_run_options_t options;
     int result = 0;
 
@@ -263,12 +234,13 @@ main(int argc, char **argv)
                                      &definition) != BM_STATUS_OK) {
             fprintf(stderr, "unknown machine: %s\n", options.machine_id);
             result = 3;
-        } else if ((adapter = find_adapter(definition)) == NULL) {
+        } else if ((adapter = bm_frontend_adapter_find(definition->id)) ==
+                   NULL) {
             fprintf(stderr, "no headless adapter for machine: %s\n",
                     definition->id);
             result = 3;
         } else {
-            result = adapter->run(&options);
+            result = headless_run_machine(adapter, &options);
         }
     } else {
         print_usage(argv[0]);

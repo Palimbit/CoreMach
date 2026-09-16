@@ -182,12 +182,20 @@
       "local_changes": "Deterministic host adapter for tests and headless use"
     },
     {
+      "id": "portable-frontend-adapters",
+      "destination": ["apps/frontend/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Frontend-neutral machine adapter registry, declarative asset requirements and typed configuration preparation over caller-owned blobs and block media; optional file helpers remain separate from the adapter contract"
+    },
+    {
       "id": "headless-frontend",
       "destination": ["apps/headless/**"],
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, deterministic execution reporting and framebuffer capture; machine-specific setup is isolated behind adapters that use only public system and runtime contracts"
+      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, deterministic execution reporting and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies"
     },
     {
       "id": "olivetti-pcs86-portable-system",
