@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define FLAG_ZF 0x0040U
+#define FLAG_DF 0x0400U
 
 typedef struct cpu_result {
     uint64_t cx;
@@ -115,6 +116,10 @@ test_direction_and_word_width(void)
     static const uint8_t word_program[] = {
         0xbe, 0x00, 0x01, 0xbf, 0x00, 0x02, 0xa7, 0xf4
     };
+    static const uint8_t direction_instruction_program[] = {
+        0xbe, 0x01, 0x01, 0xbf, 0x01, 0x02,
+        0xfd, 0xa6, 0xfc, 0xf4
+    };
     static const uint8_t reverse_data[] = { 0x11U, 0x22U };
     static const uint8_t word_data[] = { 0x34U, 0x12U };
     static const memory_region_t reverse_regions[] = {
@@ -139,6 +144,14 @@ test_direction_and_word_width(void)
     assert(result.halted == 1U);
     assert(result.si == 0x0102U && result.di == 0x0202U);
     assert((result.flags & FLAG_ZF) != 0U);
+
+    result = run_program(direction_instruction_program,
+                         sizeof(direction_instruction_program), reverse_regions,
+                         sizeof(reverse_regions) / sizeof(reverse_regions[0]));
+    assert(result.halted == 1U);
+    assert(result.si == 0x0100U && result.di == 0x0200U);
+    assert((result.flags & FLAG_ZF) != 0U);
+    assert((result.flags & FLAG_DF) == 0U);
 }
 
 static void

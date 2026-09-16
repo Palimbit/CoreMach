@@ -2158,6 +2158,9 @@ execute_one(bm_808x_state_t *state)
         case 0xfc: /* CLD */
             state->flags &= (uint16_t) ~FLAG_DF;
             return BM_STATUS_OK;
+        case 0xfd: /* STD */
+            state->flags |= FLAG_DF;
+            return BM_STATUS_OK;
         case 0xf4: /* HLT */
             state->halted = 1;
             return BM_STATUS_OK;
