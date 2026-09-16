@@ -54,10 +54,12 @@ if(BUILD_TESTING)
     )
     target_compile_features(blumach_headless_scenario_file_test PRIVATE c_std_11)
     if(MSVC)
-        target_compile_options(blumach_headless_scenario_file_test PRIVATE /W4 /WX)
+        target_compile_options(blumach_headless_scenario_file_test PRIVATE
+            /W4 /WX /UNDEBUG
+        )
     else()
         target_compile_options(blumach_headless_scenario_file_test PRIVATE
-            -Wall -Wextra -Wpedantic -Werror
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
         )
     endif()
     add_test(NAME portable-headless.scenario-file
