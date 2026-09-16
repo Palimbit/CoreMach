@@ -33,10 +33,37 @@ print_usage(const char *program)
             "  %s --describe <machine-id>\n"
             "  %s --machine <machine-id> --firmware-even <path>"
             " --firmware-odd <path> [--floppy <path>] [--ticks <count>]"
-            " [--frame <path>] [--type-at <tick> --type-text <text>"
-            " [--key-ticks <count>]]\n"
+            " [--frame <path>] [--type-at <tick> --type-text <text>]..."
+            " [--key-ticks <count>] [--expect-frame-crc32 <hex>]\n"
             "     text accepts \\n, \\r, \\t, \\b and \\\\ escapes\n",
             program, program, program, program);
+}
+
+static int
+parse_crc32(const char *value, uint32_t *crc)
+{
+    char *end = NULL;
+    const char *cursor;
+    unsigned long parsed;
+    size_t length;
+    if ((value == NULL) || (crc == NULL))
+        return 0;
+    length = strlen(value);
+    if ((length == 0U) || (length > 8U))
+        return 0;
+    for (cursor = value; *cursor != '\0'; ++cursor) {
+        if (!(((*cursor >= '0') && (*cursor <= '9')) ||
+              ((*cursor >= 'a') && (*cursor <= 'f')) ||
+              ((*cursor >= 'A') && (*cursor <= 'F'))))
+            return 0;
+    }
+    errno = 0;
+    parsed = strtoul(value, &end, 16);
+    if ((errno == ERANGE) || (end == NULL) || (*end != '\0') ||
+        (parsed > UINT32_MAX))
+        return 0;
+    *crc = (uint32_t) parsed;
+    return 1;
 }
 
 static int
@@ -75,13 +102,13 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
 {
     int index;
     int ticks_was_set = 0;
-    int type_at_was_set = 0;
+    int pending_type_at = 0;
     int key_ticks_was_set = 0;
+    int frame_crc_was_set = 0;
 
-    *options = (headless_run_options_t) {
-        NULL, NULL, NULL, NULL, NULL, NULL, UINT64_C(10000000), 0U,
-        UINT64_C(2000)
-    };
+    *options = (headless_run_options_t) { 0 };
+    options->ticks = UINT64_C(10000000);
+    options->key_ticks = UINT64_C(2000);
     for (index = 1; index < argc; ++index) {
         const char *argument = argv[index];
         const char *value;
@@ -104,26 +131,39 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
             if (!assign_once(&options->frame_path, value))
                 return 0;
         } else if (strcmp(argument, "--type-text") == 0) {
-            if (!assign_once(&options->type_text, value))
+            if (!pending_type_at ||
+                !assign_once(&options->text_actions[
+                    options->text_action_count].text, value))
                 return 0;
+            ++options->text_action_count;
+            pending_type_at = 0;
         } else if (strcmp(argument, "--ticks") == 0) {
             if (ticks_was_set || !parse_ticks(value, &options->ticks))
                 return 0;
             ticks_was_set = 1;
         } else if (strcmp(argument, "--type-at") == 0) {
-            if (type_at_was_set || !parse_ticks(value, &options->type_at))
+            if (pending_type_at ||
+                (options->text_action_count >= HEADLESS_MAX_TEXT_ACTIONS) ||
+                !parse_ticks(value, &options->text_actions[
+                    options->text_action_count].at))
                 return 0;
-            type_at_was_set = 1;
+            pending_type_at = 1;
         } else if (strcmp(argument, "--key-ticks") == 0) {
             if (key_ticks_was_set || !parse_ticks(value, &options->key_ticks))
                 return 0;
             key_ticks_was_set = 1;
+        } else if (strcmp(argument, "--expect-frame-crc32") == 0) {
+            if (frame_crc_was_set ||
+                !parse_crc32(value, &options->expected_frame_crc32))
+                return 0;
+            frame_crc_was_set = 1;
+            options->expect_frame_crc32 = 1;
         } else {
             return 0;
         }
     }
-    return ((options->type_text != NULL) == type_at_was_set) &&
-           (!key_ticks_was_set || type_at_was_set) &&
+    return !pending_type_at &&
+           (!key_ticks_was_set || (options->text_action_count != 0U)) &&
            (options->machine_id != NULL) &&
            (options->firmware_even_path != NULL) &&
            (options->firmware_odd_path != NULL);

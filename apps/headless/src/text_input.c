@@ -158,3 +158,52 @@ headless_type_text(bm_session_t *session, const char *text, uint64_t key_ticks)
     }
     return decoded < 0 ? BM_STATUS_INVALID_ARGUMENT : BM_STATUS_OK;
 }
+
+bm_status_t
+headless_text_schedule_validate(const headless_text_action_t *actions,
+                                size_t action_count, uint64_t key_ticks,
+                                uint64_t total_ticks)
+{
+    uint64_t previous_end = 0U;
+    size_t index;
+    if ((action_count != 0U) && (actions == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    for (index = 0U; index < action_count; ++index) {
+        uint64_t duration;
+        bm_status_t status = headless_text_duration(
+            actions[index].text, key_ticks, &duration);
+        if (status != BM_STATUS_OK)
+            return status;
+        if ((actions[index].at < previous_end) ||
+            (actions[index].at >= total_ticks) ||
+            (duration > total_ticks - actions[index].at))
+            return BM_STATUS_INVALID_ARGUMENT;
+        previous_end = actions[index].at + duration;
+    }
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+headless_run_text_schedule(bm_session_t *session,
+                           const headless_text_action_t *actions,
+                           size_t action_count, uint64_t key_ticks)
+{
+    size_t index;
+    if ((session == NULL) || ((action_count != 0U) && (actions == NULL)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    for (index = 0U; index < action_count; ++index) {
+        bm_status_t status;
+        const uint64_t now = bm_session_time(session);
+        if (now > actions[index].at)
+            return BM_STATUS_INVALID_ARGUMENT;
+        status = now < actions[index].at ?
+                 bm_session_run_for(session, actions[index].at - now) :
+                 BM_STATUS_OK;
+        if (status == BM_STATUS_OK)
+            status = headless_type_text(session, actions[index].text,
+                                        key_ticks);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    return BM_STATUS_OK;
+}

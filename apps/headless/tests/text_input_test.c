@@ -20,6 +20,14 @@ main(void)
     const char *invalid = "\\q";
     headless_text_key_t key;
     uint64_t duration = 0U;
+    const headless_text_action_t valid_actions[] = {
+        { "ab", UINT64_C(100) },
+        { "\\n", UINT64_C(200) }
+    };
+    const headless_text_action_t overlapping_actions[] = {
+        { "ab", UINT64_C(100) },
+        { "c", UINT64_C(130) }
+    };
 
     key = decode_one("a");
     assert(key.key == BM_KEY_A && !key.shifted);
@@ -47,5 +55,16 @@ main(void)
            BM_STATUS_INVALID_ARGUMENT);
     assert(headless_text_duration("a", UINT64_MAX, &duration) ==
            BM_STATUS_CAPACITY_EXCEEDED);
+    assert(headless_text_schedule_validate(valid_actions, 2U, UINT64_C(10),
+                                           UINT64_C(300)) == BM_STATUS_OK);
+    assert(headless_text_schedule_validate(overlapping_actions, 2U,
+                                           UINT64_C(10), UINT64_C(300)) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(headless_text_schedule_validate(valid_actions, 2U, UINT64_C(10),
+                                           UINT64_C(210)) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(headless_text_schedule_validate(NULL, 1U, UINT64_C(10),
+                                           UINT64_C(300)) ==
+           BM_STATUS_INVALID_ARGUMENT);
     return 0;
 }
