@@ -248,6 +248,23 @@ main(void)
     assert(io_trace.entries[15].operation == BM_BUS_READ);
     assert(io_trace.entries[15].port == 0x63U && io_trace.entries[15].value == 0x08U);
 
+    trace.count = 0;
+    io_trace.count = 0;
+    assert(bm_session_reset(session) == BM_STATUS_OK);
+    assert(inspect(session, "cs") == 0xffffU);
+    assert(inspect(session, "ip") == 0U);
+    {
+        uint64_t value = UINT64_MAX;
+        assert(bm_session_inspect_machine(session, "pit0_count", &value) == BM_STATUS_OK);
+        assert(value == 0U);
+        assert(bm_session_inspect_machine(session, "unknown", &value) ==
+               BM_STATUS_INVALID_ARGUMENT);
+    }
+    assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
+    assert(inspect(session, "halted") == 1U);
+    assert(trace.count == 46U);
+    assert(io_trace.count == 16U);
+
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
 

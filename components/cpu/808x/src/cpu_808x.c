@@ -414,6 +414,134 @@ compare8(bm_808x_state_t *state, uint8_t left, uint8_t right)
         state->flags |= FLAG_OF;
 }
 
+static uint8_t
+rotate_shift8(bm_808x_state_t *state, uint8_t value,
+              unsigned int operation, uint8_t count)
+{
+    uint8_t original = value;
+    uint16_t original_flags = state->flags;
+    unsigned int index;
+    if (operation == 6U)
+        operation = 4U; /* Undocumented SAL alias on the V30/8086 family. */
+    for (index = 0; index < count; ++index) {
+        unsigned int old_carry = (state->flags & FLAG_CF) != 0U;
+        unsigned int carry;
+        switch (operation) {
+            case 0: /* ROL */
+                carry = value >> 7U;
+                value = (uint8_t) ((value << 1U) | carry);
+                break;
+            case 1: /* ROR */
+                carry = value & 1U;
+                value = (uint8_t) ((value >> 1U) | (carry << 7U));
+                break;
+            case 2: /* RCL */
+                carry = value >> 7U;
+                value = (uint8_t) ((value << 1U) | old_carry);
+                break;
+            case 3: /* RCR */
+                carry = value & 1U;
+                value = (uint8_t) ((value >> 1U) | (old_carry << 7U));
+                break;
+            case 4: /* SHL/SAL */
+                carry = value >> 7U;
+                value = (uint8_t) (value << 1U);
+                break;
+            case 5: /* SHR */
+                carry = value & 1U;
+                value = (uint8_t) (value >> 1U);
+                break;
+            default: /* SAR */
+                carry = value & 1U;
+                value = (uint8_t) ((value >> 1U) | (value & 0x80U));
+                break;
+        }
+        state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                                   (carry ? FLAG_CF : 0U));
+    }
+    if (operation >= 4U) {
+        uint16_t carry = state->flags & FLAG_CF;
+        uint16_t preserved = original_flags & (FLAG_AF | FLAG_OF);
+        set_logic_flags(state, value, 8U);
+        state->flags = (uint16_t) ((state->flags & ~(FLAG_AF | FLAG_OF)) |
+                                  preserved | carry);
+    }
+    if (count == 1U) {
+        state->flags &= (uint16_t) ~FLAG_OF;
+        if ((((operation == 0U) || (operation == 2U) || (operation == 4U)) &&
+             ((((value >> 7U) & 1U) ^ ((state->flags & FLAG_CF) != 0U)) != 0U)) ||
+            (((operation == 1U) || (operation == 3U)) &&
+             (((value >> 7U) ^ (value >> 6U)) & 1U)) ||
+            ((operation == 5U) && ((original & 0x80U) != 0U)))
+            state->flags |= FLAG_OF;
+    }
+    return value;
+}
+
+static uint16_t
+rotate_shift16(bm_808x_state_t *state, uint16_t value,
+               unsigned int operation, uint8_t count)
+{
+    uint16_t original = value;
+    uint16_t original_flags = state->flags;
+    unsigned int index;
+    if (operation == 6U)
+        operation = 4U;
+    for (index = 0; index < count; ++index) {
+        unsigned int old_carry = (state->flags & FLAG_CF) != 0U;
+        unsigned int carry;
+        switch (operation) {
+            case 0:
+                carry = value >> 15U;
+                value = (uint16_t) ((value << 1U) | carry);
+                break;
+            case 1:
+                carry = value & 1U;
+                value = (uint16_t) ((value >> 1U) | (carry << 15U));
+                break;
+            case 2:
+                carry = value >> 15U;
+                value = (uint16_t) ((value << 1U) | old_carry);
+                break;
+            case 3:
+                carry = value & 1U;
+                value = (uint16_t) ((value >> 1U) | (old_carry << 15U));
+                break;
+            case 4:
+                carry = value >> 15U;
+                value = (uint16_t) (value << 1U);
+                break;
+            case 5:
+                carry = value & 1U;
+                value = (uint16_t) (value >> 1U);
+                break;
+            default:
+                carry = value & 1U;
+                value = (uint16_t) ((value >> 1U) | (value & 0x8000U));
+                break;
+        }
+        state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                                   (carry ? FLAG_CF : 0U));
+    }
+    if (operation >= 4U) {
+        uint16_t carry = state->flags & FLAG_CF;
+        uint16_t preserved = original_flags & (FLAG_AF | FLAG_OF);
+        set_logic_flags(state, value, 16U);
+        state->flags = (uint16_t) ((state->flags & ~(FLAG_AF | FLAG_OF)) |
+                                  preserved | carry);
+    }
+    if (count == 1U) {
+        state->flags &= (uint16_t) ~FLAG_OF;
+        if ((((operation == 0U) || (operation == 2U) || (operation == 4U)) &&
+             ((((value >> 15U) & 1U) ^ ((state->flags & FLAG_CF) != 0U)) != 0U)) ||
+            (((operation == 1U) || (operation == 3U)) &&
+             (((value >> 15U) ^ (value >> 14U)) & 1U)) ||
+            ((operation == 5U) && ((original & 0x8000U) != 0U)))
+            state->flags |= FLAG_OF;
+    }
+    return value;
+}
+
 static bm_status_t
 execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                int segment_override)
@@ -675,6 +803,13 @@ execute_one(bm_808x_state_t *state)
         if (status == BM_STATUS_OK)
             state->registers[opcode - 0x58U] = value;
         return status;
+    }
+    if ((opcode >= 0x91U) && (opcode <= 0x97U)) {
+        unsigned int index = opcode - 0x90U;
+        uint16_t value = state->registers[REG_AX];
+        state->registers[REG_AX] = state->registers[index];
+        state->registers[index] = value;
+        return BM_STATUS_OK;
     }
 
     switch (opcode) {
@@ -1063,6 +1198,30 @@ execute_one(bm_808x_state_t *state)
             set_register_byte(state, left, get_register_byte(state, right));
             set_register_byte(state, right, temporary);
             return BM_STATUS_OK;
+        }
+        case 0x84: /* TEST r/m8,r8. */
+        case 0x85: { /* TEST r/m16,r16. */
+            uint8_t modrm;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (opcode == 0x84U) {
+                uint8_t value = 0;
+                status = read_operand_byte(state, &operand, &value);
+                if (status == BM_STATUS_OK)
+                    set_logic_flags(state, (uint8_t)
+                        (value & get_register_byte(state, (modrm >> 3U) & 7U)), 8U);
+            } else {
+                uint16_t value = 0;
+                status = read_operand_word(state, &operand, &value);
+                if (status == BM_STATUS_OK)
+                    set_logic_flags(state, (uint16_t)
+                        (value & state->registers[(modrm >> 3U) & 7U]), 16U);
+            }
+            return status;
         }
         case 0x80: /* Immediate arithmetic group; basic r/m8 operations. */
         case 0x81: { /* Immediate arithmetic group; basic r/m16 operations. */
@@ -1491,18 +1650,13 @@ execute_one(bm_808x_state_t *state)
         case 0xd2: { /* Shift r/m8 by CL. */
             uint8_t modrm;
             uint8_t value = 0;
-            uint8_t original;
             uint8_t count;
             unsigned int operation;
-            unsigned int index;
-            uint16_t preserved;
             bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
-            if ((operation != 4U) && (operation != 5U))
-                return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
@@ -1511,30 +1665,7 @@ execute_one(bm_808x_state_t *state)
             count = opcode == 0xd0U ? 1U : get_register_byte(state, 1U);
             if (count == 0U)
                 return BM_STATUS_OK;
-            original = value;
-            preserved = state->flags & (FLAG_AF | FLAG_OF);
-            for (index = 0; index < count; ++index) {
-                uint8_t carry_bit = operation == 4U ? 0x80U : 1U;
-                if ((value & carry_bit) != 0U)
-                    state->flags |= FLAG_CF;
-                else
-                    state->flags &= (uint16_t) ~FLAG_CF;
-                value = operation == 4U ? (uint8_t) (value << 1U) :
-                                          (uint8_t) (value >> 1U);
-            }
-            {
-                uint16_t carry = state->flags & FLAG_CF;
-                set_logic_flags(state, value, 8);
-                state->flags = (uint16_t) ((state->flags & ~(FLAG_AF | FLAG_OF)) |
-                                          preserved | carry);
-                if (count == 1U) {
-                    state->flags &= (uint16_t) ~FLAG_OF;
-                    if ((operation == 4U) ?
-                        (((value & 0x80U) != 0U) != (carry != 0U)) :
-                        ((original & 0x80U) != 0U))
-                        state->flags |= FLAG_OF;
-                }
-            }
+            value = rotate_shift8(state, value, operation, count);
             return write_operand_byte(state, &operand, value);
         }
         case 0xd1: /* Shift r/m16 by one. */
@@ -1543,16 +1674,11 @@ execute_one(bm_808x_state_t *state)
             uint16_t value = 0;
             uint8_t count;
             unsigned int operation;
-            uint16_t preserved;
-            uint16_t original;
-            unsigned int index;
             bm_808x_operand_t operand;
             status = fetch_byte(state, &modrm);
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
-            if ((operation != 4U) && (operation != 5U))
-                return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
@@ -1561,30 +1687,7 @@ execute_one(bm_808x_state_t *state)
             count = opcode == 0xd1U ? 1U : get_register_byte(state, 1U);
             if (count == 0U)
                 return BM_STATUS_OK;
-            original = value;
-            preserved = state->flags & (FLAG_AF | FLAG_OF);
-            for (index = 0; index < count; ++index) {
-                uint16_t carry_bit = operation == 4U ? 0x8000U : 1U;
-                if ((value & carry_bit) != 0U)
-                    state->flags |= FLAG_CF;
-                else
-                    state->flags &= (uint16_t) ~FLAG_CF;
-                value = operation == 4U ? (uint16_t) (value << 1U) :
-                                          (uint16_t) (value >> 1U);
-            }
-            {
-                uint16_t carry = state->flags & FLAG_CF;
-                set_logic_flags(state, value, 16);
-                state->flags = (uint16_t) ((state->flags & ~(FLAG_AF | FLAG_OF)) |
-                                          preserved | carry);
-                if (count == 1U) {
-                    state->flags &= (uint16_t) ~FLAG_OF;
-                    if ((operation == 4U) ?
-                        (((value & 0x8000U) != 0U) != (carry != 0U)) :
-                        ((original & 0x8000U) != 0U))
-                        state->flags |= FLAG_OF;
-                }
-            }
+            value = rotate_shift16(state, value, operation, count);
             return write_operand_word(state, &operand, value);
         }
         case 0xa0: /* MOV AL,moffs8 */

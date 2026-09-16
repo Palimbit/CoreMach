@@ -1,110 +1,44 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2019-2020 Miran Grca
+ * Copyright 2022-2026 Daniel Balsom
+ * Copyright 2026 Clara
  * Copyright 2026 BluMach contributors
- *
- * Derived rewrite of the inherited PIT. This first deterministic contract
- * implements binary modes 0, 2 and 3; BCD and counter latching remain future work.
  */
 #include <blumach/components/pit8253.h>
 
-#include <string.h>
+#include "pit8253_exact.h"
 
-typedef struct bm_pit_channel {
-    uint32_t reload;
-    uint32_t count;
-    uint8_t mode;
-    uint8_t access;
-    uint8_t write_low;
-    uint8_t read_low;
-    uint8_t pending_low;
-    uint16_t latched_count;
-    uint8_t latch_pending;
-    uint8_t latch_low_next;
-    uint8_t gate;
-    uint8_t output;
-} bm_pit_channel_t;
+#include <stdbool.h>
+#include <string.h>
 
 struct bm_pit8253 {
     bm_host_services_t host;
     uint16_t io_base;
     bm_pit8253_output_fn output;
     void *output_context;
-    bm_pit_channel_t channels[3];
+    bm_pit_exact_device_t exact;
 };
 
 static void
-set_output(bm_pit8253_t *pit, unsigned int channel, int value)
+notify_changed_outputs(bm_pit8253_t *pit, const bool previous[3])
 {
-    bm_pit_channel_t *counter = &pit->channels[channel];
-    value = !!value;
-    if (counter->output == (uint8_t) value)
+    unsigned int channel;
+    if (pit->output == NULL)
         return;
-    counter->output = (uint8_t) value;
-    if (pit->output != NULL)
-        pit->output(pit->output_context, channel, value);
+    for (channel = 0; channel < 3U; ++channel) {
+        bool current = bm_pit_exact_get_output(&pit->exact, channel);
+        if (current != previous[channel])
+            pit->output(pit->output_context, channel, current ? 1 : 0);
+    }
 }
 
 static void
-load_count(bm_pit8253_t *pit, unsigned int channel, uint16_t value)
+remember_outputs(const bm_pit8253_t *pit, bool output[3])
 {
-    bm_pit_channel_t *counter = &pit->channels[channel];
-    counter->reload = value ? value : 65536U;
-    counter->count = counter->reload;
-    set_output(pit, channel, counter->mode == 0 ? 0 : 1);
-}
-
-static bm_status_t
-counter_write(bm_pit8253_t *pit, unsigned int channel, uint8_t value)
-{
-    bm_pit_channel_t *counter = &pit->channels[channel];
-    switch (counter->access) {
-        case 1:
-            load_count(pit, channel, value);
-            break;
-        case 2:
-            load_count(pit, channel, (uint16_t) value << 8U);
-            break;
-        case 3:
-            if (counter->write_low) {
-                load_count(pit, channel,
-                           (uint16_t) (counter->pending_low | ((uint16_t) value << 8U)));
-                counter->write_low = 0;
-            } else {
-                counter->pending_low = value;
-                counter->write_low = 1;
-            }
-            break;
-        default:
-            return BM_STATUS_INVALID_STATE;
-    }
-    return BM_STATUS_OK;
-}
-
-static uint8_t
-counter_read(bm_pit_channel_t *counter)
-{
-    uint16_t value;
-    if (counter->latch_pending != 0U) {
-        value = counter->latched_count;
-        --counter->latch_pending;
-        if (counter->access == 2U)
-            return (uint8_t) (value >> 8U);
-        if (counter->access == 3U) {
-            uint8_t result = counter->latch_low_next ?
-                (uint8_t) value : (uint8_t) (value >> 8U);
-            counter->latch_low_next ^= 1U;
-            return result;
-        }
-        return (uint8_t) value;
-    }
-    value = (uint16_t) counter->count;
-    if (counter->access == 2)
-        return (uint8_t) (value >> 8U);
-    if (counter->access != 3)
-        return (uint8_t) value;
-    counter->read_low ^= 1U;
-    return counter->read_low ? (uint8_t) value : (uint8_t) (value >> 8U);
+    unsigned int channel;
+    for (channel = 0; channel < 3U; ++channel)
+        output[channel] = bm_pit_exact_get_output(&pit->exact, channel);
 }
 
 static bm_status_t
@@ -112,43 +46,24 @@ pit_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pit8253_t *pit = context;
     unsigned int port = (unsigned int) (transaction->address - pit->io_base);
-    if ((transaction->size != 1) || (transaction->operation == BM_BUS_FETCH))
+    bool previous[3];
+
+    if ((transaction->size != 1U) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
     if (transaction->operation == BM_BUS_READ) {
-        if (port >= 3)
+        if (port >= 3U)
             return BM_STATUS_UNSUPPORTED;
-        transaction->value = counter_read(&pit->channels[port]);
+        transaction->value = bm_pit_exact_data_read(&pit->exact, port);
         return BM_STATUS_OK;
     }
-    if (port < 3)
-        return counter_write(pit, port, (uint8_t) transaction->value);
-    {
-        uint8_t control = (uint8_t) transaction->value;
-        unsigned int channel = control >> 6U;
-        bm_pit_channel_t *counter;
-        if (channel >= 3)
-            return BM_STATUS_UNSUPPORTED;
-        counter = &pit->channels[channel];
-        if (((control >> 4U) & 3U) == 0U) {
-            if (counter->latch_pending == 0U) {
-                counter->latched_count = (uint16_t) counter->count;
-                counter->latch_pending = counter->access == 3U ? 2U : 1U;
-                counter->latch_low_next = 1U;
-            }
-            return BM_STATUS_OK;
-        }
-        counter->access = (control >> 4U) & 3U;
-        counter->mode = (control >> 1U) & 7U;
-        if (counter->mode > 5)
-            counter->mode &= 3U;
-        if (((control & 1U) != 0) || ((counter->mode != 0) &&
-            (counter->mode != 2) && (counter->mode != 3)))
-            return BM_STATUS_UNSUPPORTED;
-        counter->write_low = 0;
-        counter->read_low = 0;
-        counter->latch_pending = 0;
-        return BM_STATUS_OK;
-    }
+
+    remember_outputs(pit, previous);
+    if (port < 3U)
+        bm_pit_exact_data_write(&pit->exact, port, (uint8_t) transaction->value);
+    else
+        bm_pit_exact_control_write(&pit->exact, (uint8_t) transaction->value);
+    notify_changed_outputs(pit, previous);
+    return BM_STATUS_OK;
 }
 
 bm_status_t
@@ -172,8 +87,8 @@ bm_pit8253_create(const bm_host_services_t *host,
     pit->output = config->output;
     pit->output_context = config->output_context;
     bm_pit8253_reset(pit);
-    status = bm_bus_map(bus, BM_ADDRESS_IO, config->io_base, config->io_base + 3U,
-                        pit_access, pit);
+    status = bm_bus_map(bus, BM_ADDRESS_IO, config->io_base,
+                        (uint32_t) config->io_base + 3U, pit_access, pit);
     if (status != BM_STATUS_OK) {
         host->release(host->context, pit);
         return status;
@@ -192,52 +107,57 @@ bm_pit8253_destroy(bm_pit8253_t *pit)
 void
 bm_pit8253_reset(bm_pit8253_t *pit)
 {
-    unsigned int channel;
+    bool previous[3];
     if (pit == NULL)
         return;
-    for (channel = 0; channel < 3; ++channel) {
-        memset(&pit->channels[channel], 0, sizeof(pit->channels[channel]));
-        pit->channels[channel].gate = 1;
-        pit->channels[channel].output = 1;
-    }
+    remember_outputs(pit, previous);
+    bm_pit_exact_reset(&pit->exact);
+    bm_pit_exact_set_gate(&pit->exact, 0U, true);
+    bm_pit_exact_set_gate(&pit->exact, 1U, true);
+    bm_pit_exact_set_gate(&pit->exact, 2U, false);
+    notify_changed_outputs(pit, previous);
 }
 
 bm_status_t
 bm_pit8253_set_gate(bm_pit8253_t *pit, unsigned int channel, int asserted)
 {
-    if ((pit == NULL) || (channel >= 3))
+    bool previous[3];
+    if ((pit == NULL) || (channel >= 3U))
         return BM_STATUS_INVALID_ARGUMENT;
-    pit->channels[channel].gate = (uint8_t) !!asserted;
+    remember_outputs(pit, previous);
+    bm_pit_exact_set_gate(&pit->exact, channel, asserted != 0);
+    notify_changed_outputs(pit, previous);
     return BM_STATUS_OK;
 }
 
 bm_status_t
 bm_pit8253_advance(bm_pit8253_t *pit, uint32_t input_ticks)
 {
-    unsigned int channel;
     if (pit == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
-    for (channel = 0; channel < 3; ++channel) {
-        bm_pit_channel_t *counter = &pit->channels[channel];
-        if (!counter->gate || (counter->count == 0))
-            continue;
-        while (input_ticks >= counter->count) {
-            input_ticks -= counter->count;
-            if (counter->mode == 0) {
-                counter->count = 0;
-                set_output(pit, channel, 1);
-                break;
-            }
-            counter->count = counter->reload;
-            if (counter->mode == 3)
-                set_output(pit, channel, !counter->output);
-            else {
-                set_output(pit, channel, 0);
-                set_output(pit, channel, 1);
-            }
-        }
-        if (counter->count != 0)
-            counter->count -= input_ticks;
+    while (input_ticks-- != 0U) {
+        bool previous[3];
+        remember_outputs(pit, previous);
+        bm_pit_exact_tick(&pit->exact);
+        notify_changed_outputs(pit, previous);
     }
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_pit8253_count(const bm_pit8253_t *pit, unsigned int channel, uint16_t *count)
+{
+    if ((pit == NULL) || (channel >= 3U) || (count == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *count = bm_pit_exact_get_count(&pit->exact, channel);
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_pit8253_output(const bm_pit8253_t *pit, unsigned int channel, int *output)
+{
+    if ((pit == NULL) || (channel >= 3U) || (output == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *output = bm_pit_exact_get_output(&pit->exact, channel) ? 1 : 0;
     return BM_STATUS_OK;
 }

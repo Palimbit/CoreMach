@@ -5,6 +5,7 @@ add_library(blumach_pc_components STATIC
     src/dma_page_registers.c
     src/pic8259.c
     src/pit8253.c
+    src/pit8253_exact.c
     src/rtc_mm58167.c
 )
 target_include_directories(blumach_pc_components

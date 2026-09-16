@@ -24,6 +24,10 @@ typedef bm_status_t (*bm_machine_create_fn)(bm_engine_t *engine,
                                             const void *configuration,
                                             void **out_machine);
 typedef void (*bm_machine_destroy_fn)(void *machine);
+typedef bm_status_t (*bm_machine_reset_fn)(void *machine);
+typedef bm_status_t (*bm_machine_inspect_fn)(const void *machine,
+                                             const char *name,
+                                             uint64_t *value);
 typedef bm_status_t (*bm_machine_video_geometry_fn)(const void *machine,
                                                      bm_video_geometry_t *geometry);
 typedef bm_status_t (*bm_machine_video_render_fn)(const void *machine,
@@ -35,6 +39,8 @@ typedef struct bm_machine_ops {
     bm_machine_destroy_fn destroy;
     bm_machine_video_geometry_fn video_geometry;
     bm_machine_video_render_fn video_render;
+    bm_machine_reset_fn reset;
+    bm_machine_inspect_fn inspect;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_config {
@@ -63,6 +69,9 @@ bm_status_t bm_session_video_geometry(const bm_session_t *session,
                                       bm_video_geometry_t *geometry);
 bm_status_t bm_session_render_video(const bm_session_t *session,
                                     bm_video_framebuffer_t *framebuffer);
+bm_status_t bm_session_inspect_machine(const bm_session_t *session,
+                                       const char *name,
+                                       uint64_t *value);
 
 #ifdef __cplusplus
 }

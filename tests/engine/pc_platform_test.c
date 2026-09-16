@@ -66,6 +66,8 @@ main(void)
     output_sink_t output = { 0 };
     bm_pit8253_config_t pit_config = { 0x40U, capture_output, &output };
     uint8_t vector = 0;
+    uint16_t count = 0;
+    int level = 0;
 
     assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_pic8259_create(&host, bus, &pic_config, &pic) == BM_STATUS_OK);
@@ -95,26 +97,87 @@ main(void)
     assert(bm_pic8259_set_irq(pic, 0, 0) == BM_STATUS_OK);
     assert(bm_pic8259_set_irq(pic, 0, 1) == BM_STATUS_OK);
     assert(irq.changes == 3U && irq.asserted == 1);
-    bm_pic8259_reset(pic);
+    /* An edge source withdrawn before INTA must not survive as that IRQ. */
+    assert(bm_pic8259_set_irq(pic, 0, 0) == BM_STATUS_OK);
+    assert(!bm_pic8259_pending(pic));
     assert(irq.changes == 4U && irq.asserted == 0);
+    assert(bm_pic8259_set_irq(pic, 0, 1) == BM_STATUS_OK);
+    bm_pic8259_reset(pic);
+    assert(irq.changes == 6U && irq.asserted == 0);
     assert(!bm_pic8259_pending(pic));
 
     assert(write_port(bus, 0x43U, 0x30U) == BM_STATUS_OK); /* Channel 0, mode 0, lobyte/hibyte. */
     assert(write_port(bus, 0x40U, 0x04U) == BM_STATUS_OK);
     assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);
-    assert(bm_pit8253_advance(pit, 3) == BM_STATUS_OK);
-    assert(output.changes == 1U && output.channel == 0U && output.value == 0);
+    assert(bm_pit8253_advance(pit, 4) == BM_STATUS_OK);
+    assert(output.changes == 0U);
     assert(bm_pit8253_advance(pit, 1) == BM_STATUS_OK);
-    assert(output.changes == 2U && output.value == 1);
+    assert(output.changes == 1U && output.channel == 0U && output.value == 1);
 
-    assert(write_port(bus, 0x43U, 0x34U) == BM_STATUS_OK); /* Channel 0, mode 2. */
+    assert(write_port(bus, 0x43U, 0x30U) == BM_STATUS_OK);
     assert(write_port(bus, 0x40U, 0x34U) == BM_STATUS_OK);
     assert(write_port(bus, 0x40U, 0x12U) == BM_STATUS_OK);
-    assert(bm_pit8253_advance(pit, 0x34U) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 0x35U) == BM_STATUS_OK);
     assert(write_port(bus, 0x43U, 0x00U) == BM_STATUS_OK); /* Latch current count. */
     assert(bm_pit8253_advance(pit, 0x0100U) == BM_STATUS_OK);
     assert(read_port(bus, 0x40U) == 0x00U);
     assert(read_port(bus, 0x40U) == 0x12U);
+
+    output.changes = 0U;
+    assert(write_port(bus, 0x43U, 0x34U) == BM_STATUS_OK); /* Mode 2. */
+    assert(write_port(bus, 0x40U, 0x04U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 4U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 0);
+    assert(bm_pit8253_advance(pit, 1U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 1);
+    assert(output.changes == 3U);
+
+    assert(write_port(bus, 0x43U, 0x36U) == BM_STATUS_OK); /* Mode 3. */
+    assert(write_port(bus, 0x40U, 0x04U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 3U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 0);
+    assert(bm_pit8253_advance(pit, 2U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 1);
+
+    assert(write_port(bus, 0x43U, 0x38U) == BM_STATUS_OK); /* Mode 4. */
+    assert(write_port(bus, 0x40U, 0x02U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 3U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 0);
+    assert(bm_pit8253_advance(pit, 1U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 1);
+
+    assert(write_port(bus, 0x43U, 0x31U) == BM_STATUS_OK); /* Mode 0, BCD 0010. */
+    assert(write_port(bus, 0x40U, 0x10U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 10U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 0);
+    assert(bm_pit8253_advance(pit, 1U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 1);
+
+    assert(write_port(bus, 0x43U, 0x72U) == BM_STATUS_OK); /* Channel 1, mode 1. */
+    assert(write_port(bus, 0x41U, 0x02U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x41U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_set_gate(pit, 1U, 0) == BM_STATUS_OK);
+    assert(bm_pit8253_set_gate(pit, 1U, 1) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 3U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 1U, &level) == BM_STATUS_OK && level == 1);
+
+    assert(write_port(bus, 0x43U, 0x7aU) == BM_STATUS_OK); /* Channel 1, mode 5. */
+    assert(write_port(bus, 0x41U, 0x02U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x41U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_set_gate(pit, 1U, 0) == BM_STATUS_OK);
+    assert(bm_pit8253_set_gate(pit, 1U, 1) == BM_STATUS_OK);
+    assert(bm_pit8253_advance(pit, 3U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 1U, &level) == BM_STATUS_OK && level == 0);
+    assert(bm_pit8253_advance(pit, 1U) == BM_STATUS_OK);
+    assert(bm_pit8253_output(pit, 1U, &level) == BM_STATUS_OK && level == 1);
+
+    assert(bm_pit8253_count(pit, 1U, &count) == BM_STATUS_OK);
+    assert(bm_pit8253_count(pit, 3U, &count) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_pit8253_output(NULL, 0U, &level) == BM_STATUS_INVALID_ARGUMENT);
 
     bm_pit8253_destroy(pit);
     bm_pic8259_destroy(pic);

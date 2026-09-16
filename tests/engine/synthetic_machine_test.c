@@ -329,7 +329,7 @@ machine_config(const synthetic_config_t *configuration)
     bm_machine_config_t result = {
         "test.synthetic-four-instruction",
         configuration,
-        { synthetic_validate, synthetic_create, synthetic_destroy, NULL, NULL },
+        { synthetic_validate, synthetic_create, synthetic_destroy, NULL, NULL, NULL, NULL },
         { 1, 4 }
     };
     return result;
