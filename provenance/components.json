@@ -64,6 +64,34 @@
       "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core, external XT page latches with explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement. DMA transfer ownership and device data movement remain absent"
     },
     {
+      "id": "portable-spp-parallel-port",
+      "destination": [
+        "components/pc/include/blumach/components/lpt_spp.h",
+        "components/pc/src/lpt_spp.c"
+      ],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "637688101c02f218ea45804a58b8f70833a2abd9",
+      "origin_paths": ["src/device/lpt.c", "src/include/86box/lpt.h"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Sarah Walker", "BluMach contributors"],
+      "local_changes": "Reduced the inherited parallel subsystem to an opaque caller-owned SPP register component with explicit output and ACK-interrupt callbacks; removed global port tables, host character devices, EPP/ECP, DMA, timers and threads"
+    },
+    {
+      "id": "portable-ns16450-uart",
+      "destination": [
+        "components/pc/include/blumach/components/uart16450.h",
+        "components/pc/src/uart16450.c"
+      ],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "637688101c02f218ea45804a58b8f70833a2abd9",
+      "origin_paths": ["src/device/serial.c", "src/include/86box/serial.h"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Miran Grca", "Fred N. van Kempen", "BluMach contributors"],
+      "local_changes": "Reduced the inherited UART model to an opaque NS16450 register core with divisor latch, interrupt priority, modem/data loopback and explicit host callbacks; removed 16550 FIFOs, global COM tables, mouse coupling, host serial backends and real-time baud scheduling"
+    },
+    {
       "id": "portable-intel-8253",
       "destination": [
         "components/pc/include/blumach/components/pit8253.h",
@@ -110,7 +138,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, and optional host-neutral framebuffer discovery/rendering operations"
+      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations and normalized physical-key input events independent of guest scan-code sets"
     },
     {
       "id": "null-host-platform",
@@ -137,7 +165,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, 8237 programming core and four-bit XT page registers, single PIC, scheduler-driven PIT and MM58167, PVGA1A core and minimum motherboard register map behind a typed machine factory; added explicit reset, diagnostic inspection, PIC-to-CPU interrupt routing, rational instruction-domain clock accumulation, early BIOS diagnostic latches, an opaque port-70h memory-control latch, selector-only EMS register boundary, explicit open-bus behaviour for the unpopulated option-ROM space, observed write-only video-arbitration latches at 102h/46E8h and optional runtime framebuffer publication, while DMA transfers, the EMS aperture, keyboard queues and cycle-accurate timing remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, 8237 programming core and four-bit XT page registers, single PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, diagnostic and memory-control latches, selector-only EMS, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues and normalized Set 1 keyboard delivery, while FDC operation, DMA transfers, the EMS aperture, mouse input and cycle-accurate timing remain absent"
     }
   ],
   "external_dependencies": []

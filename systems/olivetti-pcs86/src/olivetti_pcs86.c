@@ -12,10 +12,12 @@
 #include <blumach/components/dma8237.h>
 #include <blumach/components/dma_page_registers.h>
 #include <blumach/components/linear_memory.h>
+#include <blumach/components/lpt_spp.h>
 #include <blumach/components/pic8259.h>
 #include <blumach/components/pit8253.h>
 #include <blumach/components/pvga1a.h>
 #include <blumach/components/rtc_mm58167.h>
+#include <blumach/components/uart16450.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -31,6 +33,8 @@ typedef struct bm_pcs86_machine {
     bm_pit8253_t *pit;
     bm_pvga1a_t *video;
     bm_mm58167_t *rtc;
+    bm_lpt_spp_t *lpt;
+    bm_uart16450_t *uart;
     bm_engine_t *engine;
     bm_cpu_id_t cpu_id;
     int cpu_ready;
@@ -39,6 +43,12 @@ typedef struct bm_pcs86_machine {
     uint8_t memory_blocks;
     uint8_t glue[16];
     uint8_t ps2[5];
+    uint8_t ps2_queue[2][16];
+    uint8_t ps2_queue_start[2];
+    uint8_t ps2_queue_end[2];
+    uint8_t scan_queue[64];
+    uint8_t scan_queue_start;
+    uint8_t scan_queue_end;
     uint8_t jumpers;
     uint8_t nmi_mask;
     uint8_t diagnostic_port;
@@ -59,6 +69,289 @@ typedef struct bm_pcs86_machine {
 #define PCS86_SCHEDULER_TICKS_PER_SECOND UINT64_C(2000000)
 #define PCS86_PIT_TICKS_PER_SECOND UINT64_C(1193182)
 #define PCS86_CLOCK_QUANTUM UINT64_C(64)
+
+static bm_status_t
+pcs86_open_bus_access(void *context, bm_bus_transaction_t *transaction)
+{
+    uint32_t index;
+    (void) context;
+    if ((transaction == NULL) || (transaction->size == 0U) ||
+        (transaction->size > sizeof(transaction->value)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (transaction->operation == BM_BUS_WRITE)
+        return BM_STATUS_OK;
+    if (transaction->operation == BM_BUS_FETCH)
+        return BM_STATUS_UNSUPPORTED;
+    transaction->value = 0;
+    for (index = 0; index < transaction->size; ++index)
+        transaction->value |= UINT64_C(0xff) << (index * 8U);
+    return BM_STATUS_OK;
+}
+
+static void
+pcs86_lpt_irq(void *context, int asserted)
+{
+    bm_pcs86_machine_t *machine = context;
+    (void) bm_pic8259_set_irq(machine->pic, 7U,
+                              ((machine->control & 0x02U) != 0) && asserted);
+}
+
+static void
+pcs86_uart_irq(void *context, int asserted)
+{
+    bm_pcs86_machine_t *machine = context;
+    (void) bm_pic8259_set_irq(machine->pic, 4U,
+                              ((machine->control & 0x10U) != 0) && asserted);
+}
+
+static bm_status_t
+pcs86_lpt_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    uint8_t value = (uint8_t) transaction->value;
+    unsigned int register_index;
+
+    if ((transaction->size != 1U) || (transaction->operation == BM_BUS_FETCH))
+        return BM_STATUS_UNSUPPORTED;
+    register_index = (unsigned int) (transaction->address - 0x0378U);
+    if ((transaction->operation == BM_BUS_WRITE) && (register_index == 0U))
+        machine->diagnostic_port = value;
+    if ((machine->control & 0x02U) == 0) {
+        if (transaction->operation == BM_BUS_READ)
+            transaction->value = 0xffU;
+        return BM_STATUS_OK;
+    }
+    if (transaction->operation == BM_BUS_READ) {
+        bm_status_t status = bm_lpt_spp_read(machine->lpt, register_index, &value);
+        transaction->value = value;
+        return status;
+    }
+    return bm_lpt_spp_write(machine->lpt, register_index, value);
+}
+
+static bm_status_t
+pcs86_uart_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    uint8_t value = (uint8_t) transaction->value;
+    unsigned int register_index;
+
+    if ((transaction->size != 1U) || (transaction->operation == BM_BUS_FETCH))
+        return BM_STATUS_UNSUPPORTED;
+    if ((machine->control & 0x10U) == 0) {
+        if (transaction->operation == BM_BUS_READ)
+            transaction->value = 0xffU;
+        return BM_STATUS_OK;
+    }
+    register_index = (unsigned int) (transaction->address - 0x03f8U);
+    if (transaction->operation == BM_BUS_READ) {
+        bm_status_t status = bm_uart16450_read(machine->uart, register_index, &value);
+        transaction->value = value;
+        return status;
+    }
+    return bm_uart16450_write(machine->uart, register_index, value);
+}
+
+static bm_status_t
+pcs86_queue_push(uint8_t *queue, uint8_t *start, uint8_t *end,
+                 uint8_t mask, uint8_t value)
+{
+    uint8_t next = (uint8_t) ((*end + 1U) & mask);
+    if (next == *start)
+        return BM_STATUS_CAPACITY_EXCEEDED;
+    queue[*end] = value;
+    *end = next;
+    return BM_STATUS_OK;
+}
+
+static unsigned int
+pcs86_queue_free(uint8_t start, uint8_t end, uint8_t mask)
+{
+    return (unsigned int) mask - (unsigned int) ((end - start) & mask);
+}
+
+static bm_status_t
+pcs86_ps2_queue_push(bm_pcs86_machine_t *machine, unsigned int channel,
+                     uint8_t value)
+{
+    return pcs86_queue_push(machine->ps2_queue[channel],
+                            &machine->ps2_queue_start[channel],
+                            &machine->ps2_queue_end[channel], 0x0fU, value);
+}
+
+static uint8_t
+pcs86_ps2_queue_pop(bm_pcs86_machine_t *machine, unsigned int channel,
+                    uint8_t fallback)
+{
+    uint8_t value = fallback;
+    if (machine->ps2_queue_start[channel] != machine->ps2_queue_end[channel]) {
+        value = machine->ps2_queue[channel][machine->ps2_queue_start[channel]];
+        machine->ps2_queue_start[channel] =
+            (uint8_t) ((machine->ps2_queue_start[channel] + 1U) & 0x0fU);
+    }
+    return value;
+}
+
+static bm_status_t
+pcs86_ps2_command(bm_pcs86_machine_t *machine, unsigned int channel,
+                  uint8_t command)
+{
+    unsigned int response_size = 1U;
+    bm_status_t status;
+
+    if ((command == 0xf2U) || (command == 0xffU))
+        response_size = (channel == 1U) ? 3U :
+                        ((command == 0xf2U) ? 3U : 2U);
+    if (pcs86_queue_free(machine->ps2_queue_start[channel],
+                         machine->ps2_queue_end[channel], 0x0fU) < response_size)
+        return BM_STATUS_CAPACITY_EXCEEDED;
+
+    status = pcs86_ps2_queue_push(machine, channel, 0xfaU);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (command == 0xf2U) {
+        if (channel == 0U) {
+            status = pcs86_ps2_queue_push(machine, channel, 0xabU);
+            if (status == BM_STATUS_OK)
+                status = pcs86_ps2_queue_push(machine, channel, 0x83U);
+        } else
+            status = pcs86_ps2_queue_push(machine, channel, 0x00U);
+    } else if (command == 0xffU) {
+        status = pcs86_ps2_queue_push(machine, channel, 0xaaU);
+        if ((status == BM_STATUS_OK) && (channel == 1U))
+            status = pcs86_ps2_queue_push(machine, channel, 0x00U);
+    }
+    return status;
+}
+
+static bm_status_t
+pcs86_scan_queue_push(bm_pcs86_machine_t *machine, uint8_t value)
+{
+    bm_status_t status = pcs86_queue_push(machine->scan_queue,
+                                          &machine->scan_queue_start,
+                                          &machine->scan_queue_end,
+                                          0x3fU, value);
+    if (status == BM_STATUS_OK)
+        (void) bm_pic8259_set_irq(machine->pic, 1U, 1);
+    return status;
+}
+
+static bm_status_t
+pcs86_key_to_set1(bm_key_code_t key, uint8_t *scan, int *extended)
+{
+    *extended = 0;
+    switch (key) {
+        case BM_KEY_ESCAPE: *scan = 0x01U; break;
+        case BM_KEY_1: *scan = 0x02U; break;
+        case BM_KEY_2: *scan = 0x03U; break;
+        case BM_KEY_3: *scan = 0x04U; break;
+        case BM_KEY_4: *scan = 0x05U; break;
+        case BM_KEY_5: *scan = 0x06U; break;
+        case BM_KEY_6: *scan = 0x07U; break;
+        case BM_KEY_7: *scan = 0x08U; break;
+        case BM_KEY_8: *scan = 0x09U; break;
+        case BM_KEY_9: *scan = 0x0aU; break;
+        case BM_KEY_0: *scan = 0x0bU; break;
+        case BM_KEY_MINUS: *scan = 0x0cU; break;
+        case BM_KEY_EQUAL: *scan = 0x0dU; break;
+        case BM_KEY_BACKSPACE: *scan = 0x0eU; break;
+        case BM_KEY_TAB: *scan = 0x0fU; break;
+        case BM_KEY_Q: *scan = 0x10U; break;
+        case BM_KEY_W: *scan = 0x11U; break;
+        case BM_KEY_E: *scan = 0x12U; break;
+        case BM_KEY_R: *scan = 0x13U; break;
+        case BM_KEY_T: *scan = 0x14U; break;
+        case BM_KEY_Y: *scan = 0x15U; break;
+        case BM_KEY_U: *scan = 0x16U; break;
+        case BM_KEY_I: *scan = 0x17U; break;
+        case BM_KEY_O: *scan = 0x18U; break;
+        case BM_KEY_P: *scan = 0x19U; break;
+        case BM_KEY_LEFT_BRACKET: *scan = 0x1aU; break;
+        case BM_KEY_RIGHT_BRACKET: *scan = 0x1bU; break;
+        case BM_KEY_ENTER: *scan = 0x1cU; break;
+        case BM_KEY_LEFT_CONTROL: *scan = 0x1dU; break;
+        case BM_KEY_A: *scan = 0x1eU; break;
+        case BM_KEY_S: *scan = 0x1fU; break;
+        case BM_KEY_D: *scan = 0x20U; break;
+        case BM_KEY_F: *scan = 0x21U; break;
+        case BM_KEY_G: *scan = 0x22U; break;
+        case BM_KEY_H: *scan = 0x23U; break;
+        case BM_KEY_J: *scan = 0x24U; break;
+        case BM_KEY_K: *scan = 0x25U; break;
+        case BM_KEY_L: *scan = 0x26U; break;
+        case BM_KEY_SEMICOLON: *scan = 0x27U; break;
+        case BM_KEY_APOSTROPHE: *scan = 0x28U; break;
+        case BM_KEY_GRAVE: *scan = 0x29U; break;
+        case BM_KEY_LEFT_SHIFT: *scan = 0x2aU; break;
+        case BM_KEY_BACKSLASH: *scan = 0x2bU; break;
+        case BM_KEY_Z: *scan = 0x2cU; break;
+        case BM_KEY_X: *scan = 0x2dU; break;
+        case BM_KEY_C: *scan = 0x2eU; break;
+        case BM_KEY_V: *scan = 0x2fU; break;
+        case BM_KEY_B: *scan = 0x30U; break;
+        case BM_KEY_N: *scan = 0x31U; break;
+        case BM_KEY_M: *scan = 0x32U; break;
+        case BM_KEY_COMMA: *scan = 0x33U; break;
+        case BM_KEY_PERIOD: *scan = 0x34U; break;
+        case BM_KEY_SLASH: *scan = 0x35U; break;
+        case BM_KEY_RIGHT_SHIFT: *scan = 0x36U; break;
+        case BM_KEY_LEFT_ALT: *scan = 0x38U; break;
+        case BM_KEY_SPACE: *scan = 0x39U; break;
+        case BM_KEY_CAPS_LOCK: *scan = 0x3aU; break;
+        case BM_KEY_F1: *scan = 0x3bU; break;
+        case BM_KEY_F2: *scan = 0x3cU; break;
+        case BM_KEY_F3: *scan = 0x3dU; break;
+        case BM_KEY_F4: *scan = 0x3eU; break;
+        case BM_KEY_F5: *scan = 0x3fU; break;
+        case BM_KEY_F6: *scan = 0x40U; break;
+        case BM_KEY_F7: *scan = 0x41U; break;
+        case BM_KEY_F8: *scan = 0x42U; break;
+        case BM_KEY_F9: *scan = 0x43U; break;
+        case BM_KEY_F10: *scan = 0x44U; break;
+        case BM_KEY_SCROLL_LOCK: *scan = 0x46U; break;
+        case BM_KEY_HOME: *scan = 0x47U; *extended = 1; break;
+        case BM_KEY_UP: *scan = 0x48U; *extended = 1; break;
+        case BM_KEY_PAGE_UP: *scan = 0x49U; *extended = 1; break;
+        case BM_KEY_LEFT: *scan = 0x4bU; *extended = 1; break;
+        case BM_KEY_RIGHT: *scan = 0x4dU; *extended = 1; break;
+        case BM_KEY_END: *scan = 0x4fU; *extended = 1; break;
+        case BM_KEY_DOWN: *scan = 0x50U; *extended = 1; break;
+        case BM_KEY_PAGE_DOWN: *scan = 0x51U; *extended = 1; break;
+        case BM_KEY_INSERT: *scan = 0x52U; *extended = 1; break;
+        case BM_KEY_DELETE: *scan = 0x53U; *extended = 1; break;
+        case BM_KEY_RIGHT_CONTROL: *scan = 0x1dU; *extended = 1; break;
+        case BM_KEY_RIGHT_ALT: *scan = 0x38U; *extended = 1; break;
+        default: return BM_STATUS_UNSUPPORTED;
+    }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_input(void *context, const bm_input_event_t *event)
+{
+    bm_pcs86_machine_t *machine = context;
+    uint8_t scan;
+    int extended;
+    bm_status_t status;
+
+    if ((machine == NULL) || (event == NULL) ||
+        (event->kind != BM_INPUT_KEY))
+        return BM_STATUS_INVALID_ARGUMENT;
+    status = pcs86_key_to_set1(event->key, &scan, &extended);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (pcs86_queue_free(machine->scan_queue_start,
+                         machine->scan_queue_end, 0x3fU) <
+        (extended ? 2U : 1U))
+        return BM_STATUS_CAPACITY_EXCEEDED;
+    if (extended) {
+        status = pcs86_scan_queue_push(machine, 0xe0U);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    return pcs86_scan_queue_push(machine,
+                                 event->pressed ? scan : (uint8_t) (scan | 0x80U));
+}
 
 static bm_status_t
 pcs86_unpopulated_option_rom_access(void *context, bm_bus_transaction_t *transaction)
@@ -203,6 +496,13 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
             case 0x0060:
                 value = 0;
                 (void) bm_pic8259_set_irq(machine->pic, 1, 0);
+                if (machine->scan_queue_start != machine->scan_queue_end) {
+                    value = machine->scan_queue[machine->scan_queue_start];
+                    machine->scan_queue_start =
+                        (uint8_t) ((machine->scan_queue_start + 1U) & 0x3fU);
+                    if (machine->scan_queue_start != machine->scan_queue_end)
+                        (void) bm_pic8259_set_irq(machine->pic, 1, 1);
+                }
                 break;
             case 0x0061:
                 value = machine->port61;
@@ -220,13 +520,21 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
                 value = machine->control;
                 break;
             case 0x0066:
-            case 0x0067:
-            case 0x0068:
             case 0x0069:
                 value = machine->ps2[port - 0x0066U];
                 break;
+            case 0x0067:
+            case 0x0068:
+                value = pcs86_ps2_queue_pop(machine,
+                                             (unsigned int) (port - 0x0067U),
+                                             machine->ps2[port - 0x0066U]);
+                break;
             case 0x006a:
                 value = 0;
+                if (machine->ps2_queue_start[0] != machine->ps2_queue_end[0])
+                    value |= 0x20U;
+                if (machine->ps2_queue_start[1] != machine->ps2_queue_end[1])
+                    value |= 0x04U;
                 break;
             case 0x006b:
             case 0x006c:
@@ -250,6 +558,10 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
             machine->glue[port & 0x0fU] = value;
             break;
         case 0x0065:
+            if (((machine->control ^ value) & 0x02U) && ((value & 0x02U) == 0))
+                (void) bm_pic8259_set_irq(machine->pic, 7U, 0);
+            if (((machine->control ^ value) & 0x10U) && ((value & 0x10U) == 0))
+                (void) bm_pic8259_set_irq(machine->pic, 4U, 0);
             machine->control = value;
             break;
         case 0x0066:
@@ -257,6 +569,9 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
             break;
         case 0x0067:
         case 0x0068:
+            machine->ps2[port - 0x0066U] = value;
+            return pcs86_ps2_command(machine,
+                                     (unsigned int) (port - 0x0067U), value);
         case 0x0069:
         case 0x006a:
             machine->ps2[port - 0x0066U] = value;
@@ -344,6 +659,8 @@ pcs86_destroy(void *context)
         return;
     bm_dma_page_registers_destroy(machine->dma_pages);
     bm_dma8237_destroy(machine->dma);
+    bm_uart16450_destroy(machine->uart);
+    bm_lpt_spp_destroy(machine->lpt);
     bm_mm58167_destroy(machine->rtc);
     bm_pvga1a_destroy(machine->video);
     bm_pit8253_destroy(machine->pit);
@@ -430,7 +747,7 @@ pcs86_create(bm_engine_t *engine,
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
 
-    status = bm_bus_create(host, 19, &machine->bus);
+    status = bm_bus_create(host, 32, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -490,6 +807,14 @@ pcs86_create(bm_engine_t *engine,
         status = bm_mm58167_create(host, machine->bus, &rtc_config, &machine->rtc);
     }
     if (status == BM_STATUS_OK) {
+        bm_lpt_spp_config_t lpt_config = { NULL, pcs86_lpt_irq, machine };
+        status = bm_lpt_spp_create(host, &lpt_config, &machine->lpt);
+    }
+    if (status == BM_STATUS_OK) {
+        bm_uart16450_config_t uart_config = { NULL, pcs86_uart_irq, machine };
+        status = bm_uart16450_create(host, &uart_config, &machine->uart);
+    }
+    if (status == BM_STATUS_OK) {
         bm_pvga1a_config_t video_config = { BM_PVGA1A_VRAM_SIZE };
         status = bm_pvga1a_create(host, machine->bus, &video_config, &machine->video);
     }
@@ -506,8 +831,17 @@ pcs86_create(bm_engine_t *engine,
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0070U, 0x0070U,
                             pcs86_memory_control_access, machine);
     if (status == BM_STATUS_OK)
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0378U, 0x0378U,
-                            pcs86_diagnostic_access, machine);
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0378U, 0x037aU,
+                            pcs86_lpt_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0278U, 0x027aU,
+                            pcs86_open_bus_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x03f8U, 0x03ffU,
+                            pcs86_uart_access, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x02f8U, 0x02ffU,
+                            pcs86_open_bus_access, machine);
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x8400U, 0x8403U,
                             pcs86_ems_selector_access, machine);
@@ -556,12 +890,20 @@ pcs86_reset(void *context)
     bm_pic8259_reset(machine->pic);
     bm_pit8253_reset(machine->pit);
     bm_mm58167_reset(machine->rtc);
+    bm_lpt_spp_reset(machine->lpt);
+    bm_uart16450_reset(machine->uart);
     bm_pvga1a_reset(machine->video);
     machine->port61 = 0U;
     machine->control = 0x80U;
     machine->memory_blocks = 0U;
     memset(machine->glue, 0, sizeof(machine->glue));
     memset(machine->ps2, 0, sizeof(machine->ps2));
+    memset(machine->ps2_queue, 0, sizeof(machine->ps2_queue));
+    memset(machine->ps2_queue_start, 0, sizeof(machine->ps2_queue_start));
+    memset(machine->ps2_queue_end, 0, sizeof(machine->ps2_queue_end));
+    memset(machine->scan_queue, 0, sizeof(machine->scan_queue));
+    machine->scan_queue_start = 0U;
+    machine->scan_queue_end = 0U;
     machine->ps2[0] = 0x04U;
     machine->nmi_mask = 0U;
     machine->diagnostic_port = 0U;
@@ -610,6 +952,26 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
             *value = state.in_service;
         else
             *value = state.input_lines;
+    } else if (strcmp(name, "keyboard_queue_depth") == 0) {
+        *value = (uint8_t) ((machine->scan_queue_end -
+                            machine->scan_queue_start) & 0x3fU);
+    } else if ((strcmp(name, "lpt_data") == 0) ||
+               (strcmp(name, "lpt_status") == 0) ||
+               (strcmp(name, "lpt_control") == 0)) {
+        bm_lpt_spp_state_t state;
+        if (bm_lpt_spp_state(machine->lpt, &state) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        if (strcmp(name, "lpt_data") == 0)
+            *value = state.data;
+        else if (strcmp(name, "lpt_status") == 0)
+            *value = state.status;
+        else
+            *value = state.control;
+    } else if (strcmp(name, "uart_line_status") == 0) {
+        bm_uart16450_state_t state;
+        if (bm_uart16450_state(machine->uart, &state) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = state.line_status;
     } else {
         return BM_STATUS_INVALID_ARGUMENT;
     }
@@ -637,7 +999,8 @@ bm_pcs86_machine_config(const bm_pcs86_config_t *configuration)
             pcs86_video_geometry,
             pcs86_video_render,
             pcs86_reset,
-            pcs86_inspect
+            pcs86_inspect,
+            pcs86_input
         },
         { 1, 10 }
     };

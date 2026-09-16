@@ -11,18 +11,24 @@ The inherited product remains the only usable implementation. The parallel
 portable engine now executes enough of the original revision 1.09 BIOS to show
 its Resident Diagnostics screen and visibly pass CPU, ROM, DMA, interrupt-
 controller, Timer 0 and Clock/Calendar checks while reporting 640 kB. It owns
-portable 8237/page-latch, 8259A, exact-state 8253, functional MM58167 and PVGA1A
-text-rendering components. The PCS 86 needs no separate VGA ROM because its
-system EPROMs contain the Paradise initialization. After 6,256,860 retired
-instructions and 2,960 successful I/O accesses, the strict interpreter reaches
-the first unimplemented parallel-port status read at `37Ah`. The captured
+portable 8237/page-latch, 8259A, exact-state 8253, functional MM58167, SPP,
+NS16450 and PVGA1A text-rendering components. The PCS 86 needs no separate VGA
+ROM because its system EPROMs contain the Paradise initialization. After
+6,272,717 retired instructions and 3,251 successful I/O accesses, the strict
+interpreter reaches the first unimplemented floppy-control write at `3F2h`,
+after completing its parallel and serial probes. This does not claim an attached
+printer or serial endpoint. The captured
 720x400 text framebuffer has CRC32 `680D0FA8`.
 The observed write-only video-selection sequence at `46E8h` and `102h` is
 retained without guessed side effects. No placeholder ROM, VGA register or
 video memory is fabricated. The MM58167 counter/calendar window, alarms, IRQs
 and caller-owned persistence are implemented and tested; its yearless calendar
-and scheduler rate remain explicit approximations. The DMA controller does not
-yet arbitrate or perform transfers. This is measured bring-up progress, not a
+and scheduler rate remain explicit approximations. The runtime accepts
+host-neutral physical-key events, which the machine translates into supported
+IBM Set 1 make/break bytes and IRQ1. The dual keyboard/mouse command queues
+reproduce the firmware-observed identify, reset and acknowledgement responses,
+but electrical timing, mouse input and the full command set remain approximate.
+The DMA controller does not yet arbitrate or perform transfers. This is measured bring-up progress, not a
 completed POST or usable machine. The preceding write of `40h` to port
 `70h` is retained in an opaque PCS 86 latch without assigning guessed PC/AT
 CMOS semantics, while `8400h-8403h` currently retain only EMS page-selector

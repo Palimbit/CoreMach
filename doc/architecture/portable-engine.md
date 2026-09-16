@@ -37,6 +37,8 @@ those facilities without exposing them to an emulated component.
 - Buses model memory, I/O, program and data spaces independently.
 - Debug access is an attribute of a transaction, not a second hidden bus.
 - Host allocation, time and logging arrive through explicit capabilities.
+- Frontends submit stable physical-key events; guest machines own scan-code and
+  controller-protocol translation.
 - The null platform makes tests and GUI-free targets first-class builds.
 - Every production file is covered exactly once by the provenance manifest.
 
@@ -145,13 +147,24 @@ to a frontend. The first rasterizer covers text modes only and reads the
 programmed character, attribute, font, palette and CRTC state; it does not use a
 built-in font or a synthetic diagnostic screen.
 
-At the current stop point it produces a deterministic 720x400 frame (CRC32
+The earlier timekeeping cut produced a deterministic 720x400 frame (CRC32
 `680D0FA8`) containing the PCS-86 Resident Diagnostics 1.09 screen. CPU, ROM,
-DMA, interrupt-controller, Timer 0 and Clock/Calendar checks are visible as
-passing, and 640 kB of base memory is reported. Execution continues beyond the
-diagnostics until the first unimplemented parallel-port status read at `37Ah`.
-This is bring-up evidence, not a claim that POST completes. Cursor, blink phase,
-graphics modes and scan timing are still outside this cut.
+DMA, interrupt-controller, Timer 0 and Clock/Calendar checks were visible as
+passing, and 640 kB of base memory was reported. The current cut then adds a
+caller-owned SPP register component at `378h-37Ah`, an NS16450 register core at
+`3F8h-3FFh`, their port-65h gates and IRQ7/IRQ4 routes, and the PCS 86 dual
+keyboard/mouse command queues. Runtime keyboard input uses stable physical-key
+identifiers and the machine translates supported keys to IBM Set 1 bytes on
+IRQ1; Qt, Win32 and host scan codes remain outside the engine.
+
+With those components the local BIOS probe executes 6,272,717 instructions and
+3,251 successful I/O transactions, completes its parallel and serial probes,
+and stops strictly at its first access to the absent floppy controller,
+`OUT 3F2h,AL` at `F000:352C`. The no-printer SPP status and disconnected UART
+are honest device states, not forced diagnostic-success values. This remains
+bring-up evidence rather than completed POST. FDC operation and DMA transfers,
+mouse input, complete keyboard command coverage, cursor/blink, graphics modes
+and scan timing remain outside this cut.
 
 The PCS 86 now owns a portable 8237 programming core with explicit address,
 count, command, mode, request, mask, status and master-clear state. A separate
@@ -183,6 +196,8 @@ pending output, the machine routes that signal through the engine CPU contract,
 and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
 real-mode vector table. A withdrawn edge request no longer survives as its
 original IRQ before the first interrupt acknowledgement. Neither component
-owns the other. DMA transfers, parallel I/O, keyboard delivery, storage and
-complete V30 coverage remain subsequent cuts; POST has not completed, although
-its current diagnostic screen can be rendered and captured without Qt.
+owns the other. The added SPP, NS16450 and keyboard paths follow the same
+ownership rule and communicate only through explicit callbacks and runtime
+events. DMA transfers, floppy storage, mouse delivery and complete V30 coverage
+remain subsequent cuts; POST has not completed, although its current diagnostic
+screen can be rendered and captured without Qt.

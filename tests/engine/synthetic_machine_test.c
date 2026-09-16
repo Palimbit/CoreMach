@@ -21,6 +21,8 @@ typedef struct synthetic_event {
 typedef struct synthetic_sink {
     synthetic_event_t events[8];
     size_t count;
+    bm_input_event_t last_input;
+    int received_input;
 } synthetic_sink_t;
 
 typedef struct synthetic_config {
@@ -323,13 +325,26 @@ synthetic_destroy(void *context)
     machine->host.release(machine->host.context, machine);
 }
 
+static bm_status_t
+synthetic_input(void *context, const bm_input_event_t *event)
+{
+    synthetic_machine_t *machine = context;
+    if ((machine == NULL) || (event == NULL) ||
+        (event->kind != BM_INPUT_KEY))
+        return BM_STATUS_INVALID_ARGUMENT;
+    machine->sink->last_input = *event;
+    machine->sink->received_input = 1;
+    return BM_STATUS_OK;
+}
+
 static bm_machine_config_t
 machine_config(const synthetic_config_t *configuration)
 {
     bm_machine_config_t result = {
         "test.synthetic-four-instruction",
         configuration,
-        { synthetic_validate, synthetic_create, synthetic_destroy, NULL, NULL, NULL, NULL },
+        { synthetic_validate, synthetic_create, synthetic_destroy,
+          NULL, NULL, NULL, NULL, synthetic_input },
         { 1, 4 }
     };
     return result;
@@ -364,6 +379,15 @@ main(void)
     assert(bm_session_configure(second, &second_machine) == BM_STATUS_OK);
     assert(bm_session_start(first) == BM_STATUS_OK);
     assert(bm_session_start(second) == BM_STATUS_OK);
+
+    {
+        bm_input_event_t event = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
+        assert(bm_session_send_input(first, &event) == BM_STATUS_OK);
+        assert(first_sink.received_input);
+        assert(first_sink.last_input.key == BM_KEY_A);
+        assert(first_sink.last_input.pressed);
+        assert(!second_sink.received_input);
+    }
 
     assert(bm_session_run_for(first, 12) == BM_STATUS_OK);
     assert(inspect(first, "r0") == 2);
