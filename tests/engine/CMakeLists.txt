@@ -44,22 +44,36 @@ target_link_libraries(portable-engine-dma8237
     PRIVATE blumach_pc_components blumach_memory blumach_platform_null
 )
 
-add_executable(portable-engine-fdc765 fdc765_test.c)
-target_link_libraries(portable-engine-fdc765
-    PRIVATE
+add_library(portable-engine-fdc765-test-support STATIC fdc765_test_harness.c)
+target_link_libraries(portable-engine-fdc765-test-support
+    PUBLIC
         blumach_pc_components
         blumach_storage
         blumach_memory
         blumach_platform_null
 )
+target_compile_features(portable-engine-fdc765-test-support PRIVATE c_std_11)
+set_target_properties(portable-engine-fdc765-test-support
+    PROPERTIES C_EXTENSIONS OFF
+)
+if(MSVC)
+    target_compile_options(portable-engine-fdc765-test-support
+        PRIVATE /W4 /WX /UNDEBUG
+    )
+else()
+    target_compile_options(portable-engine-fdc765-test-support
+        PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+    )
+endif()
+
+add_executable(portable-engine-fdc765 fdc765_test.c)
+target_link_libraries(portable-engine-fdc765
+    PRIVATE portable-engine-fdc765-test-support
+)
 
 add_executable(portable-engine-fdc765-contracts fdc765_contract_test.c)
 target_link_libraries(portable-engine-fdc765-contracts
-    PRIVATE
-        blumach_pc_components
-        blumach_storage
-        blumach_memory
-        blumach_platform_null
+    PRIVATE portable-engine-fdc765-test-support
 )
 
 add_executable(portable-engine-dma-pages dma_page_registers_test.c)
