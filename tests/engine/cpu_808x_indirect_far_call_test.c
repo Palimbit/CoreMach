@@ -1,30 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include <blumach/components/bus.h>
-#include <blumach/components/cpu_808x.h>
-#include <blumach/components/linear_memory.h>
-#include <blumach/engine/engine.h>
-#include <blumach/platforms/null_host.h>
+#include "cpu_808x_test_harness.h"
 
 #include <assert.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
-static uint64_t
-inspect(bm_engine_t *engine, const char *name)
-{
-    uint64_t value = UINT64_MAX;
-    assert(bm_engine_inspect_cpu(engine, 0U, name, &value) == BM_STATUS_OK);
-    return value;
-}
-
-static uint8_t
-peek(const bm_linear_memory_t *memory, uint64_t address)
-{
-    uint8_t value = 0U;
-    assert(bm_linear_memory_peek(memory, address, &value) == BM_STATUS_OK);
-    return value;
-}
 
 int
 main(void)
@@ -37,86 +15,54 @@ main(void)
         0xbb, 0x34, 0x12,       /* MOV BX,1234h after return. */
         0x2e, 0xff, 0x2e, 0x34, 0x00 /* JMP FAR CS:[0034h]. */
     };
-    bm_host_services_t host = bm_null_host_services();
-    bm_engine_config_t engine_config = { 1U, 1U };
-    bm_linear_memory_config_t memory_config;
-    bm_808x_config_t cpu_config;
-    bm_engine_t *engine = NULL;
-    bm_bus_t *bus = NULL;
-    bm_linear_memory_t *memory = NULL;
-    bm_cpu_t cpu;
-    uint8_t *image = calloc(1U, 0x100000U);
-
-    assert(image != NULL);
-    memcpy(image + 0xf0000U, program, sizeof(program));
-    image[0xf0030U] = 0x10U; /* Target E000:0010. */
-    image[0xf0031U] = 0x00U;
-    image[0xf0032U] = 0x00U;
-    image[0xf0033U] = 0xe0U;
-    image[0xf0034U] = 0x20U; /* Jump target D000:0020. */
-    image[0xf0035U] = 0x00U;
-    image[0xf0036U] = 0x00U;
-    image[0xf0037U] = 0xd0U;
-    image[0xe0010U] = 0xb8U; /* MOV AX,BEEFh. */
-    image[0xe0011U] = 0xefU;
-    image[0xe0012U] = 0xbeU;
-    image[0xe0013U] = 0xcbU; /* RETF. */
-    image[0xd0020U] = 0xbaU; /* MOV DX,5678h. */
-    image[0xd0021U] = 0x78U;
-    image[0xd0022U] = 0x56U;
-    image[0xd0023U] = 0xbcU; /* MOV SP,0080h. */
-    image[0xd0024U] = 0x80U;
-    image[0xd0025U] = 0x00U;
-    image[0xd0026U] = 0x9aU; /* CALL FAR C000:0030. */
-    image[0xd0027U] = 0x30U;
-    image[0xd0028U] = 0x00U;
-    image[0xd0029U] = 0x00U;
-    image[0xd002aU] = 0xc0U;
-    image[0xd002bU] = 0xf4U; /* HLT after return. */
-    image[0xc0030U] = 0xbeU; /* MOV SI,9ABCh. */
-    image[0xc0031U] = 0xbcU;
-    image[0xc0032U] = 0x9aU;
-    image[0xc0033U] = 0xcbU; /* RETF. */
-    image[0xffff0U] = 0xeaU;
-    image[0xffff1U] = 0x00U;
-    image[0xffff2U] = 0x00U;
-    image[0xffff3U] = 0x00U;
-    image[0xffff4U] = 0xf0U;
-    assert(bm_bus_create(&host, 1U, &bus) == BM_STATUS_OK);
-    memory_config = (bm_linear_memory_config_t) {
-        BM_ADDRESS_MEMORY, 0U, 0x100000U, 0, image, 0x100000U
+    static const uint8_t far_pointers[] = {
+        0x10U, 0x00U, 0x00U, 0xe0U, /* E000:0010. */
+        0x20U, 0x00U, 0x00U, 0xd0U  /* D000:0020. */
     };
-    assert(bm_linear_memory_create(&host, bus, &memory_config, &memory) ==
-           BM_STATUS_OK);
-    assert(bm_engine_create(&host, &engine_config, &engine) == BM_STATUS_OK);
-    cpu_config = (bm_808x_config_t) {
-        BM_808X_NEC_V30, 10000000U, bus, NULL, NULL, NULL, NULL
+    static const uint8_t called_program[] = {
+        0xb8U, 0xefU, 0xbeU, /* MOV AX,BEEFh. */
+        0xcbU                /* RETF. */
     };
-    assert(bm_808x_create(&host, &cpu_config, &cpu) == BM_STATUS_OK);
-    assert(bm_engine_add_cpu(engine, &cpu, NULL) == BM_STATUS_OK);
-    assert(bm_engine_reset(engine) == BM_STATUS_OK);
-    assert(bm_engine_run_for(engine, 16U) == BM_STATUS_OK);
+    static const uint8_t jumped_program[] = {
+        0xbaU, 0x78U, 0x56U, /* MOV DX,5678h. */
+        0xbcU, 0x80U, 0x00U, /* MOV SP,0080h. */
+        0x9aU, 0x30U, 0x00U, 0x00U, 0xc0U, /* CALL FAR C000:0030. */
+        0xf4U                /* HLT after return. */
+    };
+    static const uint8_t nested_program[] = {
+        0xbeU, 0xbcU, 0x9aU, /* MOV SI,9ABCh. */
+        0xcbU                /* RETF. */
+    };
+    cpu_808x_test_machine_t machine;
 
-    assert(inspect(engine, "halted") == 1U);
-    assert(inspect(engine, "cs") == 0xd000U);
-    assert(inspect(engine, "ip") == 0x002cU);
-    assert(inspect(engine, "sp") == 0x0080U);
-    assert(inspect(engine, "ax") == 0xbeefU);
-    assert(inspect(engine, "bx") == 0x1234U);
-    assert(inspect(engine, "dx") == 0x5678U);
-    assert(inspect(engine, "si") == 0x9abcU);
-    assert(peek(memory, 0x020fcU) == 0x0dU); /* Return IP 000Dh. */
-    assert(peek(memory, 0x020fdU) == 0x00U);
-    assert(peek(memory, 0x020feU) == 0x00U); /* Return CS F000h. */
-    assert(peek(memory, 0x020ffU) == 0xf0U);
-    assert(peek(memory, 0x0207cU) == 0x2bU); /* Return IP 002Bh. */
-    assert(peek(memory, 0x0207dU) == 0x00U);
-    assert(peek(memory, 0x0207eU) == 0x00U); /* Return CS D000h. */
-    assert(peek(memory, 0x0207fU) == 0xd0U);
+    cpu_808x_test_machine_create(&machine, NULL, program, sizeof(program));
+    cpu_808x_test_write(&machine, 0xf0030U, far_pointers,
+                        sizeof(far_pointers));
+    cpu_808x_test_write(&machine, 0xe0010U, called_program,
+                        sizeof(called_program));
+    cpu_808x_test_write(&machine, 0xd0020U, jumped_program,
+                        sizeof(jumped_program));
+    cpu_808x_test_write(&machine, 0xc0030U, nested_program,
+                        sizeof(nested_program));
+    assert(cpu_808x_test_run(&machine, 16U) == BM_STATUS_OK);
 
-    bm_engine_destroy(engine);
-    bm_linear_memory_destroy(memory);
-    bm_bus_destroy(bus);
-    free(image);
+    assert(cpu_808x_test_inspect(&machine, "halted") == 1U);
+    assert(cpu_808x_test_inspect(&machine, "cs") == 0xd000U);
+    assert(cpu_808x_test_inspect(&machine, "ip") == 0x002cU);
+    assert(cpu_808x_test_inspect(&machine, "sp") == 0x0080U);
+    assert(cpu_808x_test_inspect(&machine, "ax") == 0xbeefU);
+    assert(cpu_808x_test_inspect(&machine, "bx") == 0x1234U);
+    assert(cpu_808x_test_inspect(&machine, "dx") == 0x5678U);
+    assert(cpu_808x_test_inspect(&machine, "si") == 0x9abcU);
+    assert(cpu_808x_test_peek(&machine, 0x020fcU) == 0x0dU);
+    assert(cpu_808x_test_peek(&machine, 0x020fdU) == 0x00U);
+    assert(cpu_808x_test_peek(&machine, 0x020feU) == 0x00U);
+    assert(cpu_808x_test_peek(&machine, 0x020ffU) == 0xf0U);
+    assert(cpu_808x_test_peek(&machine, 0x0207cU) == 0x2bU);
+    assert(cpu_808x_test_peek(&machine, 0x0207dU) == 0x00U);
+    assert(cpu_808x_test_peek(&machine, 0x0207eU) == 0x00U);
+    assert(cpu_808x_test_peek(&machine, 0x0207fU) == 0xd0U);
+
+    cpu_808x_test_machine_destroy(&machine);
     return 0;
 }

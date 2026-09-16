@@ -92,56 +92,32 @@ endif()
 
 add_executable(portable-engine-808x-post cpu_808x_post_test.c)
 target_link_libraries(portable-engine-808x-post
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-checksum cpu_808x_checksum_test.c)
 target_link_libraries(portable-engine-808x-checksum
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-segments cpu_808x_segment_test.c)
 target_link_libraries(portable-engine-808x-segments
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-compare cpu_808x_compare_test.c)
 target_link_libraries(portable-engine-808x-compare
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-shifts cpu_808x_shift_test.c)
 target_link_libraries(portable-engine-808x-shifts
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-returns cpu_808x_return_test.c)
 target_link_libraries(portable-engine-808x-returns
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-sign-extend cpu_808x_sign_extend_test.c)
@@ -151,11 +127,7 @@ target_link_libraries(portable-engine-808x-sign-extend
 
 add_executable(portable-engine-808x-string-compare cpu_808x_string_compare_test.c)
 target_link_libraries(portable-engine-808x-string-compare
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-trace cpu_808x_trace_test.c)
@@ -165,11 +137,7 @@ target_link_libraries(portable-engine-808x-trace
 
 add_executable(portable-engine-808x-indirect-far-call cpu_808x_indirect_far_call_test.c)
 target_link_libraries(portable-engine-808x-indirect-far-call
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-pop-rm cpu_808x_pop_rm_test.c)
