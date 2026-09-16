@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include "file_inputs.h"
+#include <blumach/frontend/file_inputs.h>
 
 #include <limits.h>
 #include <stdlib.h>
@@ -19,8 +19,8 @@ open_file(const char *path, const char *mode)
 }
 
 int
-headless_blob_read_exact(const char *path, size_t expected_size,
-                         headless_blob_t *blob)
+bm_frontend_blob_read_exact(const char *path, size_t expected_size,
+                            bm_frontend_blob_t *blob)
 {
     FILE *file;
     uint8_t *data;
@@ -29,7 +29,7 @@ headless_blob_read_exact(const char *path, size_t expected_size,
 
     if ((path == NULL) || (blob == NULL) || (expected_size == 0U))
         return 0;
-    *blob = (headless_blob_t) { NULL, 0U };
+    *blob = (bm_frontend_blob_t) { NULL, 0U };
     file = open_file(path, "rb");
     if (file == NULL)
         return 0;
@@ -51,19 +51,19 @@ headless_blob_read_exact(const char *path, size_t expected_size,
 }
 
 void
-headless_blob_release(headless_blob_t *blob)
+bm_frontend_blob_release(bm_frontend_blob_t *blob)
 {
     if (blob == NULL)
         return;
     free(blob->data);
-    *blob = (headless_blob_t) { NULL, 0U };
+    *blob = (bm_frontend_blob_t) { NULL, 0U };
 }
 
 static bm_status_t
 read_blocks(void *context, uint64_t first_block, uint32_t block_count,
             uint8_t *destination)
 {
-    headless_readonly_media_t *media = context;
+    bm_frontend_readonly_media_t *media = context;
     uint64_t offset;
     uint64_t byte_count;
 
@@ -84,8 +84,8 @@ read_blocks(void *context, uint64_t first_block, uint32_t block_count,
 }
 
 int
-headless_readonly_media_open(const char *path, uint32_t block_size,
-                             headless_readonly_media_t *media)
+bm_frontend_readonly_media_open(const char *path, uint32_t block_size,
+                                bm_frontend_readonly_media_t *media)
 {
     FILE *file;
     long length;
@@ -112,7 +112,7 @@ headless_readonly_media_open(const char *path, uint32_t block_size,
 }
 
 void
-headless_readonly_media_close(headless_readonly_media_t *media)
+bm_frontend_readonly_media_close(bm_frontend_readonly_media_t *media)
 {
     if (media == NULL)
         return;

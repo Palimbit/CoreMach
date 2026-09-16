@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 add_executable(blumach_headless
-    src/file_inputs.c
     src/main.c
-    src/pcs86_frontend.c
+    src/machine_runner.c
     src/scenario_file.c
     src/text_input.c
 )
 target_link_libraries(blumach_headless PRIVATE
+    blumach_frontend
+    blumach_frontend_files
     blumach_runtime
     blumach_platform_null
-    blumach_system_olivetti_pcs86
 )
 target_compile_features(blumach_headless PRIVATE c_std_11)
 set_target_properties(blumach_headless PROPERTIES C_EXTENSIONS OFF OUTPUT_NAME BluMach-headless)

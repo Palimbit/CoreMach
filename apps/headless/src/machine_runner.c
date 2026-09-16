@@ -1,52 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include "pcs86_frontend.h"
-#include "file_inputs.h"
+#include "machine_runner.h"
 #include "text_input.h"
 
 #include <blumach/platforms/null_host.h>
+#include <blumach/frontend/file_inputs.h>
 #include <blumach/runtime/runtime.h>
-#include <blumach/systems/olivetti_pcs86.h>
 
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-
-typedef struct headless_trace {
-    bm_808x_trace_t last;
-    uint64_t instructions;
-    uint64_t io_operations;
-} headless_trace_t;
-
-static void
-capture_instruction(void *context, const bm_808x_trace_t *trace)
-{
-    headless_trace_t *state = context;
-    state->last = *trace;
-    ++state->instructions;
-}
-
-static void
-capture_io(void *context, const bm_pcs86_io_trace_t *trace)
-{
-    headless_trace_t *state = context;
-    (void) trace;
-    ++state->io_operations;
-}
-
-static const bm_pcs86_firmware_identity_t *
-find_firmware_identity(const bm_pcs86_firmware_identity_t *identities,
-                       size_t count, const char *role)
-{
-    size_t index;
-    for (index = 0U; index < count; ++index) {
-        if ((identities[index].role != NULL) &&
-            (strcmp(identities[index].role, role) == 0))
-            return &identities[index];
-    }
-    return NULL;
-}
 
 static uint32_t
 crc32_pixels(const uint32_t *pixels, size_t count)
@@ -112,15 +75,17 @@ write_ppm(const char *path, const bm_video_framebuffer_t *framebuffer)
 }
 
 int
-headless_run_pcs86(const headless_run_options_t *options)
+headless_run_machine(const bm_frontend_adapter_t *adapter,
+                     const headless_run_options_t *options)
 {
+    bm_frontend_asset_binding_t bindings[3];
+    size_t binding_count = 2U;
     bm_host_services_t host = bm_null_host_services();
-    headless_blob_t even = { NULL, 0U };
-    headless_blob_t odd = { NULL, 0U };
-    headless_readonly_media_t floppy = { 0 };
-    headless_trace_t trace = { 0 };
-    bm_pcs86_config_t config = { 0 };
-    bm_machine_config_t machine;
+    bm_frontend_blob_t even = { NULL, 0U };
+    bm_frontend_blob_t odd = { NULL, 0U };
+    bm_frontend_readonly_media_t floppy = { 0 };
+    bm_frontend_machine_t *machine = NULL;
+    bm_frontend_diagnostics_t diagnostics = { 0 };
     bm_session_t *session = NULL;
     bm_status_t status = BM_STATUS_INVALID_STATE;
     bm_status_t video_status = BM_STATUS_INVALID_STATE;
@@ -130,10 +95,6 @@ headless_run_pcs86(const headless_run_options_t *options)
     size_t nonblack = 0U;
     uint32_t frame_crc = 0U;
     int frame_matches = !options->expect_frame_crc32;
-    size_t identity_count = 0U;
-    const bm_pcs86_firmware_identity_t *identities;
-    const bm_pcs86_firmware_identity_t *even_identity;
-    const bm_pcs86_firmware_identity_t *odd_identity;
     int frame_written = options->frame_path == NULL;
     int result = 3;
 
@@ -143,56 +104,49 @@ headless_run_pcs86(const headless_run_options_t *options)
     if (status != BM_STATUS_OK) {
         fputs("typed actions must be valid, ordered, and fit within --ticks\n",
               stderr);
-        result = 2;
-        goto cleanup;
+        return 2;
     }
-
-    if (!headless_blob_read_exact(options->firmware_even_path,
-                                  BM_PCS86_FIRMWARE_HALF_SIZE, &even) ||
-        !headless_blob_read_exact(options->firmware_odd_path,
-                                  BM_PCS86_FIRMWARE_HALF_SIZE, &odd)) {
+    if (!bm_frontend_blob_read_exact(options->firmware_even_path, 32768U,
+                                     &even) ||
+        !bm_frontend_blob_read_exact(options->firmware_odd_path, 32768U,
+                                     &odd)) {
         fputs("firmware halves must each be exactly 32768 bytes\n", stderr);
         result = 2;
         goto cleanup;
     }
+    bindings[0] = (bm_frontend_asset_binding_t) {
+        "firmware-even", BM_FRONTEND_ASSET_BLOB,
+        { .blob = { NULL, even.data, even.size, NULL } }
+    };
+    bindings[1] = (bm_frontend_asset_binding_t) {
+        "firmware-odd", BM_FRONTEND_ASSET_BLOB,
+        { .blob = { NULL, odd.data, odd.size, NULL } }
+    };
     if (options->floppy_path != NULL) {
-        if (!headless_readonly_media_open(options->floppy_path, 512U, &floppy) ||
+        if (!bm_frontend_readonly_media_open(options->floppy_path, 512U,
+                                             &floppy) ||
             ((floppy.size != 737280U) && (floppy.size != 1474560U))) {
             fputs("floppy image must be a raw 720 KiB or 1.44 MiB image\n",
                   stderr);
             result = 2;
             goto cleanup;
         }
+        bindings[2] = (bm_frontend_asset_binding_t) {
+            "floppy-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+            { .media = floppy.media }
+        };
+        binding_count = 3U;
     }
-    identities = bm_pcs86_expected_firmware(&identity_count);
-    even_identity = find_firmware_identity(identities, identity_count, "even");
-    odd_identity = find_firmware_identity(identities, identity_count, "odd");
-    if ((even_identity == NULL) || (odd_identity == NULL)) {
-        fputs("machine firmware contract is unavailable\n", stderr);
-        result = 3;
+    status = bm_frontend_machine_open(adapter, bindings, binding_count, &machine);
+    if (status != BM_STATUS_OK) {
+        fputs("machine assets are missing, unreadable, or invalid\n", stderr);
+        result = 2;
         goto cleanup;
     }
-    config.firmware_even = (bm_blob_view_t) {
-        even_identity->asset_id, even.data, even.size, NULL
-    };
-    config.firmware_odd = (bm_blob_view_t) {
-        odd_identity->asset_id, odd.data, odd.size, NULL
-    };
-    config.trace = capture_instruction;
-    config.trace_context = &trace;
-    config.io_trace = capture_io;
-    config.io_trace_context = &trace;
-    if (floppy.file != NULL) {
-        config.floppy[0] = (bm_floppy_drive_config_t) {
-            1, 1, 1,
-            { 80U, 2U, (uint8_t) (floppy.size == 737280U ? 9U : 18U), 512U },
-            floppy.media
-        };
-    }
-    machine = bm_pcs86_machine_config(&config);
     status = bm_session_create(&host, &session);
     if (status == BM_STATUS_OK)
-        status = bm_session_configure(session, &machine);
+        status = bm_session_configure(session,
+                                      bm_frontend_machine_config(machine));
     if (status == BM_STATUS_OK)
         status = bm_session_start(session);
     if (status == BM_STATUS_OK)
@@ -228,30 +182,34 @@ headless_run_pcs86(const headless_run_options_t *options)
                     frame_matches = !options->expect_frame_crc32 ||
                                     (frame_crc == options->expected_frame_crc32);
                     if (options->frame_path != NULL)
-                        frame_written = write_ppm(options->frame_path, &framebuffer);
+                        frame_written = write_ppm(options->frame_path,
+                                                  &framebuffer);
                 }
             }
         }
     }
-
+    (void) bm_frontend_machine_diagnostics(machine, &diagnostics);
     printf("machine=%s status=%d requested_ticks=%" PRIu64
            " elapsed_ticks=%" PRIu64 " instructions=%" PRIu64
            " io=%" PRIu64 "\n",
            options->machine_id, (int) status, options->ticks,
            session != NULL ? bm_session_time(session) : 0U,
-           trace.instructions, trace.io_operations);
+           diagnostics.instructions, diagnostics.io_operations);
     printf("last=%04x:%04x physical=%05" PRIx32
            " opcode=%02x effective=%02x prefixes=%u\n",
-           trace.last.cs, trace.last.ip, trace.last.physical_address,
-           trace.last.opcode, trace.last.effective_opcode,
-           trace.last.prefix_count);
+           diagnostics.last_cs, diagnostics.last_ip,
+           diagnostics.last_physical_address, diagnostics.last_opcode,
+           diagnostics.last_effective_opcode,
+           (unsigned int) diagnostics.last_prefix_count);
     printf("video_status=%d width=%" PRIu32 " height=%" PRIu32
            " nonblack=%zu crc32=%08" PRIx32 " frame=%s\n",
            (int) video_status, geometry.width, geometry.height, nonblack,
            frame_crc, (frame_written && options->frame_path != NULL) ?
                       options->frame_path : "");
-    printf("firmware_hash=unchecked floppy_bytes=%zu floppy_read_only=%d\n",
-           floppy.size, floppy.file != NULL ? 1 : 0);
+    printf("firmware_hash=unchecked floppy_bytes=%" PRIu64
+           " floppy_read_only=%d\n",
+           diagnostics.read_only_media_bytes,
+           diagnostics.read_only_media_bytes != 0U ? 1 : 0);
     if (options->text_action_count != 0U)
         printf("input_actions=%zu key_ticks=%" PRIu64 "\n",
                options->text_action_count, options->key_ticks);
@@ -267,8 +225,9 @@ headless_run_pcs86(const headless_run_options_t *options)
 cleanup:
     bm_session_destroy(session);
     free(pixels);
-    headless_readonly_media_close(&floppy);
-    headless_blob_release(&even);
-    headless_blob_release(&odd);
+    bm_frontend_machine_close(machine);
+    bm_frontend_readonly_media_close(&floppy);
+    bm_frontend_blob_release(&even);
+    bm_frontend_blob_release(&odd);
     return result;
 }

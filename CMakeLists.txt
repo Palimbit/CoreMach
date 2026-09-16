@@ -305,6 +305,7 @@ if(BLUMACH_BUILD_ENGINE)
     add_subdirectory(runtime)
     add_subdirectory(systems/olivetti-pcs86)
     add_subdirectory(platforms/null)
+    add_subdirectory(apps/frontend)
     add_subdirectory(apps/headless)
 endif()
 
