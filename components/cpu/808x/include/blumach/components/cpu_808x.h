@@ -19,6 +19,8 @@ typedef struct bm_808x_trace {
     uint16_t ip;
     uint32_t physical_address;
     uint8_t opcode;
+    uint8_t effective_opcode;
+    uint8_t prefix_count;
 } bm_808x_trace_t;
 
 typedef void (*bm_808x_trace_fn)(void *context, const bm_808x_trace_t *trace);

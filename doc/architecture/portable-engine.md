@@ -226,6 +226,16 @@ bootstrap. The boot sector is executed and prints its own `Non-system disk or
 disk error` message; this is observed boot-sector execution, not a claim that
 the mounted disk contains a bootable installed operating system.
 
+A CPU architecture cut adds tested, general 808x semantics for
+sign extension, string comparison and repeat conditions, direct and indirect
+far control flow, `POP r/m16`, byte/word exchange and negation, accumulator
+`TEST`, `XLAT`, immediate carry arithmetic and unsigned byte division. The
+CPU trace now distinguishes the first byte from the effective opcode after
+prefixes, while inspection exposes up to the first eight consumed instruction
+bytes and their full length. Each behavior is covered with synthetic memory and
+machine-independent tests; opcode handling does not depend on firmware
+addresses, image contents or host services.
+
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
 format-track, deleted-data distinction, flux/weak-sector formats and dynamic
 media insertion. Those are explicit future fidelity work, while raw-sector

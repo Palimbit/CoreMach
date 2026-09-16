@@ -181,7 +181,9 @@ The main implementation files are `components/cpu/808x/src/cpu_808x.c`,
 include the focused `cpu_808x_post_test.c`, `cpu_808x_checksum_test.c`,
 `cpu_808x_segment_test.c`, `cpu_808x_compare_test.c`, `dma8237_test.c`,
 `dma_page_registers_test.c`, `rtc_mm58167_test.c`,
-`pc_platform_test.c`, `cpu_808x_shift_test.c`, `cpu_808x_return_test.c`,
+`pc_platform_test.c`, `cpu_808x_shift_test.c`, `cpu_808x_return_test.c`, the
+focused sign-extension, string-comparison, decode-trace, far-control-flow,
+exchange, negate, `XLAT`, carry-arithmetic and byte-division tests,
 `fdc765_test.c`, `pvga1a_test.c`,
 `legacy_io_test.c`, `pcs86_reset_test.c` and `pcs86_user_io_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never
