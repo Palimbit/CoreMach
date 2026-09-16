@@ -3,6 +3,7 @@
 #define BLUMACH_PORTABLE_WINDOW_H
 
 #include "display_widget.h"
+#include "session_worker.h"
 
 #include <blumach/frontend/file_inputs.h>
 #include <blumach/frontend/frontend.h>
@@ -11,7 +12,6 @@
 #include <QHash>
 #include <QMainWindow>
 #include <QString>
-#include <QTimer>
 
 #include <memory>
 #include <vector>
@@ -39,11 +39,11 @@ private:
     bool openMachine(const bm_frontend_adapter_t *adapter,
                      const QHash<QString, QString> &paths);
     void closeMachine();
-    void advance();
     void togglePause();
     void resetMachine();
     void stopMachine();
     void sendKey(QKeyEvent *event, bool pressed);
+    void handleSnapshot(SessionWorker::Snapshot snapshot);
     void updateActions();
     void showStatus(const QString &detail = QString());
     static bm_key_code_t mapKey(int key);
@@ -53,13 +53,14 @@ private:
     QAction *pauseAction_;
     QAction *resetAction_;
     QAction *stopAction_;
-    QTimer timer_;
     bm_host_services_t host_;
     bm_frontend_machine_t *machine_ = nullptr;
-    bm_session_t *session_ = nullptr;
+    std::unique_ptr<SessionWorker> worker_;
     std::vector<std::unique_ptr<AssetStorage>> assets_;
     std::vector<bm_frontend_asset_binding_t> bindings_;
-    std::vector<uint32_t> pixels_;
+    bm_status_t lastError_ = BM_STATUS_OK;
+    uint64_t workerGeneration_ = 0U;
+    bool lifecyclePending_ = false;
 };
 
 #endif

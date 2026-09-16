@@ -9,10 +9,9 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QStatusBar>
 #include <QToolBar>
-
-#include <limits>
 
 PortableWindow::AssetStorage::~AssetStorage()
 {
@@ -40,10 +39,8 @@ PortableWindow::PortableWindow(QWidget *parent)
             [this] { resetMachine(); });
     connect(stopAction_, &QAction::triggered, this,
             [this] { stopMachine(); });
-    connect(&timer_, &QTimer::timeout, this, [this] { advance(); });
     display_->setKeyHandler(
         [this](QKeyEvent *event, bool pressed) { sendKey(event, pressed); });
-    timer_.setInterval(16);
     resize(960, 600);
     updateActions();
     showStatus(tr("Open a machine to begin"));
@@ -123,13 +120,22 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
     }
     bm_status_t result = bm_frontend_machine_open(
         adapter, bindings_.data(), bindings_.size(), &machine_);
-    if (result == BM_STATUS_OK)
-        result = bm_session_create(&host_, &session_);
-    if (result == BM_STATUS_OK)
-        result = bm_session_configure(session_,
-                                      bm_frontend_machine_config(machine_));
-    if (result == BM_STATUS_OK)
-        result = bm_session_start(session_);
+    if (result == BM_STATUS_OK) {
+        const uint64_t generation = workerGeneration_;
+        worker_ = std::make_unique<SessionWorker>(
+            host_, bm_frontend_machine_config(machine_), UINT64_C(10000000),
+            [this, generation](SessionWorker::Snapshot snapshot) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, generation,
+                     snapshot = std::move(snapshot)]() mutable {
+                        if (generation == workerGeneration_)
+                            handleSnapshot(std::move(snapshot));
+                    },
+                    Qt::QueuedConnection);
+            });
+        result = worker_->start();
+    }
     if (result != BM_STATUS_OK) {
         QMessageBox::critical(this, tr("Could not start machine"),
                               tr("The portable session rejected the configuration "
@@ -137,7 +143,8 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         closeMachine();
         return false;
     }
-    timer_.start();
+    lastError_ = BM_STATUS_OK;
+    lifecyclePending_ = false;
     display_->setFocus();
     updateActions();
     showStatus();
@@ -147,116 +154,56 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
 void
 PortableWindow::closeMachine()
 {
-    timer_.stop();
-    bm_session_destroy(session_);
-    session_ = nullptr;
+    ++workerGeneration_;
+    lifecyclePending_ = false;
+    worker_.reset();
     bm_frontend_machine_close(machine_);
     machine_ = nullptr;
     bindings_.clear();
     assets_.clear();
-    pixels_.clear();
     display_->setFrame(QImage());
     updateActions();
 }
 
 void
-PortableWindow::advance()
-{
-    if ((session_ == nullptr) ||
-        (bm_session_state(session_) != BM_SESSION_RUNNING))
-        return;
-    bm_status_t result = bm_session_run_for(session_, UINT64_C(100000));
-    bm_video_geometry_t geometry {};
-    if (result == BM_STATUS_OK)
-        result = bm_session_video_geometry(session_, &geometry);
-    if ((result == BM_STATUS_OK) && (geometry.width != 0U) &&
-        (geometry.height != 0U) &&
-        (geometry.width <= std::numeric_limits<size_t>::max() /
-                              geometry.height)) {
-        pixels_.resize(static_cast<size_t>(geometry.width) * geometry.height);
-        bm_video_framebuffer_t framebuffer {
-            pixels_.data(), pixels_.size(), geometry.width, geometry
-        };
-        result = bm_session_render_video(session_, &framebuffer);
-        if (result == BM_STATUS_OK) {
-            const QImage frame(reinterpret_cast<const uchar *>(pixels_.data()),
-                               static_cast<int>(geometry.width),
-                               static_cast<int>(geometry.height),
-                               static_cast<qsizetype>(geometry.width * 4U),
-                               QImage::Format_RGB32);
-            display_->setFrame(frame.copy());
-        }
-    }
-    if (result != BM_STATUS_OK) {
-        timer_.stop();
-        QMessageBox::critical(this, tr("Machine stopped"),
-                              tr("Portable execution failed with status %1.")
-                                  .arg(static_cast<int>(result)));
-        (void) bm_session_stop(session_);
-        updateActions();
-    }
-    showStatus();
-}
-
-void
 PortableWindow::togglePause()
 {
-    if (session_ == nullptr)
+    if ((worker_ == nullptr) || lifecyclePending_)
         return;
-    bm_status_t result = BM_STATUS_INVALID_STATE;
-    if (bm_session_state(session_) == BM_SESSION_RUNNING) {
-        timer_.stop();
-        result = bm_session_pause(session_);
-    } else if (bm_session_state(session_) == BM_SESSION_PAUSED) {
-        result = bm_session_resume(session_);
-        if (result == BM_STATUS_OK)
-            timer_.start();
-    }
-    if (result != BM_STATUS_OK)
-    {
-        if (bm_session_state(session_) == BM_SESSION_RUNNING)
-            timer_.start();
-        QMessageBox::warning(this, tr("Lifecycle error"),
-                             tr("The requested transition failed (%1).")
-                                 .arg(static_cast<int>(result)));
+    if (worker_->state() == BM_SESSION_RUNNING) {
+        lifecyclePending_ = true;
+        worker_->pause();
+    } else if (worker_->state() == BM_SESSION_PAUSED) {
+        lifecyclePending_ = true;
+        worker_->resume();
     }
     updateActions();
-    showStatus();
 }
 
 void
 PortableWindow::resetMachine()
 {
-    if (session_ != nullptr) {
-        const bm_status_t result = bm_session_reset(session_);
-        if (result != BM_STATUS_OK)
-            QMessageBox::warning(this, tr("Reset failed"),
-                                 tr("Reset failed with status %1.")
-                                     .arg(static_cast<int>(result)));
-        showStatus();
+    if ((worker_ != nullptr) && !lifecyclePending_) {
+        lifecyclePending_ = true;
+        worker_->reset();
+        updateActions();
     }
 }
 
 void
 PortableWindow::stopMachine()
 {
-    if (session_ != nullptr) {
-        timer_.stop();
-        const bm_status_t result = bm_session_stop(session_);
-        if (result != BM_STATUS_OK)
-            QMessageBox::warning(this, tr("Stop failed"),
-                                 tr("Stop failed with status %1.")
-                                     .arg(static_cast<int>(result)));
+    if ((worker_ != nullptr) && !lifecyclePending_) {
+        lifecyclePending_ = true;
+        worker_->stop();
         updateActions();
-        showStatus();
     }
 }
 
 void
 PortableWindow::sendKey(QKeyEvent *event, bool pressed)
 {
-    if ((session_ == nullptr) ||
-        (bm_session_state(session_) != BM_SESSION_RUNNING)) {
+    if ((worker_ == nullptr) || (worker_->state() != BM_SESSION_RUNNING)) {
         event->ignore();
         return;
     }
@@ -268,25 +215,44 @@ PortableWindow::sendKey(QKeyEvent *event, bool pressed)
     const bm_input_event_t input {
         BM_INPUT_KEY, key, pressed ? 1 : 0, event->isAutoRepeat() ? 1 : 0
     };
-    if (bm_session_send_input(session_, &input) == BM_STATUS_OK)
-        event->accept();
-    else
-        event->ignore();
+    worker_->sendInput(input);
+    event->accept();
+}
+
+void
+PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
+{
+    if (!snapshot.frame.isNull())
+        display_->setFrame(snapshot.frame);
+    if (snapshot.lifecycleResult)
+        lifecyclePending_ = false;
+    if ((snapshot.status != BM_STATUS_OK) &&
+        (snapshot.status != lastError_)) {
+        lastError_ = snapshot.status;
+        QMessageBox::critical(this, tr("Portable session error"),
+                              tr("The worker reported status %1.")
+                                  .arg(static_cast<int>(snapshot.status)));
+    }
+    updateActions();
+    showStatus();
 }
 
 void
 PortableWindow::updateActions()
 {
-    const bm_session_state_t state = session_ != nullptr ?
-                                     bm_session_state(session_) : BM_SESSION_NEW;
-    pauseAction_->setEnabled(state == BM_SESSION_RUNNING ||
-                             state == BM_SESSION_PAUSED);
+    const bm_session_state_t state = worker_ != nullptr ? worker_->state() :
+                                                          BM_SESSION_NEW;
+    pauseAction_->setEnabled(!lifecyclePending_ &&
+                             (state == BM_SESSION_RUNNING ||
+                              state == BM_SESSION_PAUSED));
     pauseAction_->setText(state == BM_SESSION_PAUSED ? tr("Resume") :
                                                        tr("Pause"));
-    resetAction_->setEnabled(state == BM_SESSION_RUNNING ||
-                             state == BM_SESSION_PAUSED);
-    stopAction_->setEnabled(state == BM_SESSION_RUNNING ||
-                            state == BM_SESSION_PAUSED);
+    resetAction_->setEnabled(!lifecyclePending_ &&
+                             (state == BM_SESSION_RUNNING ||
+                              state == BM_SESSION_PAUSED));
+    stopAction_->setEnabled(!lifecyclePending_ &&
+                            (state == BM_SESSION_RUNNING ||
+                             state == BM_SESSION_PAUSED));
 }
 
 void
@@ -296,12 +262,12 @@ PortableWindow::showStatus(const QString &detail)
         status_->setText(detail);
         return;
     }
-    if (session_ == nullptr) {
+    if (worker_ == nullptr) {
         status_->setText(tr("No machine"));
         return;
     }
     const char *state = "unknown";
-    switch (bm_session_state(session_)) {
+    switch (worker_->state()) {
         case BM_SESSION_RUNNING: state = "running"; break;
         case BM_SESSION_PAUSED: state = "paused"; break;
         case BM_SESSION_STOPPED: state = "stopped"; break;
@@ -311,7 +277,7 @@ PortableWindow::showStatus(const QString &detail)
     status_->setText(tr("%1 — %2 ticks")
                          .arg(QString::fromLatin1(state))
                          .arg(static_cast<qulonglong>(
-                             bm_session_time(session_))));
+                             worker_->ticks())));
 }
 
 bm_key_code_t
