@@ -161,8 +161,13 @@ transfer_sector_to_memory(bm_fdc765_t *fdc,
     for (index = 0U; index < geometry->bytes_per_sector; ++index) {
         status = bm_dma8237_device_write(fdc->dma, fdc->dma_channel,
                                          fdc->transfer_buffer[index], terminal);
-        if ((status != BM_STATUS_OK) || *terminal)
+        if (status != BM_STATUS_OK)
             return status;
+        if (*terminal) {
+            if (index + 1U != geometry->bytes_per_sector)
+                return BM_STATUS_DEVICE_ERROR;
+            return BM_STATUS_OK;
+        }
     }
     return BM_STATUS_OK;
 }
