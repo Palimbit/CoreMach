@@ -752,12 +752,14 @@ pcs86_video_geometry(const void *context, bm_video_geometry_t *geometry)
 }
 
 static bm_status_t
-pcs86_video_render(const void *context, bm_video_framebuffer_t *framebuffer)
+pcs86_video_render(const void *context, bm_tick_t emulated_time,
+                   bm_video_framebuffer_t *framebuffer)
 {
     const bm_pcs86_machine_t *machine = context;
     if (machine == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
-    return bm_pvga1a_render(machine->video, framebuffer);
+    return bm_pvga1a_render(machine->video, emulated_time,
+                            PCS86_SCHEDULER_TICKS_PER_SECOND, framebuffer);
 }
 
 static bm_status_t
@@ -1062,6 +1064,42 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
         if (bm_uart16450_state(machine->uart, &state) != BM_STATUS_OK)
             return BM_STATUS_DEVICE_ERROR;
         *value = state.line_status;
+    } else if ((strcmp(name, "video_crtc_cursor_start") == 0) ||
+               (strcmp(name, "video_crtc_cursor_end") == 0) ||
+               (strcmp(name, "video_crtc_cursor_high") == 0) ||
+               (strcmp(name, "video_crtc_cursor_low") == 0) ||
+               (strcmp(name, "video_crtc_start_high") == 0) ||
+               (strcmp(name, "video_crtc_start_low") == 0) ||
+               (strcmp(name, "video_crtc_max_scan_line") == 0) ||
+               (strcmp(name, "video_crtc_offset") == 0) ||
+               (strcmp(name, "video_pvga_pr3") == 0)) {
+        uint8_t index;
+        uint8_t register_value;
+        bm_pvga1a_register_set_t register_set = BM_PVGA1A_CRTC;
+        if (strcmp(name, "video_crtc_cursor_start") == 0)
+            index = 0x0aU;
+        else if (strcmp(name, "video_crtc_cursor_end") == 0)
+            index = 0x0bU;
+        else if (strcmp(name, "video_crtc_cursor_high") == 0)
+            index = 0x0eU;
+        else if (strcmp(name, "video_crtc_cursor_low") == 0)
+            index = 0x0fU;
+        else if (strcmp(name, "video_crtc_start_high") == 0)
+            index = 0x0cU;
+        else if (strcmp(name, "video_crtc_start_low") == 0)
+            index = 0x0dU;
+        else if (strcmp(name, "video_crtc_max_scan_line") == 0)
+            index = 9U;
+        else if (strcmp(name, "video_crtc_offset") == 0)
+            index = 0x13U;
+        else {
+            register_set = BM_PVGA1A_GRAPHICS;
+            index = 0x0dU;
+        }
+        if (bm_pvga1a_inspect_register(machine->video, register_set,
+                                        index, &register_value) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = register_value;
     } else {
         return BM_STATUS_INVALID_ARGUMENT;
     }

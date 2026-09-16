@@ -25,6 +25,7 @@ typedef struct test_machine {
     unsigned int input_calls;
     unsigned int geometry_calls;
     unsigned int render_calls;
+    bm_tick_t last_render_time;
     bm_input_event_t last_input;
 } test_machine_t;
 
@@ -133,12 +134,14 @@ test_video_geometry(const void *context, bm_video_geometry_t *geometry)
 }
 
 static bm_status_t
-test_video_render(const void *context, bm_video_framebuffer_t *framebuffer)
+test_video_render(const void *context, bm_tick_t emulated_time,
+                  bm_video_framebuffer_t *framebuffer)
 {
     test_machine_t *machine = (test_machine_t *) context;
 
     assert(machine != NULL);
     ++machine->render_calls;
+    machine->last_render_time = emulated_time;
     if (machine->video_status != BM_STATUS_OK)
         return machine->video_status;
     framebuffer->geometry.width = 320U;
@@ -353,6 +356,7 @@ test_session_state_machine(void)
     assert(geometry.width == 320U && geometry.height == 200U);
     assert(bm_session_render_video(session, &framebuffer) == BM_STATUS_OK);
     assert(framebuffer.geometry.width == 320U);
+    assert(machine.last_render_time == 5U);
     assert(bm_session_inspect_machine(session, "answer", &value) == BM_STATUS_OK);
     assert(value == 42U);
     assert(bm_session_send_input(session, &input) == BM_STATUS_OK);

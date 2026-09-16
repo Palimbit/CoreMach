@@ -243,6 +243,15 @@ main(int argc, char **argv)
     uint64_t fdc_dor = 0U;
     uint64_t fdc_msr = 0U;
     uint64_t fdc_irq = 0U;
+    uint64_t crtc_cursor_start = 0U;
+    uint64_t crtc_cursor_end = 0U;
+    uint64_t crtc_cursor_high = 0U;
+    uint64_t crtc_cursor_low = 0U;
+    uint64_t crtc_start_high = 0U;
+    uint64_t crtc_start_low = 0U;
+    uint64_t crtc_max_scan_line = 0U;
+    uint64_t crtc_offset = 0U;
+    uint64_t pvga_pr3 = 0U;
 
     if ((argc < 3) || (argc > 6)) {
         fprintf(stderr, "usage: %s <even-rom> <odd-rom>"
@@ -317,6 +326,24 @@ main(int argc, char **argv)
         (void) bm_session_inspect_machine(session, "fdc_dor", &fdc_dor);
         (void) bm_session_inspect_machine(session, "fdc_msr", &fdc_msr);
         (void) bm_session_inspect_machine(session, "fdc_irq", &fdc_irq);
+        (void) bm_session_inspect_machine(session, "video_crtc_cursor_start",
+                                          &crtc_cursor_start);
+        (void) bm_session_inspect_machine(session, "video_crtc_cursor_end",
+                                          &crtc_cursor_end);
+        (void) bm_session_inspect_machine(session, "video_crtc_cursor_high",
+                                          &crtc_cursor_high);
+        (void) bm_session_inspect_machine(session, "video_crtc_cursor_low",
+                                          &crtc_cursor_low);
+        (void) bm_session_inspect_machine(session, "video_crtc_start_high",
+                                          &crtc_start_high);
+        (void) bm_session_inspect_machine(session, "video_crtc_start_low",
+                                          &crtc_start_low);
+        (void) bm_session_inspect_machine(session, "video_crtc_max_scan_line",
+                                          &crtc_max_scan_line);
+        (void) bm_session_inspect_machine(session, "video_crtc_offset",
+                                          &crtc_offset);
+        (void) bm_session_inspect_machine(session, "video_pvga_pr3",
+                                          &pvga_pr3);
         video_status = bm_session_video_geometry(session, &geometry);
         if (video_status == BM_STATUS_OK) {
             pixel_count = (size_t) geometry.width * geometry.height;
@@ -379,6 +406,15 @@ main(int argc, char **argv)
     printf("floppy_bytes=%zu fdc_dor=%02" PRIx64 " fdc_msr=%02" PRIx64
            " fdc_irq=%" PRIu64 "\n",
            disk.size, fdc_dor, fdc_msr, fdc_irq);
+    printf("crtc_0a=%02" PRIx64 " crtc_0b=%02" PRIx64
+           " crtc_0e=%02" PRIx64 " crtc_0f=%02" PRIx64
+           " crtc_0c=%02" PRIx64 " crtc_0d=%02" PRIx64
+           " crtc_09=%02" PRIx64 " crtc_13=%02" PRIx64
+           " pvga_pr3=%02" PRIx64 "\n",
+           crtc_cursor_start, crtc_cursor_end,
+           crtc_cursor_high, crtc_cursor_low,
+           crtc_start_high, crtc_start_low,
+           crtc_max_scan_line, crtc_offset, pvga_pr3);
 
     bm_session_destroy(session);
     free(pixels);

@@ -246,6 +246,7 @@ bm_session_render_video(const bm_session_t *session, bm_video_framebuffer_t *fra
         (session->configuration.definition->ops.video_render == NULL))
         return BM_STATUS_UNSUPPORTED;
     return session->configuration.definition->ops.video_render(session->machine,
+                                                                bm_engine_now(session->engine),
                                                                 framebuffer);
 }
 
