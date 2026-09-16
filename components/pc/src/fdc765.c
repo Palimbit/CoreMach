@@ -253,8 +253,7 @@ execute_data_command(bm_fdc765_t *fdc, int write)
     if ((expected_size_code == 0xffU) || (size_code != expected_size_code) ||
         (geometry->bytes_per_sector > sizeof(fdc->transfer_buffer)) ||
         (head >= geometry->heads) || (sector == 0U) ||
-        (sector > geometry->sectors_per_track) || (eot == 0U) ||
-        (eot > geometry->sectors_per_track)) {
+        (sector > geometry->sectors_per_track) || (eot == 0U)) {
         set_rw_results(fdc, (uint8_t) (st0 | 0x40U), 0x04U, 0U,
                        cylinder, head, sector, size_code);
         return;

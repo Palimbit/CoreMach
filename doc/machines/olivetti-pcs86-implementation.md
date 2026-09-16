@@ -17,10 +17,11 @@ incomplete emulator, but it is no longer stopped at the storage boundary: the
 BIOS visibly passes CPU, ROM, DMA, interrupt-controller, Timer,
 Clock/Calendar and keyboard diagnostics, reports 640 kB and one floppy drive,
 then enters its primary bootstrap. With the preserved 720 KiB system-diskette
-image mounted read-only, the BIOS transfers and executes its boot sector, which
-prints `Non-system disk or disk error`. A 10,000,000-tick manual run completes
-without an engine error after 9,999,858 retired instructions and 10,919
-successful I/O accesses; its 720x400 frame has CRC32 `C6163480`. The
+image mounted read-only, the BIOS transfers and executes its boot sector and
+the system files display the Microsoft MS-DOS 3.30a banner. The run stops
+explicitly with `BM_STATUS_UNMAPPED` at `OUT 02F2h,AL` after 6,935,257 retired
+instructions and 14,031 I/O accesses; its 720x400 frame has CRC32 `DCD404C6`.
+This is DOS initialization, not a completed boot to a command prompt. The
 unpopulated option-ROM region returns ones;
 the PCS 86 system EPROMs already contain video initialization, so the engine
 does not fabricate a separate ROM. The PVGA1A component owns VGA/Paradise
@@ -164,8 +165,10 @@ gates and IRQ routes, the board's two protocol queues and host-neutral keyboard
 delivery. The next local validation adds a read-only 720 KiB raw image and
 reaches the primary bootstrap. All visible resident diagnostics report `Pass`;
 the BIOS detects one floppy, reads its boot sector through DMA2 and transfers
-execution to it. The boot sector's own `Non-system disk or disk error` message
-is visible in the captured frame. The PVGA1A status phase, scheduler rate, FDC
+execution to it. DMA terminal count completes each requested sector even when
+the command EOT exceeds the mounted track, and the system files display the
+MS-DOS 3.30a banner before the unmapped `02F2h` boundary. The PVGA1A status
+phase, scheduler rate, FDC
 timing and PS/2 response timing remain deterministic bring-up approximations;
 no printer/serial backend or mouse input is connected.
 
