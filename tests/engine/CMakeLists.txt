@@ -76,6 +76,11 @@ target_link_libraries(portable-engine-fdc765-contracts
     PRIVATE portable-engine-fdc765-test-support
 )
 
+add_executable(portable-engine-storage-contracts storage_contract_test.c)
+target_link_libraries(portable-engine-storage-contracts
+    PRIVATE blumach_storage blumach_platform_null
+)
+
 add_executable(portable-engine-dma-pages dma_page_registers_test.c)
 target_link_libraries(portable-engine-dma-pages
     PRIVATE blumach_pc_components blumach_platform_null
@@ -210,7 +215,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-legacy-io)
+foreach(target portable-engine-memory portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -235,6 +240,7 @@ add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 add_test(NAME portable-engine.dma8237-programming COMMAND portable-engine-dma8237)
 add_test(NAME portable-engine.fdc765-dma COMMAND portable-engine-fdc765)
 add_test(NAME portable-engine.fdc765-contracts COMMAND portable-engine-fdc765-contracts)
+add_test(NAME portable-engine.storage-contracts COMMAND portable-engine-storage-contracts)
 add_test(NAME portable-engine.dma-page-registers COMMAND portable-engine-dma-pages)
 add_test(NAME portable-engine.mm58167-irq-control COMMAND portable-engine-mm58167-irq)
 add_test(NAME portable-engine.pvga1a-registers-memory COMMAND portable-engine-pvga1a)
@@ -264,6 +270,7 @@ set_tests_properties(
     portable-engine.dma8237-programming
     portable-engine.fdc765-dma
     portable-engine.fdc765-contracts
+    portable-engine.storage-contracts
     portable-engine.dma-page-registers
     portable-engine.mm58167-irq-control
     portable-engine.pvga1a-registers-memory
