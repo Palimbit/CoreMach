@@ -68,6 +68,28 @@ target_link_libraries(portable-engine-pvga1a
     PRIVATE blumach_video blumach_platform_null
 )
 
+add_library(portable-engine-808x-test-support STATIC cpu_808x_test_harness.c)
+target_link_libraries(portable-engine-808x-test-support
+    PUBLIC
+        blumach_cpu_808x
+        blumach_memory
+        blumach_engine
+        blumach_platform_null
+)
+target_compile_features(portable-engine-808x-test-support PRIVATE c_std_11)
+set_target_properties(portable-engine-808x-test-support
+    PROPERTIES C_EXTENSIONS OFF
+)
+if(MSVC)
+    target_compile_options(portable-engine-808x-test-support
+        PRIVATE /W4 /WX /UNDEBUG
+    )
+else()
+    target_compile_options(portable-engine-808x-test-support
+        PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+    )
+endif()
+
 add_executable(portable-engine-808x-post cpu_808x_post_test.c)
 target_link_libraries(portable-engine-808x-post
     PRIVATE
@@ -124,11 +146,7 @@ target_link_libraries(portable-engine-808x-returns
 
 add_executable(portable-engine-808x-sign-extend cpu_808x_sign_extend_test.c)
 target_link_libraries(portable-engine-808x-sign-extend
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-string-compare cpu_808x_string_compare_test.c)
@@ -142,11 +160,7 @@ target_link_libraries(portable-engine-808x-string-compare
 
 add_executable(portable-engine-808x-trace cpu_808x_trace_test.c)
 target_link_libraries(portable-engine-808x-trace
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-indirect-far-call cpu_808x_indirect_far_call_test.c)
@@ -187,11 +201,7 @@ target_link_libraries(portable-engine-808x-negate
 
 add_executable(portable-engine-808x-xlat cpu_808x_xlat_test.c)
 target_link_libraries(portable-engine-808x-xlat
-    PRIVATE
-        blumach_cpu_808x
-        blumach_memory
-        blumach_engine
-        blumach_platform_null
+    PRIVATE portable-engine-808x-test-support
 )
 
 add_executable(portable-engine-808x-immediate-carry cpu_808x_immediate_carry_test.c)
