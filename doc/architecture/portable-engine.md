@@ -91,6 +91,14 @@ vectors and records two NEC distinctions: `AAM 00h` produces `AH=FFh` without
 interrupt zero, while `AAD` always uses decimal base ten regardless of its
 encoded second byte.
 
+The next native-ISA campaign raises the verified total to 250,000 hardware
+vectors. It covers the previously absent byte and accumulator forms of ADC and
+SBB, DAA/DAS/AAA/AAS, CWD, INT3, INTO and all eight operations of the NEC 82h
+byte-immediate alias. In particular, decimal and ASCII adjustment follow the
+measured NEC flag and carry thresholds rather than assuming the behaviour of a
+different x86 generation. Undefined flags are excluded with the corpus masks;
+the interpreter still gives them a deterministic internal value.
+
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
 copied or executed by this test.

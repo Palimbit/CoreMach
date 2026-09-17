@@ -57,7 +57,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, versioned architectural snapshot/restore and one-boundary step, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, tested arithmetic/logical and shift paths including ADC/SBB, hardware-vector-validated NEC AAM/AAD, direct/indirect near calls, near/far returns with cleanup, software and maskable interrupt entry, IRET, stack, SAHF/LAHF and flag control, byte/word MOVS/STOS/LODS/SCAS with REP/REPE/REPNE and basic IN/OUT; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, versioned architectural snapshot/restore and one-boundary step, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, hardware-vector-validated ADC/SBB primary forms, NEC 82h alias, DAA/DAS/AAA/AAS, AAM/AAD, CWD, INT3/INTO, arithmetic/logical and shift paths, direct/indirect near calls, near/far returns with cleanup, software and maskable interrupt entry, IRET, stack, SAHF/LAHF and flag control, byte/word MOVS/STOS/LODS/SCAS with REP/REPE/REPNE and basic IN/OUT; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; rational PIT/RTC clock accumulators use a measured functional instruction rate, not V30 cycle accounting |
@@ -127,8 +127,10 @@ The current automated ladder uses no historical software:
    entry using newly authored memory images.
    A separate manual adapter streams externally supplied hardware-generated
    SingleStepTests/V20 vectors through the same public state and step contracts.
-   The D4h/D5h gate currently covers 20,000 cases with no mismatch while
-   intentionally excluding V20 cycle traces from V30 timing claims.
+   The current native-ISA gate covers 250,000 cases with no mismatch across
+   D4h/D5h, ADC/SBB primary forms, decimal/ASCII adjustments, CWD, INT3/INTO
+   and the eight 82h groups, while intentionally excluding V20 cycle traces
+   from V30 timing claims.
 4. The PCS 86 test creates two synthetic 32 KiB halves in memory. Their
    interleaved reset vector performs a far jump from physical `FFFF0h` to
    `F0100h`, writes RAM, initializes the PIC, programs the PIT, exercises the
@@ -222,7 +224,8 @@ include the focused `cpu_808x_post_test.c`, `cpu_808x_checksum_test.c`,
 `pc_platform_test.c`, `cpu_808x_shift_test.c`, `cpu_808x_return_test.c`, the
 focused sign-extension, string-comparison, decode-trace, far-control-flow,
 exchange, negate, `XLAT`, carry-arithmetic and byte-division tests,
-architectural-state and AAM/AAD adjustment tests, the external-vector adapter,
+architectural-state, AAM/AAD and base-ISA completion tests, the external-vector
+adapter,
 `fdc765_test.c`, `pvga1a_test.c`,
 `legacy_io_test.c`, `pcs86_reset_test.c` and `pcs86_user_io_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never

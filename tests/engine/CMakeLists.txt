@@ -257,6 +257,11 @@ target_link_libraries(portable-engine-808x-adjust
     PRIVATE portable-engine-808x-test-support
 )
 
+add_executable(portable-engine-808x-base-isa cpu_808x_base_isa_test.c)
+target_link_libraries(portable-engine-808x-base-isa
+    PRIVATE portable-engine-808x-test-support
+)
+
 # Manual conformance adapter. External hardware vectors remain outside the
 # repository and are supplied to tools/run_v20_conformance.py by path.
 add_executable(portable-engine-808x-vector-runner cpu_808x_vector_runner.c)
@@ -276,7 +281,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-vector-runner portable-engine-legacy-io)
+foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-base-isa portable-engine-808x-vector-runner portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -330,6 +335,7 @@ add_test(NAME portable-engine.808x-immediate-carry COMMAND portable-engine-808x-
 add_test(NAME portable-engine.808x-byte-divide COMMAND portable-engine-808x-byte-divide)
 add_test(NAME portable-engine.808x-reverse-carry COMMAND portable-engine-808x-reverse-carry)
 add_test(NAME portable-engine.808x-adjust COMMAND portable-engine-808x-adjust)
+add_test(NAME portable-engine.808x-base-isa COMMAND portable-engine-808x-base-isa)
 add_test(NAME portable-engine.legacy-io COMMAND portable-engine-legacy-io)
 set_tests_properties(
     portable-engine.linear-memory
@@ -366,6 +372,7 @@ set_tests_properties(
     portable-engine.808x-byte-divide
     portable-engine.808x-reverse-carry
     portable-engine.808x-adjust
+    portable-engine.808x-base-isa
     portable-engine.legacy-io
     PROPERTIES TIMEOUT 10
 )
