@@ -35,7 +35,8 @@ those facilities without exposing them to an emulated component.
 - Time uses integer ticks and same-time events use insertion order.
 - CPU implementations receive a bounded budget and report consumed time.
 - Buses model memory, I/O, program and data spaces independently.
-- Debug access is an attribute of a transaction, not a second hidden bus.
+- Debug and initiator-held lock state are explicit transaction attributes, not
+  second hidden buses or host-specific callbacks.
 - Host allocation, time and logging arrive through explicit capabilities.
 - Storage components consume caller-owned block media; host paths and file
   handles stay outside the engine.
@@ -153,6 +154,23 @@ and `IRET` resumes the remaining iterations. The V30 retains at most three
 prefixes in that return address, which is covered synthetically. The engine
 currently exposes only the maskable interrupt input; NMI, single-step traps,
 prefetch state and physical cycle timing remain explicit later work.
+
+The prefix-control cut adds the V30-native `REPC` (`65h`) and `REPNC` (`64h`)
+conditions for `CMPS`/`SCAS`: the completed comparison controls continuation
+through CF, while a zero initial `CX` performs no data access. Using either
+carry-repeat prefix as the effective repeat prefix for any other instruction is
+an explicit unsupported result, and the NEC-undefined `F1h` encoding remains
+rejected. When several repeat prefixes are present, the last one selects the
+condition, matching the existing last-prefix selection rule.
+
+`BUSLOCK` (`F0h`) is no longer accepted as an inert prefix. The generic bus
+contract exposes validated debug and locked attributes, and every fetch,
+memory or I/O transaction after the prefix and through its effective
+instruction carries the locked attribute. A repeated block keeps it for every
+iteration and defers maskable interrupt acceptance until the block completes.
+This remains an instruction-domain contract: it does not model electrical pin
+levels, bus arbitration or the V30's documented low BUSLOCK output while a
+prefixed `HALT` is in standby and no transaction exists.
 
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,

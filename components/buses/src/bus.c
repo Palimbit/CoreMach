@@ -106,6 +106,8 @@ bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction)
         !valid_address_space(transaction->space) ||
         !valid_operation(transaction->operation) ||
         !valid_endianness(transaction->endianness) ||
+        ((transaction->attributes &
+          ~(BM_BUS_TRANSACTION_DEBUG | BM_BUS_TRANSACTION_LOCKED)) != 0U) ||
         (transaction->size == 0) || (transaction->size > 8) ||
         (transaction->address > (UINT64_MAX - transaction->size + 1)))
         return BM_STATUS_INVALID_ARGUMENT;

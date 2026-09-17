@@ -164,6 +164,9 @@ test_transaction_validation(void)
     transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ, 0U, 1U);
     transaction.endianness = (bm_endianness_t) 99;
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_INVALID_ARGUMENT);
+    transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ, 0U, 1U);
+    transaction.attributes = 4U;
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_INVALID_ARGUMENT);
     transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ, 0U, 0U);
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_INVALID_ARGUMENT);
     transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ, 0U, 9U);
@@ -203,7 +206,8 @@ test_routing_metadata_and_observer(void)
     transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ, 0x104U, 4U);
     transaction.alignment = 4U;
     transaction.endianness = BM_ENDIAN_BIG;
-    transaction.debug_access = 1;
+    transaction.attributes =
+        BM_BUS_TRANSACTION_DEBUG | BM_BUS_TRANSACTION_LOCKED;
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
     assert(memory.calls == 1U);
     assert(io.calls == 0U);
@@ -213,7 +217,8 @@ test_routing_metadata_and_observer(void)
     assert(memory.last.size == 4U);
     assert(memory.last.endianness == BM_ENDIAN_BIG);
     assert(memory.last.wait_states == 2U);
-    assert(memory.last.debug_access == 1);
+    assert((memory.last.attributes & BM_BUS_TRANSACTION_DEBUG) != 0U);
+    assert((memory.last.attributes & BM_BUS_TRANSACTION_LOCKED) != 0U);
     assert(transaction.value == UINT64_C(0xa1b2c3d4));
     assert(transaction.wait_states == 5U);
     assert(observer.calls == 1U);

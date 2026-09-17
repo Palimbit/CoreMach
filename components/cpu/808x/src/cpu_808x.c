@@ -49,6 +49,7 @@ typedef struct bm_808x_state {
     int halted;
     int interrupt_asserted;
     uint8_t interrupt_inhibit;
+    int bus_lock_active;
     bm_808x_trace_fn trace;
     void *trace_context;
     bm_808x_interrupt_ack_fn interrupt_ack;
@@ -67,7 +68,8 @@ read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
 {
     bm_bus_transaction_t transaction = {
         BM_ADDRESS_MEMORY, operation, physical_address(segment, offset), 0,
-        1, 1, 0, BM_ENDIAN_LITTLE, 0
+        1, 1, 0, BM_ENDIAN_LITTLE,
+        state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     bm_status_t status = bm_bus_transact(state->bus, &transaction);
     if (status == BM_STATUS_OK)
@@ -109,7 +111,8 @@ write_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint8_t va
 {
     bm_bus_transaction_t transaction = {
         BM_ADDRESS_MEMORY, BM_BUS_WRITE, physical_address(segment, offset), value,
-        1, 1, 0, BM_ENDIAN_LITTLE, 0
+        1, 1, 0, BM_ENDIAN_LITTLE,
+        state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     return bm_bus_transact(state->bus, &transaction);
 }
@@ -845,9 +848,12 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
         if ((((opcode == 0xa6U) || (opcode == 0xa7U)) ||
              ((opcode == 0xaeU) || (opcode == 0xafU))) &&
             (((repeat_mode == 1) && ((state->flags & FLAG_ZF) == 0)) ||
-             ((repeat_mode == 2) && ((state->flags & FLAG_ZF) != 0))))
+             ((repeat_mode == 2) && ((state->flags & FLAG_ZF) != 0)) ||
+             ((repeat_mode == 3) && ((state->flags & FLAG_CF) == 0)) ||
+             ((repeat_mode == 4) && ((state->flags & FLAG_CF) != 0))))
             break;
         if ((state->registers[REG_CX] != 0U) &&
+            !state->bus_lock_active &&
             maskable_interrupt_ready(state))
             return service_interrupt_at(state, repeat_ip);
     }
@@ -886,7 +892,8 @@ static bm_status_t
 io_read_byte(bm_808x_state_t *state, uint16_t port, uint8_t *value)
 {
     bm_bus_transaction_t transaction = {
-        BM_ADDRESS_IO, BM_BUS_READ, port, 0, 1, 1, 0, BM_ENDIAN_LITTLE, 0
+        BM_ADDRESS_IO, BM_BUS_READ, port, 0, 1, 1, 0, BM_ENDIAN_LITTLE,
+        state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     bm_status_t status = bm_bus_transact(state->bus, &transaction);
     if (status == BM_STATUS_OK)
@@ -898,7 +905,8 @@ static bm_status_t
 io_write_byte(bm_808x_state_t *state, uint16_t port, uint8_t value)
 {
     bm_bus_transaction_t transaction = {
-        BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 1, 1, 0, BM_ENDIAN_LITTLE, 0
+        BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 1, 1, 0, BM_ENDIAN_LITTLE,
+        state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     return bm_bus_transact(state->bus, &transaction);
 }
@@ -976,6 +984,7 @@ execute_io_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
             break;
         state->registers[REG_CX] = (uint16_t) (state->registers[REG_CX] - 1U);
         if ((state->registers[REG_CX] != 0U) &&
+            !state->bus_lock_active &&
             maskable_interrupt_ready(state))
             return service_interrupt_at(state, repeat_ip);
     }
@@ -999,6 +1008,7 @@ cpu_reset(void *context)
     state->halted = 0;
     state->interrupt_asserted = 0;
     state->interrupt_inhibit = 0U;
+    state->bus_lock_active = 0;
     return BM_STATUS_OK;
 }
 
@@ -1011,6 +1021,7 @@ execute_one(bm_808x_state_t *state)
     uint8_t prefix_count = 0U;
     int segment_override = -1;
     int repeat = 0;
+    int bus_lock = 0;
     bm_status_t status;
     uint16_t repeat_ip;
 
@@ -1031,14 +1042,21 @@ execute_one(bm_808x_state_t *state)
             case 0x2e: prefix_segment = 1; break; /* CS: */
             case 0x36: prefix_segment = 2; break; /* SS: */
             case 0x3e: prefix_segment = 3; break; /* DS: */
+            case 0x64: repeat = 4; break;          /* REPNC */
+            case 0x65: repeat = 3; break;          /* REPC */
+            case 0xf0: bus_lock = 1; break;        /* BUSLOCK */
             case 0xf2: repeat = 2; break;          /* REPNE */
             case 0xf3: repeat = 1; break;          /* REP/REPE */
             default: break;
         }
-        if ((prefix_segment < 0) && (opcode != 0xf2U) && (opcode != 0xf3U))
+        if ((prefix_segment < 0) && (opcode != 0x64U) &&
+            (opcode != 0x65U) && (opcode != 0xf0U) &&
+            (opcode != 0xf2U) && (opcode != 0xf3U))
             break;
         if (prefix_segment >= 0)
             segment_override = prefix_segment;
+        if (bus_lock)
+            state->bus_lock_active = 1;
         ++prefix_count;
         status = fetch_byte(state, &opcode);
         if (status != BM_STATUS_OK)
@@ -1059,6 +1077,10 @@ execute_one(bm_808x_state_t *state)
         };
         state->trace(state->trace_context, &trace);
     }
+    if (((repeat == 3) || (repeat == 4)) &&
+        (opcode != 0xa6U) && (opcode != 0xa7U) &&
+        (opcode != 0xaeU) && (opcode != 0xafU))
+        return BM_STATUS_UNSUPPORTED;
 
     if ((opcode >= 0xb8U) && (opcode <= 0xbfU)) {
         uint16_t immediate;
@@ -2650,6 +2672,7 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
         if (state->halted)
             return BM_STATUS_IDLE;
         status = execute_one(state);
+        state->bus_lock_active = 0;
         if (status != BM_STATUS_OK)
             return status;
         if (state->interrupt_inhibit != 0U)
@@ -2836,6 +2859,7 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->last_effective_opcode = 0U;
     state->last_instruction_bytes = 0U;
     state->last_instruction_length = 0U;
+    state->bus_lock_active = 0;
     return BM_STATUS_OK;
 }
 
