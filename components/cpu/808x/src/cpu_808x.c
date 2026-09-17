@@ -3,7 +3,7 @@
  *
  * Derived rewrite of the inherited 808x/Vx0 interpreter. The original work
  * includes Copyright 2015-2020 Andrew Jenner and Copyright 2016-2020 Miran
- * Grca. This file implements a still-incomplete native-mode NEC V30 core.
+ * Grca. This file implements a still-incomplete NEC V30 core.
  */
 #include <blumach/components/cpu_808x.h>
 
@@ -58,6 +58,7 @@ typedef struct bm_808x_state {
     int trap_pending;
     int interrupt_entered;
     int bus_lock_active;
+    int md_write_enabled;
     bm_808x_trace_fn trace;
     void *trace_context;
     bm_808x_interrupt_ack_fn interrupt_ack;
@@ -68,16 +69,18 @@ typedef struct bm_808x_state {
 } bm_808x_state_t;
 
 static uint16_t
-native_psw_image(uint16_t value)
+psw_image(uint16_t value)
 {
     return (uint16_t) ((value & PSW_WRITABLE) | PSW_FIXED_ONE);
 }
 
 static void
-restore_native_psw(bm_808x_state_t *state, uint16_t value)
+restore_psw(bm_808x_state_t *state, uint16_t value)
 {
     uint16_t mode = state->flags & FLAG_MD;
-    state->flags = (uint16_t) ((native_psw_image(value) & ~FLAG_MD) | mode);
+    state->flags = psw_image(value);
+    if (!state->md_write_enabled)
+        state->flags = (uint16_t) ((state->flags & ~FLAG_MD) | mode);
 }
 
 static uint32_t
@@ -343,12 +346,12 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
     uint16_t new_cs = 0;
     bm_status_t status;
 
-    status = push_word(state, native_psw_image(state->flags));
+    status = push_word(state, psw_image(state->flags));
     if (status == BM_STATUS_OK)
         status = push_word(state, state->segments[1]);
     if (status == BM_STATUS_OK)
         status = push_word(state, state->ip);
-    state->flags = (uint16_t) ((native_psw_image(state->flags) | FLAG_MD) &
+    state->flags = (uint16_t) ((psw_image(state->flags) | FLAG_MD) &
                                ~(FLAG_IF | FLAG_TF));
     if (status == BM_STATUS_OK)
         status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U), &new_ip);
@@ -928,6 +931,64 @@ execute_nec_nibble_rotate(bm_808x_state_t *state, uint8_t extension,
 }
 
 static bm_status_t
+enter_emulation(bm_808x_state_t *state, uint8_t vector)
+{
+    uint16_t new_ip = 0U;
+    uint16_t new_cs = 0U;
+    bm_status_t status;
+
+    /* A native call made from an emulation-mode interrupt/call may not nest
+     * BRKEM: NEC documents the resulting MD operation as undefined. */
+    if (state->md_write_enabled)
+        return BM_STATUS_UNSUPPORTED;
+    status = read_word(state, 0U, (uint16_t) ((uint16_t) vector * 4U),
+                       &new_ip);
+    if (status == BM_STATUS_OK)
+        status = read_word(state, 0U,
+                           (uint16_t) ((uint16_t) vector * 4U + 2U),
+                           &new_cs);
+    if (status == BM_STATUS_OK)
+        status = push_word(state, psw_image(state->flags));
+    if (status == BM_STATUS_OK)
+        status = push_word(state, state->segments[1]);
+    if (status == BM_STATUS_OK)
+        status = push_word(state, state->ip);
+    if (status == BM_STATUS_OK) {
+        state->flags = (uint16_t) (psw_image(state->flags) & ~FLAG_MD);
+        state->md_write_enabled = 1;
+        state->segments[1] = new_cs;
+        state->ip = new_ip;
+        state->halted = 0;
+        state->interrupt_entered = 1;
+    }
+    return status;
+}
+
+static bm_status_t
+return_from_emulation(bm_808x_state_t *state)
+{
+    uint16_t new_ip = 0U;
+    uint16_t new_cs = 0U;
+    uint16_t new_flags = 0U;
+    bm_status_t status = pop_word(state, &new_ip);
+
+    if (status == BM_STATUS_OK)
+        status = pop_word(state, &new_cs);
+    if (status == BM_STATUS_OK)
+        status = pop_word(state, &new_flags);
+    if (status == BM_STATUS_OK) {
+        state->ip = new_ip;
+        state->segments[1] = new_cs;
+        state->flags = (uint16_t) (psw_image(new_flags) | FLAG_MD);
+        state->md_write_enabled = 0;
+        state->halted = 0;
+        state->trap_pending = 0;
+        state->interrupt_entered = 1;
+    }
+    return status;
+}
+
+static bm_status_t
 read_nec_bit_window(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
                     unsigned int byte_count, uint32_t *value)
 {
@@ -1055,6 +1116,12 @@ execute_nec_extension(bm_808x_state_t *state, int segment_override)
     if ((extension == 0x31U) || (extension == 0x33U) ||
         (extension == 0x39U) || (extension == 0x3bU))
         return execute_nec_bit_field(state, extension, segment_override);
+    if (extension == 0xffU) { /* BRKEM imm8. */
+        uint8_t vector = 0U;
+        status = fetch_byte(state, &vector);
+        return status == BM_STATUS_OK ?
+               enter_emulation(state, vector) : status;
+    }
     return BM_STATUS_UNSUPPORTED;
 }
 
@@ -1454,7 +1521,555 @@ cpu_reset(void *context)
     state->trap_pending = 0;
     state->interrupt_entered = 0;
     state->bus_lock_active = 0;
+    state->md_write_enabled = 0;
     return BM_STATUS_OK;
+}
+
+static unsigned int
+i8080_register_index(unsigned int code)
+{
+    static const unsigned int registers[] = { 5U, 1U, 6U, 2U, 7U, 3U, 0U };
+    return registers[code < 6U ? code : 6U];
+}
+
+static bm_status_t
+i8080_read_register(bm_808x_state_t *state, unsigned int code, uint8_t *value)
+{
+    if (code == 6U)
+        return read_byte(state, state->segments[3], state->registers[REG_BX],
+                         BM_BUS_READ, value);
+    *value = get_register_byte(state, i8080_register_index(code));
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+i8080_write_register(bm_808x_state_t *state, unsigned int code, uint8_t value)
+{
+    if (code == 6U)
+        return write_byte(state, state->segments[3], state->registers[REG_BX],
+                          value);
+    set_register_byte(state, i8080_register_index(code), value);
+    return BM_STATUS_OK;
+}
+
+static uint16_t *
+i8080_pair(bm_808x_state_t *state, unsigned int code)
+{
+    static const unsigned int registers[] = {
+        REG_CX, REG_DX, REG_BX, REG_BP
+    };
+    return &state->registers[registers[code & 3U]];
+}
+
+static bm_status_t
+i8080_push(bm_808x_state_t *state, uint16_t value)
+{
+    state->registers[REG_BP] = (uint16_t) (state->registers[REG_BP] - 2U);
+    return write_word(state, state->segments[3], state->registers[REG_BP],
+                      value);
+}
+
+static bm_status_t
+i8080_pop(bm_808x_state_t *state, uint16_t *value)
+{
+    bm_status_t status = read_word(state, state->segments[3],
+                                   state->registers[REG_BP], value);
+    if (status == BM_STATUS_OK)
+        state->registers[REG_BP] =
+            (uint16_t) (state->registers[REG_BP] + 2U);
+    return status;
+}
+
+static void
+i8080_set_zsp(bm_808x_state_t *state, uint8_t value)
+{
+    state->flags &= (uint16_t) ~(FLAG_ZF | FLAG_SF | FLAG_PF);
+    if (value == 0U)
+        state->flags |= FLAG_ZF;
+    if ((value & 0x80U) != 0U)
+        state->flags |= FLAG_SF;
+    if (even_parity(value))
+        state->flags |= FLAG_PF;
+}
+
+static uint8_t
+i8080_add(bm_808x_state_t *state, uint8_t left, uint8_t right,
+          unsigned int carry)
+{
+    uint16_t result = (uint16_t) left + right + carry;
+    state->flags &= (uint16_t) ~(FLAG_CF | FLAG_AF);
+    if (result > 0xffU)
+        state->flags |= FLAG_CF;
+    if (((left & 0x0fU) + (right & 0x0fU) + carry) > 0x0fU)
+        state->flags |= FLAG_AF;
+    i8080_set_zsp(state, (uint8_t) result);
+    return (uint8_t) result;
+}
+
+static uint8_t
+i8080_subtract(bm_808x_state_t *state, uint8_t left, uint8_t right,
+               unsigned int borrow)
+{
+    uint16_t subtrahend = (uint16_t) right + borrow;
+    uint16_t half_sum = (uint16_t) (left & 0x0fU) +
+                        ((uint8_t) ~right & 0x0fU) +
+                        (borrow ? 0U : 1U);
+    uint8_t result = (uint8_t) (left - subtrahend);
+    state->flags &= (uint16_t) ~(FLAG_CF | FLAG_AF);
+    if ((uint16_t) left < subtrahend)
+        state->flags |= FLAG_CF;
+    /* 8080 AC reports the carry produced by two's-complement subtraction,
+     * not the borrow sense exposed through CY. */
+    if (half_sum > 0x0fU)
+        state->flags |= FLAG_AF;
+    i8080_set_zsp(state, result);
+    return result;
+}
+
+static void
+i8080_logic(bm_808x_state_t *state, unsigned int operation, uint8_t value)
+{
+    uint8_t accumulator = get_register_byte(state, 0U);
+
+    state->flags &= (uint16_t) ~(FLAG_CF | FLAG_AF);
+    if (operation == 4U) {
+        if (((accumulator | value) & 0x08U) != 0U)
+            state->flags |= FLAG_AF;
+        accumulator &= value;
+    } else if (operation == 5U) {
+        accumulator ^= value;
+    } else {
+        accumulator |= value;
+    }
+    set_register_byte(state, 0U, accumulator);
+    i8080_set_zsp(state, accumulator);
+}
+
+static bm_status_t
+i8080_execute_alu(bm_808x_state_t *state, unsigned int operation,
+                  uint8_t value)
+{
+    uint8_t accumulator = get_register_byte(state, 0U);
+    uint8_t result;
+
+    switch (operation) {
+        case 0U:
+            result = i8080_add(state, accumulator, value, 0U);
+            set_register_byte(state, 0U, result);
+            break;
+        case 1U:
+            result = i8080_add(state, accumulator, value,
+                               (state->flags & FLAG_CF) != 0U);
+            set_register_byte(state, 0U, result);
+            break;
+        case 2U:
+            result = i8080_subtract(state, accumulator, value, 0U);
+            set_register_byte(state, 0U, result);
+            break;
+        case 3U:
+            result = i8080_subtract(state, accumulator, value,
+                                    (state->flags & FLAG_CF) != 0U);
+            set_register_byte(state, 0U, result);
+            break;
+        case 4U:
+        case 5U:
+        case 6U:
+            i8080_logic(state, operation, value);
+            break;
+        default:
+            (void) i8080_subtract(state, accumulator, value, 0U);
+            break;
+    }
+    return BM_STATUS_OK;
+}
+
+static int
+i8080_condition(const bm_808x_state_t *state, unsigned int condition)
+{
+    switch (condition & 7U) {
+        case 0U: return (state->flags & FLAG_ZF) == 0U;
+        case 1U: return (state->flags & FLAG_ZF) != 0U;
+        case 2U: return (state->flags & FLAG_CF) == 0U;
+        case 3U: return (state->flags & FLAG_CF) != 0U;
+        case 4U: return (state->flags & FLAG_PF) == 0U;
+        case 5U: return (state->flags & FLAG_PF) != 0U;
+        case 6U: return (state->flags & FLAG_SF) == 0U;
+        default: return (state->flags & FLAG_SF) != 0U;
+    }
+}
+
+static bm_status_t
+i8080_call(bm_808x_state_t *state, uint16_t address)
+{
+    bm_status_t status = i8080_push(state, state->ip);
+    if (status == BM_STATUS_OK)
+        state->ip = address;
+    return status;
+}
+
+static bm_status_t
+i8080_return(bm_808x_state_t *state)
+{
+    uint16_t address = 0U;
+    bm_status_t status = i8080_pop(state, &address);
+    if (status == BM_STATUS_OK)
+        state->ip = address;
+    return status;
+}
+
+static void
+i8080_decimal_adjust(bm_808x_state_t *state)
+{
+    uint8_t accumulator = get_register_byte(state, 0U);
+    uint8_t correction = 0U;
+    int carry = (state->flags & FLAG_CF) != 0U;
+
+    if (((accumulator & 0x0fU) > 9U) ||
+        ((state->flags & FLAG_AF) != 0U))
+        correction |= 0x06U;
+    if ((accumulator > 0x99U) || carry) {
+        correction |= 0x60U;
+        carry = 1;
+    }
+    accumulator = i8080_add(state, accumulator, correction, 0U);
+    state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                               (carry ? FLAG_CF : 0U));
+    set_register_byte(state, 0U, accumulator);
+}
+
+static bm_status_t
+execute_8080_one(bm_808x_state_t *state)
+{
+    uint16_t instruction_ip = state->ip;
+    uint8_t opcode = 0U;
+    bm_status_t status;
+
+    state->last_instruction_bytes = 0U;
+    state->last_instruction_length = 0U;
+    status = fetch_byte(state, &opcode);
+    if (status != BM_STATUS_OK)
+        return status;
+    state->last_fetch = physical_address(state->segments[1], instruction_ip);
+    state->last_opcode = opcode;
+    state->last_effective_opcode = opcode;
+    if (state->trace != NULL) {
+        bm_808x_trace_t trace = {
+            .cs = state->segments[1],
+            .ip = instruction_ip,
+            .physical_address = state->last_fetch,
+            .opcode = opcode,
+            .effective_opcode = opcode,
+            .prefix_count = 0U
+        };
+        state->trace(state->trace_context, &trace);
+    }
+
+    if ((opcode >= 0x40U) && (opcode <= 0x7fU)) {
+        uint8_t value = 0U;
+        if (opcode == 0x76U) {
+            state->halted = 1;
+            return BM_STATUS_OK;
+        }
+        status = i8080_read_register(state, opcode & 7U, &value);
+        return status == BM_STATUS_OK ?
+               i8080_write_register(state, (opcode >> 3U) & 7U, value) :
+               status;
+    }
+    if ((opcode >= 0x80U) && (opcode <= 0xbfU)) {
+        uint8_t value = 0U;
+        status = i8080_read_register(state, opcode & 7U, &value);
+        return status == BM_STATUS_OK ?
+               i8080_execute_alu(state, (opcode >> 3U) & 7U, value) : status;
+    }
+    if ((opcode & 0xc7U) == 0x04U) { /* INR r/M. */
+        uint8_t value = 0U;
+        uint16_t carry = state->flags & FLAG_CF;
+        unsigned int code = (opcode >> 3U) & 7U;
+        status = i8080_read_register(state, code, &value);
+        if (status == BM_STATUS_OK)
+            value = i8080_add(state, value, 1U, 0U);
+        state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
+        return status == BM_STATUS_OK ?
+               i8080_write_register(state, code, value) : status;
+    }
+    if ((opcode & 0xc7U) == 0x05U) { /* DCR r/M. */
+        uint8_t value = 0U;
+        uint16_t carry = state->flags & FLAG_CF;
+        unsigned int code = (opcode >> 3U) & 7U;
+        status = i8080_read_register(state, code, &value);
+        if (status == BM_STATUS_OK)
+            value = i8080_subtract(state, value, 1U, 0U);
+        state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
+        return status == BM_STATUS_OK ?
+               i8080_write_register(state, code, value) : status;
+    }
+    if ((opcode & 0xc7U) == 0x06U) { /* MVI r/M,imm8. */
+        uint8_t value = 0U;
+        status = fetch_byte(state, &value);
+        return status == BM_STATUS_OK ?
+               i8080_write_register(state, (opcode >> 3U) & 7U, value) :
+               status;
+    }
+    if ((opcode & 0xcfU) == 0x01U) { /* LXI rp,imm16. */
+        uint16_t value = 0U;
+        status = fetch_word(state, &value);
+        if (status == BM_STATUS_OK)
+            *i8080_pair(state, (opcode >> 4U) & 3U) = value;
+        return status;
+    }
+    if ((opcode & 0xcfU) == 0x03U) { /* INX rp. */
+        uint16_t *pair = i8080_pair(state, (opcode >> 4U) & 3U);
+        *pair = (uint16_t) (*pair + 1U);
+        return BM_STATUS_OK;
+    }
+    if ((opcode & 0xcfU) == 0x0bU) { /* DCX rp. */
+        uint16_t *pair = i8080_pair(state, (opcode >> 4U) & 3U);
+        *pair = (uint16_t) (*pair - 1U);
+        return BM_STATUS_OK;
+    }
+    if ((opcode & 0xcfU) == 0x09U) { /* DAD rp. */
+        uint32_t value = (uint32_t) state->registers[REG_BX] +
+                         *i8080_pair(state, (opcode >> 4U) & 3U);
+        state->registers[REG_BX] = (uint16_t) value;
+        state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                                   ((value > 0xffffUL) ? FLAG_CF : 0U));
+        return BM_STATUS_OK;
+    }
+    if ((opcode & 0xc7U) == 0xc0U) { /* Conditional RET. */
+        return i8080_condition(state, (opcode >> 3U) & 7U) ?
+               i8080_return(state) : BM_STATUS_OK;
+    }
+    if ((opcode & 0xc7U) == 0xc2U) { /* Conditional JMP. */
+        uint16_t address = 0U;
+        status = fetch_word(state, &address);
+        if ((status == BM_STATUS_OK) &&
+            i8080_condition(state, (opcode >> 3U) & 7U))
+            state->ip = address;
+        return status;
+    }
+    if ((opcode & 0xc7U) == 0xc4U) { /* Conditional CALL. */
+        uint16_t address = 0U;
+        status = fetch_word(state, &address);
+        if ((status == BM_STATUS_OK) &&
+            i8080_condition(state, (opcode >> 3U) & 7U))
+            status = i8080_call(state, address);
+        return status;
+    }
+    if ((opcode & 0xc7U) == 0xc7U) /* RST n. */
+        return i8080_call(state, (uint16_t) (opcode & 0x38U));
+    if ((opcode & 0xcfU) == 0xc1U) { /* POP rp/PSW. */
+        uint16_t value = 0U;
+        unsigned int pair = (opcode >> 4U) & 3U;
+        status = i8080_pop(state, &value);
+        if (status == BM_STATUS_OK) {
+            if (pair == 3U) {
+                set_register_byte(state, 0U, (uint8_t) (value >> 8U));
+                state->flags = (uint16_t) ((state->flags & 0xff00U) |
+                                           (value & 0x00d5U) | 0x0002U);
+            } else {
+                *i8080_pair(state, pair) = value;
+            }
+        }
+        return status;
+    }
+    if ((opcode & 0xcfU) == 0xc5U) { /* PUSH rp/PSW. */
+        unsigned int pair = (opcode >> 4U) & 3U;
+        uint16_t value = pair == 3U ?
+            (uint16_t) (((uint16_t) get_register_byte(state, 0U) << 8U) |
+                        (state->flags & 0x00d5U) | 0x0002U) :
+            *i8080_pair(state, pair);
+        return i8080_push(state, value);
+    }
+    if ((opcode & 0xc7U) == 0xc6U) { /* Immediate ALU. */
+        uint8_t value = 0U;
+        status = fetch_byte(state, &value);
+        return status == BM_STATUS_OK ?
+               i8080_execute_alu(state, (opcode >> 3U) & 7U, value) : status;
+    }
+
+    switch (opcode) {
+        case 0x00: /* NOP. */
+            return BM_STATUS_OK;
+        case 0x02: /* STAX B. */
+        case 0x12: /* STAX D. */
+            return write_byte(state, state->segments[3],
+                              state->registers[opcode == 0x02U ? REG_CX : REG_DX],
+                              get_register_byte(state, 0U));
+        case 0x0a: /* LDAX B. */
+        case 0x1a: { /* LDAX D. */
+            uint8_t value = 0U;
+            status = read_byte(state, state->segments[3],
+                               state->registers[opcode == 0x0aU ? REG_CX : REG_DX],
+                               BM_BUS_READ, &value);
+            if (status == BM_STATUS_OK)
+                set_register_byte(state, 0U, value);
+            return status;
+        }
+        case 0x07: { /* RLC. */
+            uint8_t value = get_register_byte(state, 0U);
+            unsigned int carry = value >> 7U;
+            set_register_byte(state, 0U, (uint8_t) ((value << 1U) | carry));
+            state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                                       (carry ? FLAG_CF : 0U));
+            return BM_STATUS_OK;
+        }
+        case 0x0f: { /* RRC. */
+            uint8_t value = get_register_byte(state, 0U);
+            unsigned int carry = value & 1U;
+            set_register_byte(state, 0U,
+                              (uint8_t) ((value >> 1U) | (carry << 7U)));
+            state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                                       (carry ? FLAG_CF : 0U));
+            return BM_STATUS_OK;
+        }
+        case 0x17: { /* RAL. */
+            uint8_t value = get_register_byte(state, 0U);
+            unsigned int carry_in = (state->flags & FLAG_CF) != 0U;
+            unsigned int carry_out = value >> 7U;
+            set_register_byte(state, 0U,
+                              (uint8_t) ((value << 1U) | carry_in));
+            state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                                       (carry_out ? FLAG_CF : 0U));
+            return BM_STATUS_OK;
+        }
+        case 0x1f: { /* RAR. */
+            uint8_t value = get_register_byte(state, 0U);
+            unsigned int carry_in = (state->flags & FLAG_CF) != 0U;
+            unsigned int carry_out = value & 1U;
+            set_register_byte(state, 0U,
+                              (uint8_t) ((value >> 1U) | (carry_in << 7U)));
+            state->flags = (uint16_t) ((state->flags & ~FLAG_CF) |
+                                       (carry_out ? FLAG_CF : 0U));
+            return BM_STATUS_OK;
+        }
+        case 0x22: { /* SHLD addr. */
+            uint16_t address = 0U;
+            status = fetch_word(state, &address);
+            return status == BM_STATUS_OK ?
+                   write_word(state, state->segments[3], address,
+                              state->registers[REG_BX]) : status;
+        }
+        case 0x2a: { /* LHLD addr. */
+            uint16_t address = 0U;
+            uint16_t value = 0U;
+            status = fetch_word(state, &address);
+            if (status == BM_STATUS_OK)
+                status = read_word(state, state->segments[3], address, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_BX] = value;
+            return status;
+        }
+        case 0x27: /* DAA. */
+            i8080_decimal_adjust(state);
+            return BM_STATUS_OK;
+        case 0x2f: /* CMA. */
+            set_register_byte(state, 0U,
+                              (uint8_t) ~get_register_byte(state, 0U));
+            return BM_STATUS_OK;
+        case 0x32: /* STA addr. */
+        case 0x3a: { /* LDA addr. */
+            uint16_t address = 0U;
+            uint8_t value = 0U;
+            status = fetch_word(state, &address);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (opcode == 0x32U)
+                return write_byte(state, state->segments[3], address,
+                                  get_register_byte(state, 0U));
+            status = read_byte(state, state->segments[3], address,
+                               BM_BUS_READ, &value);
+            if (status == BM_STATUS_OK)
+                set_register_byte(state, 0U, value);
+            return status;
+        }
+        case 0x37: /* STC. */
+            state->flags |= FLAG_CF;
+            return BM_STATUS_OK;
+        case 0x3f: /* CMC. */
+            state->flags ^= FLAG_CF;
+            return BM_STATUS_OK;
+        case 0xc3: { /* JMP addr. */
+            uint16_t address = 0U;
+            status = fetch_word(state, &address);
+            if (status == BM_STATUS_OK)
+                state->ip = address;
+            return status;
+        }
+        case 0xc9: /* RET. */
+            return i8080_return(state);
+        case 0xcd: { /* CALL addr. */
+            uint16_t address = 0U;
+            status = fetch_word(state, &address);
+            return status == BM_STATUS_OK ? i8080_call(state, address) : status;
+        }
+        case 0xd3: { /* OUT port. */
+            uint8_t port = 0U;
+            status = fetch_byte(state, &port);
+            return status == BM_STATUS_OK ?
+                   io_write_byte(state, port, get_register_byte(state, 0U)) :
+                   status;
+        }
+        case 0xdb: { /* IN port. */
+            uint8_t port = 0U;
+            uint8_t value = 0U;
+            status = fetch_byte(state, &port);
+            if (status == BM_STATUS_OK)
+                status = io_read_byte(state, port, &value);
+            if (status == BM_STATUS_OK)
+                set_register_byte(state, 0U, value);
+            return status;
+        }
+        case 0xe3: { /* XTHL. */
+            uint16_t memory = 0U;
+            status = read_word(state, state->segments[3],
+                               state->registers[REG_BP], &memory);
+            if (status == BM_STATUS_OK)
+                status = write_word(state, state->segments[3],
+                                    state->registers[REG_BP],
+                                    state->registers[REG_BX]);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_BX] = memory;
+            return status;
+        }
+        case 0xe9: /* PCHL. */
+            state->ip = state->registers[REG_BX];
+            return BM_STATUS_OK;
+        case 0xeb: { /* XCHG. */
+            uint16_t value = state->registers[REG_DX];
+            state->registers[REG_DX] = state->registers[REG_BX];
+            state->registers[REG_BX] = value;
+            return BM_STATUS_OK;
+        }
+        case 0xed: { /* NEC emulation-mode group. */
+            uint8_t extension = 0U;
+            status = fetch_byte(state, &extension);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (extension == 0xedU) { /* CALLN imm8. */
+                uint8_t vector = 0U;
+                status = fetch_byte(state, &vector);
+                return status == BM_STATUS_OK ?
+                       enter_interrupt(state, vector) : status;
+            }
+            if (extension == 0xfdU) /* RETEM. */
+                return return_from_emulation(state);
+            return BM_STATUS_UNSUPPORTED;
+        }
+        case 0xf3: /* DI. */
+            state->flags &= (uint16_t) ~FLAG_IF;
+            return BM_STATUS_OK;
+        case 0xf9: /* SPHL. */
+            state->registers[REG_BP] = state->registers[REG_BX];
+            return BM_STATUS_OK;
+        case 0xfb: /* EI. */
+            state->flags |= FLAG_IF;
+            state->interrupt_inhibit = 2U;
+            return BM_STATUS_OK;
+        default:
+            /* NEC marks the remaining 8080-map holes undefined; do not adopt
+             * undocumented Intel aliases as supported instructions. */
+            return BM_STATUS_UNSUPPORTED;
+    }
 }
 
 static bm_status_t
@@ -1469,6 +2084,9 @@ execute_one(bm_808x_state_t *state)
     int bus_lock = 0;
     bm_status_t status;
     uint16_t repeat_ip;
+
+    if ((state->flags & FLAG_MD) == 0U)
+        return execute_8080_one(state);
 
     state->last_instruction_bytes = 0U;
     state->last_instruction_length = 0U;
@@ -1856,12 +2474,12 @@ execute_one(bm_808x_state_t *state)
                               (uint8_t) ((state->flags & 0x00d5U) | 0x02U));
             return BM_STATUS_OK;
         case 0x9c: /* PUSHF (NEC V30 reserved-bit image). */
-            return push_word(state, native_psw_image(state->flags));
+            return push_word(state, psw_image(state->flags));
         case 0x9d: { /* POPF */
             uint16_t value;
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK)
-                restore_native_psw(state, value);
+                restore_psw(state, value);
             return status;
         }
         case 0x9b: /* POLL/WAIT: external active-low input. */
@@ -2875,7 +3493,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->ip = new_ip;
                 state->segments[1] = new_cs;
-                restore_native_psw(state, new_flags);
+                restore_psw(state, new_flags);
             }
             return status;
         }
@@ -3108,6 +3726,13 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
                 state->halted = 0;
                 continue;
             }
+            /* In emulation mode an asserted INT also releases HLT when IE is
+             * clear; execution resumes without entering an interrupt. */
+            if (((state->flags & FLAG_MD) == 0U) &&
+                state->interrupt_asserted) {
+                state->halted = 0;
+                continue;
+            }
             return BM_STATUS_IDLE;
         }
     }
@@ -3120,7 +3745,9 @@ cpu_signal(void *context, uint32_t line, int asserted)
     bm_808x_state_t *state = context;
     if (line == BM_808X_SIGNAL_INT) {
         state->interrupt_asserted = !!asserted;
-        if (asserted && maskable_interrupt_ready(state))
+        if (asserted && (maskable_interrupt_ready(state) ||
+                         (state->halted &&
+                          ((state->flags & FLAG_MD) == 0U))))
             state->halted = 0;
         return BM_STATUS_OK;
     }
@@ -3168,7 +3795,9 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
     else if (strcmp(name, "ip") == 0)
         *value = state->ip;
     else if (strcmp(name, "flags") == 0)
-        *value = native_psw_image(state->flags);
+        *value = psw_image(state->flags);
+    else if (strcmp(name, "md_write_enabled") == 0)
+        *value = (uint64_t) state->md_write_enabled;
     else if (strcmp(name, "halted") == 0)
         *value = (uint64_t) state->halted;
     else if (strcmp(name, "last_fetch") == 0)
@@ -3249,16 +3878,29 @@ bm_808x_get_arch_state(const bm_cpu_t *cpu, bm_808x_arch_state_t *out_state)
         return BM_STATUS_INVALID_ARGUMENT;
     state = cpu->context;
     *out_state = (bm_808x_arch_state_t) {
-        sizeof(*out_state), BM_808X_ARCH_STATE_VERSION, state->model,
-        state->registers[REG_AX], state->registers[REG_CX],
-        state->registers[REG_DX], state->registers[REG_BX],
-        state->registers[REG_SP], state->registers[REG_BP],
-        state->registers[REG_SI], state->registers[REG_DI],
-        state->segments[0], state->segments[1], state->segments[2],
-        state->segments[3], state->ip, native_psw_image(state->flags),
-        (uint8_t) !!state->halted, state->interrupt_inhibit,
-        state->boundary_inhibit, (uint8_t) !!state->nmi_pending,
-        (uint8_t) !!state->trap_pending
+        .size = sizeof(*out_state),
+        .version = BM_808X_ARCH_STATE_VERSION,
+        .model = state->model,
+        .ax = state->registers[REG_AX],
+        .cx = state->registers[REG_CX],
+        .dx = state->registers[REG_DX],
+        .bx = state->registers[REG_BX],
+        .sp = state->registers[REG_SP],
+        .bp = state->registers[REG_BP],
+        .si = state->registers[REG_SI],
+        .di = state->registers[REG_DI],
+        .es = state->segments[0],
+        .cs = state->segments[1],
+        .ss = state->segments[2],
+        .ds = state->segments[3],
+        .ip = state->ip,
+        .flags = psw_image(state->flags),
+        .halted = (uint8_t) !!state->halted,
+        .interrupt_inhibit = state->interrupt_inhibit,
+        .boundary_inhibit = state->boundary_inhibit,
+        .nmi_pending = (uint8_t) !!state->nmi_pending,
+        .trap_pending = (uint8_t) !!state->trap_pending,
+        .md_write_enabled = (uint8_t) !!state->md_write_enabled
     };
     return BM_STATUS_OK;
 }
@@ -3276,10 +3918,12 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
         (state_image->interrupt_inhibit > 1U) ||
         (state_image->boundary_inhibit > 1U) ||
         (state_image->nmi_pending > 1U) ||
-        (state_image->trap_pending > 1U))
+        (state_image->trap_pending > 1U) ||
+        (state_image->md_write_enabled > 1U))
         return BM_STATUS_INVALID_ARGUMENT;
-    if ((state_image->flags & FLAG_MD) == 0U)
-        return BM_STATUS_UNSUPPORTED;
+    if (((state_image->flags & FLAG_MD) == 0U) &&
+        !state_image->md_write_enabled)
+        return BM_STATUS_INVALID_ARGUMENT;
     state = cpu->context;
     state->registers[REG_AX] = state_image->ax;
     state->registers[REG_CX] = state_image->cx;
@@ -3294,12 +3938,13 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->segments[2] = state_image->ss;
     state->segments[3] = state_image->ds;
     state->ip = state_image->ip;
-    state->flags = native_psw_image(state_image->flags);
+    state->flags = psw_image(state_image->flags);
     state->halted = state_image->halted;
     state->interrupt_inhibit = state_image->interrupt_inhibit;
     state->boundary_inhibit = state_image->boundary_inhibit;
     state->nmi_pending = state_image->nmi_pending;
     state->trap_pending = state_image->trap_pending;
+    state->md_write_enabled = state_image->md_write_enabled;
     state->last_fetch = physical_address(state_image->cs, state_image->ip);
     state->last_opcode = 0U;
     state->last_effective_opcode = 0U;

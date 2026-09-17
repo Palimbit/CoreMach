@@ -164,18 +164,35 @@ NMI and trap latches plus two explicit shadows: `EI` delays maskable INT only,
 while segment-register transfers also defer NMI and single-step recognition
 through the following instruction. Non-locked repeated blocks may accept NMI
 after a completed iteration and restart at their retained prefixes; BUSLOCK
-keeps the edge latched until the complete repeated block ends. Prefetch state,
-physical cycle timing and 8080 emulation mode remain explicit later work.
+keeps the edge latched until the complete repeated block ends. Prefetch state
+and physical cycle timing remain explicit later work.
 
-The native-PSW cut canonicalizes the V30 status-word image at every public
-state boundary: MD is one, bits 14-12 and 1 read as one, and reserved bits 5
-and 3 read as zero. `PUSHF` and interrupt entry save that same image. Because
-reset disables writes to MD, `POPF` and `IRET` restore the arithmetic, control
-and BRK flags but preserve native mode. An architectural snapshot requesting
-MD zero and the `BRKEM` instruction both return `BM_STATUS_UNSUPPORTED` rather
-than pretending that the unimplemented 8080 execution mode exists. Synthetic
-tests cover reset, state transfer, stack images, interrupt entry and both
-mode-change rejection paths without firmware or host dependencies.
+The PSW cut canonicalizes the V30 status-word image at every public state
+boundary: bits 14-12 and 1 read as one, and reserved bits 5 and 3 read as zero.
+Reset starts with MD one and its write gate disabled, so `POPF` and `IRET`
+preserve native mode. `BRKEM` clears MD and enables that gate; an interrupt or
+`CALLN` can then enter native mode and `IRET` may restore MD zero. `RETEM`
+restores the native frame and disables MD writes again. Architectural snapshot
+version 4 preserves both MD and its write gate, and rejects the impossible
+combination of emulation mode with the gate disabled.
+
+The emulation-mode cut executes the complete documented NEC V30 8080 opcode
+map through the same portable state and buses. A maps to AL; BC, DE and HL map
+to CW, DW and BW; the emulated stack pointer maps to BP. Instruction fetches
+use PS:PC, while data and the emulated stack use DS0; the native SP/SS pair
+remains available for mode transitions and interrupts. The low PSW flags map
+directly to the 8080 flags, while native-only registers and high control flags
+remain inaccessible to 8080 instructions. Memory, stack and immediate I/O
+operations use the existing bus contracts, with no global interpreter state.
+
+`BRKEM`, `CALLN`, native interrupt entry, `IRET` and `RETEM` are covered as
+round trips. An asserted INT releases emulation-mode HLT even with IE clear;
+with IE set it enters the native interrupt path. Undefined holes in the NEC
+8080 map, undefined Group 0 extensions and nested `BRKEM` return
+`BM_STATUS_UNSUPPORTED`; undocumented Intel 8080 opcode aliases are not
+silently adopted. This is an instruction-boundary functional implementation:
+8080/V30 cycle counts, prefetch, bus-status pins and electrical timing remain
+outside this cut.
 
 The native-extension cut implements the documented V30 Group 3 map used by
 `ADD4S`, `SUB4S`, `CMP4S`, `ROL4`, `ROR4`, `INS` and `EXT`. Packed-BCD strings
