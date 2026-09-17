@@ -209,24 +209,30 @@ register-count shift `/6` behavior. This closes opcode classification; it does
 not claim exhaustive physical conformance for every operand value or replace
 the remaining cycle, prefetch and bus work.
 
-The first timing-contract cut keeps three quantities separate. Documented
-execution-unit clocks are classified for a deliberately limited set of native
-register, immediate, branch, control-transfer, flag and I/O forms; an explicit
-`execution_clocks_known` flag prevents every unclassified instruction and all
-8080-mode instructions from masquerading as zero-cycle operations. Successful
-transactions through the portable memory and I/O bus are counted separately,
-including wait states reported by mapped devices, without calling those logical
-transactions physical V30 bus cycles. Finally, taken control transfers and
-accepted interrupts report a six-byte V30 prefetch-queue invalidation and the
-new prefetch pointer. The observer is host-neutral and cannot alter execution.
+The timing contract keeps three quantities separate. Documented execution-unit
+clocks are classified for native register, immediate, memory, branch,
+control-transfer, flag and I/O forms whenever Table 2-8 provides a value that
+the current instruction boundary can determine exactly. Memory forms use the
+decoded effective-address parity for the V30's documented odd-word penalty;
+stack forms retain the entry SP so caller cleanup cannot corrupt that decision,
+and counted shifts use the actual count. An explicit
+`execution_clocks_known` flag leaves data-dependent multiply, signed divide,
+bit-field, string and other formula/range cases unclassified rather than
+inventing a representative value. All 8080-mode timings remain unclassified.
+Successful transactions through the portable memory and I/O bus are counted
+separately, including wait states reported by mapped devices, without calling
+those logical transactions physical V30 bus cycles. Finally, taken control
+transfers and accepted interrupts report a six-byte V30 prefetch-queue
+invalidation and the new prefetch pointer. The observer is host-neutral and
+cannot alter execution.
 
 This establishes the boundary needed for the next CPU work without claiming a
-complete timing model. Queue fill, fetch/execution overlap, pre-decode, the
-remaining execution-clock table, physical word-transfer and alignment timing,
-and scheduler consumption of the observations remain explicit subsequent
-work. NEC's tables also state that execution clocks exclude prefetch,
-pre-decode and bus waits, which is why the contract does not combine them into
-one misleading number.
+complete timing model. Queue fill, fetch/execution overlap, pre-decode,
+data-dependent and repeat-formula clock reporting, physical bus-cycle shape and
+scheduler consumption of the observations remain explicit subsequent work.
+NEC's tables also state that execution clocks exclude prefetch, pre-decode and
+bus waits, which is why the contract does not combine them into one misleading
+number.
 
 The native-extension cut implements the documented V30 Group 3 map used by
 `ADD4S`, `SUB4S`, `CMP4S`, `ROL4`, `ROR4`, `INS` and `EXT`. Packed-BCD strings
