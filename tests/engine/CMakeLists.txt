@@ -287,6 +287,11 @@ target_link_libraries(portable-engine-808x-interrupt-boundaries
     PRIVATE portable-engine-808x-test-support
 )
 
+add_executable(portable-engine-808x-prefix-control cpu_808x_prefix_control_test.c)
+target_link_libraries(portable-engine-808x-prefix-control
+    PRIVATE portable-engine-808x-test-support
+)
+
 # Manual conformance adapter. External hardware vectors remain outside the
 # repository and are supplied to tools/run_v20_conformance.py by path.
 add_executable(portable-engine-808x-vector-runner cpu_808x_vector_runner.c)
@@ -306,7 +311,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-base-isa portable-engine-808x-signed-math portable-engine-808x-80186-stack portable-engine-808x-80186-control portable-engine-808x-80186-io-string portable-engine-808x-interrupt-boundaries portable-engine-808x-vector-runner portable-engine-legacy-io)
+foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-base-isa portable-engine-808x-signed-math portable-engine-808x-80186-stack portable-engine-808x-80186-control portable-engine-808x-80186-io-string portable-engine-808x-interrupt-boundaries portable-engine-808x-prefix-control portable-engine-808x-vector-runner portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -366,6 +371,7 @@ add_test(NAME portable-engine.808x-80186-stack COMMAND portable-engine-808x-8018
 add_test(NAME portable-engine.808x-80186-control COMMAND portable-engine-808x-80186-control)
 add_test(NAME portable-engine.808x-80186-io-string COMMAND portable-engine-808x-80186-io-string)
 add_test(NAME portable-engine.808x-interrupt-boundaries COMMAND portable-engine-808x-interrupt-boundaries)
+add_test(NAME portable-engine.808x-prefix-control COMMAND portable-engine-808x-prefix-control)
 add_test(NAME portable-engine.legacy-io COMMAND portable-engine-legacy-io)
 set_tests_properties(
     portable-engine.linear-memory
@@ -408,6 +414,7 @@ set_tests_properties(
     portable-engine.808x-80186-control
     portable-engine.808x-80186-io-string
     portable-engine.808x-interrupt-boundaries
+    portable-engine.808x-prefix-control
     portable-engine.legacy-io
     PROPERTIES TIMEOUT 10
 )

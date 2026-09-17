@@ -30,6 +30,13 @@ typedef enum bm_endianness {
     BM_ENDIAN_BIG
 } bm_endianness_t;
 
+typedef enum bm_bus_transaction_attribute {
+    /* The access is observational and must not have normal guest side effects. */
+    BM_BUS_TRANSACTION_DEBUG = 1U << 0,
+    /* The initiator holds its bus-lock window across this transaction. */
+    BM_BUS_TRANSACTION_LOCKED = 1U << 1
+} bm_bus_transaction_attribute_t;
+
 typedef struct bm_bus_transaction {
     bm_address_space_t space;
     bm_bus_operation_t operation;
@@ -39,7 +46,7 @@ typedef struct bm_bus_transaction {
     uint32_t alignment;
     uint32_t wait_states;
     bm_endianness_t endianness;
-    int debug_access;
+    uint32_t attributes;
 } bm_bus_transaction_t;
 
 typedef bm_status_t (*bm_bus_access_fn)(void *context, bm_bus_transaction_t *transaction);
