@@ -499,6 +499,39 @@ omitted physical-media behavior.
 
 ## Portable Qt presentation boundary
 
+### Host pacing and latency diagnostics
+
+On Windows the Qt worker uses a high-resolution waitable timer for its running
+idle interval, together with an auto-reset event for queued commands. Input can
+wake the wait immediately. Paused/stopped workers wait for commands without
+periodic polling. Handles are owned by the frontend worker and released after
+its thread joins. Unsupported hosts use the standard condition-variable wait;
+failure to obtain the Windows timer is reported. No timer API enters the engine.
+
+The opt-in `BLUMACH_TRACE_LATENCY` environment flag emits monotonic timestamps
+and opaque IDs for input queueing/dispatch/completion, frame generation, UI
+delivery and paint submission. It records no key values or guest image data.
+The portable PowerShell launcher accepts `-TraceLatency -LogPath <local-log>`;
+run `python -B tools/portable_latency_report.py <local-log>` for sample counts,
+p50/p95/max, frame intervals and ticks per wall second. These measurements
+include logging overhead. Paint submission is neither physical monitor scanout
+nor proof that a guest application has rendered the requested character.
+
+Local Windows/UCRT64 Release measurements found that a nominal 1 ms condition
+wait took about 15.5 ms; the high-resolution wait took about 2 ms. With the
+canonical read-only PCS 86 inputs and OpenGL, observed guest throughput changed
+from about 0.49 million to 1.98 million ticks per wall second (target 2 million),
+and median frame interval from 30.8 to 18.2 ms. Eight input transitions reached
+the worker in 0.8–3.4 ms; six reached paint submission in 13–18 ms. Two early
+transitions encountered a 1.4-second post-UI-delivery paint gap during native
+UI automation. Its cause is unconfirmed; it is not excluded from the report.
+Other platforms and end-to-end physical keyboard/display latency are unmeasured.
+
+The CPU still reports instruction-based ticks. FAST/SLOW port behavior and the
+physical slow clock remain a separate pending implementation/measurement.
+
+### Presentation preferences
+
 The Qt6 frontend owns window geometry, menus, fullscreen state, presentation
 scaling, interpolation and image export. These are user preferences rather
 than emulated-machine state: changing them cannot affect engine time, video

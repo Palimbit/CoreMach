@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "display_widget.h"
+#include "latency_trace.h"
 
 #include <QKeyEvent>
 #include <QOpenGLWidget>
@@ -26,6 +27,8 @@ protected:
         (void) event;
         QPainter painter(this);
         owner_->paintPresentation(painter, rect());
+        painter.end();
+        LatencyTrace::event("paint-submit", owner_->traceFrame_);
     }
 
 private:
@@ -47,6 +50,8 @@ protected:
     {
         QPainter painter(this);
         owner_->paintPresentation(painter, rect());
+        painter.end();
+        LatencyTrace::event("paint-submit", owner_->traceFrame_);
     }
 
 private:
@@ -65,8 +70,9 @@ DisplayWidget::DisplayWidget(QWidget *parent)
 }
 
 void
-DisplayWidget::setFrame(const QImage &frame)
+DisplayWidget::setFrame(const QImage &frame, uint64_t traceFrame)
 {
+    traceFrame_ = traceFrame;
     frame_ = frame;
     canvas_->update();
 }

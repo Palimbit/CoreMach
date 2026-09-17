@@ -5,6 +5,7 @@
 #include <blumach/runtime/runtime.h>
 
 #include <QImage>
+#include "worker_wakeup.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -31,6 +32,8 @@ public:
         std::vector<bm_storage_device_status_t> storage;
         QImage frame;
         bool lifecycleResult = false;
+        uint64_t traceFrame = 0U;
+        uint64_t traceInput = 0U;
     };
     using SnapshotHandler = std::function<void(Snapshot)>;
 
@@ -62,6 +65,7 @@ private:
         explicit Command(CommandKind value) : kind(value) {}
         CommandKind kind;
         bm_input_event_t input {};
+        uint64_t traceInput = 0U;
         bm_storage_device_kind_t storageKind = BM_STORAGE_DEVICE_FLOPPY;
         uint32_t storageUnit = 0U;
         bm_storage_media_change_t mediaChange {};
@@ -94,10 +98,12 @@ private:
     std::atomic<uint64_t> ticks_ { 0U };
     std::mutex mutex_;
     std::condition_variable condition_;
+    WorkerWakeup wakeup_;
     std::deque<Command> commands_;
     std::vector<MountedMedia> mountedMedia_;
     std::thread thread_;
     bool ready_ = false;
+    uint64_t traceInput_ = 0U;
     bm_status_t startStatus_ = BM_STATUS_INVALID_STATE;
 };
 

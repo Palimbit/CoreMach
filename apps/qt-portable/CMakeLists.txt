@@ -19,6 +19,9 @@ add_executable(blumach_portable_qt WIN32
     src/portable_catalog.h
     src/session_worker.cpp
     src/session_worker.h
+    src/worker_wakeup.cpp
+    src/worker_wakeup.h
+    src/latency_trace.h
     src/snapshot_mailbox.cpp
     src/snapshot_mailbox.h
     src/tick_pacer.cpp
@@ -52,6 +55,19 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(blumach_portable_wakeup_test
+        src/worker_wakeup.cpp tests/worker_wakeup_test.cpp)
+    target_include_directories(blumach_portable_wakeup_test PRIVATE src)
+    target_link_libraries(blumach_portable_wakeup_test PRIVATE Qt6::Core Threads::Threads)
+    target_compile_features(blumach_portable_wakeup_test PRIVATE cxx_std_17)
+    if(MSVC)
+        target_compile_options(blumach_portable_wakeup_test PRIVATE /W4 /WX /UNDEBUG)
+    else()
+        target_compile_options(blumach_portable_wakeup_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+    endif()
+    add_test(NAME portable-qt.worker-wakeup COMMAND blumach_portable_wakeup_test)
+    set_tests_properties(portable-qt.worker-wakeup PROPERTIES TIMEOUT 10)
+
     add_executable(blumach_portable_display_widget_test
         src/display_widget.cpp
         tests/display_widget_test.cpp

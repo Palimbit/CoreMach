@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "session_worker.h"
 #include "tick_pacer.h"
+#include "latency_trace.h"
 
 #include <algorithm>
 #include <chrono>
@@ -68,6 +69,8 @@ SessionWorker::sendInput(const bm_input_event_t &event)
 {
     Command command(CommandKind::Input);
     command.input = event;
+    command.traceInput = LatencyTrace::nextId();
+    LatencyTrace::event("input-queued", command.traceInput);
     enqueue(std::move(command));
 }
 
@@ -95,7 +98,7 @@ SessionWorker::enqueue(Command command)
         std::lock_guard<std::mutex> lock(mutex_);
         commands_.push_back(command);
     }
-    condition_.notify_one();
+    wakeup_.notify();
 }
 
 bool
@@ -115,6 +118,8 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
             case CommandKind::Reset: status = bm_session_reset(session); break;
             case CommandKind::Stop: status = bm_session_stop(session); break;
             case CommandKind::Input:
+                traceInput_ = command.traceInput;
+                LatencyTrace::event("input-dispatch", traceInput_);
                 status = bm_session_send_input(session, &command.input);
                 if ((status == BM_STATUS_OK) &&
                     (bm_session_state(session) == BM_SESSION_RUNNING)) {
@@ -124,6 +129,7 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                     if (status == BM_STATUS_OK)
                         pacer.account(inputTransitionTicks);
                 }
+                LatencyTrace::event("input-complete", traceInput_);
                 break;
             case CommandKind::StorageMedia:
                 status = bm_session_replace_storage_media(
@@ -233,6 +239,12 @@ SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
     }
     snapshot.storage = std::move(storage);
     snapshot.frame = std::move(frame);
+    if (!snapshot.frame.isNull()) {
+        snapshot.traceFrame = LatencyTrace::nextId();
+        snapshot.traceInput = traceInput_;
+        LatencyTrace::event("frame-ready", snapshot.traceFrame, traceInput_);
+        LatencyTrace::event("guest-ticks", snapshot.traceFrame, snapshot.ticks);
+    }
     snapshot.lifecycleResult = lifecycleResult;
     state_.store(snapshot.state);
     ticks_.store(snapshot.ticks);
@@ -278,10 +290,13 @@ SessionWorker::run()
             if (due != 0U)
                 status = bm_session_run_for(session, due);
             if ((status == BM_STATUS_OK) && (now >= nextFrame)) {
+                const uint64_t renderStart = LatencyTrace::enabled() ? LatencyTrace::now() : 0U;
                 QImage frame;
                 bm_video_geometry_t geometry {};
                 std::vector<bm_storage_device_status_t> storage;
                 status = renderFrame(session, frame, geometry);
+                if (LatencyTrace::enabled())
+                    LatencyTrace::event("render-us", 0U, LatencyTrace::now() - renderStart);
                 if (status == BM_STATUS_OK)
                     status = collectStorage(session, storage);
                 publish(session, status, std::move(frame), false, &geometry,
@@ -297,8 +312,8 @@ SessionWorker::run()
             nextFrame = now;
         }
         std::unique_lock<std::mutex> lock(mutex_);
-        condition_.wait_for(lock, std::chrono::milliseconds(1),
-                            [this] { return !commands_.empty(); });
+        wakeup_.wait(lock, bm_session_state(session) == BM_SESSION_RUNNING,
+                     [this] { return !commands_.empty(); });
     }
     bm_session_destroy(session);
 }

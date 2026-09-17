@@ -2,7 +2,9 @@
 param(
     [string]$Executable = "build/portable/apps/qt-portable/BluMach-portable.exe",
     [string]$Machine,
-    [string[]]$Asset
+    [string[]]$Asset,
+    [string]$LogPath,
+    [switch]$TraceLatency
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,5 +41,23 @@ foreach ($binding in $Asset) {
     $arguments += @("--asset", $binding)
 }
 
+if ($TraceLatency) {
+    $env:BLUMACH_TRACE_LATENCY = "1"
+}
+if ($LogPath) {
+    $env:QT_FORCE_STDERR_LOGGING = "1"
+    $quotedArguments = $arguments | ForEach-Object {
+        '"' + ($_ -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+    }
+    $launchOptions = @{
+        FilePath = $executablePath
+        RedirectStandardError = $LogPath
+        PassThru = $true
+    }
+    if ($quotedArguments) { $launchOptions.ArgumentList = $quotedArguments }
+    $process = Start-Process @launchOptions
+    Write-Output "BluMach PID: $($process.Id)"
+    exit 0
+}
 & $executablePath @arguments
 exit $LASTEXITCODE
