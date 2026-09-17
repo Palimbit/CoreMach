@@ -57,7 +57,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, versioned architectural snapshot/restore and one-boundary step, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, hardware-vector-validated ADC/SBB primary forms, NEC 82h alias, DAA/DAS/AAA/AAS, AAM/AAD, CWD, INT3/INTO, arithmetic/logical and shift paths, direct/indirect near calls, near/far returns with cleanup, software and maskable interrupt entry, IRET, stack, SAHF/LAHF and flag control, byte/word MOVS/STOS/LODS/SCAS with REP/REPE/REPNE and basic IN/OUT; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, versioned architectural snapshot/restore and one-boundary step, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, hardware-vector-validated primary ALU forms, NEC 82h alias, DAA/DAS/AAA/AAS, AAM/AAD, signed/unsigned multiply and divide, PUSHA/POPA, immediate PUSH/IMUL, CWD, INT3/INTO, shift paths, direct/indirect near calls, near/far returns with cleanup, software and maskable interrupt entry, IRET, stack, SAHF/LAHF and flag control, byte/word MOVS/STOS/LODS/SCAS with REP/REPE/REPNE and basic IN/OUT; no complete ISA or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; rational PIT/RTC clock accumulators use a measured functional instruction rate, not V30 cycle accounting |
@@ -225,7 +225,7 @@ include the focused `cpu_808x_post_test.c`, `cpu_808x_checksum_test.c`,
 focused sign-extension, string-comparison, decode-trace, far-control-flow,
 exchange, negate, `XLAT`, carry-arithmetic and byte-division tests,
 architectural-state, AAM/AAD, base-ISA completion and signed-multiply/divide
-tests, the external-vector adapter,
+tests, the 80186-compatible stack/immediate test, the external-vector adapter,
 `fdc765_test.c`, `pvga1a_test.c`,
 `legacy_io_test.c`, `pcs86_reset_test.c` and `pcs86_user_io_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never

@@ -1036,6 +1036,103 @@ execute_one(bm_808x_state_t *state)
     }
 
     switch (opcode) {
+        case 0x60: { /* PUSHA. */
+            uint16_t original_sp = state->registers[REG_SP];
+            unsigned int index;
+            static const unsigned int order[] = {
+                REG_AX, REG_CX, REG_DX, REG_BX
+            };
+            for (index = 0U; index < sizeof(order) / sizeof(order[0]); ++index) {
+                status = push_word(state, state->registers[order[index]]);
+                if (status != BM_STATUS_OK)
+                    return status;
+            }
+            status = push_word(state, original_sp);
+            if (status == BM_STATUS_OK)
+                status = push_word(state, state->registers[REG_BP]);
+            if (status == BM_STATUS_OK)
+                status = push_word(state, state->registers[REG_SI]);
+            if (status == BM_STATUS_OK)
+                status = push_word(state, state->registers[REG_DI]);
+            return status;
+        }
+        case 0x61: { /* POPA. */
+            uint16_t value = 0U;
+            status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_DI] = value;
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_SI] = value;
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_BP] = value;
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &value); /* Discard saved SP. */
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_BX] = value;
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_DX] = value;
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_CX] = value;
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_AX] = value;
+            return status;
+        }
+        case 0x68: { /* PUSH imm16. */
+            uint16_t immediate = 0U;
+            status = fetch_word(state, &immediate);
+            return status == BM_STATUS_OK ? push_word(state, immediate) : status;
+        }
+        case 0x6a: { /* PUSH sign-extended imm8. */
+            uint8_t immediate = 0U;
+            status = fetch_byte(state, &immediate);
+            return status == BM_STATUS_OK ?
+                push_word(state, (uint16_t) signed_byte(immediate)) : status;
+        }
+        case 0x69: /* IMUL r16,r/m16,imm16. */
+        case 0x6b: { /* IMUL r16,r/m16,sign-extended imm8. */
+            uint8_t modrm;
+            uint16_t source = 0U;
+            int32_t immediate;
+            int32_t result;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override,
+                                           &operand);
+            if (status == BM_STATUS_OK)
+                status = read_operand_word(state, &operand, &source);
+            if (opcode == 0x69U) {
+                uint16_t word = 0U;
+                if (status == BM_STATUS_OK)
+                    status = fetch_word(state, &word);
+                immediate = signed_word(word);
+            } else {
+                uint8_t byte = 0U;
+                if (status == BM_STATUS_OK)
+                    status = fetch_byte(state, &byte);
+                immediate = signed_byte(byte);
+            }
+            if (status != BM_STATUS_OK)
+                return status;
+            result = signed_word(source) * immediate;
+            state->registers[(modrm >> 3U) & 7U] = (uint16_t) result;
+            state->flags &= (uint16_t) ~(FLAG_CF | FLAG_OF);
+            if ((result < -32768L) || (result > 32767L))
+                state->flags |= FLAG_CF | FLAG_OF;
+            return BM_STATUS_OK;
+        }
         case 0x0f: { /* NEC V30 bit operations. */
             uint8_t extension;
             uint8_t modrm;
