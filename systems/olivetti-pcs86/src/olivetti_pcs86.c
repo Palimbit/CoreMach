@@ -27,7 +27,10 @@
 typedef struct bm_pcs86_machine {
     bm_host_services_t host;
     bm_bus_t *bus;
-    bm_linear_memory_t *ram;
+    uint8_t *conventional_ram;
+    uint8_t *ems_ram;
+    size_t ems_size;
+    uint16_t ems_pages;
     bm_linear_memory_t *rom;
     bm_dma8237_t *dma;
     bm_dma_page_registers_t *dma_pages;
@@ -73,6 +76,61 @@ typedef struct bm_pcs86_machine {
 #define PCS86_SCHEDULER_TICKS_PER_SECOND UINT64_C(2000000)
 #define PCS86_PIT_TICKS_PER_SECOND UINT64_C(1193182)
 #define PCS86_CLOCK_QUANTUM UINT64_C(64)
+#define PCS86_EMS_APERTURE_BASE UINT32_C(0x80000)
+#define PCS86_EMS_APERTURE_SIZE UINT32_C(0x10000)
+#define PCS86_EMS_WINDOW_SIZE UINT32_C(0x4000)
+
+static uint8_t *
+pcs86_memory_pointer(bm_pcs86_machine_t *machine, uint64_t address)
+{
+    if ((address >= PCS86_EMS_APERTURE_BASE) &&
+        (address < PCS86_EMS_APERTURE_BASE + PCS86_EMS_APERTURE_SIZE)) {
+        size_t aperture_offset = (size_t) (address - PCS86_EMS_APERTURE_BASE);
+        size_t window = aperture_offset / PCS86_EMS_WINDOW_SIZE;
+        uint8_t selector = machine->ems_page_selector[window];
+        size_t page = (size_t) (selector & 0x7fU);
+
+        if (((selector & 0x80U) != 0U) && (page < machine->ems_pages))
+            return &machine->ems_ram[page * PCS86_EMS_WINDOW_SIZE +
+                                     (aperture_offset & (PCS86_EMS_WINDOW_SIZE - 1U))];
+    }
+    return &machine->conventional_ram[address];
+}
+
+static bm_status_t
+pcs86_memory_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    uint32_t index;
+
+    if ((transaction == NULL) || (transaction->size == 0U) ||
+        (transaction->size > sizeof(transaction->value)) ||
+        (transaction->address >= BM_PCS86_MEMORY_SIZE) ||
+        (transaction->size > BM_PCS86_MEMORY_SIZE - (size_t) transaction->address))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (transaction->operation == BM_BUS_WRITE) {
+        for (index = 0U; index < transaction->size; ++index) {
+            uint32_t shift = (transaction->endianness == BM_ENDIAN_LITTLE)
+                                 ? index * 8U
+                                 : (transaction->size - index - 1U) * 8U;
+            *pcs86_memory_pointer(machine, transaction->address + index) =
+                (uint8_t) (transaction->value >> shift);
+        }
+        return BM_STATUS_OK;
+    }
+    if ((transaction->operation != BM_BUS_READ) &&
+        (transaction->operation != BM_BUS_FETCH))
+        return BM_STATUS_INVALID_ARGUMENT;
+    transaction->value = 0U;
+    for (index = 0U; index < transaction->size; ++index) {
+        uint32_t shift = (transaction->endianness == BM_ENDIAN_LITTLE)
+                             ? index * 8U
+                             : (transaction->size - index - 1U) * 8U;
+        transaction->value |=
+            (uint64_t) *pcs86_memory_pointer(machine, transaction->address + index) << shift;
+    }
+    return BM_STATUS_OK;
+}
 
 static bm_status_t
 pcs86_open_bus_access(void *context, bm_bus_transaction_t *transaction)
@@ -450,12 +508,14 @@ pcs86_ems_selector_access(void *context, bm_bus_transaction_t *transaction)
     bm_pcs86_machine_t *machine = context;
     size_t window;
 
-    if ((transaction->size != 1) || (transaction->operation != BM_BUS_WRITE))
+    if ((transaction->size != 1U) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
 
     window = (size_t) (transaction->address - 0x8400U);
-    machine->ems_page_selector[window] = (uint8_t) transaction->value;
-    /* The EMS aperture and backing SIMMs deliberately remain unimplemented. */
+    if (transaction->operation == BM_BUS_READ)
+        transaction->value = machine->ems_page_selector[window];
+    else
+        machine->ems_page_selector[window] = (uint8_t) transaction->value;
     return BM_STATUS_OK;
 }
 
@@ -529,6 +589,11 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
                 break;
             case 0x0064:
                 value = machine->glue[4] & 0x8fU;
+                if (machine->ems_size == (size_t) BM_PCS86_EMS_384_KIB * 1024U)
+                    value |= 0x20U;
+                else if (machine->ems_size ==
+                         (size_t) BM_PCS86_EMS_1920_KIB * 1024U)
+                    value |= 0x40U;
                 break;
             case 0x0065:
                 value = machine->control;
@@ -670,6 +735,11 @@ pcs86_validate(const bm_configuration_view_t *configuration)
         status = validate_blob(&config->firmware_odd, &expected_firmware[1]);
     for (index = 0U; (status == BM_STATUS_OK) && (index < 2U); ++index)
         status = bm_floppy_drive_config_validate(&config->floppy[index]);
+    if ((status == BM_STATUS_OK) &&
+        (config->ems_kib != BM_PCS86_EMS_NONE_KIB) &&
+        (config->ems_kib != BM_PCS86_EMS_384_KIB) &&
+        (config->ems_kib != BM_PCS86_EMS_1920_KIB))
+        status = BM_STATUS_INVALID_ARGUMENT;
     return status;
 }
 
@@ -710,7 +780,10 @@ pcs86_destroy(void *context)
     bm_pit8253_destroy(machine->pit);
     bm_pic8259_destroy(machine->pic);
     bm_linear_memory_destroy(machine->rom);
-    bm_linear_memory_destroy(machine->ram);
+    if (machine->ems_ram != NULL)
+        machine->host.release(machine->host.context, machine->ems_ram);
+    if (machine->conventional_ram != NULL)
+        machine->host.release(machine->host.context, machine->conventional_ram);
     bm_bus_destroy(machine->bus);
     machine->host.release(machine->host.context, machine);
 }
@@ -795,16 +868,30 @@ pcs86_create(bm_engine_t *engine,
         (uint8_t) (pcs86_floppy_jumper_code(&config->floppy[1]) << 2U));
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
+    machine->ems_size = (size_t) config->ems_kib * 1024U;
+    machine->ems_pages = (uint16_t) (machine->ems_size / PCS86_EMS_WINDOW_SIZE);
 
     status = bm_bus_create(host, 32, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
-        bm_linear_memory_config_t ram_config = {
-            BM_ADDRESS_MEMORY, 0, BM_PCS86_MEMORY_SIZE, 0, NULL, 0
-        };
-        status = bm_linear_memory_create(host, machine->bus, &ram_config, &machine->ram);
+        machine->conventional_ram = host->allocate(host->context, BM_PCS86_MEMORY_SIZE);
+        if (machine->conventional_ram == NULL)
+            status = BM_STATUS_OUT_OF_MEMORY;
+        else
+            memset(machine->conventional_ram, 0, BM_PCS86_MEMORY_SIZE);
     }
+    if ((status == BM_STATUS_OK) && (machine->ems_size != 0U)) {
+        machine->ems_ram = host->allocate(host->context, machine->ems_size);
+        if (machine->ems_ram == NULL)
+            status = BM_STATUS_OUT_OF_MEMORY;
+        else
+            memset(machine->ems_ram, 0, machine->ems_size);
+    }
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_MEMORY, 0U,
+                            BM_PCS86_MEMORY_SIZE - 1U,
+                            pcs86_memory_access, machine);
     if (status == BM_STATUS_OK) {
         combined_rom = host->allocate(host->context, BM_PCS86_ROM_SIZE);
         if (combined_rom == NULL)
@@ -1051,6 +1138,15 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
     } else if (strcmp(name, "keyboard_queue_depth") == 0) {
         *value = (uint8_t) ((machine->scan_queue_end -
                             machine->scan_queue_start) & 0x3fU);
+    } else if (strcmp(name, "ems_kib") == 0) {
+        *value = machine->ems_size / 1024U;
+    } else if (strcmp(name, "ems_pages") == 0) {
+        *value = machine->ems_pages;
+    } else if ((strlen(name) == strlen("ems_selector0")) &&
+               (strncmp(name, "ems_selector", strlen("ems_selector")) == 0) &&
+               (name[strlen("ems_selector")] >= '0') &&
+               (name[strlen("ems_selector")] <= '3')) {
+        *value = machine->ems_page_selector[name[strlen("ems_selector")] - '0'];
     } else if ((strcmp(name, "lpt_data") == 0) ||
                (strcmp(name, "lpt_status") == 0) ||
                (strcmp(name, "lpt_control") == 0)) {

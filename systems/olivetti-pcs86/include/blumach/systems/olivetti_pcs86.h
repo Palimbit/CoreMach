@@ -12,10 +12,13 @@ extern "C" {
 
 #define BM_PCS86_FIRMWARE_HALF_SIZE 32768U
 #define BM_PCS86_MEMORY_SIZE (640U * 1024U)
+#define BM_PCS86_EMS_NONE_KIB 0U
+#define BM_PCS86_EMS_384_KIB 384U
+#define BM_PCS86_EMS_1920_KIB 1920U
 #define BM_PCS86_ROM_BASE 0xf0000U
 #define BM_PCS86_ROM_SIZE 65536U
 #define BM_PCS86_CONFIG_TYPE "blumach.system.olivetti-pcs86.config"
-#define BM_PCS86_CONFIG_VERSION 1U
+#define BM_PCS86_CONFIG_VERSION 2U
 
 typedef struct bm_pcs86_io_trace {
     bm_bus_operation_t operation;
@@ -33,6 +36,7 @@ typedef struct bm_pcs86_config {
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
     bm_floppy_drive_config_t floppy[2];
+    uint32_t ems_kib;
 } bm_pcs86_config_t;
 
 typedef struct bm_pcs86_firmware_identity {
