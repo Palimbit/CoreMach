@@ -25,9 +25,30 @@ typedef struct test_machine {
     unsigned int input_calls;
     unsigned int geometry_calls;
     unsigned int render_calls;
+    unsigned int storage_status_calls;
     bm_tick_t last_render_time;
     bm_input_event_t last_input;
 } test_machine_t;
+
+static size_t
+test_storage_count(const void *context)
+{
+    return context != NULL ? 1U : 0U;
+}
+
+static bm_status_t
+test_storage_status(const void *context, size_t index,
+                    bm_storage_device_status_t *status)
+{
+    test_machine_t *machine = (test_machine_t *) context;
+    if ((machine == NULL) || (status == NULL) || (index != 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    ++machine->storage_status_calls;
+    *status = (bm_storage_device_status_t) {
+        BM_STORAGE_DEVICE_FLOPPY, 0U, 1, 1, 1, 1, 7U, 0U
+    };
+    return BM_STATUS_OK;
+}
 
 static void
 initialize_machine(test_machine_t *machine)
@@ -130,6 +151,8 @@ test_video_geometry(const void *context, bm_video_geometry_t *geometry)
     geometry->width = 320U;
     geometry->height = 200U;
     geometry->format = BM_PIXEL_XRGB8888;
+    geometry->refresh_numerator = 60U;
+    geometry->refresh_denominator = 1U;
     return BM_STATUS_OK;
 }
 
@@ -147,6 +170,8 @@ test_video_render(const void *context, bm_tick_t emulated_time,
     framebuffer->geometry.width = 320U;
     framebuffer->geometry.height = 200U;
     framebuffer->geometry.format = BM_PIXEL_XRGB8888;
+    framebuffer->geometry.refresh_numerator = 60U;
+    framebuffer->geometry.refresh_denominator = 1U;
     return BM_STATUS_OK;
 }
 
@@ -166,7 +191,9 @@ make_configuration(test_machine_t *machine, int optional_operations)
             test_video_render,
             test_reset,
             test_inspect,
-            test_input
+            test_input,
+            test_storage_count,
+            test_storage_status
         },
         .engine = { 1U, 2U }
     };
@@ -176,7 +203,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
         .configuration = { "test.runtime-session.config", 1U,
                            sizeof(test_machine_t) },
         .ops = { test_validate, test_create, test_destroy,
-                 NULL, NULL, NULL, NULL, NULL },
+                 NULL, NULL, NULL, NULL, NULL, NULL, NULL },
         .engine = { 1U, 2U }
     };
     bm_machine_config_t configuration = {
@@ -317,9 +344,12 @@ test_session_state_machine(void)
     test_machine_t machine;
     bm_machine_config_t configuration;
     bm_input_event_t input = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
-    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888 };
+    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888, 0U, 0U };
     bm_video_framebuffer_t framebuffer = { NULL, 0U, 0U,
-                                           { 0U, 0U, BM_PIXEL_XRGB8888 } };
+                                           { 0U, 0U, BM_PIXEL_XRGB8888,
+                                             0U, 0U } };
+    bm_storage_device_status_t storage;
+    size_t storage_count = 0U;
     uint64_t value = 0U;
 
     initialize_machine(&machine);
@@ -341,6 +371,10 @@ test_session_state_machine(void)
     assert(bm_session_inspect_machine(session, "answer", &value) ==
            BM_STATUS_INVALID_STATE);
     assert(bm_session_send_input(session, &input) == BM_STATUS_INVALID_STATE);
+    assert(bm_session_storage_device_count(session, &storage_count) ==
+           BM_STATUS_INVALID_STATE);
+    assert(bm_session_storage_device_status(session, 0U, &storage) ==
+           BM_STATUS_INVALID_STATE);
 
     assert(bm_session_configure(session, &configuration) == BM_STATUS_OK);
     assert(bm_session_state(session) == BM_SESSION_CONFIGURED);
@@ -356,6 +390,8 @@ test_session_state_machine(void)
     assert(bm_session_time(session) == 5U);
     assert(bm_session_video_geometry(session, &geometry) == BM_STATUS_OK);
     assert(geometry.width == 320U && geometry.height == 200U);
+    assert(geometry.refresh_numerator == 60U &&
+           geometry.refresh_denominator == 1U);
     assert(bm_session_render_video(session, &framebuffer) == BM_STATUS_OK);
     assert(framebuffer.geometry.width == 320U);
     assert(machine.last_render_time == 5U);
@@ -363,6 +399,16 @@ test_session_state_machine(void)
     assert(value == 42U);
     assert(bm_session_send_input(session, &input) == BM_STATUS_OK);
     assert(machine.last_input.key == BM_KEY_A);
+    assert(bm_session_storage_device_count(session, &storage_count) ==
+           BM_STATUS_OK && storage_count == 1U);
+    assert(bm_session_storage_device_status(session, 0U, &storage) ==
+           BM_STATUS_OK);
+    assert(storage.kind == BM_STORAGE_DEVICE_FLOPPY && storage.unit == 0U);
+    assert(storage.media_present && storage.write_protected &&
+           storage.motor_active && storage.read_operations == 7U);
+    assert(machine.storage_status_calls == 1U);
+    assert(bm_session_storage_device_status(session, 1U, &storage) ==
+           BM_STATUS_INVALID_ARGUMENT);
 
     assert(bm_session_pause(session) == BM_STATUS_OK);
     assert(bm_session_state(session) == BM_SESSION_PAUSED);
@@ -400,9 +446,12 @@ test_optional_operations(void)
     test_machine_t machine;
     bm_machine_config_t configuration;
     bm_input_event_t input = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
-    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888 };
+    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888, 0U, 0U };
     bm_video_framebuffer_t framebuffer = { NULL, 0U, 0U,
-                                           { 0U, 0U, BM_PIXEL_XRGB8888 } };
+                                           { 0U, 0U, BM_PIXEL_XRGB8888,
+                                             0U, 0U } };
+    bm_storage_device_status_t storage;
+    size_t storage_count = 0U;
     uint64_t value = 0U;
 
     initialize_machine(&machine);
@@ -415,6 +464,10 @@ test_optional_operations(void)
     assert(bm_session_inspect_machine(session, "answer", &value) ==
            BM_STATUS_UNSUPPORTED);
     assert(bm_session_send_input(session, &input) == BM_STATUS_UNSUPPORTED);
+    assert(bm_session_storage_device_count(session, &storage_count) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(bm_session_storage_device_status(session, 0U, &storage) ==
+           BM_STATUS_UNSUPPORTED);
     assert(bm_session_reset(session) == BM_STATUS_OK);
 
     assert(bm_session_video_geometry(NULL, &geometry) == BM_STATUS_INVALID_ARGUMENT);
@@ -429,6 +482,14 @@ test_optional_operations(void)
            BM_STATUS_INVALID_ARGUMENT);
     assert(bm_session_send_input(NULL, &input) == BM_STATUS_INVALID_ARGUMENT);
     assert(bm_session_send_input(session, NULL) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_storage_device_count(NULL, &storage_count) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_storage_device_count(session, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_storage_device_status(NULL, 0U, &storage) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_storage_device_status(session, 0U, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);

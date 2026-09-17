@@ -15,6 +15,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -22,6 +23,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QStringList>
 #include <QStyle>
 #include <QToolBar>
 
@@ -38,6 +40,7 @@ PortableWindow::AssetStorage::~AssetStorage()
 
 PortableWindow::PortableWindow(QWidget *parent)
     : QMainWindow(parent), display_(new DisplayWidget), status_(new QLabel),
+      storageStatus_(new QLabel),
       machineToolbar_(addToolBar(tr("Machine"))),
       pauseAction_(new QAction(tr("Pause"), this)),
       resetAction_(new QAction(tr("Reset"), this)),
@@ -112,6 +115,8 @@ PortableWindow::PortableWindow(QWidget *parent)
     setWindowTitle(tr("BluMach Portable"));
     setCentralWidget(display_);
     statusBar()->addPermanentWidget(status_, 1);
+    storageStatus_->setTextFormat(Qt::RichText);
+    statusBar()->addPermanentWidget(storageStatus_);
     statusBarAction_->setChecked(true);
     connect(openAction, &QAction::triggered, this,
             [this] { chooseMachine(); });
@@ -245,14 +250,7 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         worker_ = std::make_unique<SessionWorker>(
             host_, bm_frontend_machine_config(machine_), UINT64_C(10000000),
             [this, generation](SessionWorker::Snapshot snapshot) {
-                QMetaObject::invokeMethod(
-                    this,
-                    [this, generation,
-                     snapshot = std::move(snapshot)]() mutable {
-                        if (generation == workerGeneration_)
-                            handleSnapshot(std::move(snapshot));
-                    },
-                    Qt::QueuedConnection);
+                queueSnapshot(generation, std::move(snapshot));
             });
         result = worker_->start();
     }
@@ -271,6 +269,12 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         tr("%1 — BluMach Portable").arg(activeMachineId_));
     lastError_ = BM_STATUS_OK;
     lifecyclePending_ = false;
+    hasVideoGeometry_ = false;
+    presentedFrames_ = 0U;
+    presentationFps_ = 0.0;
+    frameRateTimer_.start();
+    activityTimer_.start();
+    storagePresentation_.clear();
     display_->setFocus();
     updateActions();
     showStatus();
@@ -283,11 +287,19 @@ PortableWindow::closeMachine()
     ++workerGeneration_;
     lifecyclePending_ = false;
     worker_.reset();
+    snapshotMailbox_.clear();
     bm_frontend_machine_close(machine_);
     machine_ = nullptr;
     bindings_.clear();
     assets_.clear();
     activeMachineId_.clear();
+    hasVideoGeometry_ = false;
+    presentedFrames_ = 0U;
+    presentationFps_ = 0.0;
+    frameRateTimer_.invalidate();
+    activityTimer_.invalidate();
+    storagePresentation_.clear();
+    storageStatus_->clear();
     setWindowTitle(tr("BluMach Portable"));
     display_->setFrame(QImage());
     updateActions();
@@ -441,10 +453,44 @@ PortableWindow::sendKey(QKeyEvent *event, bool pressed)
 }
 
 void
+PortableWindow::queueSnapshot(uint64_t generation,
+                              SessionWorker::Snapshot snapshot)
+{
+    if (!snapshotMailbox_.submit(std::move(snapshot)))
+        return;
+    QMetaObject::invokeMethod(
+        this, [this, generation] { drainSnapshots(generation); },
+        Qt::QueuedConnection);
+}
+
+void
+PortableWindow::drainSnapshots(uint64_t generation)
+{
+    std::deque<SessionWorker::Snapshot> snapshots = snapshotMailbox_.take();
+    if (generation != workerGeneration_)
+        return;
+    for (SessionWorker::Snapshot &snapshot : snapshots)
+        handleSnapshot(std::move(snapshot));
+}
+
+void
 PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
 {
-    if (!snapshot.frame.isNull())
+    if (!snapshot.frame.isNull()) {
         display_->setFrame(snapshot.frame);
+        if (snapshot.hasVideo) {
+            videoGeometry_ = snapshot.geometry;
+            hasVideoGeometry_ = true;
+        }
+        ++presentedFrames_;
+        if (frameRateTimer_.isValid() && (frameRateTimer_.elapsed() >= 500)) {
+            presentationFps_ = static_cast<double>(presentedFrames_) * 1000.0 /
+                               static_cast<double>(frameRateTimer_.elapsed());
+            presentedFrames_ = 0U;
+            frameRateTimer_.restart();
+        }
+        updateStorageStatus(snapshot.storage);
+    }
     if (snapshot.lifecycleResult)
         lifecyclePending_ = false;
     if ((snapshot.status != BM_STATUS_OK) &&
@@ -456,6 +502,58 @@ PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
     }
     updateActions();
     showStatus();
+}
+
+void
+PortableWindow::updateStorageStatus(
+    const std::vector<bm_storage_device_status_t> &storage)
+{
+    constexpr qint64 pulseMilliseconds = 180;
+    const qint64 now = activityTimer_.isValid() ? activityTimer_.elapsed() : 0;
+    if (storagePresentation_.size() < storage.size())
+        storagePresentation_.resize(storage.size());
+    QStringList labels;
+    for (size_t index = 0U; index < storage.size(); ++index) {
+        const bm_storage_device_status_t &device = storage[index];
+        StoragePresentation &presentation = storagePresentation_[index];
+        if (!device.installed)
+            continue;
+        if (presentation.initialized) {
+            if (device.read_operations > presentation.reads)
+                presentation.readPulseUntil = now + pulseMilliseconds;
+            if (device.write_operations > presentation.writes)
+                presentation.writePulseUntil = now + pulseMilliseconds;
+        }
+        presentation.reads = device.read_operations;
+        presentation.writes = device.write_operations;
+        presentation.initialized = true;
+        const QString unit = device.kind == BM_STORAGE_DEVICE_FLOPPY ?
+            QString(QChar(static_cast<char16_t>(u'A' + device.unit))) :
+            QString::number(device.unit);
+        if (!device.media_present) {
+            labels.push_back(tr("%1: empty").arg(unit));
+            continue;
+        }
+        const QString readColor = now < presentation.readPulseUntil ?
+            QStringLiteral("#2eae4e") : QStringLiteral("#777777");
+        const QString writeColor = now < presentation.writePulseUntil ?
+            QStringLiteral("#e6a700") : QStringLiteral("#777777");
+        QString label = tr("%1: %2").arg(
+            unit, device.write_protected ? tr("RO") : tr("RW"));
+        if (device.motor_active)
+            label += tr(" · motor");
+        label += QStringLiteral(
+            " · <span style=\"color:%1\">● R</span> %2"
+            " · <span style=\"color:%3\">● W</span> %4")
+            .arg(readColor)
+            .arg(static_cast<qulonglong>(device.read_operations))
+            .arg(writeColor)
+            .arg(static_cast<qulonglong>(device.write_operations));
+        labels.push_back(label);
+    }
+    storageStatus_->setText(labels.join(QStringLiteral(" &nbsp; ")));
+    storageStatus_->setToolTip(
+        tr("Removable media state and completed read/write operations"));
 }
 
 void
@@ -497,10 +595,30 @@ PortableWindow::showStatus(const QString &detail)
         case BM_SESSION_CONFIGURED: state = "configured"; break;
         case BM_SESSION_NEW: state = "new"; break;
     }
-    status_->setText(tr("%1 — %2 ticks")
-                         .arg(QString::fromLatin1(state))
-                         .arg(static_cast<qulonglong>(
-                             worker_->ticks())));
+    QString text = tr("%1").arg(QString::fromLatin1(state));
+    if (hasVideoGeometry_) {
+        QString refresh = tr("unknown");
+        if ((videoGeometry_.refresh_numerator != 0U) &&
+            (videoGeometry_.refresh_denominator != 0U)) {
+            const double hz = static_cast<double>(
+                videoGeometry_.refresh_numerator) /
+                static_cast<double>(videoGeometry_.refresh_denominator);
+            refresh = QLocale().toString(hz, 'f', 1);
+        }
+        const QSize output = display_->outputPixelSize();
+        text += tr(" — %1×%2 @ %3 Hz")
+                    .arg(videoGeometry_.width)
+                    .arg(videoGeometry_.height)
+                    .arg(refresh);
+        if (!output.isEmpty())
+            text += tr(" → %1×%2").arg(output.width()).arg(output.height());
+        if (presentationFps_ > 0.0)
+            text += tr(" — %1 FPS").arg(
+                QLocale().toString(presentationFps_, 'f', 1));
+    }
+    status_->setText(text);
+    status_->setToolTip(tr("Emulated time: %1 ticks")
+                            .arg(static_cast<qulonglong>(worker_->ticks())));
 }
 
 bm_key_code_t

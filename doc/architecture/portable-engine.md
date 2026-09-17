@@ -511,3 +511,23 @@ boundary; no path, native window, settings object or Qt type crosses into the
 frontend adapter, runtime or engine. Advanced GPU renderers, shaders and CRT
 effects remain later presentation layers and must consume the same immutable
 frame contract rather than depending on inherited emulator globals.
+
+The interactive worker limits each catch-up slice to five milliseconds at the
+current frontend rate and coalesces consecutive ordinary frames before they
+cross to the Qt event loop. Lifecycle results and errors remain ordered and
+cannot be discarded. This bounds the worker-side keyboard delay and prevents a
+busy UI from presenting an accumulated queue of obsolete images.
+
+Video geometry also carries an optional exact refresh rational. PVGA1A derives
+it from the programmed CRTC totals and a selected documented clock; board-defined
+external clocks remain zero/unknown instead of being assigned a guessed rate.
+Headless reports the rational directly. Qt labels source resolution and guest
+refresh separately from physical output size and measured presentation FPS.
+
+Storage telemetry follows the same boundary. A machine may enumerate generic
+device status containing media presence, write protection, motor state and
+cumulative completed read/write operations. The PCS 86 composes those values
+from its floppy drive and FDC, while Qt only presents snapshots and short
+activity pulses. The contract contains no path, file handle or UI object and
+does not yet authorize inserting, ejecting or making a caller-owned medium
+writable.

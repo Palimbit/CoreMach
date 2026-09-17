@@ -30,6 +30,23 @@ typedef struct bm_block_media {
     bm_block_media_write_fn write;
 } bm_block_media_t;
 
+typedef enum bm_storage_device_kind {
+    BM_STORAGE_DEVICE_FLOPPY = 0
+} bm_storage_device_kind_t;
+
+/* Frontend-neutral, read-only device telemetry. Operation counters are
+ * cumulative since the most recent machine reset. */
+typedef struct bm_storage_device_status {
+    bm_storage_device_kind_t kind;
+    uint32_t unit;
+    int installed;
+    int media_present;
+    int write_protected;
+    int motor_active;
+    uint64_t read_operations;
+    uint64_t write_operations;
+} bm_storage_device_status_t;
+
 bm_status_t bm_block_media_validate(const bm_block_media_t *media);
 bm_status_t bm_block_media_read(const bm_block_media_t *media,
                                 uint64_t first_block,

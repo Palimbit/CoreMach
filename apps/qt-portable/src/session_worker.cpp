@@ -9,7 +9,10 @@
 #include <vector>
 
 namespace {
-constexpr uint64_t maximumChunk = UINT64_C(250000);
+/* Keep the emulation boundary short enough that input queued by the UI is not
+ * held behind a long catch-up slice.  At the current 10 MHz session rate this
+ * caps the worker-side contribution to input latency at five milliseconds. */
+constexpr uint64_t maximumChunk = UINT64_C(50000);
 constexpr auto framePeriod = std::chrono::milliseconds(16);
 }
 
@@ -96,9 +99,9 @@ SessionWorker::processCommands(bm_session_t *session)
 }
 
 bm_status_t
-SessionWorker::renderFrame(bm_session_t *session, QImage &frame)
+SessionWorker::renderFrame(bm_session_t *session, QImage &frame,
+                           bm_video_geometry_t &geometry)
 {
-    bm_video_geometry_t geometry {};
     bm_status_t status = bm_session_video_geometry(session, &geometry);
     if (status != BM_STATUS_OK)
         return status;
@@ -123,15 +126,47 @@ SessionWorker::renderFrame(bm_session_t *session, QImage &frame)
     return frame.isNull() ? BM_STATUS_OUT_OF_MEMORY : BM_STATUS_OK;
 }
 
+bm_status_t
+SessionWorker::collectStorage(
+    bm_session_t *session,
+    std::vector<bm_storage_device_status_t> &storage)
+{
+    size_t count = 0U;
+    bm_status_t status = bm_session_storage_device_count(session, &count);
+    if (status == BM_STATUS_UNSUPPORTED) {
+        storage.clear();
+        return BM_STATUS_OK;
+    }
+    if (status != BM_STATUS_OK)
+        return status;
+    storage.resize(count);
+    for (size_t index = 0U; index < count; ++index) {
+        status = bm_session_storage_device_status(session, index,
+                                                  &storage[index]);
+        if (status != BM_STATUS_OK) {
+            storage.clear();
+            return status;
+        }
+    }
+    return BM_STATUS_OK;
+}
+
 void
 SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
-                       bool lifecycleResult)
+                       bool lifecycleResult,
+                       const bm_video_geometry_t *geometry,
+                       std::vector<bm_storage_device_status_t> storage)
 {
     Snapshot snapshot;
     snapshot.status = status;
     snapshot.state = session != nullptr ? bm_session_state(session) :
                                           BM_SESSION_NEW;
     snapshot.ticks = session != nullptr ? bm_session_time(session) : 0U;
+    if (geometry != nullptr) {
+        snapshot.geometry = *geometry;
+        snapshot.hasVideo = true;
+    }
+    snapshot.storage = std::move(storage);
     snapshot.frame = std::move(frame);
     snapshot.lifecycleResult = lifecycleResult;
     state_.store(snapshot.state);
@@ -177,8 +212,13 @@ SessionWorker::run()
                 status = bm_session_run_for(session, due);
             if ((status == BM_STATUS_OK) && (now >= nextFrame)) {
                 QImage frame;
-                status = renderFrame(session, frame);
-                publish(session, status, std::move(frame));
+                bm_video_geometry_t geometry {};
+                std::vector<bm_storage_device_status_t> storage;
+                status = renderFrame(session, frame, geometry);
+                if (status == BM_STATUS_OK)
+                    status = collectStorage(session, storage);
+                publish(session, status, std::move(frame), false, &geometry,
+                        std::move(storage));
                 nextFrame = now + framePeriod;
             }
             if (status != BM_STATUS_OK) {

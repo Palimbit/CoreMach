@@ -18,6 +18,10 @@ typedef struct bm_video_geometry {
     uint32_t width;
     uint32_t height;
     bm_pixel_format_t format;
+    /* Refresh frequency in hertz as an exact rational. Both fields are zero
+     * when the machine cannot identify its programmed video clock. */
+    uint64_t refresh_numerator;
+    uint64_t refresh_denominator;
 } bm_video_geometry_t;
 
 typedef struct bm_video_framebuffer {

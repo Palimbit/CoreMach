@@ -25,6 +25,7 @@ public:
     void setFrame(const QImage &frame);
     QImage frame() const;
     bool hasFrame() const;
+    QSize outputPixelSize() const;
     void setScaleMode(ScaleMode mode);
     ScaleMode scaleMode() const;
     void setSmoothScaling(bool enabled);

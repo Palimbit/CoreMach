@@ -280,3 +280,39 @@ bm_session_send_input(bm_session_t *session, const bm_input_event_t *event)
         return BM_STATUS_UNSUPPORTED;
     return session->configuration.definition->ops.input(session->machine, event);
 }
+
+bm_status_t
+bm_session_storage_device_count(const bm_session_t *session, size_t *count)
+{
+    if ((session == NULL) || (count == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.storage_count == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    *count = session->configuration.definition->ops.storage_count(
+        session->machine);
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_session_storage_device_status(const bm_session_t *session, size_t index,
+                                 bm_storage_device_status_t *status)
+{
+    size_t count;
+    bm_status_t result;
+
+    if ((session == NULL) || (status == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    result = bm_session_storage_device_count(session, &count);
+    if (result != BM_STATUS_OK)
+        return result;
+    if (index >= count)
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (session->configuration.definition->ops.storage_status == NULL)
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.definition->ops.storage_status(
+        session->machine, index, status);
+}

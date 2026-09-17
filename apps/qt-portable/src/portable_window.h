@@ -5,12 +5,14 @@
 #include "display_widget.h"
 #include "portable_catalog.h"
 #include "session_worker.h"
+#include "snapshot_mailbox.h"
 
 #include <blumach/frontend/file_inputs.h>
 #include <blumach/frontend/frontend.h>
 #include <blumach/runtime/runtime.h>
 
 #include <QHash>
+#include <QElapsedTimer>
 #include <QMainWindow>
 #include <QString>
 
@@ -57,13 +59,18 @@ private:
     void readSettings();
     void writeSettings() const;
     void sendKey(QKeyEvent *event, bool pressed);
+    void queueSnapshot(uint64_t generation, SessionWorker::Snapshot snapshot);
+    void drainSnapshots(uint64_t generation);
     void handleSnapshot(SessionWorker::Snapshot snapshot);
+    void updateStorageStatus(
+        const std::vector<bm_storage_device_status_t> &storage);
     void updateActions();
     void showStatus(const QString &detail = QString());
     static bm_key_code_t mapKey(int key);
 
     DisplayWidget *display_;
     QLabel *status_;
+    QLabel *storageStatus_;
     QToolBar *machineToolbar_;
     QAction *pauseAction_;
     QAction *resetAction_;
@@ -79,6 +86,7 @@ private:
     QString catalogError_;
     bm_frontend_machine_t *machine_ = nullptr;
     std::unique_ptr<SessionWorker> worker_;
+    SnapshotMailbox snapshotMailbox_;
     std::vector<std::unique_ptr<AssetStorage>> assets_;
     std::vector<bm_frontend_asset_binding_t> bindings_;
     bm_status_t lastError_ = BM_STATUS_OK;
@@ -86,6 +94,20 @@ private:
     bool lifecyclePending_ = false;
     bool wasMaximizedBeforeFullscreen_ = false;
     QString activeMachineId_;
+    bm_video_geometry_t videoGeometry_ {};
+    QElapsedTimer frameRateTimer_;
+    unsigned int presentedFrames_ = 0U;
+    double presentationFps_ = 0.0;
+    bool hasVideoGeometry_ = false;
+    struct StoragePresentation {
+        uint64_t reads = 0U;
+        uint64_t writes = 0U;
+        qint64 readPulseUntil = 0;
+        qint64 writePulseUntil = 0;
+        bool initialized = false;
+    };
+    QElapsedTimer activityTimer_;
+    std::vector<StoragePresentation> storagePresentation_;
 };
 
 #endif
