@@ -1653,7 +1653,7 @@ static uint8_t
 i8080_add(bm_808x_state_t *state, uint8_t left, uint8_t right,
           unsigned int carry)
 {
-    uint16_t result = (uint16_t) left + right + carry;
+    uint16_t result = (uint16_t) ((unsigned int) left + right + carry);
     state->flags &= (uint16_t) ~(FLAG_CF | FLAG_AF);
     if (result > 0xffU)
         state->flags |= FLAG_CF;
@@ -1667,7 +1667,7 @@ static uint8_t
 i8080_subtract(bm_808x_state_t *state, uint8_t left, uint8_t right,
                unsigned int borrow)
 {
-    uint16_t subtrahend = (uint16_t) right + borrow;
+    uint16_t subtrahend = (uint16_t) ((unsigned int) right + borrow);
     uint16_t half_sum = (uint16_t) (left & 0x0fU) +
                         ((uint8_t) ~right & 0x0fU) +
                         (borrow ? 0U : 1U);
@@ -2329,7 +2329,7 @@ execute_one(bm_808x_state_t *state)
             uint16_t lower = 0U;
             uint16_t upper = 0U;
             int32_t index;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override,
