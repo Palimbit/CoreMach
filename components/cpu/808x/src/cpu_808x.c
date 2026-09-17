@@ -3,7 +3,7 @@
  *
  * Derived rewrite of the inherited 808x/Vx0 interpreter. The original work
  * includes Copyright 2015-2020 Andrew Jenner and Copyright 2016-2020 Miran
- * Grca. This file deliberately implements only the reset bring-up subset.
+ * Grca. This file implements a still-incomplete native-mode NEC V30 core.
  */
 #include <blumach/components/cpu_808x.h>
 
@@ -29,7 +29,10 @@ enum {
     FLAG_TF = 0x0100,
     FLAG_IF = 0x0200,
     FLAG_DF = 0x0400,
-    FLAG_OF = 0x0800
+    FLAG_OF = 0x0800,
+    FLAG_MD = 0x8000,
+    PSW_WRITABLE = 0x8fd5,
+    PSW_FIXED_ONE = 0x7002
 };
 
 typedef struct bm_808x_state {
@@ -60,6 +63,19 @@ typedef struct bm_808x_state {
     bm_808x_interrupt_ack_fn interrupt_ack;
     void *interrupt_context;
 } bm_808x_state_t;
+
+static uint16_t
+native_psw_image(uint16_t value)
+{
+    return (uint16_t) ((value & PSW_WRITABLE) | PSW_FIXED_ONE);
+}
+
+static void
+restore_native_psw(bm_808x_state_t *state, uint16_t value)
+{
+    uint16_t mode = state->flags & FLAG_MD;
+    state->flags = (uint16_t) ((native_psw_image(value) & ~FLAG_MD) | mode);
+}
 
 static uint32_t
 physical_address(uint16_t segment, uint16_t offset)
@@ -270,12 +286,13 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
     uint16_t new_cs = 0;
     bm_status_t status;
 
-    status = push_word(state, state->flags);
+    status = push_word(state, native_psw_image(state->flags));
     if (status == BM_STATUS_OK)
         status = push_word(state, state->segments[1]);
     if (status == BM_STATUS_OK)
         status = push_word(state, state->ip);
-    state->flags &= (uint16_t) ~(FLAG_IF | FLAG_TF);
+    state->flags = (uint16_t) ((native_psw_image(state->flags) | FLAG_MD) &
+                               ~(FLAG_IF | FLAG_TF));
     if (status == BM_STATUS_OK)
         status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U), &new_ip);
     if (status == BM_STATUS_OK)
@@ -1535,12 +1552,12 @@ execute_one(bm_808x_state_t *state)
                               (uint8_t) ((state->flags & 0x00d5U) | 0x02U));
             return BM_STATUS_OK;
         case 0x9c: /* PUSHF (NEC V30 reserved-bit image). */
-            return push_word(state, (uint16_t) ((state->flags & 0x8fd7U) | 0x7000U));
+            return push_word(state, native_psw_image(state->flags));
         case 0x9d: { /* POPF */
             uint16_t value;
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK)
-                state->flags = value | 0x0002U;
+                restore_native_psw(state, value);
             return status;
         }
         case 0xa4: /* MOVSB */
@@ -2549,7 +2566,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->ip = new_ip;
                 state->segments[1] = new_cs;
-                state->flags = new_flags | 0x0002U;
+                restore_native_psw(state, new_flags);
             }
             return status;
         }
@@ -2833,7 +2850,7 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
     else if (strcmp(name, "ip") == 0)
         *value = state->ip;
     else if (strcmp(name, "flags") == 0)
-        *value = state->flags;
+        *value = native_psw_image(state->flags);
     else if (strcmp(name, "halted") == 0)
         *value = (uint64_t) state->halted;
     else if (strcmp(name, "last_fetch") == 0)
@@ -2917,7 +2934,7 @@ bm_808x_get_arch_state(const bm_cpu_t *cpu, bm_808x_arch_state_t *out_state)
         state->registers[REG_SP], state->registers[REG_BP],
         state->registers[REG_SI], state->registers[REG_DI],
         state->segments[0], state->segments[1], state->segments[2],
-        state->segments[3], state->ip, state->flags,
+        state->segments[3], state->ip, native_psw_image(state->flags),
         (uint8_t) !!state->halted, state->interrupt_inhibit,
         state->boundary_inhibit, (uint8_t) !!state->nmi_pending,
         (uint8_t) !!state->trap_pending
@@ -2940,6 +2957,8 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
         (state_image->nmi_pending > 1U) ||
         (state_image->trap_pending > 1U))
         return BM_STATUS_INVALID_ARGUMENT;
+    if ((state_image->flags & FLAG_MD) == 0U)
+        return BM_STATUS_UNSUPPORTED;
     state = cpu->context;
     state->registers[REG_AX] = state_image->ax;
     state->registers[REG_CX] = state_image->cx;
@@ -2954,7 +2973,7 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->segments[2] = state_image->ss;
     state->segments[3] = state_image->ds;
     state->ip = state_image->ip;
-    state->flags = state_image->flags;
+    state->flags = native_psw_image(state_image->flags);
     state->halted = state_image->halted;
     state->interrupt_inhibit = state_image->interrupt_inhibit;
     state->boundary_inhibit = state_image->boundary_inhibit;

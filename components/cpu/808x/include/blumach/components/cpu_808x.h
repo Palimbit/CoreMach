@@ -82,7 +82,9 @@ bm_status_t bm_808x_create(const bm_host_services_t *host,
 /* Architectural state transfer is defined only at an instruction boundary.
  * It deliberately excludes bus pins, trace bookkeeping and host callbacks,
  * but includes the architecturally observable interrupt shadows and latched
- * NMI/single-step requests. */
+ * NMI/single-step requests. The current native-mode-only core canonicalizes
+ * the NEC PSW fixed bits and rejects an input image with MD clear rather than
+ * pretending to support 8080 emulation mode. */
 bm_status_t bm_808x_get_arch_state(const bm_cpu_t *cpu,
                                    bm_808x_arch_state_t *out_state);
 bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,

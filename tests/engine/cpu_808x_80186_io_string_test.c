@@ -76,7 +76,7 @@ execution_state(cpu_808x_test_machine_t *machine)
     state.ds = 0x1000U;
     state.es = 0x2000U;
     state.ip = 0U;
-    state.flags = 0xa002U;
+    state.flags = 0xf002U;
     return state;
 }
 
@@ -99,7 +99,7 @@ test_insb_ignores_segment_override(void)
     state = cpu_808x_test_get_state(&machine);
     assert(consumed == 1U && state.ip == sizeof(program));
     assert(state.di == 0x0011U && state.cx == 5U);
-    assert(state.flags == 0xa002U);
+    assert(state.flags == 0xf002U);
     assert(cpu_808x_test_peek(&machine, 0x20010U) == 0x5aU);
     assert(cpu_808x_test_peek(&machine, 0x10010U) == 0U);
     assert(io.event_count == 1U);
@@ -128,7 +128,7 @@ test_rep_insw_uses_fixed_wrapping_port(void)
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
     assert(state.di == 0x0024U && state.cx == 0U);
-    assert(state.flags == 0xa002U && io.event_count == 4U);
+    assert(state.flags == 0xf002U && io.event_count == 4U);
     assert(io.events[0].port == 0xffffU && io.events[1].port == 0U);
     assert(io.events[2].port == 0xffffU && io.events[3].port == 0U);
     assert(cpu_808x_test_peek(&machine, 0x20020U) == 0x11U);
@@ -209,7 +209,7 @@ test_rep_outsw_decrements_and_orders_bytes(void)
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
     assert(state.si == 0x00feU && state.cx == 0U);
-    assert(state.flags == (uint16_t) (0xa002U | FLAG_DF));
+    assert(state.flags == (uint16_t) (0xf002U | FLAG_DF));
     assert(io.event_count == 4U);
     assert(io.events[0].port == 0x0200U && io.events[0].value == 0xcdU);
     assert(io.events[1].port == 0x0201U && io.events[1].value == 0xabU);
