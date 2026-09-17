@@ -62,12 +62,15 @@ private:
     void queueSnapshot(uint64_t generation, SessionWorker::Snapshot snapshot);
     void drainSnapshots(uint64_t generation);
     void handleSnapshot(SessionWorker::Snapshot snapshot);
+    void updateStorageStatus(
+        const std::vector<bm_storage_device_status_t> &storage);
     void updateActions();
     void showStatus(const QString &detail = QString());
     static bm_key_code_t mapKey(int key);
 
     DisplayWidget *display_;
     QLabel *status_;
+    QLabel *storageStatus_;
     QToolBar *machineToolbar_;
     QAction *pauseAction_;
     QAction *resetAction_;
@@ -96,6 +99,15 @@ private:
     unsigned int presentedFrames_ = 0U;
     double presentationFps_ = 0.0;
     bool hasVideoGeometry_ = false;
+    struct StoragePresentation {
+        uint64_t reads = 0U;
+        uint64_t writes = 0U;
+        qint64 readPulseUntil = 0;
+        qint64 writePulseUntil = 0;
+        bool initialized = false;
+    };
+    QElapsedTimer activityTimer_;
+    std::vector<StoragePresentation> storagePresentation_;
 };
 
 #endif

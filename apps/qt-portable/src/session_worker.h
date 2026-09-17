@@ -13,6 +13,7 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 class SessionWorker final {
 public:
@@ -22,6 +23,7 @@ public:
         uint64_t ticks = 0U;
         bm_video_geometry_t geometry {};
         bool hasVideo = false;
+        std::vector<bm_storage_device_status_t> storage;
         QImage frame;
         bool lifecycleResult = false;
     };
@@ -56,9 +58,13 @@ private:
     bool processCommands(bm_session_t *session);
     bm_status_t renderFrame(bm_session_t *session, QImage &frame,
                             bm_video_geometry_t &geometry);
+    static bm_status_t collectStorage(
+        bm_session_t *session,
+        std::vector<bm_storage_device_status_t> &storage);
     void publish(bm_session_t *session, bm_status_t status,
                  QImage frame = QImage(), bool lifecycleResult = false,
-                 const bm_video_geometry_t *geometry = nullptr);
+                 const bm_video_geometry_t *geometry = nullptr,
+                 std::vector<bm_storage_device_status_t> storage = {});
 
     bm_host_services_t host_;
     const bm_machine_config_t *configuration_;

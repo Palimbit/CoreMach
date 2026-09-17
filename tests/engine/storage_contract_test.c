@@ -238,6 +238,7 @@ test_drive_access_and_state(void)
     test_media_t context;
     bm_floppy_drive_config_t config;
     bm_floppy_drive_t *drive = NULL;
+    bm_floppy_drive_state_t state;
     const bm_floppy_geometry_t *geometry;
     uint8_t bytes[TEST_BLOCK_SIZE];
 
@@ -272,6 +273,9 @@ test_drive_access_and_state(void)
 
     assert(bm_floppy_drive_read_sector(drive, 1U, 1U, 3U, bytes,
                                        sizeof(bytes)) == BM_STATUS_OK);
+    assert(bm_floppy_drive_state(drive, &state) == BM_STATUS_OK);
+    assert(state.installed && state.media_present && !state.write_protected);
+    assert(state.read_operations == 1U && state.write_operations == 0U);
     assert(context.last_block == 11U);
     assert(bytes[0] == 0x7eU);
     assert(bm_floppy_drive_read_sector(drive, 2U, 0U, 1U, bytes,
@@ -289,6 +293,8 @@ test_drive_access_and_state(void)
 
     assert(bm_floppy_drive_write_sector(drive, 0U, 1U, 1U, replacement,
                                         sizeof(replacement)) == BM_STATUS_OK);
+    assert(bm_floppy_drive_state(drive, &state) == BM_STATUS_OK);
+    assert(state.read_operations == 1U && state.write_operations == 1U);
     assert(context.last_block == 3U);
     assert(memcmp(&context.bytes[3U * TEST_BLOCK_SIZE], replacement,
                   sizeof(replacement)) == 0);
@@ -301,6 +307,12 @@ test_drive_access_and_state(void)
     assert(bm_floppy_drive_write_sector(drive, 0U, 0U, 1U, replacement,
                                         sizeof(replacement)) ==
            BM_STATUS_DEVICE_ERROR);
+    assert(bm_floppy_drive_state(drive, &state) == BM_STATUS_OK);
+    assert(state.read_operations == 1U && state.write_operations == 1U);
+
+    bm_floppy_drive_reset(drive);
+    assert(bm_floppy_drive_state(drive, &state) == BM_STATUS_OK);
+    assert(state.read_operations == 0U && state.write_operations == 0U);
 
     bm_floppy_drive_destroy(drive);
 }
@@ -361,6 +373,7 @@ main(void)
     assert(bm_floppy_drive_geometry(NULL) == NULL);
     assert(bm_floppy_drive_cylinder(NULL) == 0U);
     assert(bm_floppy_drive_seek(NULL, 0U) == BM_STATUS_INVALID_STATE);
+    assert(bm_floppy_drive_state(NULL, NULL) == BM_STATUS_INVALID_ARGUMENT);
     bm_floppy_drive_reset(NULL);
     bm_floppy_drive_clear_changed(NULL);
     bm_floppy_drive_destroy(NULL);

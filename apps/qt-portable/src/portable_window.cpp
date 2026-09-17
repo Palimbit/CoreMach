@@ -23,6 +23,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QStringList>
 #include <QStyle>
 #include <QToolBar>
 
@@ -39,6 +40,7 @@ PortableWindow::AssetStorage::~AssetStorage()
 
 PortableWindow::PortableWindow(QWidget *parent)
     : QMainWindow(parent), display_(new DisplayWidget), status_(new QLabel),
+      storageStatus_(new QLabel),
       machineToolbar_(addToolBar(tr("Machine"))),
       pauseAction_(new QAction(tr("Pause"), this)),
       resetAction_(new QAction(tr("Reset"), this)),
@@ -113,6 +115,8 @@ PortableWindow::PortableWindow(QWidget *parent)
     setWindowTitle(tr("BluMach Portable"));
     setCentralWidget(display_);
     statusBar()->addPermanentWidget(status_, 1);
+    storageStatus_->setTextFormat(Qt::RichText);
+    statusBar()->addPermanentWidget(storageStatus_);
     statusBarAction_->setChecked(true);
     connect(openAction, &QAction::triggered, this,
             [this] { chooseMachine(); });
@@ -269,6 +273,8 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
     presentedFrames_ = 0U;
     presentationFps_ = 0.0;
     frameRateTimer_.start();
+    activityTimer_.start();
+    storagePresentation_.clear();
     display_->setFocus();
     updateActions();
     showStatus();
@@ -291,6 +297,9 @@ PortableWindow::closeMachine()
     presentedFrames_ = 0U;
     presentationFps_ = 0.0;
     frameRateTimer_.invalidate();
+    activityTimer_.invalidate();
+    storagePresentation_.clear();
+    storageStatus_->clear();
     setWindowTitle(tr("BluMach Portable"));
     display_->setFrame(QImage());
     updateActions();
@@ -480,6 +489,7 @@ PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
             presentedFrames_ = 0U;
             frameRateTimer_.restart();
         }
+        updateStorageStatus(snapshot.storage);
     }
     if (snapshot.lifecycleResult)
         lifecyclePending_ = false;
@@ -492,6 +502,58 @@ PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
     }
     updateActions();
     showStatus();
+}
+
+void
+PortableWindow::updateStorageStatus(
+    const std::vector<bm_storage_device_status_t> &storage)
+{
+    constexpr qint64 pulseMilliseconds = 180;
+    const qint64 now = activityTimer_.isValid() ? activityTimer_.elapsed() : 0;
+    if (storagePresentation_.size() < storage.size())
+        storagePresentation_.resize(storage.size());
+    QStringList labels;
+    for (size_t index = 0U; index < storage.size(); ++index) {
+        const bm_storage_device_status_t &device = storage[index];
+        StoragePresentation &presentation = storagePresentation_[index];
+        if (!device.installed)
+            continue;
+        if (presentation.initialized) {
+            if (device.read_operations > presentation.reads)
+                presentation.readPulseUntil = now + pulseMilliseconds;
+            if (device.write_operations > presentation.writes)
+                presentation.writePulseUntil = now + pulseMilliseconds;
+        }
+        presentation.reads = device.read_operations;
+        presentation.writes = device.write_operations;
+        presentation.initialized = true;
+        const QString unit = device.kind == BM_STORAGE_DEVICE_FLOPPY ?
+            QString(QChar(static_cast<char16_t>(u'A' + device.unit))) :
+            QString::number(device.unit);
+        if (!device.media_present) {
+            labels.push_back(tr("%1: empty").arg(unit));
+            continue;
+        }
+        const QString readColor = now < presentation.readPulseUntil ?
+            QStringLiteral("#2eae4e") : QStringLiteral("#777777");
+        const QString writeColor = now < presentation.writePulseUntil ?
+            QStringLiteral("#e6a700") : QStringLiteral("#777777");
+        QString label = tr("%1: %2").arg(
+            unit, device.write_protected ? tr("RO") : tr("RW"));
+        if (device.motor_active)
+            label += tr(" · motor");
+        label += QStringLiteral(
+            " · <span style=\"color:%1\">● R</span> %2"
+            " · <span style=\"color:%3\">● W</span> %4")
+            .arg(readColor)
+            .arg(static_cast<qulonglong>(device.read_operations))
+            .arg(writeColor)
+            .arg(static_cast<qulonglong>(device.write_operations));
+        labels.push_back(label);
+    }
+    storageStatus_->setText(labels.join(QStringLiteral(" &nbsp; ")));
+    storageStatus_->setToolTip(
+        tr("Removable media state and completed read/write operations"));
 }
 
 void

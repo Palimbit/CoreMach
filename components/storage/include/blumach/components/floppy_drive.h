@@ -27,6 +27,16 @@ typedef struct bm_floppy_drive_config {
     bm_block_media_t media;
 } bm_floppy_drive_config_t;
 
+typedef struct bm_floppy_drive_state {
+    uint16_t cylinder;
+    int installed;
+    int media_present;
+    int write_protected;
+    int changed;
+    uint64_t read_operations;
+    uint64_t write_operations;
+} bm_floppy_drive_state_t;
+
 bm_status_t bm_floppy_drive_config_validate(
     const bm_floppy_drive_config_t *config);
 bm_status_t bm_floppy_drive_create(const bm_host_services_t *host,
@@ -42,6 +52,8 @@ void bm_floppy_drive_clear_changed(bm_floppy_drive_t *drive);
 const bm_floppy_geometry_t *bm_floppy_drive_geometry(const bm_floppy_drive_t *drive);
 bm_status_t bm_floppy_drive_seek(bm_floppy_drive_t *drive, uint16_t cylinder);
 uint16_t bm_floppy_drive_cylinder(const bm_floppy_drive_t *drive);
+bm_status_t bm_floppy_drive_state(const bm_floppy_drive_t *drive,
+                                  bm_floppy_drive_state_t *state);
 bm_status_t bm_floppy_drive_read_sector(bm_floppy_drive_t *drive,
                                         uint16_t cylinder,
                                         uint8_t head,
