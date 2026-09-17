@@ -77,10 +77,11 @@ implemented subset can execute a substantial original-BIOS path.
 
 The component also exposes a versioned architectural snapshot and a
 single-boundary step operation. These contracts contain registers, segments,
-IP, FLAGS and halt state, but deliberately exclude bus pins, trace bookkeeping
-and host callbacks. They allow external conformance tools to establish an
-arbitrary documented state without adding test-only globals or host services to
-the interpreter.
+IP, FLAGS, halt state and the maskable-interrupt inhibit that remains after
+`EI` or a segment-register transfer, but deliberately exclude bus pins, trace
+bookkeeping and host callbacks. They allow external conformance tools to
+establish an arbitrary documented state without adding test-only globals or
+host services to the interpreter.
 
 `tools/run_v20_conformance.py` can stream an explicitly supplied
 SingleStepTests/V20 corpus through the manual vector runner. The corpus remains
@@ -139,8 +140,19 @@ DF selects index increment or decrement, a zero repeat count performs no bus
 access, and word I/O uses ordered byte transfers at DX and wrapping DX+1. A bus
 failure preserves the progress of completed iterations but does not advance
 the failing iteration. This remains functional instruction-domain behavior:
-the current string executor does not yet expose V30 bus-cycle timing or an
-interruptible boundary between REP iterations.
+the current string executor does not yet expose V30 bus-cycle timing.
+
+The prefix/interrupt cut implements the interrupt-disable windows documented
+for the V30. A pending maskable interrupt is accepted only after the instruction
+following `EI`, `MOV` to or from a segment register, `POP` to a segment register,
+or the segment half of `LES`/`LDS`. Prefix bytes and their effective instruction
+remain one acceptance unit. Repeated memory and I/O operations can accept an
+interrupt only after a completed iteration; the saved return address points to
+the retained prefix sequence, `CX` and the indexes preserve completed progress,
+and `IRET` resumes the remaining iterations. The V30 retains at most three
+prefixes in that return address, which is covered synthetically. The engine
+currently exposes only the maskable interrupt input; NMI, single-step traps,
+prefetch state and physical cycle timing remain explicit later work.
 
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
@@ -322,8 +334,15 @@ successful no-ops.
 The next cut adds INSB/INSW/OUTSB/OUTSW, including REP count-zero behavior,
 DF-directed indexing, the fixed DX port, the mandatory ES input destination,
 source overrides for output and ordered word transfers. It uses only the same
-portable memory and I/O bus. Interrupt restart between REP iterations and V30
-bus-cycle accounting remain part of the later prefix/interrupt and timing cuts.
+portable memory and I/O bus.
+
+The following cut makes interrupt acceptance an explicit instruction-boundary
+contract. It preserves the V30 delay after `EI` and segment-register transfers,
+prevents an asserted interrupt from being stranded by the common `EI; HLT`
+sequence, and restarts interrupted REP memory or I/O operations at the retained
+prefix address with completed progress intact. This changes no host, Qt, file
+or firmware boundary. NMI, trap handling and V30 bus-cycle accounting remain
+separate future cuts.
 
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
 format-track, deleted-data distinction, flux/weak-sector formats and dynamic

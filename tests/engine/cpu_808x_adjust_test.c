@@ -92,6 +92,7 @@ test_arch_state_contract(void)
     state.ip = 0U;
     state.flags = 0x8fd7U;
     state.halted = 0U;
+    state.interrupt_inhibit = 1U;
     cpu_808x_test_set_state(&machine, &state);
     observed = cpu_808x_test_get_state(&machine);
     assert(observed.ax == state.ax && observed.cx == state.cx);
@@ -101,11 +102,13 @@ test_arch_state_contract(void)
     assert(observed.es == state.es && observed.cs == state.cs);
     assert(observed.ss == state.ss && observed.ds == state.ds);
     assert(observed.ip == state.ip && observed.flags == state.flags);
+    assert(observed.interrupt_inhibit == 1U);
 
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     assert(consumed == 1U);
     observed = cpu_808x_test_get_state(&machine);
     assert(observed.ip == 1U && observed.ax == state.ax);
+    assert(observed.interrupt_inhibit == 0U);
 
     invalid = state;
     invalid.size = 0U;
@@ -117,6 +120,10 @@ test_arch_state_contract(void)
            BM_STATUS_INVALID_ARGUMENT);
     invalid = state;
     invalid.halted = 2U;
+    assert(bm_808x_set_arch_state(&machine.cpu, &invalid) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    invalid = state;
+    invalid.interrupt_inhibit = 2U;
     assert(bm_808x_set_arch_state(&machine.cpu, &invalid) ==
            BM_STATUS_INVALID_ARGUMENT);
     assert(bm_808x_get_arch_state(NULL, &observed) ==
