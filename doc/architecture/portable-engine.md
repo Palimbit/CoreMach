@@ -512,11 +512,40 @@ frontend adapter, runtime or engine. Advanced GPU renderers, shaders and CRT
 effects remain later presentation layers and must consume the same immutable
 frame contract rather than depending on inherited emulator globals.
 
-The interactive worker limits each catch-up slice to five milliseconds at the
-current frontend rate and coalesces consecutive ordinary frames before they
-cross to the Qt event loop. Lifecycle results and errors remain ordered and
-cannot be discarded. This bounds the worker-side keyboard delay and prevents a
-busy UI from presenting an accumulated queue of obsolete images.
+The interactive worker derives a five-millisecond catch-up slice from the
+machine definition's scheduler rate and coalesces consecutive ordinary frames
+before they cross to the Qt event loop. Lifecycle results and errors remain
+ordered and cannot be discarded. This bounds the worker-side keyboard delay
+and prevents a busy UI from presenting an accumulated queue of obsolete
+images. The scheduler rate is the portable machine contract; the frontend must
+not infer it from a CPU crystal or another device clock.
+
+Qt key events are translated to the engine's stable physical-key identifiers
+before they enter the session. On Windows the adapter consumes Qt's native
+physical scan code, matching the established frontend's layout-independent
+behavior, including the ISO `0x56` key and extended modifiers/navigation keys.
+Other platforms use the declared Qt key until their physical adapters are
+defined. Shifted punctuation remains a fallback when a physical code is not
+available. Auto-repeat release events are discarded, as they are Qt artifacts;
+repeat presses and the final release retain the guest keyboard's make-stream
+semantics. No Qt value, host scan code or keyboard-layout object crosses into
+the runtime.
+
+The PCS 86 port `60h` is a data latch as well as the IRQ1 queue front. Reading
+it acknowledges the current request and advances a queued byte, but an empty
+queue continues to expose the last latched byte until another scan byte arrives
+or the machine resets. This matters for software that reads the byte in a
+hooked IRQ1 handler and then chains the previous handler; both readers observe
+the same hardware datum without manufacturing a second input event.
+
+Each accepted make or break transition is followed by two milliseconds of
+emulated execution derived from that same declared scheduler rate. This
+deterministic separation prevents a burst from the Qt event loop from
+depositing an entire key sequence at one emulated instant. The worker charges
+those ticks to its wall-clock pacer, so input processing cannot make the guest
+run ahead. Headless and other frontends remain free to schedule the same engine
+events with their own explicit emulated-time separation; there is no private
+Qt timer or machine-specific keyboard exception in the engine.
 
 Video geometry also carries an optional exact refresh rational. PVGA1A derives
 it from the programmed CRTC totals and a selected documented clock; board-defined

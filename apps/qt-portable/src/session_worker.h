@@ -15,6 +15,8 @@
 #include <thread>
 #include <vector>
 
+class TickPacer;
+
 class SessionWorker final {
 public:
     struct Snapshot {
@@ -55,7 +57,7 @@ private:
 
     void enqueue(Command command);
     void run();
-    bool processCommands(bm_session_t *session);
+    bool processCommands(bm_session_t *session, TickPacer &pacer);
     bm_status_t renderFrame(bm_session_t *session, QImage &frame,
                             bm_video_geometry_t &geometry);
     static bm_status_t collectStorage(

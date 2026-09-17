@@ -13,6 +13,8 @@ add_executable(blumach_portable_qt WIN32
     src/main.cpp
     src/portable_window.cpp
     src/portable_window.h
+    src/qt_key_map.cpp
+    src/qt_key_map.h
     src/portable_catalog.cpp
     src/portable_catalog.h
     src/session_worker.cpp
@@ -97,6 +99,32 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME portable-qt.tick-pacer
         COMMAND blumach_portable_pacer_test
+    )
+
+    add_executable(blumach_portable_qt_key_map_test
+        src/qt_key_map.cpp
+        tests/qt_key_map_test.cpp
+    )
+    target_include_directories(blumach_portable_qt_key_map_test PRIVATE src)
+    target_link_libraries(blumach_portable_qt_key_map_test PRIVATE
+        blumach_engine
+        Qt6::Core
+    )
+    target_compile_features(blumach_portable_qt_key_map_test PRIVATE cxx_std_17)
+    set_target_properties(blumach_portable_qt_key_map_test PROPERTIES
+        CXX_EXTENSIONS OFF
+    )
+    if(MSVC)
+        target_compile_options(blumach_portable_qt_key_map_test PRIVATE
+            /W4 /WX /UNDEBUG
+        )
+    else()
+        target_compile_options(blumach_portable_qt_key_map_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+        )
+    endif()
+    add_test(NAME portable-qt.key-map
+        COMMAND blumach_portable_qt_key_map_test
     )
 
     add_executable(blumach_portable_snapshot_mailbox_test

@@ -58,6 +58,7 @@ typedef struct bm_pcs86_machine {
     uint8_t scan_queue[64];
     uint8_t scan_queue_start;
     uint8_t scan_queue_end;
+    uint8_t keyboard_data_latch;
     uint8_t jumpers;
     uint8_t nmi_mask;
     uint8_t diagnostic_port;
@@ -387,6 +388,7 @@ pcs86_key_to_set1(bm_key_code_t key, uint8_t *scan, int *extended)
         case BM_KEY_F9: *scan = 0x43U; break;
         case BM_KEY_F10: *scan = 0x44U; break;
         case BM_KEY_SCROLL_LOCK: *scan = 0x46U; break;
+        case BM_KEY_NON_US_BACKSLASH: *scan = 0x56U; break;
         case BM_KEY_HOME: *scan = 0x47U; *extended = 1; break;
         case BM_KEY_UP: *scan = 0x48U; *extended = 1; break;
         case BM_KEY_PAGE_UP: *scan = 0x49U; *extended = 1; break;
@@ -577,10 +579,11 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
     if (transaction->operation == BM_BUS_READ) {
         switch (port) {
             case 0x0060:
-                value = 0;
+                value = machine->keyboard_data_latch;
                 (void) bm_pic8259_set_irq(machine->pic, 1, 0);
                 if (machine->scan_queue_start != machine->scan_queue_end) {
                     value = machine->scan_queue[machine->scan_queue_start];
+                    machine->keyboard_data_latch = value;
                     machine->scan_queue_start =
                         (uint8_t) ((machine->scan_queue_start + 1U) & 0x3fU);
                     if (machine->scan_queue_start != machine->scan_queue_end)
@@ -1159,6 +1162,7 @@ pcs86_reset(void *context)
     memset(machine->scan_queue, 0, sizeof(machine->scan_queue));
     machine->scan_queue_start = 0U;
     machine->scan_queue_end = 0U;
+    machine->keyboard_data_latch = 0U;
     machine->ps2[0] = 0x04U;
     machine->nmi_mask = 0U;
     machine->diagnostic_port = 0U;

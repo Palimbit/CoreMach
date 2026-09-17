@@ -18,6 +18,11 @@ main()
     assert(pacer.ticksDue(start + 20ms) == 100000U);
 
     pacer.reset(start);
+    pacer.account(20000U);
+    assert(pacer.ticksDue(start + 3ms) == 10000U);
+    assert(pacer.ticksDue(start + 3ms) == 0U);
+
+    pacer.reset(start);
     assert(pacer.ticksDue(start + 100ms) == 250000U);
     assert(pacer.ticksDue(start + 100ms) == 0U);
     assert(pacer.ticksDue(start + 101ms) == 10000U);
@@ -25,5 +30,10 @@ main()
     pacer.reset(start + 1s);
     assert(pacer.ticksDue(start + 500ms) == 0U);
     assert(pacer.ticksDue(start + 1010ms) == 100000U);
+
+    TickPacer pcs86Pacer(UINT64_C(2000000), UINT64_C(10000));
+    pcs86Pacer.reset(start);
+    assert(pcs86Pacer.ticksDue(start + 5ms) == 10000U);
+    assert(pcs86Pacer.ticksDue(start + 10ms) == 10000U);
     return 0;
 }

@@ -52,6 +52,7 @@ typedef enum bm_key_code {
     BM_KEY_LEFT,
     BM_KEY_DOWN,
     BM_KEY_UP,
+    BM_KEY_NON_US_BACKSLASH = 0x64,
     BM_KEY_LEFT_CONTROL = 0xe0,
     BM_KEY_LEFT_SHIFT,
     BM_KEY_LEFT_ALT,

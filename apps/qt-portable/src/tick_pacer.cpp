@@ -20,6 +20,13 @@ TickPacer::reset(Clock::time_point now)
     emitted_ = 0U;
 }
 
+void
+TickPacer::account(uint64_t ticks)
+{
+    emitted_ = ticks > std::numeric_limits<uint64_t>::max() - emitted_ ?
+        std::numeric_limits<uint64_t>::max() : emitted_ + ticks;
+}
+
 uint64_t
 TickPacer::targetTicks(std::chrono::nanoseconds elapsed) const
 {

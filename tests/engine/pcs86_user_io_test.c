@@ -123,7 +123,8 @@ test_keyboard_scan_stream(const bm_host_services_t *host)
     static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
     static const uint8_t program[] = {
         0xba, 0x60, 0x00, /* MOV DX,0060h. */
-        0xec, 0xec, 0xec, 0xec, 0xec, 0xec, /* Read six scan bytes. */
+        0xec, 0xec, 0xec, 0xec, 0xec, 0xec, 0xec, 0xec,
+        /* Read seven queued scan bytes and the retained data latch. */
         0xf4
     };
     static const bm_input_event_t events[] = {
@@ -131,10 +132,11 @@ test_keyboard_scan_stream(const bm_host_services_t *host)
         { BM_INPUT_KEY, BM_KEY_P, 1, 0 },
         { BM_INPUT_KEY, BM_KEY_P, 0, 0 },
         { BM_INPUT_KEY, BM_KEY_LEFT_SHIFT, 0, 0 },
-        { BM_INPUT_KEY, BM_KEY_RIGHT_CONTROL, 1, 0 }
+        { BM_INPUT_KEY, BM_KEY_RIGHT_CONTROL, 1, 0 },
+        { BM_INPUT_KEY, BM_KEY_NON_US_BACKSLASH, 1, 0 }
     };
     static const uint8_t expected[] = {
-        0x2aU, 0x19U, 0x99U, 0xaaU, 0xe0U, 0x1dU
+        0x2aU, 0x19U, 0x99U, 0xaaU, 0xe0U, 0x1dU, 0x56U, 0x56U
     };
     const bm_input_event_t unsupported = {
         BM_INPUT_KEY, BM_KEY_PRINT_SCREEN, 1, 0
@@ -164,7 +166,7 @@ test_keyboard_scan_stream(const bm_host_services_t *host)
     for (index = 0U; index < sizeof(events) / sizeof(events[0]); ++index)
         assert(bm_session_send_input(session, &events[index]) == BM_STATUS_OK);
     assert(inspect_machine(session, "keyboard_queue_depth") ==
-           sizeof(expected) / sizeof(expected[0]));
+           sizeof(expected) / sizeof(expected[0]) - 1U);
     assert(bm_session_run_for(session, 16U) == BM_STATUS_OK);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(io_trace.count == sizeof(expected) / sizeof(expected[0]));
