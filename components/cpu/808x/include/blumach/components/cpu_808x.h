@@ -60,6 +60,41 @@ typedef bm_status_t (*bm_808x_fpo_fn)(
  * write exactly zero or one. The callback may return a device status. */
 typedef bm_status_t (*bm_808x_poll_fn)(void *context, int *ready);
 
+typedef enum bm_808x_boundary_kind {
+    BM_808X_BOUNDARY_INSTRUCTION = 0,
+    BM_808X_BOUNDARY_INTERRUPT = 1
+} bm_808x_boundary_kind_t;
+
+#define BM_808X_TIMING_OBSERVATION_VERSION 1U
+#define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
+
+/* Host-neutral timing observation for one completed architectural boundary.
+ * execution_clocks are NEC execution-unit clocks and deliberately exclude
+ * prefetch, pre-decode and bus waits. A zero execution_clocks_known value is
+ * an explicit unimplemented timing classification, never a zero-cycle claim.
+ * logical_bus_transactions describe the current portable bus API and are not
+ * yet a claim about physical V30 bus cycles. */
+typedef struct bm_808x_timing_observation {
+    uint32_t size;
+    uint32_t version;
+    bm_808x_boundary_kind_t kind;
+    uint8_t opcode;
+    uint8_t effective_opcode;
+    uint8_t prefix_count;
+    uint8_t execution_clocks_known;
+    uint8_t prefetch_queue_flushed;
+    uint8_t prefetch_pointer_known;
+    uint8_t prefetch_queue_capacity;
+    uint8_t reserved;
+    uint16_t prefetch_pointer;
+    uint32_t execution_clocks;
+    uint64_t logical_bus_transactions;
+    uint64_t reported_wait_states;
+} bm_808x_timing_observation_t;
+
+typedef void (*bm_808x_timing_fn)(
+    void *context, const bm_808x_timing_observation_t *observation);
+
 typedef struct bm_808x_config {
     bm_808x_model_t model;
     uint32_t frequency_hz;
@@ -75,6 +110,10 @@ typedef struct bm_808x_config {
     bm_808x_fpo_fn fpo;
     bm_808x_poll_fn poll;
     void *coprocessor_context;
+    /* Optional observer. It cannot affect execution and is called only after
+     * a successfully completed instruction or accepted interrupt boundary. */
+    bm_808x_timing_fn timing;
+    void *timing_context;
 } bm_808x_config_t;
 
 #define BM_808X_ARCH_STATE_VERSION 4U

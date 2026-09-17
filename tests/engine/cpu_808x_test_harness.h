@@ -20,6 +20,8 @@ typedef struct cpu_808x_test_config {
     bm_808x_fpo_fn fpo;
     bm_808x_poll_fn poll;
     void *coprocessor_context;
+    bm_808x_timing_fn timing;
+    void *timing_context;
 } cpu_808x_test_config_t;
 
 typedef struct cpu_808x_test_machine {
