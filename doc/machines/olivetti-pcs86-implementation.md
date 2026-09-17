@@ -57,7 +57,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, versioned architectural snapshot/restore including distinct interrupt shadows and latched NMI/single-step requests, and one-boundary step; segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, hardware-vector-validated primary ALU forms, NEC 82h alias, DAA/DAS/AAA/AAS, AAM/AAD, signed/unsigned multiply and divide, PUSHA/POPA, immediate PUSH/IMUL, CWD, INT3/INTO, shift paths, direct/indirect near calls, near/far returns with cleanup, software interrupts and NMI-over-INT-over-BRK priority, documented EI/segment-transfer delay, HALT wake-up, IRET, stack, SAHF/LAHF and flag control, byte/word memory and I/O strings with REP/REPE/REPNE/REPC/REPNC plus interruptible restart and BUSLOCK deferral; no complete ISA, full MD/PSW write rules, prefetch model or cycle timing |
+| NEC V30 | Functional instruction-boundary core derived from the inherited interpreter | Complete documented native and 8080 opcode-map classification, snapshot v4 with MD write gate, segmented 20-bit addresses, ModR/M, native and emulated stacks, hardware-vector-validated primary ALU forms, 80186-compatible and NEC extensions, FPO/POLL CPU contract, BRKEM/CALLN/RETEM, interrupt and NMI round trips, prefix shadows, interruptible REP and BUSLOCK transaction attributes; no prefetch model, per-instruction cycles, physical bus timing or embedded floating-point execution |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; rational PIT/RTC clock accumulators use a measured functional instruction rate, not V30 cycle accounting |
@@ -106,9 +106,10 @@ neither owns a cursor timer. Blink-rate source: [IBM Personal System/2 Hardware
 Interface Technical Reference, Video Subsystems, September
 1992](https://ardent-tool.com/docs/pdf/42G2193_PS2_Hardware_Interface_Technical_Reference_Video_Subsystems_Sep92.pdf).
 
-Unsupported opcodes return a structured `BM_STATUS_UNSUPPORTED` result. They
-are not skipped, approximated as NOPs or redirected to the inherited engine.
-This makes the incomplete boundary visible to tests and debuggers.
+Undefined, reserved, model-inapplicable or externally unavailable instruction
+forms return a structured `BM_STATUS_UNSUPPORTED` result. They are not skipped,
+approximated as NOPs or redirected to the inherited engine. This keeps each
+unsupported boundary visible to tests and debuggers.
 
 ## Validation ladder
 
@@ -254,7 +255,8 @@ focused sign-extension, string-comparison, decode-trace, far-control-flow,
 exchange, negate, `XLAT`, carry-arithmetic and byte-division tests,
 architectural-state, AAM/AAD, base-ISA completion and signed-multiply/divide
 tests, the 80186-compatible stack/immediate and control-instruction tests, the
-80186-compatible I/O-string test, the external-vector adapter,
+80186-compatible I/O-string test, the native and 8080 opcode-map matrices, the
+external-vector adapter,
 `fdc765_test.c`, `pvga1a_test.c`,
 `legacy_io_test.c`, `pcs86_reset_test.c` and `pcs86_user_io_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never
