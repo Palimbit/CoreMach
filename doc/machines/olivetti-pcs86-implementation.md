@@ -181,6 +181,15 @@ machine-independent contracts. The pinned physical V20 corpus has no vectors
 for these six opcodes, so this cut relies on NEC's manufacturer manuals and
 does not increase the hardware-vector total.
 
+The third 80186-compatible cut adds NEC INM/OUTM through
+INSB/INSW/OUTSB/OUTSW. Synthetic bus tests fix ES:DI as the input destination,
+permit source overrides only for output, keep DX fixed under REP, cover both DF
+directions, zero CX, byte order and port wrapping for word transfers, and
+preserve completed progress on a later bus failure. It remains independent of
+the PCS 86 firmware and devices. REP is still executed inside one portable
+instruction step, so interruptible restart between iterations and physical
+V30 bus timing remain explicit later work.
+
 BIOS 1.09 writes `40h` to I/O port `70h` at `F000:0B29` while configuring the
 upper conventional-memory path, between accesses to board ports `6Ch`, `6Bh`
 and `6Fh`. No verified bit definition is currently recorded. The engine stores
@@ -234,7 +243,7 @@ focused sign-extension, string-comparison, decode-trace, far-control-flow,
 exchange, negate, `XLAT`, carry-arithmetic and byte-division tests,
 architectural-state, AAM/AAD, base-ISA completion and signed-multiply/divide
 tests, the 80186-compatible stack/immediate and control-instruction tests, the
-external-vector adapter,
+80186-compatible I/O-string test, the external-vector adapter,
 `fdc765_test.c`, `pvga1a_test.c`,
 `legacy_io_test.c`, `pcs86_reset_test.c` and `pcs86_user_io_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never

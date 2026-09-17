@@ -907,6 +907,60 @@ io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
 }
 
 static bm_status_t
+execute_io_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
+                  int segment_override)
+{
+    unsigned int width = (opcode & 1U) != 0U ? 2U : 1U;
+    unsigned int source_segment = (segment_override >= 0) ?
+                                  (unsigned int) segment_override : 3U;
+
+    while ((repeat_mode == 0) || (state->registers[REG_CX] != 0U)) {
+        bm_status_t status;
+        uint16_t value = 0U;
+
+        if ((opcode == 0x6cU) || (opcode == 0x6dU)) { /* INSB/INSW. */
+            if (width == 1U) {
+                uint8_t byte = 0U;
+                status = io_read_byte(state, state->registers[REG_DX], &byte);
+                if (status == BM_STATUS_OK)
+                    status = write_byte(state, state->segments[0],
+                                        state->registers[REG_DI], byte);
+            } else {
+                status = io_read_word(state, state->registers[REG_DX], &value);
+                if (status == BM_STATUS_OK)
+                    status = write_word(state, state->segments[0],
+                                        state->registers[REG_DI], value);
+            }
+        } else { /* OUTSB/OUTSW. */
+            if (width == 1U) {
+                uint8_t byte = 0U;
+                status = read_byte(state, state->segments[source_segment],
+                                   state->registers[REG_SI], BM_BUS_READ, &byte);
+                if (status == BM_STATUS_OK)
+                    status = io_write_byte(state, state->registers[REG_DX], byte);
+            } else {
+                status = read_word(state, state->segments[source_segment],
+                                   state->registers[REG_SI], &value);
+                if (status == BM_STATUS_OK)
+                    status = io_write_word(state, state->registers[REG_DX], value);
+            }
+        }
+        if (status != BM_STATUS_OK)
+            return status;
+        if ((opcode == 0x6cU) || (opcode == 0x6dU))
+            state->registers[REG_DI] = (uint16_t) (state->registers[REG_DI] +
+                (((state->flags & FLAG_DF) != 0U) ? -(int) width : (int) width));
+        else
+            state->registers[REG_SI] = (uint16_t) (state->registers[REG_SI] +
+                (((state->flags & FLAG_DF) != 0U) ? -(int) width : (int) width));
+        if (repeat_mode == 0)
+            break;
+        state->registers[REG_CX] = (uint16_t) (state->registers[REG_CX] - 1U);
+    }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
 cpu_reset(void *context)
 {
     bm_808x_state_t *state = context;
@@ -1161,6 +1215,11 @@ execute_one(bm_808x_state_t *state)
                 state->flags |= FLAG_CF | FLAG_OF;
             return BM_STATUS_OK;
         }
+        case 0x6c: /* INSB. */
+        case 0x6d: /* INSW. */
+        case 0x6e: /* OUTSB. */
+        case 0x6f: /* OUTSW. */
+            return execute_io_string(state, opcode, repeat, segment_override);
         case 0x0f: { /* NEC V30 bit operations. */
             uint8_t extension;
             uint8_t modrm;
