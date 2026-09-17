@@ -53,6 +53,8 @@ private:
     void togglePause();
     void resetMachine();
     void stopMachine();
+    void insertFloppy();
+    void ejectFloppy();
     void toggleFullscreen(bool enabled);
     void copyFrame();
     void saveFrame();
@@ -73,6 +75,8 @@ private:
     QAction *pauseAction_;
     QAction *resetAction_;
     QAction *stopAction_;
+    QAction *insertFloppyAction_;
+    QAction *ejectFloppyAction_;
     QAction *fullScreenAction_;
     QAction *smoothScalingAction_;
     QAction *statusBarAction_;
@@ -87,6 +91,7 @@ private:
     SnapshotMailbox snapshotMailbox_;
     std::vector<std::unique_ptr<AssetStorage>> assets_;
     std::vector<bm_frontend_asset_binding_t> bindings_;
+    const bm_frontend_asset_requirement_t *replaceableFloppy_ = nullptr;
     bm_status_t lastError_ = BM_STATUS_OK;
     uint64_t workerGeneration_ = 0U;
     bool lifecyclePending_ = false;
@@ -97,6 +102,7 @@ private:
     unsigned int presentedFrames_ = 0U;
     double presentationFps_ = 0.0;
     bool hasVideoGeometry_ = false;
+    bool replaceableFloppyPresent_ = false;
     struct StoragePresentation {
         uint64_t reads = 0U;
         uint64_t writes = 0U;

@@ -56,6 +56,9 @@ typedef bm_status_t (*bm_machine_video_render_fn)(const void *machine,
 typedef size_t (*bm_machine_storage_count_fn)(const void *machine);
 typedef bm_status_t (*bm_machine_storage_status_fn)(
     const void *machine, size_t index, bm_storage_device_status_t *status);
+typedef bm_status_t (*bm_machine_storage_media_fn)(
+    void *machine, bm_storage_device_kind_t kind, uint32_t unit,
+    const bm_storage_media_change_t *change);
 
 typedef struct bm_machine_ops {
     bm_machine_validate_fn validate;
@@ -68,6 +71,7 @@ typedef struct bm_machine_ops {
     bm_machine_input_fn input;
     bm_machine_storage_count_fn storage_count;
     bm_machine_storage_status_fn storage_status;
+    bm_machine_storage_media_fn storage_media;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_definition {
@@ -135,6 +139,9 @@ bm_status_t bm_session_storage_device_count(const bm_session_t *session,
 bm_status_t bm_session_storage_device_status(
     const bm_session_t *session, size_t index,
     bm_storage_device_status_t *status);
+bm_status_t bm_session_replace_storage_media(
+    bm_session_t *session, bm_storage_device_kind_t kind, uint32_t unit,
+    const bm_storage_media_change_t *change);
 
 #ifdef __cplusplus
 }

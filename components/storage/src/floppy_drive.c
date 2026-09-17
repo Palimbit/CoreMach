@@ -139,6 +139,45 @@ bm_floppy_drive_clear_changed(bm_floppy_drive_t *drive)
         drive->changed = 0;
 }
 
+bm_status_t
+bm_floppy_drive_replace_media(bm_floppy_drive_t *drive,
+                              const bm_floppy_geometry_t *geometry,
+                              const bm_block_media_t *media,
+                              int write_protected)
+{
+    bm_floppy_drive_config_t replacement;
+    bm_status_t status;
+
+    if ((drive == NULL) || !drive->installed)
+        return BM_STATUS_INVALID_STATE;
+    if ((geometry == NULL) != (media == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (media == NULL) {
+        memset(&drive->media, 0, sizeof(drive->media));
+        drive->media_present = 0;
+        drive->write_protected = 0;
+        drive->changed = 1;
+        return BM_STATUS_OK;
+    }
+    memset(&replacement, 0, sizeof(replacement));
+    replacement.installed = 1;
+    replacement.media_present = 1;
+    replacement.write_protected = !!write_protected;
+    replacement.geometry = *geometry;
+    replacement.media = *media;
+    status = bm_floppy_drive_config_validate(&replacement);
+    if (status != BM_STATUS_OK)
+        return status;
+    drive->geometry = *geometry;
+    drive->media = *media;
+    drive->media_present = 1;
+    drive->write_protected = !!write_protected || media->read_only;
+    drive->changed = 1;
+    if (drive->cylinder >= geometry->cylinders)
+        drive->cylinder = (uint16_t) (geometry->cylinders - 1U);
+    return BM_STATUS_OK;
+}
+
 const bm_floppy_geometry_t *
 bm_floppy_drive_geometry(const bm_floppy_drive_t *drive)
 {
