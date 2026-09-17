@@ -165,8 +165,17 @@ while segment-register transfers also defer NMI and single-step recognition
 through the following instruction. Non-locked repeated blocks may accept NMI
 after a completed iteration and restart at their retained prefixes; BUSLOCK
 keeps the edge latched until the complete repeated block ends. Prefetch state,
-physical cycle timing and full MD/PSW write semantics remain explicit later
-work.
+physical cycle timing and 8080 emulation mode remain explicit later work.
+
+The native-PSW cut canonicalizes the V30 status-word image at every public
+state boundary: MD is one, bits 14-12 and 1 read as one, and reserved bits 5
+and 3 read as zero. `PUSHF` and interrupt entry save that same image. Because
+reset disables writes to MD, `POPF` and `IRET` restore the arithmetic, control
+and BRK flags but preserve native mode. An architectural snapshot requesting
+MD zero and the `BRKEM` instruction both return `BM_STATUS_UNSUPPORTED` rather
+than pretending that the unimplemented 8080 execution mode exists. Synthetic
+tests cover reset, state transfer, stack images, interrupt entry and both
+mode-change rejection paths without firmware or host dependencies.
 
 The prefix-control cut adds the V30-native `REPC` (`65h`) and `REPNC` (`64h`)
 conditions for `CMPS`/`SCAS`: the completed comparison controls continuation

@@ -93,7 +93,7 @@ execution_state(cpu_808x_test_machine_t *machine, uint16_t flags)
     state.ip = 0U;
     state.ss = 0U;
     state.sp = 0x0800U;
-    state.flags = (uint16_t) (0xa002U | flags);
+    state.flags = (uint16_t) (0xf002U | flags);
     state.halted = 0U;
     state.interrupt_inhibit = 0U;
     state.boundary_inhibit = 0U;

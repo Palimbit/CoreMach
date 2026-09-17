@@ -50,13 +50,13 @@ test_bound_signed_and_next_ip(void)
     write_word(&machine, 0x00102U, 0x0003U);
     set_execution_state(&machine, &state);
     state.ax = 0xfffeU; /* -2 */
-    state.flags = 0xa5d7U;
+    state.flags = 0xf5d7U;
     state.sp = 0x0100U;
     cpu_808x_test_set_state(&machine, &state);
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
     assert(consumed == 1U && state.ip == 4U && state.sp == 0x0100U);
-    assert(state.flags == 0xa5d7U);
+    assert(state.flags == 0xf5d7U);
     cpu_808x_test_machine_destroy(&machine);
 
     cpu_808x_test_machine_create(&machine, NULL, bound, sizeof(bound));
@@ -66,7 +66,7 @@ test_bound_signed_and_next_ip(void)
     write_word(&machine, 0x00016U, 0x5678U); /* BRK 5 PS */
     set_execution_state(&machine, &state);
     state.ax = 4U;
-    state.flags = 0x0f47U;
+    state.flags = 0xff47U;
     state.sp = 0x0100U;
     cpu_808x_test_set_state(&machine, &state);
     consumed = 0U;
@@ -127,7 +127,7 @@ test_immediate_shifts_use_full_count(void)
     cpu_808x_test_machine_create(&machine, NULL, shift_32, sizeof(shift_32));
     set_execution_state(&machine, &state);
     state.ax = 0xab81U;
-    state.flags = FLAG_CF | FLAG_OF;
+    state.flags = 0xf002U | FLAG_CF | FLAG_OF;
     cpu_808x_test_set_state(&machine, &state);
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
@@ -140,12 +140,12 @@ test_immediate_shifts_use_full_count(void)
                                   sizeof(shift_zero));
     set_execution_state(&machine, &state);
     state.ax = 0x1234U;
-    state.flags = 0xa5d7U;
+    state.flags = 0xf5d7U;
     cpu_808x_test_set_state(&machine, &state);
     consumed = 0U;
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
-    assert(state.ax == 0x1234U && state.flags == 0xa5d7U);
+    assert(state.ax == 0x1234U && state.flags == 0xf5d7U);
     cpu_808x_test_machine_destroy(&machine);
 
     cpu_808x_test_machine_create(&machine, NULL, shift_memory,
@@ -163,7 +163,7 @@ test_immediate_shifts_use_full_count(void)
                                   sizeof(rotate_one));
     set_execution_state(&machine, &state);
     state.ax = 0x5503U;
-    state.flags = 0U;
+    state.flags = 0xf002U;
     cpu_808x_test_set_state(&machine, &state);
     consumed = 0U;
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
@@ -208,7 +208,7 @@ test_all_documented_immediate_shift_groups(void)
                                       sizeof(byte_program));
         set_execution_state(&machine, &state);
         state.ax = 0xab95U;
-        state.flags = FLAG_CF;
+        state.flags = 0xf002U | FLAG_CF;
         cpu_808x_test_set_state(&machine, &state);
         assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
         state = cpu_808x_test_get_state(&machine);
@@ -220,7 +220,7 @@ test_all_documented_immediate_shift_groups(void)
                                       sizeof(word_program));
         set_execution_state(&machine, &state);
         state.ax = 0x8123U;
-        state.flags = FLAG_CF;
+        state.flags = 0xf002U | FLAG_CF;
         cpu_808x_test_set_state(&machine, &state);
         consumed = 0U;
         assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
@@ -249,12 +249,12 @@ test_prepare_and_dispose(void)
     set_execution_state(&machine, &state);
     state.sp = 0x0100U;
     state.bp = 0x0200U;
-    state.flags = 0xa5d7U;
+    state.flags = 0xf5d7U;
     cpu_808x_test_set_state(&machine, &state);
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
     assert(state.bp == 0x00feU && state.sp == 0x00f2U);
-    assert(state.flags == 0xa5d7U);
+    assert(state.flags == 0xf5d7U);
     assert(cpu_808x_test_peek(&machine, 0x200f8U) == 0xfeU);
     assert(cpu_808x_test_peek(&machine, 0x200faU) == 0x22U);
     assert(cpu_808x_test_peek(&machine, 0x200fcU) == 0x11U);
@@ -279,13 +279,13 @@ test_prepare_and_dispose(void)
     set_execution_state(&machine, &state);
     state.sp = 0x0080U;
     state.bp = 0x0100U;
-    state.flags = 0xa5d7U;
+    state.flags = 0xf5d7U;
     cpu_808x_test_set_state(&machine, &state);
     consumed = 0U;
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
     assert(state.sp == 0x0102U && state.bp == 0x1234U);
-    assert(state.flags == 0xa5d7U);
+    assert(state.flags == 0xf5d7U);
     cpu_808x_test_machine_destroy(&machine);
 }
 

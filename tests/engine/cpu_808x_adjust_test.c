@@ -90,7 +90,7 @@ test_arch_state_contract(void)
     state.ss = 0x2000U;
     state.ds = 0x3000U;
     state.ip = 0U;
-    state.flags = 0x8fd7U;
+    state.flags = 0xffd7U;
     state.halted = 0U;
     state.interrupt_inhibit = 1U;
     state.boundary_inhibit = 1U;
