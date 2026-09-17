@@ -704,6 +704,303 @@ compare8(bm_808x_state_t *state, uint8_t left, uint8_t right)
         state->flags |= FLAG_OF;
 }
 
+static bm_status_t
+execute_nec_bit_operation(bm_808x_state_t *state, uint8_t extension,
+                          int segment_override)
+{
+    uint8_t modrm;
+    uint8_t bit;
+    uint16_t value = 0U;
+    uint16_t mask;
+    unsigned int operation = (extension >> 1U) & 3U;
+    unsigned int width = (extension & 1U) != 0U ? 16U : 8U;
+    bm_808x_operand_t operand;
+    bm_status_t status = fetch_byte(state, &modrm);
+
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((modrm & 0x38U) != 0U)
+        return BM_STATUS_UNSUPPORTED;
+    status = decode_rm_operand(state, modrm, segment_override, &operand);
+    if ((status == BM_STATUS_OK) && ((extension & 8U) != 0U))
+        status = fetch_byte(state, &bit);
+    else
+        bit = get_register_byte(state, 1U);
+    if (status == BM_STATUS_OK) {
+        if (width == 8U) {
+            uint8_t byte = 0U;
+            status = read_operand_byte(state, &operand, &byte);
+            value = byte;
+        } else {
+            status = read_operand_word(state, &operand, &value);
+        }
+    }
+    if (status != BM_STATUS_OK)
+        return status;
+    bit &= (uint8_t) (width - 1U);
+    mask = (uint16_t) (1U << bit);
+    if (operation == 0U) { /* TEST1 resets CY/V and defines only Z. */
+        state->flags &= (uint16_t) ~(FLAG_CF | FLAG_OF | FLAG_ZF);
+        if ((value & mask) == 0U)
+            state->flags |= FLAG_ZF;
+        return BM_STATUS_OK;
+    }
+    if (operation == 1U) /* CLR1 */
+        value &= (uint16_t) ~mask;
+    else if (operation == 2U) /* SET1 */
+        value |= mask;
+    else /* NOT1 */
+        value ^= mask;
+    if (width == 8U)
+        return write_operand_byte(state, &operand, (uint8_t) value);
+    return write_operand_word(state, &operand, value);
+}
+
+static bm_status_t
+execute_nec_bcd_string(bm_808x_state_t *state, uint8_t extension,
+                       int segment_override)
+{
+    unsigned int digits = get_register_byte(state, 1U);
+    unsigned int bytes;
+    unsigned int byte_index;
+    unsigned int carry = 0U;
+    int zero = 1;
+    unsigned int source_segment = segment_override >= 0 ?
+                                  (unsigned int) segment_override : 3U;
+
+    if ((digits == 0U) || (digits == 255U))
+        return BM_STATUS_UNSUPPORTED;
+    bytes = (digits + 1U) / 2U;
+    for (byte_index = 0U; byte_index < bytes; ++byte_index) {
+        uint8_t source = 0U;
+        uint8_t destination = 0U;
+        uint8_t result = 0U;
+        unsigned int nibble;
+        bm_status_t status = read_byte(
+            state, state->segments[source_segment],
+            (uint16_t) (state->registers[REG_SI] + byte_index),
+            BM_BUS_READ, &source);
+        if (status == BM_STATUS_OK)
+            status = read_byte(
+                state, state->segments[0],
+                (uint16_t) (state->registers[REG_DI] + byte_index),
+                BM_BUS_READ, &destination);
+        if (status != BM_STATUS_OK)
+            return status;
+        for (nibble = 0U; nibble < 2U; ++nibble) {
+            unsigned int shift = nibble * 4U;
+            unsigned int source_digit = (source >> shift) & 0x0fU;
+            unsigned int destination_digit = (destination >> shift) & 0x0fU;
+            unsigned int result_digit;
+
+            if (extension == 0x20U) {
+                result_digit = destination_digit + source_digit + carry;
+                carry = 0U;
+                while (result_digit >= 10U) {
+                    result_digit -= 10U;
+                    ++carry;
+                }
+            } else {
+                int difference = (int) destination_digit -
+                                 (int) source_digit - (int) carry;
+                carry = 0U;
+                while (difference < 0) {
+                    difference += 10;
+                    ++carry;
+                }
+                result_digit = (unsigned int) difference;
+            }
+            if (result_digit != 0U)
+                zero = 0;
+            result |= (uint8_t) (result_digit << shift);
+        }
+        if (extension != 0x26U) {
+            status = write_byte(
+                state, state->segments[0],
+                (uint16_t) (state->registers[REG_DI] + byte_index), result);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+    }
+    state->flags &= (uint16_t) ~(FLAG_CF | FLAG_ZF);
+    if (carry != 0U)
+        state->flags |= FLAG_CF;
+    if (zero)
+        state->flags |= FLAG_ZF;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+execute_nec_nibble_rotate(bm_808x_state_t *state, uint8_t extension,
+                          int segment_override)
+{
+    uint8_t modrm;
+    uint8_t destination = 0U;
+    uint8_t old_al = get_register_byte(state, 0U);
+    uint8_t new_destination;
+    uint8_t new_al;
+    bm_808x_operand_t operand;
+    bm_status_t status = fetch_byte(state, &modrm);
+
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((modrm & 0x38U) != 0U)
+        return BM_STATUS_UNSUPPORTED;
+    status = decode_rm_operand(state, modrm, segment_override, &operand);
+    if (status == BM_STATUS_OK)
+        status = read_operand_byte(state, &operand, &destination);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (extension == 0x28U) {
+        new_destination = (uint8_t) ((destination << 4U) | (old_al & 0x0fU));
+        new_al = (uint8_t) (destination >> 4U);
+    } else {
+        new_destination = (uint8_t) ((destination >> 4U) |
+                                     ((old_al & 0x0fU) << 4U));
+        new_al = (uint8_t) (destination & 0x0fU);
+    }
+    if (operand.is_register && (operand.register_index == 0U)) {
+        set_register_byte(state, 0U,
+                          extension == 0x28U ? new_al : new_destination);
+        return BM_STATUS_OK;
+    }
+    status = write_operand_byte(state, &operand, new_destination);
+    if (status == BM_STATUS_OK)
+        set_register_byte(state, 0U, new_al);
+    return status;
+}
+
+static bm_status_t
+read_nec_bit_window(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
+                    unsigned int byte_count, uint32_t *value)
+{
+    unsigned int index;
+    uint32_t result = 0U;
+
+    for (index = 0U; index < byte_count; ++index) {
+        uint8_t byte = 0U;
+        bm_status_t status = read_byte(state, segment,
+                                       (uint16_t) (offset + index),
+                                       BM_BUS_READ, &byte);
+        if (status != BM_STATUS_OK)
+            return status;
+        result |= (uint32_t) byte << (index * 8U);
+    }
+    *value = result;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+write_nec_bit_window(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
+                     unsigned int byte_count, uint32_t value)
+{
+    unsigned int index;
+
+    for (index = 0U; index < byte_count; ++index) {
+        bm_status_t status = write_byte(state, segment,
+                                        (uint16_t) (offset + index),
+                                        (uint8_t) (value >> (index * 8U)));
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+execute_nec_bit_field(bm_808x_state_t *state, uint8_t extension,
+                      int segment_override)
+{
+    uint8_t modrm;
+    uint8_t immediate = 0U;
+    unsigned int offset_register;
+    unsigned int length_code;
+    unsigned int bit_offset;
+    unsigned int bit_length;
+    unsigned int byte_count;
+    unsigned int index_register;
+    unsigned int segment_index;
+    uint16_t memory_offset;
+    uint32_t window = 0U;
+    uint32_t value_mask;
+    uint32_t field_mask;
+    bm_status_t status = fetch_byte(state, &modrm);
+
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((modrm >> 6U) != 3U)
+        return BM_STATUS_UNSUPPORTED;
+    offset_register = modrm & 7U;
+    if ((extension & 8U) != 0U) {
+        if ((modrm & 0x38U) != 0U)
+            return BM_STATUS_UNSUPPORTED;
+        status = fetch_byte(state, &immediate);
+        if (status != BM_STATUS_OK)
+            return status;
+        if ((immediate & 0xf0U) != 0U)
+            return BM_STATUS_UNSUPPORTED;
+        length_code = immediate;
+    } else {
+        length_code = get_register_byte(state, (modrm >> 3U) & 7U);
+    }
+    bit_offset = get_register_byte(state, offset_register);
+    if ((bit_offset > 15U) || (length_code > 15U))
+        return BM_STATUS_UNSUPPORTED;
+    bit_length = length_code + 1U;
+    byte_count = (bit_offset + bit_length + 7U) / 8U;
+    index_register = (extension == 0x31U || extension == 0x39U) ?
+                     REG_DI : REG_SI;
+    segment_index = segment_override >= 0 ?
+                    (unsigned int) segment_override :
+                    ((extension == 0x31U || extension == 0x39U) ? 0U : 3U);
+    memory_offset = state->registers[index_register];
+    status = read_nec_bit_window(state, state->segments[segment_index],
+                                 memory_offset, byte_count, &window);
+    if (status != BM_STATUS_OK)
+        return status;
+    value_mask = (1UL << bit_length) - 1UL;
+    field_mask = value_mask << bit_offset;
+    if ((extension == 0x31U) || (extension == 0x39U)) {
+        uint32_t inserted = state->registers[REG_AX] & value_mask;
+        window = (window & ~field_mask) | (inserted << bit_offset);
+        status = write_nec_bit_window(state, state->segments[segment_index],
+                                      memory_offset, byte_count, window);
+        if (status != BM_STATUS_OK)
+            return status;
+    } else {
+        state->registers[REG_AX] =
+            (uint16_t) ((window >> bit_offset) & value_mask);
+    }
+    bit_offset += bit_length;
+    if (bit_offset > 15U) {
+        bit_offset -= 16U;
+        state->registers[index_register] =
+            (uint16_t) (state->registers[index_register] + 2U);
+    }
+    set_register_byte(state, offset_register, (uint8_t) bit_offset);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+execute_nec_extension(bm_808x_state_t *state, int segment_override)
+{
+    uint8_t extension;
+    bm_status_t status = fetch_byte(state, &extension);
+
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((extension >= 0x10U) && (extension <= 0x1fU))
+        return execute_nec_bit_operation(state, extension, segment_override);
+    if ((extension == 0x20U) || (extension == 0x22U) ||
+        (extension == 0x26U))
+        return execute_nec_bcd_string(state, extension, segment_override);
+    if ((extension == 0x28U) || (extension == 0x2aU))
+        return execute_nec_nibble_rotate(state, extension, segment_override);
+    if ((extension == 0x31U) || (extension == 0x33U) ||
+        (extension == 0x39U) || (extension == 0x3bU))
+        return execute_nec_bit_field(state, extension, segment_override);
+    return BM_STATUS_UNSUPPORTED;
+}
+
 static uint8_t
 rotate_shift8(bm_808x_state_t *state, uint8_t value,
               unsigned int operation, uint8_t count)
@@ -1360,58 +1657,8 @@ execute_one(bm_808x_state_t *state)
         case 0x6f: /* OUTSW. */
             return execute_io_string(state, opcode, repeat, segment_override,
                                      repeat_ip);
-        case 0x0f: { /* NEC V30 bit operations. */
-            uint8_t extension;
-            uint8_t modrm;
-            uint8_t bit;
-            uint16_t value = 0;
-            uint16_t mask;
-            unsigned int operation;
-            unsigned int width;
-            bm_808x_operand_t operand;
-            status = fetch_byte(state, &extension);
-            if (status != BM_STATUS_OK)
-                return status;
-            if ((extension < 0x10U) || (extension > 0x1fU))
-                return BM_STATUS_UNSUPPORTED;
-            operation = (extension >> 1U) & 3U;
-            width = (extension & 1U) != 0U ? 16U : 8U;
-            status = fetch_byte(state, &modrm);
-            if ((status == BM_STATUS_OK) && ((extension & 8U) != 0U))
-                status = fetch_byte(state, &bit);
-            else
-                bit = get_register_byte(state, 1U);
-            if (status == BM_STATUS_OK)
-                status = decode_rm_operand(state, modrm, segment_override, &operand);
-            if (status == BM_STATUS_OK) {
-                if (width == 8U) {
-                    uint8_t byte = 0;
-                    status = read_operand_byte(state, &operand, &byte);
-                    value = byte;
-                } else {
-                    status = read_operand_word(state, &operand, &value);
-                }
-            }
-            if (status != BM_STATUS_OK)
-                return status;
-            bit &= (uint8_t) (width - 1U);
-            mask = (uint16_t) (1U << bit);
-            if (operation == 0U) { /* TEST1 */
-                state->flags &= (uint16_t) ~(FLAG_CF | FLAG_OF | FLAG_ZF);
-                if ((value & mask) == 0U)
-                    state->flags |= FLAG_ZF;
-                return BM_STATUS_OK;
-            }
-            if (operation == 1U) /* CLR1 */
-                value &= (uint16_t) ~mask;
-            else if (operation == 2U) /* SET1 */
-                value |= mask;
-            else /* NOT1 */
-                value ^= mask;
-            if (width == 8U)
-                return write_operand_byte(state, &operand, (uint8_t) value);
-            return write_operand_word(state, &operand, value);
-        }
+        case 0x0f: /* NEC V30 native extension map. */
+            return execute_nec_extension(state, segment_override);
         case 0x05: /* ADD AX,imm16. */
         case 0x0d: /* OR AX,imm16. */
         case 0x15: /* ADC AX,imm16. */
