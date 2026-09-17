@@ -476,6 +476,70 @@ sbb8(bm_808x_state_t *state, uint8_t left, uint8_t right)
 }
 
 static void
+decimal_adjust_add(bm_808x_state_t *state)
+{
+    uint8_t value = get_register_byte(state, 0U);
+    int old_auxiliary = (state->flags & FLAG_AF) != 0U;
+    int auxiliary = ((value & 0x0fU) > 9U) ||
+                    old_auxiliary;
+    int carry = (state->flags & FLAG_CF) != 0U ||
+                value > (old_auxiliary ? 0x9fU : 0x99U);
+
+    if (auxiliary)
+        value = (uint8_t) (value + 0x06U);
+    if (carry)
+        value = (uint8_t) (value + 0x60U);
+    set_register_byte(state, 0U, value);
+    set_logic_flags(state, value, 8U);
+    if (auxiliary)
+        state->flags |= FLAG_AF;
+    if (carry)
+        state->flags |= FLAG_CF;
+}
+
+static void
+decimal_adjust_subtract(bm_808x_state_t *state)
+{
+    uint8_t value = get_register_byte(state, 0U);
+    int old_auxiliary = (state->flags & FLAG_AF) != 0U;
+    int auxiliary = ((value & 0x0fU) > 9U) ||
+                    old_auxiliary;
+    int carry = (state->flags & FLAG_CF) != 0U ||
+                value > (old_auxiliary ? 0x9fU : 0x99U);
+
+    if (auxiliary)
+        value = (uint8_t) (value - 0x06U);
+    if (carry)
+        value = (uint8_t) (value - 0x60U);
+    set_register_byte(state, 0U, value);
+    set_logic_flags(state, value, 8U);
+    if (auxiliary)
+        state->flags |= FLAG_AF;
+    if (carry)
+        state->flags |= FLAG_CF;
+}
+
+static void
+ascii_adjust(bm_808x_state_t *state, int subtract)
+{
+    uint8_t value = get_register_byte(state, 0U);
+    uint8_t high = get_register_byte(state, 4U);
+    int adjust = ((value & 0x0fU) > 9U) ||
+                 ((state->flags & FLAG_AF) != 0U);
+
+    state->flags &= (uint16_t) ~(FLAG_AF | FLAG_CF);
+    if (adjust) {
+        value = subtract ? (uint8_t) (value - 6U) :
+                           (uint8_t) (value + 6U);
+        high = subtract ? (uint8_t) (high - 1U) :
+                          (uint8_t) (high + 1U);
+        set_register_byte(state, 4U, high);
+        state->flags |= FLAG_AF | FLAG_CF;
+    }
+    set_register_byte(state, 0U, (uint8_t) (value & 0x0fU));
+}
+
+static void
 compare16(bm_808x_state_t *state, uint16_t left, uint16_t right)
 {
     uint16_t result = (uint16_t) (left - right);
@@ -1018,6 +1082,8 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x05: /* ADD AX,imm16. */
         case 0x0d: /* OR AX,imm16. */
+        case 0x15: /* ADC AX,imm16. */
+        case 0x1d: /* SBB AX,imm16. */
         case 0x25: /* AND AX,imm16. */
         case 0x2d: /* SUB AX,imm16. */
         case 0x35: /* XOR AX,imm16. */
@@ -1029,6 +1095,10 @@ execute_one(bm_808x_state_t *state)
                 return status;
             if (opcode == 0x05U)
                 result = add16(state, state->registers[REG_AX], immediate);
+            else if (opcode == 0x15U)
+                result = adc16(state, state->registers[REG_AX], immediate);
+            else if (opcode == 0x1dU)
+                result = sbb16(state, state->registers[REG_AX], immediate);
             else if (opcode == 0x2dU) {
                 result = (uint16_t) (state->registers[REG_AX] - immediate);
                 compare16(state, state->registers[REG_AX], immediate);
@@ -1083,6 +1153,22 @@ execute_one(bm_808x_state_t *state)
                                        (uint16_t) (value | 0xff00U) : value;
             return BM_STATUS_OK;
         }
+        case 0x99: /* CWD */
+            state->registers[REG_DX] =
+                (state->registers[REG_AX] & 0x8000U) != 0U ? 0xffffU : 0U;
+            return BM_STATUS_OK;
+        case 0x27: /* DAA */
+            decimal_adjust_add(state);
+            return BM_STATUS_OK;
+        case 0x2f: /* DAS */
+            decimal_adjust_subtract(state);
+            return BM_STATUS_OK;
+        case 0x37: /* AAA */
+            ascii_adjust(state, 0);
+            return BM_STATUS_OK;
+        case 0x3f: /* AAS */
+            ascii_adjust(state, 1);
+            return BM_STATUS_OK;
         case 0xd4: { /* AAM imm8 (NEC V20/V30 measured semantics). */
             uint8_t base = 0U;
             uint8_t value;
@@ -1146,6 +1232,8 @@ execute_one(bm_808x_state_t *state)
             return execute_string(state, opcode, repeat, segment_override);
         case 0x04: /* ADD AL,imm8 */
         case 0x0c: /* OR AL,imm8 */
+        case 0x14: /* ADC AL,imm8 */
+        case 0x1c: /* SBB AL,imm8 */
         case 0x24: /* AND AL,imm8 */
         case 0x2c: /* SUB AL,imm8 */
         case 0x34: /* XOR AL,imm8 */
@@ -1157,6 +1245,10 @@ execute_one(bm_808x_state_t *state)
                 return status;
             if (opcode == 0x04U)
                 result = add8(state, get_register_byte(state, 0), immediate);
+            else if (opcode == 0x14U)
+                result = adc8(state, get_register_byte(state, 0), immediate);
+            else if (opcode == 0x1cU)
+                result = sbb8(state, get_register_byte(state, 0), immediate);
             else if (opcode == 0x2cU) {
                 result = (uint8_t) (get_register_byte(state, 0) - immediate);
                 compare8(state, get_register_byte(state, 0), immediate);
@@ -1197,6 +1289,8 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x00: /* ADD r/m8,r8 */
         case 0x08: /* OR r/m8,r8 */
+        case 0x10: /* ADC r/m8,r8 */
+        case 0x18: /* SBB r/m8,r8 */
         case 0x20: /* AND r/m8,r8 */
         case 0x28: /* SUB r/m8,r8 */
         case 0x30: /* XOR r/m8,r8 */
@@ -1216,6 +1310,10 @@ execute_one(bm_808x_state_t *state)
             source = get_register_byte(state, (modrm >> 3U) & 7U);
             if (opcode == 0x00U)
                 result = add8(state, destination, source);
+            else if (opcode == 0x10U)
+                result = adc8(state, destination, source);
+            else if (opcode == 0x18U)
+                result = sbb8(state, destination, source);
             else if (opcode == 0x28U) {
                 result = (uint8_t) (destination - source);
                 compare8(state, destination, source);
@@ -1232,6 +1330,8 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x02: /* ADD r8,r/m8 */
         case 0x0a: /* OR r8,r/m8 */
+        case 0x12: /* ADC r8,r/m8 */
+        case 0x1a: /* SBB r8,r/m8 */
         case 0x22: /* AND r8,r/m8 */
         case 0x2a: { /* SUB r8,r/m8 */
             uint8_t modrm;
@@ -1249,6 +1349,10 @@ execute_one(bm_808x_state_t *state)
             destination = (modrm >> 3U) & 7U;
             if (opcode == 0x02U)
                 result = add8(state, get_register_byte(state, destination), source);
+            else if (opcode == 0x12U)
+                result = adc8(state, get_register_byte(state, destination), source);
+            else if (opcode == 0x1aU)
+                result = sbb8(state, get_register_byte(state, destination), source);
             else if (opcode == 0x2aU) {
                 result = (uint8_t) (get_register_byte(state, destination) - source);
                 compare8(state, get_register_byte(state, destination), source);
@@ -1493,6 +1597,7 @@ execute_one(bm_808x_state_t *state)
             return status;
         }
         case 0x80: /* Immediate arithmetic group; basic r/m8 operations. */
+        case 0x82: /* NEC byte-immediate alias of 80h. */
         case 0x81: { /* Immediate arithmetic group; basic r/m16 operations. */
             uint8_t modrm;
             unsigned int operation;
@@ -1501,19 +1606,8 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
-            if (((opcode == 0x80U) && (operation != 0U) &&
-                 (operation != 1U) && (operation != 2U) &&
-                 (operation != 3U) && (operation != 4U) &&
-                 (operation != 5U) && (operation != 6U) &&
-                 (operation != 7U)) ||
-                 ((opcode == 0x81U) && (operation != 0U) &&
-                  (operation != 1U) && (operation != 2U) &&
-                  (operation != 3U) && (operation != 4U) &&
-                  (operation != 5U) && (operation != 6U) &&
-                  (operation != 7U)))
-                return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
-            if (opcode == 0x80U) {
+            if (opcode != 0x81U) {
                 uint8_t immediate = 0;
                 uint8_t left = 0;
                 uint8_t result;
@@ -2009,6 +2103,8 @@ execute_one(bm_808x_state_t *state)
             }
             return status;
         }
+        case 0xcc: /* INT3 */
+            return enter_interrupt(state, 3U);
         case 0xcd: { /* INT imm8 */
             uint8_t vector;
             status = fetch_byte(state, &vector);
@@ -2016,6 +2112,9 @@ execute_one(bm_808x_state_t *state)
                 return status;
             return enter_interrupt(state, vector);
         }
+        case 0xce: /* INTO */
+            return (state->flags & FLAG_OF) != 0U ?
+                   enter_interrupt(state, 4U) : BM_STATUS_OK;
         case 0xcf: { /* IRET */
             uint16_t new_ip = 0;
             uint16_t new_cs = 0;
