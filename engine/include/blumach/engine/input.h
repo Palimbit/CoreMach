@@ -72,6 +72,16 @@ typedef struct bm_input_event {
     int repeat;
 } bm_input_event_t;
 
+typedef enum bm_keyboard_led {
+    BM_KEYBOARD_LED_SCROLL_LOCK = 1U << 0,
+    BM_KEYBOARD_LED_NUM_LOCK = 1U << 1,
+    BM_KEYBOARD_LED_CAPS_LOCK = 1U << 2
+} bm_keyboard_led_t;
+
+typedef struct bm_keyboard_led_state {
+    uint8_t indicators;
+} bm_keyboard_led_state_t;
+
 #ifdef __cplusplus
 }
 #endif

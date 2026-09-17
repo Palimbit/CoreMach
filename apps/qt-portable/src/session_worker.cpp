@@ -216,6 +216,17 @@ SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
     snapshot.state = session != nullptr ? bm_session_state(session) :
                                           BM_SESSION_NEW;
     snapshot.ticks = session != nullptr ? bm_session_time(session) : 0U;
+    if ((session != nullptr) &&
+        ((snapshot.state == BM_SESSION_RUNNING) ||
+         (snapshot.state == BM_SESSION_PAUSED))) {
+        const bm_status_t keyboardStatus = bm_session_keyboard_leds(
+            session, &snapshot.keyboardLeds);
+        if (keyboardStatus == BM_STATUS_OK)
+            snapshot.hasKeyboardLeds = true;
+        else if ((keyboardStatus != BM_STATUS_UNSUPPORTED) &&
+                 (snapshot.status == BM_STATUS_OK))
+            snapshot.status = keyboardStatus;
+    }
     if (geometry != nullptr) {
         snapshot.geometry = *geometry;
         snapshot.hasVideo = true;

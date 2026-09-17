@@ -26,6 +26,8 @@ public:
         uint64_t ticks = 0U;
         bm_video_geometry_t geometry {};
         bool hasVideo = false;
+        bool hasKeyboardLeds = false;
+        bm_keyboard_led_state_t keyboardLeds {};
         std::vector<bm_storage_device_status_t> storage;
         QImage frame;
         bool lifecycleResult = false;

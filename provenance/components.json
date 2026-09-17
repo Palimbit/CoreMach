@@ -15,7 +15,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Initial deterministic engine, CPU contract, scheduler, host-neutral XRGB8888 framebuffer value types and caller-owned block-media contract"
+      "local_changes": "Initial deterministic engine, CPU contract, scheduler, host-neutral physical input and guest-owned keyboard-indicator value types, XRGB8888 framebuffer value types and caller-owned block-media contract"
     },
     {
       "id": "generic-address-bus",
@@ -171,7 +171,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, normalized physical-key input events independent of guest scan-code sets, and generic caller-owned storage-media replacement"
+      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, normalized physical-key input events and guest-owned keyboard-indicator queries independent of host lock state and guest scan-code sets, and generic caller-owned storage-media replacement"
     },
     {
       "id": "null-host-platform",
@@ -195,7 +195,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated definition-rate-paced session worker, queued lifecycle, normalized keyboard and read-only removable-media commands, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling and persistent user display preferences"
+      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated definition-rate-paced session worker, queued lifecycle, normalized keyboard and read-only removable-media commands, guest-controlled Caps/Num/Scroll presentation, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling and persistent user display preferences"
     },
     {
       "id": "headless-frontend",
@@ -221,11 +221,11 @@
       "destination": ["systems/olivetti-pcs86/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "08893f4fd0392ea6e95e9abbe108f0d8f1fbbe1c",
-      "origin_paths": ["src/machine/m_xt_olivetti_pcs86.c", "doc/machines/olivetti-pcs86.md"],
+      "origin_paths": ["src/machine/m_xt_olivetti_pcs86.c", "src/device/keyboard_at.c", "doc/machines/olivetti-pcs86.md"],
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
-      "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with four banked windows and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Mouse input and cycle-accurate timing remain absent"
+      "copyright_holders": ["Miran Grca", "Fred N. van Kempen", "rtzor", "BluMach contributors"],
+      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with four banked windows and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and keyboard EDh indicator state, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Mouse input and cycle-accurate timing remain absent"
     }
   ],
   "external_dependencies": []

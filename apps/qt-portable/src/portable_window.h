@@ -66,11 +66,14 @@ private:
     void handleSnapshot(SessionWorker::Snapshot snapshot);
     void updateStorageStatus(
         const std::vector<bm_storage_device_status_t> &storage);
+    void updateKeyboardStatus(bool available,
+                              const bm_keyboard_led_state_t &state);
     void updateActions();
     void showStatus(const QString &detail = QString());
     DisplayWidget *display_;
     QLabel *status_;
     QLabel *storageStatus_;
+    QLabel *keyboardStatus_;
     QToolBar *machineToolbar_;
     QAction *pauseAction_;
     QAction *resetAction_;

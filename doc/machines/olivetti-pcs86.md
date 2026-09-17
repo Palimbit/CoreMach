@@ -27,7 +27,9 @@ and scheduler rate remain explicit approximations. The runtime accepts
 host-neutral physical-key events, which the machine translates into supported
 IBM Set 1 make/break bytes and IRQ1. The dual keyboard/mouse command queues
 reproduce the firmware-observed identify, reset and acknowledgement responses,
-but electrical timing, mouse input and the full command set remain approximate.
+including guest-controlled Scroll, Num and Caps indicators through command
+`EDh`, but electrical timing, mouse input and the full command set remain
+approximate.
 The DMA controller does not yet arbitrate or perform transfers. This is measured bring-up progress, not a
 completed POST or usable machine. The preceding write of `40h` to port
 `70h` is retained in an opaque PCS 86 latch without assigning guessed PC/AT

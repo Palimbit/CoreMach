@@ -23,6 +23,7 @@ typedef struct test_machine {
     unsigned int reset_calls;
     unsigned int inspect_calls;
     unsigned int input_calls;
+    unsigned int keyboard_led_calls;
     unsigned int geometry_calls;
     unsigned int render_calls;
     unsigned int storage_status_calls;
@@ -30,6 +31,7 @@ typedef struct test_machine {
     bm_storage_media_change_t last_media_change;
     bm_tick_t last_render_time;
     bm_input_event_t last_input;
+    bm_keyboard_led_state_t keyboard_leds;
 } test_machine_t;
 
 static size_t
@@ -62,6 +64,17 @@ test_storage_media(void *context, bm_storage_device_kind_t kind, uint32_t unit,
         return BM_STATUS_INVALID_ARGUMENT;
     ++machine->storage_media_calls;
     machine->last_media_change = *change;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+test_keyboard_leds(const void *context, bm_keyboard_led_state_t *state)
+{
+    test_machine_t *machine = (test_machine_t *) context;
+    if ((machine == NULL) || (state == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    ++machine->keyboard_led_calls;
+    *state = machine->keyboard_leds;
     return BM_STATUS_OK;
 }
 
@@ -219,7 +232,8 @@ make_configuration(test_machine_t *machine, int optional_operations)
             test_input,
             test_storage_count,
             test_storage_status,
-            test_storage_media
+            test_storage_media,
+            test_keyboard_leds
         },
         .engine = { 1U, 2U }
     };
@@ -229,7 +243,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
         .configuration = { "test.runtime-session.config", 1U,
                            sizeof(test_machine_t) },
         .ops = { test_validate, test_create, test_destroy,
-                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL },
+                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL },
         .engine = { 1U, 2U }
     };
     bm_machine_config_t configuration = {
@@ -378,6 +392,7 @@ test_session_state_machine(void)
     bm_storage_media_change_t media_change = {
         1, 1, { NULL, 1U, 1U, 1, test_media_read, NULL }
     };
+    bm_keyboard_led_state_t keyboard_leds = { 0U };
     size_t storage_count = 0U;
     uint64_t value = 0U;
 
@@ -400,6 +415,8 @@ test_session_state_machine(void)
     assert(bm_session_inspect_machine(session, "answer", &value) ==
            BM_STATUS_INVALID_STATE);
     assert(bm_session_send_input(session, &input) == BM_STATUS_INVALID_STATE);
+    assert(bm_session_keyboard_leds(session, &keyboard_leds) ==
+           BM_STATUS_INVALID_STATE);
     assert(bm_session_storage_device_count(session, &storage_count) ==
            BM_STATUS_INVALID_STATE);
     assert(bm_session_storage_device_status(session, 0U, &storage) ==
@@ -431,6 +448,12 @@ test_session_state_machine(void)
     assert(value == 42U);
     assert(bm_session_send_input(session, &input) == BM_STATUS_OK);
     assert(machine.last_input.key == BM_KEY_A);
+    machine.keyboard_leds.indicators = BM_KEYBOARD_LED_CAPS_LOCK |
+                                       BM_KEYBOARD_LED_NUM_LOCK;
+    assert(bm_session_keyboard_leds(session, &keyboard_leds) == BM_STATUS_OK);
+    assert(keyboard_leds.indicators == (BM_KEYBOARD_LED_CAPS_LOCK |
+                                        BM_KEYBOARD_LED_NUM_LOCK));
+    assert(machine.keyboard_led_calls == 1U);
     assert(bm_session_storage_device_count(session, &storage_count) ==
            BM_STATUS_OK && storage_count == 1U);
     assert(bm_session_storage_device_status(session, 0U, &storage) ==
@@ -489,6 +512,7 @@ test_optional_operations(void)
                                              0U, 0U } };
     bm_storage_device_status_t storage;
     bm_storage_media_change_t media_change = { 0 };
+    bm_keyboard_led_state_t keyboard_leds = { 0U };
     size_t storage_count = 0U;
     uint64_t value = 0U;
 
@@ -502,6 +526,8 @@ test_optional_operations(void)
     assert(bm_session_inspect_machine(session, "answer", &value) ==
            BM_STATUS_UNSUPPORTED);
     assert(bm_session_send_input(session, &input) == BM_STATUS_UNSUPPORTED);
+    assert(bm_session_keyboard_leds(session, &keyboard_leds) ==
+           BM_STATUS_UNSUPPORTED);
     assert(bm_session_storage_device_count(session, &storage_count) ==
            BM_STATUS_UNSUPPORTED);
     assert(bm_session_storage_device_status(session, 0U, &storage) ==
@@ -523,6 +549,10 @@ test_optional_operations(void)
            BM_STATUS_INVALID_ARGUMENT);
     assert(bm_session_send_input(NULL, &input) == BM_STATUS_INVALID_ARGUMENT);
     assert(bm_session_send_input(session, NULL) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_keyboard_leds(NULL, &keyboard_leds) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_keyboard_leds(session, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
     assert(bm_session_storage_device_count(NULL, &storage_count) ==
            BM_STATUS_INVALID_ARGUMENT);
     assert(bm_session_storage_device_count(session, NULL) ==

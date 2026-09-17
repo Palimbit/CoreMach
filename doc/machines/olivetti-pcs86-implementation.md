@@ -68,13 +68,13 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; the scheduler does not yet consume CPU timing observations, so rational PIT/RTC clock accumulators still use a measured functional instruction rate |
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, fixed-priority nesting, output callback, CPU acknowledge, and non-specific or specific EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven from scheduler time without claiming cycle accuracy |
-| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture/open-bus reads at `A0h-AEh`, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues and IRQ1 scan queue |
+| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture/open-bus reads at `A0h-AEh`, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues, IRQ1 scan queue and the keyboard `EDh` LED parameter |
 | Onboard EMS | Functional board implementation derived from the inherited PCS 86 model and preserved machine evidence | Selectable 0/384/1920 KiB backing store (0/24/120 pages), four readable page selectors at `8400h-8403h`, bits 6:0 as page number and bit 7 as per-window enable, with four 16 KiB windows over `80000h-8FFFFh`; port `64h` exposes the fitted-SIMM code and the common frontend defaults to 1920 KiB |
 | 8237 DMA | Functional synchronous subset derived from the inherited core | Address/count flip-flop, base/current registers, command, mode, request, masks, status, master clear and device-facing byte transfers; a separate XT latch block supplies four-bit pages and 20-bit current addresses; no asynchronous arbitration or cycle stealing |
 | MM58167 RTC | Functional portable component | PCS 86 `B0h-B7h` controls and `E0h-EFh` counter/alarm RAM, BCD millisecond calendar, alarm and periodic IRQs, reset/GO/standby commands, checksum repair and 32-byte caller-owned persistence; yearless calendar and physical crystal/battery behaviour remain approximate |
 | SPP parallel port | Derived portable register core | Data, status and control at gated `378h-37Ah`, disconnected-printer status, output callback and ACK-driven IRQ7; no EPP/ECP, printer backend, DMA or host threads |
 | NS16450 UART | Derived portable register core | Divisor latch, IER/IIR, LCR/MCR, LSR/MSR, scratch, modem/data loopback and IRQ4 at gated `3F8h-3FFh`; no 16550 FIFO, host serial backend or baud scheduling |
-| Keyboard input | New runtime contract plus PCS 86 translation | Stable physical-key events, supported IBM Set 1 make/break bytes and IRQ1; no host scan codes in the engine, mouse input, electrical timing or complete command set |
+| Keyboard input | New runtime contract plus PCS 86 translation | Stable physical-key events, supported IBM Set 1 make/break bytes and IRQ1; an optional guest-owned Scroll/Num/Caps state query reflects the keyboard `EDh` command without host lock-state inference; no host scan codes in the engine, mouse input, electrical timing or complete command set |
 | PCS 86 video selection | Observed write-only boundary | Empty `C0000h-EFFFFh` option-ROM space returns ones; `46E8h` and `102h` retain the BIOS-observed arbitration writes without undocumented side effects |
 | Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer with CRTC cursor plus standard four-plane 16-colour and chain-4 256-colour XRGB8888 output. Geometry, display start, offset, double-scan and palette selection are register-derived rather than keyed to BIOS mode numbers. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent. |
 | Complete PPI behaviour | Partial board glue | Sufficient for the validated resident diagnostics and bootstrap path; electrical/timing fidelity and undocumented bits remain unclaimed |
@@ -166,7 +166,8 @@ The current automated ladder uses no historical software:
    behaviour. A PCS 86 integration ROM enables both gated devices, performs a
    UART data loopback and reads the keyboard identify response. The session
    tests verify normalized Shift, letter, extended-key make/break delivery,
-   rejection of unsupported scan sequences, specific PIC EOI handling,
+   the `EDh` LED command and parameter with reset cleanup, rejection of
+   unsupported scan sequences, specific PIC EOI handling,
    fixed-priority blocking and reset cleanup.
 10. The FDC test releases reset, drains the four sense-interrupt results, reads
    a complete 512-byte sector through DMA2 into guest RAM and verifies

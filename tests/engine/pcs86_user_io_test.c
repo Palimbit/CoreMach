@@ -180,6 +180,53 @@ test_keyboard_scan_stream(const bm_host_services_t *host)
     bm_session_destroy(session);
 }
 
+static void
+test_keyboard_led_protocol(const bm_host_services_t *host)
+{
+    uint8_t even[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    uint8_t odd[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
+    static const uint8_t program[] = {
+        0xb0, 0xed, 0xe6, 0x67, /* Request keyboard LED update. */
+        0xe4, 0x67, 0x88, 0xc3, /* Read ACK into BL. */
+        0xb0, 0x87, 0xe6, 0x67, /* Set all three defined indicators. */
+        0xe4, 0x67, 0x88, 0xc7, /* Read parameter ACK into BH. */
+        0xf4
+    };
+    bm_pcs86_config_t config;
+    bm_machine_config_t machine;
+    bm_session_t *session = NULL;
+    bm_keyboard_led_state_t leds = { UINT8_MAX };
+    size_t index;
+
+    for (index = 0U; index < sizeof(reset_jump); ++index)
+        put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
+    for (index = 0U; index < sizeof(program); ++index)
+        put_combined_byte(even, odd, 0x0100U + index, program[index]);
+    config = (bm_pcs86_config_t) {
+        .firmware_even = { "synthetic-even", even, sizeof(even), NULL },
+        .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL }
+    };
+    machine = bm_pcs86_machine_config(&config);
+    assert(bm_session_create(host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_keyboard_leds(session, &leds) == BM_STATUS_OK);
+    assert(leds.indicators == 0U);
+    assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
+    assert(inspect_cpu(session, "halted") == 1U);
+    assert(inspect_cpu(session, "bx") == 0xfafaU);
+    assert(bm_session_keyboard_leds(session, &leds) == BM_STATUS_OK);
+    assert(leds.indicators == (BM_KEYBOARD_LED_SCROLL_LOCK |
+                               BM_KEYBOARD_LED_NUM_LOCK |
+                               BM_KEYBOARD_LED_CAPS_LOCK));
+    assert(bm_session_reset(session) == BM_STATUS_OK);
+    assert(bm_session_keyboard_leds(session, &leds) == BM_STATUS_OK);
+    assert(leds.indicators == 0U);
+    assert(bm_session_stop(session) == BM_STATUS_OK);
+    bm_session_destroy(session);
+}
+
 int
 main(void)
 {
@@ -259,5 +306,6 @@ main(void)
     test_unmapped_output(&host, &config, even, odd, 0x02f1U);
     test_unmapped_output(&host, &config, even, odd, 0x06f2U);
     test_keyboard_scan_stream(&host);
+    test_keyboard_led_protocol(&host);
     return 0;
 }

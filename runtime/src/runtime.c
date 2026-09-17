@@ -282,6 +282,22 @@ bm_session_send_input(bm_session_t *session, const bm_input_event_t *event)
 }
 
 bm_status_t
+bm_session_keyboard_leds(const bm_session_t *session,
+                         bm_keyboard_led_state_t *state)
+{
+    if ((session == NULL) || (state == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.keyboard_leds == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.definition->ops.keyboard_leds(
+        session->machine, state);
+}
+
+bm_status_t
 bm_session_storage_device_count(const bm_session_t *session, size_t *count)
 {
     if ((session == NULL) || (count == NULL))
