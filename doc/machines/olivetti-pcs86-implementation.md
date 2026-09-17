@@ -173,6 +173,14 @@ adapters. Asynchronous DMA timing, the remaining board behaviours and
 sufficient V30 coverage are the exit criteria
 for meaningful comparison against original-firmware POST traces.
 
+The second 80186-compatible CPU cut adds NEC's CHKIND/BOUND, C0h/C1h
+immediate rotate/shift groups, PREPARE/ENTER and DISPOSE/LEAVE. Signed bounds,
+the BRK 5 return address, full 8-bit counts and lexical levels, and explicit
+rejection of NEC-undefined opcode 63h and shift group `/6` are synthetic
+machine-independent contracts. The pinned physical V20 corpus has no vectors
+for these six opcodes, so this cut relies on NEC's manufacturer manuals and
+does not increase the hardware-vector total.
+
 BIOS 1.09 writes `40h` to I/O port `70h` at `F000:0B29` while configuring the
 upper conventional-memory path, between accesses to board ports `6Ch`, `6Bh`
 and `6Fh`. No verified bit definition is currently recorded. The engine stores
@@ -225,7 +233,8 @@ include the focused `cpu_808x_post_test.c`, `cpu_808x_checksum_test.c`,
 focused sign-extension, string-comparison, decode-trace, far-control-flow,
 exchange, negate, `XLAT`, carry-arithmetic and byte-division tests,
 architectural-state, AAM/AAD, base-ISA completion and signed-multiply/divide
-tests, the 80186-compatible stack/immediate test, the external-vector adapter,
+tests, the 80186-compatible stack/immediate and control-instruction tests, the
+external-vector adapter,
 `fdc765_test.c`, `pvga1a_test.c`,
 `legacy_io_test.c`, `pcs86_reset_test.c` and `pcs86_user_io_test.c`. The
 unregistered `pcs86_firmware_probe.c` utility is manual by design so CI never

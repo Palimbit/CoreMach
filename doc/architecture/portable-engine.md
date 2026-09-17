@@ -115,6 +115,22 @@ the conformance matrix for all 48 primary ADD/OR/ADC/SBB/AND/SUB/XOR/CMP
 encodings. This stage exercises 540,000 hardware vectors without discrepancies,
 460,000 of them newly covered, for an accumulated 870,000-vector campaign.
 
+The next 80186-compatible cut implements the NEC-native CHKIND/BOUND,
+full-byte-count immediate rotate/shift groups, PREPARE/ENTER and
+DISPOSE/LEAVE. These semantics follow NEC's published instruction manuals:
+bounds are signed, an out-of-range check enters BRK 5 after consuming the
+instruction, and neither the immediate shift count nor the PREPARE lexical
+level is truncated to five bits. Opcode 63h and immediate-shift group `/6` are
+explicitly rejected because NEC marks those encodings undefined; they are not
+accepted as aliases or no-ops. Synthetic tests cover the documented forms and
+the rejected encodings. The pinned physical V20 corpus currently has no vectors
+for 62h, 63h, C0h, C1h, C8h or C9h, so this cut records manufacturer-manual
+evidence rather than claiming hardware conformance for those opcodes. The
+primary references are the [October 1986 NEC V20/V30 User's
+Manual](https://www.dosdays.co.uk/media/nec/NEC-V20-V30-Users-Manual.pdf) and
+NEC's later [16-Bit V Series Instruction User's
+Manual](https://datasheets.chipdb.org/NEC/V20-V30/U11301EJ5V0UMJ1.PDF).
+
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
 copied or executed by this test.
@@ -285,6 +301,12 @@ claim V30 cycle, prefetch-queue or 16-bit-bus fidelity.
 The next cut begins the V30's 80186-compatible instruction set with PUSHA,
 POPA, immediate PUSH and immediate IMUL. Stack state and multiplication flags
 remain explicit core behavior and use only the portable memory bus.
+
+The following cut adds CHKIND/BOUND, the immediate rotate/shift groups,
+PREPARE/ENTER and DISPOSE/LEAVE. All operands still pass through the portable
+register and memory-bus contracts. Undefined NEC encodings return
+`BM_STATUS_UNSUPPORTED`; they are not treated as undocumented aliases or
+successful no-ops.
 
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
 format-track, deleted-data distinction, flux/weak-sector formats and dynamic
