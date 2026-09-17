@@ -18,8 +18,11 @@
 #include <vector>
 
 class QAction;
+class QActionGroup;
+class QCloseEvent;
 class QKeyEvent;
 class QLabel;
+class QToolBar;
 
 class PortableWindow final : public QMainWindow {
 public:
@@ -30,6 +33,9 @@ public:
                      const QHash<QString, QString> &paths);
     bool openInitialProduct(const QString &productId,
                             const QHash<QString, QString> &paths);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 
 private:
     struct AssetStorage {
@@ -45,6 +51,11 @@ private:
     void togglePause();
     void resetMachine();
     void stopMachine();
+    void toggleFullscreen(bool enabled);
+    void copyFrame();
+    void saveFrame();
+    void readSettings();
+    void writeSettings() const;
     void sendKey(QKeyEvent *event, bool pressed);
     void handleSnapshot(SessionWorker::Snapshot snapshot);
     void updateActions();
@@ -53,9 +64,16 @@ private:
 
     DisplayWidget *display_;
     QLabel *status_;
+    QToolBar *machineToolbar_;
     QAction *pauseAction_;
     QAction *resetAction_;
     QAction *stopAction_;
+    QAction *fullScreenAction_;
+    QAction *smoothScalingAction_;
+    QAction *statusBarAction_;
+    QAction *copyFrameAction_;
+    QAction *saveFrameAction_;
+    QActionGroup *scaleGroup_;
     bm_host_services_t host_;
     PortableCatalog catalog_;
     QString catalogError_;
@@ -66,6 +84,8 @@ private:
     bm_status_t lastError_ = BM_STATUS_OK;
     uint64_t workerGeneration_ = 0U;
     bool lifecyclePending_ = false;
+    bool wasMaximizedBeforeFullscreen_ = false;
+    QString activeMachineId_;
 };
 
 #endif

@@ -487,3 +487,19 @@ format-track, deleted-data distinction, flux/weak-sector formats and dynamic
 media insertion. Those are explicit future fidelity work, while deterministic
 raw-sector loading through the DOS banner is the validated boundary of this
 cut.
+
+## Portable Qt presentation boundary
+
+The Qt6 frontend owns window geometry, menus, fullscreen state, presentation
+scaling, interpolation and image export. These are user preferences rather
+than emulated-machine state: changing them cannot affect engine time, video
+memory or the framebuffer returned by the runtime. The first presentation cut
+offers source-aspect fit, integer-pixel, corrected 4:3 and stretched layouts,
+with independently selectable nearest-neighbour or smooth interpolation.
+
+Frame copying and PNG export consume the frontend's last published image. File
+dialogs, clipboard access and persistent settings remain on the Qt side of the
+boundary; no path, native window, settings object or Qt type crosses into the
+frontend adapter, runtime or engine. Advanced GPU renderers, shaders and CRT
+effects remain later presentation layers and must consume the same immutable
+frame contract rather than depending on inherited emulator globals.

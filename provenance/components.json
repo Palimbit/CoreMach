@@ -195,7 +195,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated paced session worker, queued lifecycle and normalized keyboard input commands, generation-safe XRGB8888 frame publication and explicit session lifecycle controls"
+      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated paced session worker, queued lifecycle and normalized keyboard input commands, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling and persistent user display preferences"
     },
     {
       "id": "headless-frontend",

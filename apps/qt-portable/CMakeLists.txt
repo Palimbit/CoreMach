@@ -47,6 +47,34 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(blumach_portable_display_widget_test
+        src/display_widget.cpp
+        tests/display_widget_test.cpp
+    )
+    target_include_directories(blumach_portable_display_widget_test PRIVATE src)
+    target_link_libraries(blumach_portable_display_widget_test PRIVATE
+        Qt6::Gui
+        Qt6::Widgets
+    )
+    target_compile_features(blumach_portable_display_widget_test PRIVATE
+        cxx_std_17
+    )
+    set_target_properties(blumach_portable_display_widget_test PROPERTIES
+        CXX_EXTENSIONS OFF
+    )
+    if(MSVC)
+        target_compile_options(blumach_portable_display_widget_test PRIVATE
+            /W4 /WX /UNDEBUG
+        )
+    else()
+        target_compile_options(blumach_portable_display_widget_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+        )
+    endif()
+    add_test(NAME portable-qt.display-widget
+        COMMAND blumach_portable_display_widget_test
+    )
+
     add_executable(blumach_portable_pacer_test
         src/tick_pacer.cpp
         tests/tick_pacer_test.cpp
