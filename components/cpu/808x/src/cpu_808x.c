@@ -1089,6 +1089,34 @@ execute_one(bm_808x_state_t *state)
                 state->registers[REG_AX] = value;
             return status;
         }
+        case 0x62: { /* CHKIND/BOUND r16,m16:m16. */
+            uint8_t modrm;
+            uint16_t lower = 0U;
+            uint16_t upper = 0U;
+            int32_t index;
+            bm_808x_operand_t operand;
+            status = fetch_byte(state, &modrm);
+            if (status == BM_STATUS_OK)
+                status = decode_rm_operand(state, modrm, segment_override,
+                                           &operand);
+            if ((status == BM_STATUS_OK) && operand.is_register)
+                return BM_STATUS_UNSUPPORTED;
+            if (status == BM_STATUS_OK)
+                status = read_word(state, operand.segment, operand.offset,
+                                   &lower);
+            if (status == BM_STATUS_OK)
+                status = read_word(state, operand.segment,
+                                   (uint16_t) (operand.offset + 2U), &upper);
+            if (status != BM_STATUS_OK)
+                return status;
+            index = signed_word(state->registers[(modrm >> 3U) & 7U]);
+            if ((index < signed_word(lower)) || (index > signed_word(upper)))
+                return enter_interrupt(state, 5U);
+            return BM_STATUS_OK;
+        }
+        case 0x63:
+            /* Undefined in the NEC native-mode instruction map. */
+            return BM_STATUS_UNSUPPORTED;
         case 0x68: { /* PUSH imm16. */
             uint16_t immediate = 0U;
             status = fetch_word(state, &immediate);
@@ -2232,6 +2260,50 @@ execute_one(bm_808x_state_t *state)
             }
             return status;
         }
+        case 0xc8: { /* PREPARE/ENTER imm16,imm8. */
+            uint16_t allocation = 0U;
+            uint16_t frame_pointer;
+            uint16_t frame_walk;
+            uint8_t nesting = 0U;
+            status = fetch_word(state, &allocation);
+            if (status == BM_STATUS_OK)
+                status = fetch_byte(state, &nesting);
+            if (status != BM_STATUS_OK)
+                return status;
+            frame_walk = state->registers[REG_BP];
+            status = push_word(state, frame_walk);
+            frame_pointer = state->registers[REG_SP];
+            if ((status == BM_STATUS_OK) && (nesting != 0U)) {
+                uint8_t remaining = nesting;
+                while ((status == BM_STATUS_OK) && (--remaining != 0U)) {
+                    uint16_t ancestor = 0U;
+                    frame_walk = (uint16_t) (frame_walk - 2U);
+                    status = read_word(state, state->segments[2], frame_walk,
+                                       &ancestor);
+                    if (status == BM_STATUS_OK)
+                        status = push_word(state, ancestor);
+                }
+                if (status == BM_STATUS_OK)
+                    status = push_word(state, frame_pointer);
+            }
+            if (status == BM_STATUS_OK) {
+                state->registers[REG_BP] = frame_pointer;
+                state->registers[REG_SP] =
+                    (uint16_t) (state->registers[REG_SP] - allocation);
+            }
+            return status;
+        }
+        case 0xc9: { /* DISPOSE/LEAVE. */
+            uint16_t original_sp = state->registers[REG_SP];
+            uint16_t frame_pointer = 0U;
+            state->registers[REG_SP] = state->registers[REG_BP];
+            status = pop_word(state, &frame_pointer);
+            if (status == BM_STATUS_OK)
+                state->registers[REG_BP] = frame_pointer;
+            else
+                state->registers[REG_SP] = original_sp;
+            return status;
+        }
         case 0xca: /* RET far imm16 */
         case 0xcb: { /* RET far */
             uint16_t destination = 0U;
@@ -2279,6 +2351,7 @@ execute_one(bm_808x_state_t *state)
             }
             return status;
         }
+        case 0xc0: /* Shift r/m8 by immediate count. */
         case 0xd0: /* Shift r/m8 by one. */
         case 0xd2: { /* Shift r/m8 by CL. */
             uint8_t modrm;
@@ -2290,17 +2363,23 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
+            if ((opcode == 0xc0U) && (operation == 6U))
+                return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && (opcode == 0xc0U))
+                status = fetch_byte(state, &count);
+            else
+                count = opcode == 0xd0U ? 1U : get_register_byte(state, 1U);
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if (status != BM_STATUS_OK)
                 return status;
-            count = opcode == 0xd0U ? 1U : get_register_byte(state, 1U);
             if (count == 0U)
                 return BM_STATUS_OK;
             value = rotate_shift8(state, value, operation, count);
             return write_operand_byte(state, &operand, value);
         }
+        case 0xc1: /* Shift r/m16 by immediate count. */
         case 0xd1: /* Shift r/m16 by one. */
         case 0xd3: { /* Shift r/m16 by CL. */
             uint8_t modrm;
@@ -2312,12 +2391,17 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
+            if ((opcode == 0xc1U) && (operation == 6U))
+                return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && (opcode == 0xc1U))
+                status = fetch_byte(state, &count);
+            else
+                count = opcode == 0xd1U ? 1U : get_register_byte(state, 1U);
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
             if (status != BM_STATUS_OK)
                 return status;
-            count = opcode == 0xd1U ? 1U : get_register_byte(state, 1U);
             if (count == 0U)
                 return BM_STATUS_OK;
             value = rotate_shift16(state, value, operation, count);
