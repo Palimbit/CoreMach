@@ -206,6 +206,17 @@
       "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, deterministic execution reporting and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies"
     },
     {
+      "id": "portable-xta-controller",
+      "destination": ["components/pc/include/blumach/components/xta.h", "components/pc/src/xta.c"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "08893f4fd0392ea6e95e9abbe108f0d8f1fbbe1c",
+      "origin_paths": ["src/disk/hdc_xta.c"],
+      "method": "derived-rewrite",
+      "license": "BSD-3-Clause",
+      "copyright_holders": ["Fred N. van Kempen", "rtzor", "BluMach contributors"],
+      "local_changes": "Replaced legacy timers, globals, host image tables and direct PIC/DMA calls with caller-owned block media, explicit bus/DMA/IRQ contracts, deterministic PIO and DMA phases, configurable geometry, controller gating and structured state inspection; unsupported commands report the hardware illegal-command completion rather than being silently accepted"
+    },
+    {
       "id": "olivetti-pcs86-portable-system",
       "destination": ["systems/olivetti-pcs86/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
@@ -214,7 +225,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with four banked windows and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and a configured uPD765-compatible controller with IRQ6, DMA2, active-low disk change and PCS 86 floppy jumpers. Mouse input and cycle-accurate timing remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with four banked windows and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery, a uPD765-compatible controller with IRQ6/DMA2, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Mouse input and cycle-accurate timing remain absent"
     }
   ],
   "external_dependencies": []

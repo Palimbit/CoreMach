@@ -4,6 +4,7 @@
 
 #include <blumach/components/cpu_808x.h>
 #include <blumach/components/floppy_drive.h>
+#include <blumach/components/xta.h>
 #include <blumach/runtime/runtime.h>
 
 #ifdef __cplusplus
@@ -18,7 +19,13 @@ extern "C" {
 #define BM_PCS86_ROM_BASE 0xf0000U
 #define BM_PCS86_ROM_SIZE 65536U
 #define BM_PCS86_CONFIG_TYPE "blumach.system.olivetti-pcs86.config"
-#define BM_PCS86_CONFIG_VERSION 2U
+#define BM_PCS86_CONFIG_VERSION 3U
+
+typedef struct bm_pcs86_hard_disk_config {
+    int present;
+    bm_xta_geometry_t geometry;
+    bm_block_media_t media;
+} bm_pcs86_hard_disk_config_t;
 
 typedef struct bm_pcs86_io_trace {
     bm_bus_operation_t operation;
@@ -37,6 +44,7 @@ typedef struct bm_pcs86_config {
     void *io_trace_context;
     bm_floppy_drive_config_t floppy[2];
     uint32_t ems_kib;
+    bm_pcs86_hard_disk_config_t hard_disk;
 } bm_pcs86_config_t;
 
 typedef struct bm_pcs86_firmware_identity {

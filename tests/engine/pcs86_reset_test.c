@@ -201,6 +201,12 @@ main(void)
     assert(inspect(session, "halted") == 1);
     assert(inspect(session, "dx") == 0x0100);
     assert(inspect(session, "cx") == 0xffffU);
+    {
+        uint64_t value = UINT64_MAX;
+        assert(bm_session_inspect_machine(session, "xta_enabled", &value) ==
+               BM_STATUS_OK);
+        assert(value == 1U);
+    }
     assert(trace.count == 46);
     assert(trace.entries[7].physical_address == 0xf010fU);
     assert(trace.entries[7].opcode == 0x8bU);
@@ -253,6 +259,9 @@ main(void)
                BM_STATUS_OK);
         assert(value == BM_PCS86_EMS_1920_KIB);
         assert(bm_session_inspect_machine(session, "ems_selector0", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0U);
+        assert(bm_session_inspect_machine(session, "xta_enabled", &value) ==
                BM_STATUS_OK);
         assert(value == 0U);
         assert(bm_session_inspect_machine(session, "unknown", &value) ==

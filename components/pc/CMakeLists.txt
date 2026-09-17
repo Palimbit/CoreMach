@@ -10,6 +10,7 @@ add_library(blumach_pc_components STATIC
     src/pit8253_exact.c
     src/rtc_mm58167.c
     src/uart16450.c
+    src/xta.c
 )
 target_include_directories(blumach_pc_components
     PUBLIC

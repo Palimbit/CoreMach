@@ -80,6 +80,42 @@ test_unmapped_output(const bm_host_services_t *host,
 }
 
 static void
+test_absent_xta_slots(const bm_host_services_t *host,
+                      bm_pcs86_config_t *config,
+                      uint8_t *even,
+                      uint8_t *odd)
+{
+    static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
+    static const uint8_t program[] = {
+        0xba, 0x25, 0x03, 0xb0, 0x0c, 0xee, 0xec, 0x88, 0xc3,
+        0xba, 0x29, 0x03, 0xb0, 0x0c, 0xee, 0xec, 0x88, 0xc7,
+        0xba, 0x2d, 0x03, 0xb0, 0x0c, 0xee, 0xec, 0x88, 0xc1,
+        0xf4
+    };
+    bm_machine_config_t machine;
+    bm_session_t *session = NULL;
+    size_t index;
+
+    memset(even, 0, BM_PCS86_FIRMWARE_HALF_SIZE);
+    memset(odd, 0, BM_PCS86_FIRMWARE_HALF_SIZE);
+    for (index = 0; index < sizeof(reset_jump); ++index)
+        put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
+    for (index = 0; index < sizeof(program); ++index)
+        put_combined_byte(even, odd, 0x0100U + index, program[index]);
+
+    machine = bm_pcs86_machine_config(config);
+    assert(bm_session_create(host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
+    assert(inspect_cpu(session, "halted") == 1U);
+    assert(inspect_cpu(session, "bx") == 0xffffU);
+    assert((inspect_cpu(session, "cx") & 0xffU) == 0xffU);
+    assert(bm_session_stop(session) == BM_STATUS_OK);
+    bm_session_destroy(session);
+}
+
+static void
 test_keyboard_scan_stream(const bm_host_services_t *host)
 {
     uint8_t even[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
@@ -217,6 +253,7 @@ main(void)
 
     config.io_trace = NULL;
     config.io_trace_context = NULL;
+    test_absent_xta_slots(&host, &config, even, odd);
     test_unmapped_output(&host, &config, even, odd, 0x02f1U);
     test_unmapped_output(&host, &config, even, odd, 0x06f2U);
     test_keyboard_scan_stream(&host);

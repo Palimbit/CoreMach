@@ -20,6 +20,7 @@
 #include <blumach/components/pvga1a.h>
 #include <blumach/components/rtc_mm58167.h>
 #include <blumach/components/uart16450.h>
+#include <blumach/components/xta.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -42,6 +43,7 @@ typedef struct bm_pcs86_machine {
     bm_mm58167_t *rtc;
     bm_lpt_spp_t *lpt;
     bm_uart16450_t *uart;
+    bm_xta_t *xta;
     bm_engine_t *engine;
     bm_cpu_id_t cpu_id;
     int cpu_ready;
@@ -164,6 +166,13 @@ pcs86_uart_irq(void *context, int asserted)
     bm_pcs86_machine_t *machine = context;
     (void) bm_pic8259_set_irq(machine->pic, 4U,
                               ((machine->control & 0x10U) != 0) && asserted);
+}
+
+static void
+pcs86_xta_irq(void *context, int asserted)
+{
+    bm_pcs86_machine_t *machine = context;
+    (void) bm_pic8259_set_irq(machine->pic, 5U, asserted);
 }
 
 static void
@@ -641,6 +650,8 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
                 (void) bm_pic8259_set_irq(machine->pic, 7U, 0);
             if (((machine->control ^ value) & 0x10U) && ((value & 0x10U) == 0))
                 (void) bm_pic8259_set_irq(machine->pic, 4U, 0);
+            if (((machine->control ^ value) & 0x01U) != 0U)
+                bm_xta_set_enabled(machine->xta, (value & 0x01U) != 0U);
             machine->control = value;
             break;
         case 0x0066:
@@ -740,6 +751,19 @@ pcs86_validate(const bm_configuration_view_t *configuration)
         (config->ems_kib != BM_PCS86_EMS_384_KIB) &&
         (config->ems_kib != BM_PCS86_EMS_1920_KIB))
         status = BM_STATUS_INVALID_ARGUMENT;
+    if ((status == BM_STATUS_OK) && config->hard_disk.present) {
+        uint64_t required_blocks =
+            (uint64_t) config->hard_disk.geometry.cylinders *
+            config->hard_disk.geometry.heads *
+            config->hard_disk.geometry.sectors_per_track;
+        if ((config->hard_disk.geometry.cylinders == 0U) ||
+            (config->hard_disk.geometry.heads == 0U) ||
+            (config->hard_disk.geometry.sectors_per_track == 0U) ||
+            (bm_block_media_validate(&config->hard_disk.media) != BM_STATUS_OK) ||
+            (config->hard_disk.media.block_size != 512U) ||
+            (config->hard_disk.media.block_count < required_blocks))
+            status = BM_STATUS_INVALID_ARGUMENT;
+    }
     return status;
 }
 
@@ -772,6 +796,7 @@ pcs86_destroy(void *context)
     bm_floppy_drive_destroy(machine->floppy[1]);
     bm_floppy_drive_destroy(machine->floppy[0]);
     bm_dma_page_registers_destroy(machine->dma_pages);
+    bm_xta_destroy(machine->xta);
     bm_dma8237_destroy(machine->dma);
     bm_uart16450_destroy(machine->uart);
     bm_lpt_spp_destroy(machine->lpt);
@@ -902,6 +927,8 @@ pcs86_create(bm_engine_t *engine,
     machine->jumpers = (uint8_t) (
         0xf0U | pcs86_floppy_jumper_code(&config->floppy[0]) |
         (uint8_t) (pcs86_floppy_jumper_code(&config->floppy[1]) << 2U));
+    if (config->hard_disk.present)
+        machine->jumpers &= (uint8_t) ~0x80U;
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
     machine->ems_size = (size_t) config->ems_kib * 1024U;
@@ -962,6 +989,29 @@ pcs86_create(bm_engine_t *engine,
         status = bm_dma_page_registers_create(host, machine->bus, &page_config,
                                               &machine->dma_pages);
     }
+    if (status == BM_STATUS_OK) {
+        bm_xta_config_t xta_config = {
+            .io_base = 0x0320U,
+            .option_switches = 0xffU,
+            .dma_channel = 3U,
+            .dma = machine->dma,
+            .irq = pcs86_xta_irq,
+            .irq_context = machine,
+            .drive_present = config->hard_disk.present,
+            .geometry = config->hard_disk.geometry,
+            .media = config->hard_disk.media
+        };
+        status = bm_xta_create(host, machine->bus, &xta_config, &machine->xta);
+    }
+    if (status == BM_STATUS_OK)
+        /* The inherited PCS 86 used the legacy I/O fabric's default open-bus
+         * behaviour for unclaimed ports.  Its firmware resets four
+         * conventional XTA base slots at 321h, 325h, 329h and 32Dh, while the
+         * onboard controller claims only 320h-323h.  Preserve that board/bus
+         * contract explicitly: the three absent slots ignore writes and read
+         * as open bus. */
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0324U, 0x032fU,
+                            pcs86_open_bus_access, machine);
     if (status == BM_STATUS_OK) {
         bm_pic8259_config_t pic_config = {
             0x0020U, pcs86_pic_output, machine
@@ -1095,9 +1145,11 @@ pcs86_reset(void *context)
     bm_mm58167_reset(machine->rtc);
     bm_lpt_spp_reset(machine->lpt);
     bm_uart16450_reset(machine->uart);
+    bm_xta_reset(machine->xta);
     bm_pvga1a_reset(machine->video);
     machine->port61 = 0U;
     machine->control = 0x80U;
+    bm_xta_set_enabled(machine->xta, 0);
     machine->memory_blocks = 0U;
     memset(machine->glue, 0, sizeof(machine->glue));
     memset(machine->ps2, 0, sizeof(machine->ps2));
@@ -1200,6 +1252,24 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
         if (bm_uart16450_state(machine->uart, &state) != BM_STATUS_OK)
             return BM_STATUS_DEVICE_ERROR;
         *value = state.line_status;
+    } else if ((strcmp(name, "xta_status") == 0) ||
+               (strcmp(name, "xta_sense") == 0) ||
+               (strcmp(name, "xta_cylinder") == 0) ||
+               (strcmp(name, "xta_enabled") == 0) ||
+               (strcmp(name, "xta_irq") == 0)) {
+        bm_xta_state_t state;
+        if (bm_xta_state(machine->xta, &state) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        if (strcmp(name, "xta_status") == 0)
+            *value = state.status;
+        else if (strcmp(name, "xta_sense") == 0)
+            *value = state.sense;
+        else if (strcmp(name, "xta_cylinder") == 0)
+            *value = state.cylinder;
+        else if (strcmp(name, "xta_enabled") == 0)
+            *value = (uint64_t) state.enabled;
+        else
+            *value = (uint64_t) state.interrupt_asserted;
     } else if ((strcmp(name, "video_crtc_cursor_start") == 0) ||
                (strcmp(name, "video_crtc_cursor_end") == 0) ||
                (strcmp(name, "video_crtc_cursor_high") == 0) ||

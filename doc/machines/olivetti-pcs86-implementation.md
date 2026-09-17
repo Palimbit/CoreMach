@@ -13,7 +13,11 @@ documented 64 KiB system-ROM window, a single 8259A, a complete 8253 mode model,
 a functional MM58167, isolated SPP and NS16450 components and the known
 motherboard-register map. The current cut also supplies a caller-owned block
 medium, an independent floppy drive, real 8237 device transfers and a portable
-uPD765-compatible controller at `3F0h-3F7h` using IRQ6 and DMA2. It remains an
+uPD765-compatible controller at `3F0h-3F7h` using IRQ6 and DMA2. The integrated
+XTA path is also a portable component at `320h-323h`, gated by
+port `65h`, with IRQ5, DMA3 and caller-owned 615/4/17 block media; it does not
+load an option ROM because the PCS 86 firmware contains its disk services.
+It remains an
 incomplete emulator, but it is no longer stopped at the storage boundary: the
 BIOS visibly passes CPU, ROM, DMA, interrupt-controller, Timer,
 Clock/Calendar and keyboard diagnostics, reports 640 kB and one floppy drive,
@@ -75,6 +79,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer with CRTC cursor plus standard four-plane 16-colour and chain-4 256-colour XRGB8888 output. Geometry, display start, offset, double-scan and palette selection are register-derived rather than keyed to BIOS mode numbers. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent. |
 | Complete PPI behaviour | Partial board glue | Sufficient for the validated resident diagnostics and bootstrap path; electrical/timing fidelity and undocumented bits remain unclaimed |
 | Floppy controller and storage | Functional boot subset | Caller-owned raw block media, independent 360 KiB/1.2 MiB/720 KiB/1.44 MiB drive geometry, PCS 86 jumpers, active-low disk change, reset/sense/specify/seek/recalibrate/read-ID and DMA read/write-data paths; no rotational timing, flux/track formats, formatting or weak-sector behaviour |
+| Integrated XTA | Portable derived rewrite of the inherited generic XTA controller | Onboard `320h-323h` interface; the legacy machine already supplied open-bus semantics implicitly for the three unclaimed conventional base slots through `32Fh`, which the explicit portable bus now models at board level. Includes the port-`65h` gate, active-low presence jumper, IRQ5, DMA3 and PIO, caller-owned 512-byte block media, CP3026 615/4/17 geometry, read/write/verify/seek/recalibrate/sense/parameters/buffer/format/diagnostic commands; unknown commands complete with an explicit illegal-command sense code, and there is no option ROM, host path or private disk API |
 
 ## Text cursor timing and observed CRTC state
 
@@ -167,12 +172,23 @@ The current automated ladder uses no historical software:
    a complete 512-byte sector through DMA2 into guest RAM and verifies
    write-protect reporting. The PCS 86 integration test verifies a configured
    720 KiB drive's jumper encoding and reset state.
+11. A synthetic XTA test exercises controller gating, switches, PIO sector read
+   and write, DMA3 transfer into guest RAM, IRQ5 signalling, completion and
+   sense phases, and explicit illegal-command reporting without historical
+   firmware or disk inputs.
 
 Original firmware is intentionally not used in CI and no ROM, disk, manual or
 diagnostic asset is present in these public files. The manual firmware probe
 accepts two external 32 KiB halves and an optional external raw floppy image,
 reports the exact instruction boundary and can emit a framebuffer capture;
 it does not weaken the rule that firmware is caller-owned local data.
+
+A local-only XTA probe used the preserved EPROM pair, system diskette and blank
+CP3026 image through read-only frontend bindings. At 240,000,000 engine ticks
+it remained healthy (`BM_STATUS_OK`) after 239,997,684 instructions and 24,244
+successful I/O operations, ending at `F000:2B69` inside the firmware disk
+service with a valid framebuffer. This establishes stable firmware interaction
+with the installed controller, not XTA installation or a second hard-disk boot.
 
 ## Rejected shortcuts and replacement criteria
 
