@@ -30,5 +30,10 @@ main()
     pacer.reset(start + 1s);
     assert(pacer.ticksDue(start + 500ms) == 0U);
     assert(pacer.ticksDue(start + 1010ms) == 100000U);
+
+    TickPacer pcs86Pacer(UINT64_C(2000000), UINT64_C(10000));
+    pcs86Pacer.reset(start);
+    assert(pcs86Pacer.ticksDue(start + 5ms) == 10000U);
+    assert(pcs86Pacer.ticksDue(start + 10ms) == 10000U);
     return 0;
 }

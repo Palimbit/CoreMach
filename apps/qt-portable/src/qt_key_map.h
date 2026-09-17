@@ -6,6 +6,9 @@
 
 #include <QtGlobal>
 
-bm_key_code_t bmQtKeyCode(int key, quint32 nativeVirtualKey);
+bm_key_code_t bmWindowsScanCodeToKey(quint32 nativeScanCode);
+bm_key_code_t bmQtKeyCode(int key, quint32 nativeScanCode,
+                          quint32 nativeVirtualKey);
+bool bmQtShouldForwardKey(bool pressed, bool autoRepeat);
 
 #endif

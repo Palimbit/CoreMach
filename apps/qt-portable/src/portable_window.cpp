@@ -441,7 +441,12 @@ PortableWindow::sendKey(QKeyEvent *event, bool pressed)
         event->ignore();
         return;
     }
+    if (!bmQtShouldForwardKey(pressed, event->isAutoRepeat())) {
+        event->accept();
+        return;
+    }
     const bm_key_code_t key = bmQtKeyCode(event->key(),
+                                         event->nativeScanCode(),
                                          event->nativeVirtualKey());
     if (key == static_cast<bm_key_code_t>(0)) {
         event->ignore();

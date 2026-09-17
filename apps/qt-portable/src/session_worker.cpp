@@ -2,6 +2,7 @@
 #include "session_worker.h"
 #include "tick_pacer.h"
 
+#include <algorithm>
 #include <chrono>
 #include <limits>
 #include <system_error>
@@ -10,14 +11,19 @@
 
 namespace {
 /* Keep the emulation boundary short enough that input queued by the UI is not
- * held behind a long catch-up slice.  At the current 10 MHz session rate this
- * caps the worker-side contribution to input latency at five milliseconds. */
-constexpr uint64_t maximumChunk = UINT64_C(50000);
+ * held behind a long catch-up slice. */
+constexpr uint64_t maximumChunksPerSecond = UINT64_C(200);
 /* Give every make/break transition two milliseconds of guest time. This keeps
  * a Qt event burst ordered like a keyboard byte stream while the pacer account
  * prevents the extra work from making the guest run ahead of wall time. */
-constexpr uint64_t inputTransitionTicks = UINT64_C(20000);
+constexpr uint64_t inputTransitionsPerSecond = UINT64_C(500);
 constexpr auto framePeriod = std::chrono::milliseconds(16);
+
+uint64_t
+ticksForInterval(uint64_t ticksPerSecond, uint64_t intervalsPerSecond)
+{
+    return std::max(UINT64_C(1), ticksPerSecond / intervalsPerSecond);
+}
 }
 
 SessionWorker::SessionWorker(const bm_host_services_t &host,
@@ -96,6 +102,8 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                 status = bm_session_send_input(session, &command.input);
                 if ((status == BM_STATUS_OK) &&
                     (bm_session_state(session) == BM_SESSION_RUNNING)) {
+                    const uint64_t inputTransitionTicks = ticksForInterval(
+                        ticksPerSecond_, inputTransitionsPerSecond);
                     status = bm_session_run_for(session, inputTransitionTicks);
                     if (status == BM_STATUS_OK)
                         pacer.account(inputTransitionTicks);
@@ -206,7 +214,9 @@ SessionWorker::run()
         return;
     }
 
-    TickPacer pacer(ticksPerSecond_, maximumChunk);
+    TickPacer pacer(
+        ticksPerSecond_,
+        ticksForInterval(ticksPerSecond_, maximumChunksPerSecond));
     auto now = TickPacer::Clock::now();
     auto nextFrame = now;
     pacer.reset(now);
