@@ -415,10 +415,15 @@ Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
 and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
 real-mode vector table. A withdrawn edge request no longer survives as its
-original IRQ before the first interrupt acknowledgement. Neither component
-owns the other. The added SPP, NS16450 and keyboard paths follow the same
-ownership rule and communicate only through explicit callbacks and runtime
-events. Mouse delivery and complete V30 coverage remain subsequent cuts.
+original IRQ before the first interrupt acknowledgement. Non-specific and
+specific EOI commands release their corresponding in-service state, and fixed
+priority prevents the same or a lower-priority request from recursively
+entering an active handler. This matters for the PCS 86 BIOS, which uses
+specific `61h` and `66h` EOI commands for keyboard and floppy interrupts.
+Neither component owns the other. The added SPP, NS16450 and keyboard paths
+follow the same ownership rule and communicate only through explicit callbacks
+and runtime events. Mouse delivery and complete V30 coverage remain subsequent
+cuts.
 
 ### PCS86-4 floppy/bootstrap status
 

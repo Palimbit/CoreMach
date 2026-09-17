@@ -36,17 +36,6 @@ struct bm_pic8259 {
     void *output_context;
 };
 
-static void
-update_output(bm_pic8259_t *pic)
-{
-    int asserted = (pic->irr & (uint8_t) ~pic->imr) != 0;
-    if (asserted != pic->output_asserted) {
-        pic->output_asserted = asserted;
-        if (pic->output != NULL)
-            pic->output(pic->output_context, asserted);
-    }
-}
-
 static int
 highest_priority(uint8_t value)
 {
@@ -56,6 +45,32 @@ highest_priority(uint8_t value)
             return (int) line;
     }
     return -1;
+}
+
+static uint8_t
+eligible_requests(const bm_pic8259_t *pic)
+{
+    uint8_t pending = pic->irr & (uint8_t) ~pic->imr;
+    const int active = highest_priority(pic->isr);
+
+    /* Fixed-priority fully nested mode only permits a request that outranks
+     * the highest-priority interrupt already in service. */
+    if (active == 0)
+        return 0U;
+    if (active > 0)
+        pending &= (uint8_t) ((1U << active) - 1U);
+    return pending;
+}
+
+static void
+update_output(bm_pic8259_t *pic)
+{
+    int asserted = eligible_requests(pic) != 0U;
+    if (asserted != pic->output_asserted) {
+        pic->output_asserted = asserted;
+        if (pic->output != NULL)
+            pic->output(pic->output_context, asserted);
+    }
 }
 
 static bm_status_t
@@ -88,7 +103,10 @@ pic_access(void *context, bm_bus_transaction_t *transaction)
             int line = highest_priority(pic->isr);
             if (line >= 0)
                 pic->isr &= (uint8_t) ~(1U << line);
+        } else if ((value & 0xe0U) == 0x60U) {
+            pic->isr &= (uint8_t) ~(1U << (value & 0x07U));
         }
+        update_output(pic);
         return BM_STATUS_OK;
     }
 
@@ -201,7 +219,7 @@ bm_pic8259_set_irq(bm_pic8259_t *pic, unsigned int line, int asserted)
 int
 bm_pic8259_pending(const bm_pic8259_t *pic)
 {
-    return (pic != NULL) && ((pic->irr & (uint8_t) ~pic->imr) != 0);
+    return (pic != NULL) && (eligible_requests(pic) != 0U);
 }
 
 bm_status_t
@@ -211,7 +229,7 @@ bm_pic8259_acknowledge(bm_pic8259_t *pic, uint8_t *vector)
     uint8_t pending;
     if ((pic == NULL) || (vector == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
-    pending = pic->irr & (uint8_t) ~pic->imr;
+    pending = eligible_requests(pic);
     line = highest_priority(pending);
     if (line < 0)
         return BM_STATUS_IDLE;
