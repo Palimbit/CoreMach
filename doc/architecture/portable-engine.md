@@ -131,6 +131,17 @@ Manual](https://www.dosdays.co.uk/media/nec/NEC-V20-V30-Users-Manual.pdf) and
 NEC's later [16-Bit V Series Instruction User's
 Manual](https://datasheets.chipdb.org/NEC/V20-V30/U11301EJ5V0UMJ1.PDF).
 
+The following 80186-compatible cut adds the NEC INM/OUTM instructions exposed
+by the usual INSB/INSW/OUTSB/OUTSW opcodes. Input always targets ES:DI and
+ignores segment override prefixes as documented; output reads DS:SI by default
+and accepts the selected source-segment override. DX remains fixed across REP,
+DF selects index increment or decrement, a zero repeat count performs no bus
+access, and word I/O uses ordered byte transfers at DX and wrapping DX+1. A bus
+failure preserves the progress of completed iterations but does not advance
+the failing iteration. This remains functional instruction-domain behavior:
+the current string executor does not yet expose V30 bus-cycle timing or an
+interruptible boundary between REP iterations.
+
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
 copied or executed by this test.
@@ -307,6 +318,12 @@ PREPARE/ENTER and DISPOSE/LEAVE. All operands still pass through the portable
 register and memory-bus contracts. Undefined NEC encodings return
 `BM_STATUS_UNSUPPORTED`; they are not treated as undocumented aliases or
 successful no-ops.
+
+The next cut adds INSB/INSW/OUTSB/OUTSW, including REP count-zero behavior,
+DF-directed indexing, the fixed DX port, the mandatory ES input destination,
+source overrides for output and ordered word transfers. It uses only the same
+portable memory and I/O bus. Interrupt restart between REP iterations and V30
+bus-cycle accounting remain part of the later prefix/interrupt and timing cuts.
 
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
 format-track, deleted-data distinction, flux/weak-sector formats and dynamic
