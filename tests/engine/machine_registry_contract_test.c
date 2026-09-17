@@ -31,6 +31,7 @@ make_definition(const char *id)
 {
     bm_machine_definition_t definition = {
         .id = id,
+        .scheduler_ticks_per_second = 1000000U,
         .configuration = { "test.registry.config", 1U, sizeof(int) },
         .ops = { NULL, test_create, test_destroy,
                  NULL, NULL, NULL, NULL, NULL },
@@ -57,6 +58,9 @@ test_definition_and_configuration_validation(void)
 
     invalid = definition;
     invalid.id = "";
+    assert(bm_machine_definition_validate(&invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid = definition;
+    invalid.scheduler_ticks_per_second = 0U;
     assert(bm_machine_definition_validate(&invalid) == BM_STATUS_INVALID_ARGUMENT);
     invalid = definition;
     invalid.configuration.type = "";

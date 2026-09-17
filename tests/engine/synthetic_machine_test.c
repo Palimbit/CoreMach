@@ -312,6 +312,7 @@ machine_config(const synthetic_config_t *configuration)
 {
     static const bm_machine_definition_t definition = {
         .id = "test.synthetic-four-instruction",
+        .scheduler_ticks_per_second = 1000000U,
         .configuration = { "test.synthetic-config", 1U,
                            sizeof(synthetic_config_t) },
         .ops = { synthetic_validate, synthetic_create, synthetic_destroy,

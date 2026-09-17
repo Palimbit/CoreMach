@@ -33,6 +33,9 @@ those facilities without exposing them to an emulated component.
 - Every mutable value belongs to an engine, session, machine or component.
 - A session has an explicit lifecycle and supports safe partial cleanup.
 - Time uses integer ticks and same-time events use insertion order.
+- Every machine definition declares the rate of its current scheduler tick
+  domain so a frontend never substitutes CPU crystal frequency for engine
+  time. The rate is pacing metadata, not a claim of cycle accuracy.
 - CPU implementations receive a bounded budget and report consumed time.
 - Buses model memory, I/O, program and data spaces independently.
 - Debug and initiator-held lock state are explicit transaction attributes, not
