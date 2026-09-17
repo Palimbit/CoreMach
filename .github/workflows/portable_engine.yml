@@ -81,7 +81,7 @@ jobs:
       - name: Install Qt6 development packages
         run: |
           sudo apt-get update
-          sudo apt-get install --yes qt6-base-dev
+          sudo apt-get install --yes qt6-base-dev libqt6opengl6-dev
       - name: Configure portable Qt6 build
         run: >-
           cmake -S . -B build/portable-qt
@@ -93,4 +93,6 @@ jobs:
       - name: Build
         run: cmake --build build/portable-qt --parallel 4
       - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build/portable-qt --output-on-failure

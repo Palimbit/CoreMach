@@ -86,6 +86,8 @@ private:
     QAction *copyFrameAction_;
     QAction *saveFrameAction_;
     QActionGroup *scaleGroup_;
+    QActionGroup *rendererGroup_;
+    QActionGroup *effectGroup_;
     bm_host_services_t host_;
     PortableCatalog catalog_;
     QString catalogError_;

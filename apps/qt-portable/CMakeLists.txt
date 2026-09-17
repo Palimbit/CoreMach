@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui OpenGLWidgets Widgets)
 find_package(Threads REQUIRED)
 include(BluMachCatalog)
 blumach_prepare_catalog(BLUMACH_PORTABLE_CATALOG_QRC)
@@ -33,6 +33,7 @@ target_link_libraries(blumach_portable_qt PRIVATE
     blumach_runtime
     Qt6::Core
     Qt6::Gui
+    Qt6::OpenGLWidgets
     Qt6::Widgets
     Threads::Threads
 )
@@ -58,6 +59,7 @@ if(BUILD_TESTING)
     target_include_directories(blumach_portable_display_widget_test PRIVATE src)
     target_link_libraries(blumach_portable_display_widget_test PRIVATE
         Qt6::Gui
+        Qt6::OpenGLWidgets
         Qt6::Widgets
     )
     target_compile_features(blumach_portable_display_widget_test PRIVATE
