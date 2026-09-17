@@ -2329,7 +2329,7 @@ execute_one(bm_808x_state_t *state)
             uint16_t lower = 0U;
             uint16_t upper = 0U;
             int32_t index;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override,
