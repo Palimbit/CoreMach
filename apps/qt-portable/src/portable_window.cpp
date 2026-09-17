@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "portable_window.h"
 #include "machine_dialog.h"
+#include "qt_key_map.h"
 
 #include <blumach/platforms/null_host.h>
 
@@ -440,7 +441,8 @@ PortableWindow::sendKey(QKeyEvent *event, bool pressed)
         event->ignore();
         return;
     }
-    const bm_key_code_t key = mapKey(event->key());
+    const bm_key_code_t key = bmQtKeyCode(event->key(),
+                                         event->nativeVirtualKey());
     if (key == static_cast<bm_key_code_t>(0)) {
         event->ignore();
         return;
@@ -619,58 +621,4 @@ PortableWindow::showStatus(const QString &detail)
     status_->setText(text);
     status_->setToolTip(tr("Emulated time: %1 ticks")
                             .arg(static_cast<qulonglong>(worker_->ticks())));
-}
-
-bm_key_code_t
-PortableWindow::mapKey(int key)
-{
-    if ((key >= Qt::Key_A) && (key <= Qt::Key_Z))
-        return static_cast<bm_key_code_t>(BM_KEY_A + key - Qt::Key_A);
-    if ((key >= Qt::Key_1) && (key <= Qt::Key_9))
-        return static_cast<bm_key_code_t>(BM_KEY_1 + key - Qt::Key_1);
-    if (key == Qt::Key_0)
-        return BM_KEY_0;
-    switch (key) {
-        case Qt::Key_Return: case Qt::Key_Enter: return BM_KEY_ENTER;
-        case Qt::Key_Escape: return BM_KEY_ESCAPE;
-        case Qt::Key_Backspace: return BM_KEY_BACKSPACE;
-        case Qt::Key_Tab: return BM_KEY_TAB;
-        case Qt::Key_Space: return BM_KEY_SPACE;
-        case Qt::Key_Minus: return BM_KEY_MINUS;
-        case Qt::Key_Equal: return BM_KEY_EQUAL;
-        case Qt::Key_BracketLeft: return BM_KEY_LEFT_BRACKET;
-        case Qt::Key_BracketRight: return BM_KEY_RIGHT_BRACKET;
-        case Qt::Key_Backslash: return BM_KEY_BACKSLASH;
-        case Qt::Key_Semicolon: return BM_KEY_SEMICOLON;
-        case Qt::Key_Apostrophe: return BM_KEY_APOSTROPHE;
-        case Qt::Key_QuoteLeft: return BM_KEY_GRAVE;
-        case Qt::Key_Comma: return BM_KEY_COMMA;
-        case Qt::Key_Period: return BM_KEY_PERIOD;
-        case Qt::Key_Slash: return BM_KEY_SLASH;
-        case Qt::Key_CapsLock: return BM_KEY_CAPS_LOCK;
-        case Qt::Key_F1: return BM_KEY_F1;
-        case Qt::Key_F2: return BM_KEY_F2;
-        case Qt::Key_F3: return BM_KEY_F3;
-        case Qt::Key_F4: return BM_KEY_F4;
-        case Qt::Key_F5: return BM_KEY_F5;
-        case Qt::Key_F6: return BM_KEY_F6;
-        case Qt::Key_F7: return BM_KEY_F7;
-        case Qt::Key_F8: return BM_KEY_F8;
-        case Qt::Key_F9: return BM_KEY_F9;
-        case Qt::Key_F10: return BM_KEY_F10;
-        case Qt::Key_Insert: return BM_KEY_INSERT;
-        case Qt::Key_Home: return BM_KEY_HOME;
-        case Qt::Key_PageUp: return BM_KEY_PAGE_UP;
-        case Qt::Key_Delete: return BM_KEY_DELETE;
-        case Qt::Key_End: return BM_KEY_END;
-        case Qt::Key_PageDown: return BM_KEY_PAGE_DOWN;
-        case Qt::Key_Right: return BM_KEY_RIGHT;
-        case Qt::Key_Left: return BM_KEY_LEFT;
-        case Qt::Key_Down: return BM_KEY_DOWN;
-        case Qt::Key_Up: return BM_KEY_UP;
-        case Qt::Key_Control: return BM_KEY_LEFT_CONTROL;
-        case Qt::Key_Shift: return BM_KEY_LEFT_SHIFT;
-        case Qt::Key_Alt: return BM_KEY_LEFT_ALT;
-        default: return static_cast<bm_key_code_t>(0);
-    }
 }

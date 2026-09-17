@@ -518,6 +518,21 @@ cross to the Qt event loop. Lifecycle results and errors remain ordered and
 cannot be discarded. This bounds the worker-side keyboard delay and prevents a
 busy UI from presenting an accumulated queue of obsolete images.
 
+Qt key events are translated to the engine's stable physical-key identifiers
+before they enter the session. The translator accepts both unshifted Qt keys
+and the shifted punctuation symbols produced by host layouts, retains the side
+of Win32 modifier keys, and rejects keys for which the portable engine has no
+declared identifier. It does not pass Qt values, text, host scan codes or a
+keyboard-layout object into the runtime.
+
+Each accepted make or break transition is followed by two milliseconds of
+emulated execution. This deterministic separation prevents a burst from the Qt
+event loop from depositing an entire key sequence at one emulated instant. The
+worker charges those ticks to its wall-clock pacer, so input processing cannot
+make the guest run ahead. Headless and other frontends remain free to schedule
+the same engine events with their own explicit emulated-time separation; there
+is no private Qt timer or machine-specific keyboard exception in the engine.
+
 Video geometry also carries an optional exact refresh rational. PVGA1A derives
 it from the programmed CRTC totals and a selected documented clock; board-defined
 external clocks remain zero/unknown instead of being assigned a guessed rate.

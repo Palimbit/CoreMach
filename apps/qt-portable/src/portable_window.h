@@ -66,8 +66,6 @@ private:
         const std::vector<bm_storage_device_status_t> &storage);
     void updateActions();
     void showStatus(const QString &detail = QString());
-    static bm_key_code_t mapKey(int key);
-
     DisplayWidget *display_;
     QLabel *status_;
     QLabel *storageStatus_;

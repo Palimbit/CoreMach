@@ -11,6 +11,7 @@ public:
 
     TickPacer(uint64_t ticksPerSecond, uint64_t maximumChunk);
     void reset(Clock::time_point now);
+    void account(uint64_t ticks);
     uint64_t ticksDue(Clock::time_point now);
 
 private:

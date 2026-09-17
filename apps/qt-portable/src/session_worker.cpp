@@ -13,6 +13,10 @@ namespace {
  * held behind a long catch-up slice.  At the current 10 MHz session rate this
  * caps the worker-side contribution to input latency at five milliseconds. */
 constexpr uint64_t maximumChunk = UINT64_C(50000);
+/* Give every make/break transition two milliseconds of guest time. This keeps
+ * a Qt event burst ordered like a keyboard byte stream while the pacer account
+ * prevents the extra work from making the guest run ahead of wall time. */
+constexpr uint64_t inputTransitionTicks = UINT64_C(20000);
 constexpr auto framePeriod = std::chrono::milliseconds(16);
 }
 
@@ -73,7 +77,7 @@ SessionWorker::enqueue(Command command)
 }
 
 bool
-SessionWorker::processCommands(bm_session_t *session)
+SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
 {
     std::deque<Command> commands;
     {
@@ -90,6 +94,12 @@ SessionWorker::processCommands(bm_session_t *session)
             case CommandKind::Stop: status = bm_session_stop(session); break;
             case CommandKind::Input:
                 status = bm_session_send_input(session, &command.input);
+                if ((status == BM_STATUS_OK) &&
+                    (bm_session_state(session) == BM_SESSION_RUNNING)) {
+                    status = bm_session_run_for(session, inputTransitionTicks);
+                    if (status == BM_STATUS_OK)
+                        pacer.account(inputTransitionTicks);
+                }
                 break;
             case CommandKind::Shutdown: return false;
         }
@@ -202,7 +212,7 @@ SessionWorker::run()
     pacer.reset(now);
     bool active = true;
     while (active) {
-        active = processCommands(session);
+        active = processCommands(session, pacer);
         if (!active)
             break;
         now = TickPacer::Clock::now();
