@@ -16,18 +16,18 @@ uPD765-compatible controller at `3F0h-3F7h` using IRQ6 and DMA2. It remains an
 incomplete emulator, but it is no longer stopped at the storage boundary: the
 BIOS visibly passes CPU, ROM, DMA, interrupt-controller, Timer,
 Clock/Calendar and keyboard diagnostics, reports 640 kB and one floppy drive,
-then enters its primary bootstrap. With the preserved 720 KiB system-diskette
-image mounted read-only, the BIOS transfers and executes its boot sector and
-the system files display the Microsoft MS-DOS 3.30a banner. The run stops
-explicitly with `BM_STATUS_UNMAPPED` at `OUT 02F2h,AL` after 6,935,257 retired
-instructions and 14,031 I/O accesses; its 720x400 frame has CRC32 `DCD404C6`.
-This is DOS initialization, not a completed boot to a command prompt. The
+then enters its primary bootstrap. With the preserved validation diskette
+mounted read-only, the BIOS transfers and executes its boot sector, the system
+files initialize Microsoft MS-DOS 3.30a, `AUTOEXEC.BAT` runs and the pilot
+reaches an interactive `A>` prompt. This validates the described boot path and
+basic keyboard interaction, not broad DOS application compatibility. The
 unpopulated option-ROM region returns ones;
 the PCS 86 system EPROMs already contain video initialization, so the engine
 does not fabricate a separate ROM. The PVGA1A component owns VGA/Paradise
-register state and 256 KiB of planar VRAM and publishes a deterministic
-host-neutral text framebuffer. It then exercises the enabled parallel and
-serial register paths. Host-neutral keyboard events and the board's dual
+register state and 256 KiB of planar VRAM and publishes a deterministic,
+host-neutral text framebuffer including the CRTC text cursor. It then exercises
+the enabled parallel and serial register paths. Host-neutral keyboard events
+and the board's dual
 keyboard/mouse queues are present. FDC rotational/command timing, asynchronous
 DMA arbitration, mouse input and writable-media product integration remain
 absent.
@@ -71,9 +71,40 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | NS16450 UART | Derived portable register core | Divisor latch, IER/IIR, LCR/MCR, LSR/MSR, scratch, modem/data loopback and IRQ4 at gated `3F8h-3FFh`; no 16550 FIFO, host serial backend or baud scheduling |
 | Keyboard input | New runtime contract plus PCS 86 translation | Stable physical-key events, supported IBM Set 1 make/break bytes and IRQ1; no host scan codes in the engine, mouse input, electrical timing or complete command set |
 | PCS 86 video selection | Observed write-only boundary | Empty `C0000h-EFFFFh` option-ROM space returns ones; `46E8h` and `102h` retain the BIOS-observed arbitration writes without undocumented side effects |
-| Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer and host-neutral XRGB8888 framebuffer, but no graphics modes or scan timing |
+| Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer and host-neutral XRGB8888 framebuffer with CRTC cursor shape, disable, skew, display-start/offset addressing and emulated-time blink; no graphics modes or scan-event generation |
 | Complete PPI behaviour | Partial board glue | Sufficient for the validated resident diagnostics and bootstrap path; electrical/timing fidelity and undocumented bits remain unclaimed |
 | Floppy controller and storage | Functional boot subset | Caller-owned raw block media, independent 360 KiB/1.2 MiB/720 KiB/1.44 MiB drive geometry, PCS 86 jumpers, active-low disk change, reset/sense/specify/seek/recalibrate/read-ID and DMA read/write-data paths; no rotational timing, flux/track formats, formatting or weak-sector behaviour |
+
+## Text cursor timing and observed CRTC state
+
+The Western Digital/Paradise PVGA1A data sheet defines CRTC `0Ah[5]` as the
+cursor disable bit, `0Ah[4:0]` and `0Bh[4:0]` as the inclusive start and end
+scan lines, and `0Bh[6:5]` as a zero-to-three-character cursor skew. It also
+states that no cursor is generated when start is greater than end, rather than
+describing the EGA split-cursor behaviour. The start address, cursor address and
+offset remain in the CRTC character-address space. These are PVGA1A rules, not
+assumptions copied from an IBM-only implementation. Source: [Western Digital
+PVGA1A Advance Information, 30 October 1990, pp. 19-58 to
+19-61](https://www.dosdays.co.uk/media/paradise/PVGA1A_Datasheet.pdf).
+
+At the validated `A>` prompt, a read-only local probe observed `0Ah=0Dh`,
+`0Bh=0Eh`, cursor address `0E/0F=0782h`, display start `0C/0D=0000h`, maximum
+scan-line register `09h=4Fh`, offset `13h=28h` and Paradise PR3 `00h`. In the
+rendered 80-column mode this is a 16-scan-line character cell, an effective
+80-character row stride, and an underline at row 24, column 2 immediately after
+`A>`. PR3 cursor-doubling is inactive in this observed mode. No firmware, disk
+or capture used for the observation is stored in Git.
+
+The runtime passes the current engine tick explicitly to the machine video
+operation. The PVGA1A renderer derives the VGA cursor's 50-percent blink phase
+from that time, the programmed CRTC totals and the selected 25.175 or 28.322 MHz
+clock. The documented VGA cursor rate is VSYNC/16. VCLK2/VCLK3 are external,
+board-defined inputs; if selected, the current component uses a deterministic
+70 Hz fallback instead of claiming an unknown PCS 86 board clock. Headless and
+Qt therefore consume the same framebuffer state for the same emulated time and
+neither owns a cursor timer. Blink-rate source: [IBM Personal System/2 Hardware
+Interface Technical Reference, Video Subsystems, September
+1992](https://ardent-tool.com/docs/pdf/42G2193_PS2_Hardware_Interface_Technical_Reference_Video_Subsystems_Sep92.pdf).
 
 Unsupported opcodes return a structured `BM_STATUS_UNSUPPORTED` result. They
 are not skipped, approximated as NOPs or redirected to the inherited engine.

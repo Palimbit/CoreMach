@@ -47,7 +47,10 @@ typedef bm_status_t (*bm_machine_input_fn)(void *machine,
                                           const bm_input_event_t *event);
 typedef bm_status_t (*bm_machine_video_geometry_fn)(const void *machine,
                                                      bm_video_geometry_t *geometry);
+/* Rendering observes session time but cannot advance it. Frontends that render
+ * the same machine state at the same emulated_time receive the same frame. */
 typedef bm_status_t (*bm_machine_video_render_fn)(const void *machine,
+                                                   bm_tick_t emulated_time,
                                                    bm_video_framebuffer_t *framebuffer);
 
 typedef struct bm_machine_ops {

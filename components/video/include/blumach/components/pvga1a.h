@@ -42,7 +42,11 @@ bm_status_t bm_pvga1a_inspect_vram(const bm_pvga1a_t *video,
                                    uint8_t *value);
 bm_status_t bm_pvga1a_video_geometry(const bm_pvga1a_t *video,
                                      bm_video_geometry_t *geometry);
+/* ticks_per_second defines the machine's deterministic conversion from engine
+ * ticks to video time. Rendering does not consult a host clock. */
 bm_status_t bm_pvga1a_render(const bm_pvga1a_t *video,
+                             bm_tick_t emulated_time,
+                             uint64_t ticks_per_second,
                              bm_video_framebuffer_t *framebuffer);
 
 #ifdef __cplusplus

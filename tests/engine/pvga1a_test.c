@@ -37,6 +37,13 @@ memory_write(bm_bus_t *bus, uint32_t address, uint8_t value)
     return bm_bus_transact(bus, &transaction);
 }
 
+static bm_status_t
+crtc_write(bm_bus_t *bus, uint8_t index, uint8_t value)
+{
+    bm_status_t status = io_write(bus, 0x03d4U, index);
+    return status == BM_STATUS_OK ? io_write(bus, 0x03d5U, value) : status;
+}
+
 int
 main(void)
 {
@@ -47,8 +54,8 @@ main(void)
     uint8_t value = 0;
     unsigned int plane;
     bm_video_geometry_t geometry;
-    uint32_t pixels[16];
-    bm_video_framebuffer_t framebuffer = { pixels, 16U, 8U, { 0, 0, BM_PIXEL_XRGB8888 } };
+    uint32_t pixels[64];
+    bm_video_framebuffer_t framebuffer = { pixels, 64U, 16U, { 0, 0, BM_PIXEL_XRGB8888 } };
 
     assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_pvga1a_create(&host, bus, &config, &video) == BM_STATUS_OK);
@@ -107,6 +114,7 @@ main(void)
     assert(io_write(bus, 0x03d5U, 1U) == BM_STATUS_OK);
     assert(io_write(bus, 0x03d4U, 0x17U) == BM_STATUS_OK);
     assert(io_write(bus, 0x03d5U, 0x80U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0aU, 0x20U) == BM_STATUS_OK); /* Cursor disabled. */
 
     assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK);
     assert(io_write(bus, 0x03c0U, 0U) == BM_STATUS_OK);
@@ -138,10 +146,78 @@ main(void)
     assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
     assert(geometry.width == 8U && geometry.height == 2U &&
            geometry.format == BM_PIXEL_XRGB8888);
-    assert(bm_pvga1a_render(video, &framebuffer) == BM_STATUS_OK);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
     assert(framebuffer.geometry.width == 8U && framebuffer.geometry.height == 2U);
     assert(pixels[0] == 0x00ff0000U && pixels[1] == 0U);
-    assert(pixels[8] == 0U && pixels[9] == 0x00ff0000U);
+    assert(pixels[16] == 0U && pixels[17] == 0x00ff0000U);
+
+    /* Cursor shape uses 0Ah/0Bh, and a second render can change solely from
+     * deterministic emulated time: VGA cursor blink is VSYNC/16. */
+    assert(crtc_write(bus, 0U, 0x5fU) == BM_STATUS_OK); /* 100 character clocks. */
+    assert(crtc_write(bus, 6U, 0xbfU) == BM_STATUS_OK);
+    assert(crtc_write(bus, 7U, 0x01U) == BM_STATUS_OK); /* 449 total lines. */
+    assert(io_write(bus, 0x03c2U, 0x05U) == BM_STATUS_OK); /* 28.322 MHz. */
+    assert(crtc_write(bus, 0x0aU, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0bU, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0eU, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0fU, 0U) == BM_STATUS_OK);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(pixels[16] == 0x00ff0000U && pixels[23] == 0x00ff0000U);
+    assert(bm_pvga1a_render(video, UINT64_C(120000), UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(pixels[16] == 0U && pixels[17] == 0x00ff0000U && pixels[23] == 0U);
+
+    /* Disable and invalid (start > end) forms do not fabricate a cursor. */
+    assert(crtc_write(bus, 0x0aU, 0x21U) == BM_STATUS_OK);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(pixels[16] == 0U && pixels[17] == 0x00ff0000U);
+    assert(crtc_write(bus, 0x0aU, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0bU, 0U) == BM_STATUS_OK);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(pixels[16] == 0U && pixels[17] == 0x00ff0000U);
+
+    /* Position, CRTC skew, display start and offset all use the same character
+     * address space as the text fetcher. */
+    assert(io_write(bus, 0x03c4U, 2U) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c5U, 2U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0001U, 2U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 1U, 1U) == BM_STATUS_OK); /* Two columns. */
+    assert(crtc_write(bus, 0x0aU, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0bU, 0x21U) == BM_STATUS_OK); /* End 1, skew 1. */
+    assert(crtc_write(bus, 0x0eU, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0fU, 0U) == BM_STATUS_OK);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(framebuffer.geometry.width == 16U);
+    assert(pixels[24] == 0x00ff0000U && pixels[31] == 0x00ff0000U);
+    assert(crtc_write(bus, 0x0bU, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0fU, 2U) == BM_STATUS_OK); /* Outside visible cells. */
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(pixels[24] == 0U && pixels[31] == 0U);
+    assert(crtc_write(bus, 0x0cU, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0dU, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0fU, 1U) == BM_STATUS_OK);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(pixels[16] == 0x00ff0000U && pixels[23] == 0x00ff0000U);
+
+    /* Taller cells clip the inclusive cursor shape to their visible scanlines. */
+    assert(crtc_write(bus, 1U, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 9U, 3U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x12U, 3U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0aU, 2U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0bU, 3U) == BM_STATUS_OK);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &framebuffer) == BM_STATUS_OK);
+    assert(framebuffer.geometry.height == 4U);
+    assert(pixels[0] == 0U && pixels[16] == 0U);
+    assert(pixels[32] == 0x00ff0000U && pixels[39] == 0x00ff0000U);
+    assert(pixels[48] == 0x00ff0000U && pixels[55] == 0x00ff0000U);
 
     bm_pvga1a_destroy(video);
     bm_bus_destroy(bus);

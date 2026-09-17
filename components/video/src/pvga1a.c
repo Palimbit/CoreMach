@@ -521,6 +521,61 @@ vertical_display_lines(const bm_pvga1a_t *video)
     return (uint16_t) (lines + 1U);
 }
 
+static uint16_t
+vertical_total_lines(const bm_pvga1a_t *video)
+{
+    uint16_t lines = video->crtc[6];
+    if ((video->crtc[7] & 0x01U) != 0U)
+        lines |= 0x0100U;
+    if ((video->crtc[7] & 0x20U) != 0U)
+        lines |= 0x0200U;
+    return (uint16_t) (lines + 2U);
+}
+
+static uint64_t
+default_cursor_blink_half_period(uint64_t ticks_per_second)
+{
+    return (ticks_per_second / 70U) * 8U +
+           (((ticks_per_second % 70U) * 8U + 69U) / 70U);
+}
+
+static uint64_t
+cursor_blink_half_period(const bm_pvga1a_t *video, uint64_t ticks_per_second)
+{
+    uint64_t pixel_clock;
+    uint64_t frame_dots;
+    uint64_t numerator;
+
+    switch ((video->misc_output >> 2U) & 3U) {
+        case 0U:
+            pixel_clock = UINT64_C(25175000);
+            break;
+        case 1U:
+            pixel_clock = UINT64_C(28322000);
+            break;
+        default:
+            /* VCLK2/VCLK3 are board-defined inputs. The portable PCS 86 path
+             * does not select them, so retain a deterministic 70 Hz fallback
+             * rather than inventing a board clock. */
+            return default_cursor_blink_half_period(ticks_per_second);
+    }
+    frame_dots = ((uint64_t) video->crtc[0] + 5U) *
+                 text_character_width(video) * vertical_total_lines(video);
+    if ((frame_dots == 0U) ||
+        (ticks_per_second > UINT64_MAX / frame_dots / 8U))
+        return default_cursor_blink_half_period(ticks_per_second);
+    numerator = ticks_per_second * frame_dots * 8U;
+    return numerator / pixel_clock + ((numerator % pixel_clock) != 0U);
+}
+
+static int
+cursor_blink_visible(const bm_pvga1a_t *video, bm_tick_t emulated_time,
+                     uint64_t ticks_per_second)
+{
+    uint64_t half_period = cursor_blink_half_period(video, ticks_per_second);
+    return (half_period != 0U) && (((emulated_time / half_period) & 1U) == 0U);
+}
+
 bm_status_t
 bm_pvga1a_video_geometry(const bm_pvga1a_t *video, bm_video_geometry_t *geometry)
 {
@@ -582,7 +637,9 @@ font_base(const bm_pvga1a_t *video, int use_map_b)
 }
 
 bm_status_t
-bm_pvga1a_render(const bm_pvga1a_t *video, bm_video_framebuffer_t *framebuffer)
+bm_pvga1a_render(const bm_pvga1a_t *video, bm_tick_t emulated_time,
+                 uint64_t ticks_per_second,
+                 bm_video_framebuffer_t *framebuffer)
 {
     bm_video_geometry_t geometry;
     uint32_t columns;
@@ -590,10 +647,15 @@ bm_pvga1a_render(const bm_pvga1a_t *video, bm_video_framebuffer_t *framebuffer)
     uint32_t character_height;
     uint32_t row_stride;
     uint16_t start;
+    uint16_t cursor;
+    uint32_t cursor_start;
+    uint32_t cursor_end;
+    int cursor_enabled;
     uint32_t y;
     bm_status_t status;
 
-    if ((video == NULL) || (framebuffer == NULL) || (framebuffer->pixels == NULL))
+    if ((video == NULL) || (ticks_per_second == 0U) ||
+        (framebuffer == NULL) || (framebuffer->pixels == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     status = bm_pvga1a_video_geometry(video, &geometry);
     if (status != BM_STATUS_OK)
@@ -609,6 +671,18 @@ bm_pvga1a_render(const bm_pvga1a_t *video, bm_video_framebuffer_t *framebuffer)
     if (row_stride == 0U)
         row_stride = columns;
     start = (uint16_t) (((uint16_t) video->crtc[0x0c] << 8U) | video->crtc[0x0d]);
+    cursor = (uint16_t) (((uint16_t) video->crtc[0x0e] << 8U) |
+                         video->crtc[0x0f]);
+    cursor = (uint16_t) (cursor + ((video->crtc[0x0b] >> 5U) & 3U));
+    cursor_start = video->crtc[0x0a] & 0x1fU;
+    cursor_end = video->crtc[0x0b] & 0x1fU;
+    cursor_enabled = ((video->crtc[0x0a] & 0x20U) == 0U) &&
+                     (cursor_start <= cursor_end) &&
+                     (cursor_start < character_height) &&
+                     cursor_blink_visible(video, emulated_time,
+                                          ticks_per_second);
+    if (cursor_end >= character_height)
+        cursor_end = character_height - 1U;
 
     for (y = 0; y < geometry.height; ++y) {
         uint32_t *line = framebuffer->pixels + (size_t) y * framebuffer->stride;
@@ -630,6 +704,9 @@ bm_pvga1a_render(const bm_pvga1a_t *video, bm_video_framebuffer_t *framebuffer)
             uint16_t glyph_address;
             uint8_t glyph;
             uint32_t x;
+            int draw_cursor = cursor_enabled && (cell == cursor) &&
+                              (scanline >= cursor_start) &&
+                              (scanline <= cursor_end);
             if (((video->attribute[0x10] & 8U) != 0U) &&
                 ((attribute & 0x80U) != 0U))
                 background &= 7U;
@@ -645,8 +722,9 @@ bm_pvga1a_render(const bm_pvga1a_t *video, bm_video_framebuffer_t *framebuffer)
                     set = ((character & 0xe0U) == 0xc0U) &&
                           ((video->attribute[0x10] & 4U) != 0U) &&
                           ((glyph & 1U) != 0U);
-                line[column * character_width + x] =
-                    palette_color(video, set ? foreground : background);
+                line[column * character_width + x] = palette_color(
+                    video, draw_cursor ? foreground :
+                           (set ? foreground : background));
             }
         }
     }
