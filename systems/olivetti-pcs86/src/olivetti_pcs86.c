@@ -1156,6 +1156,7 @@ bm_pcs86_expected_firmware(size_t *count)
 
 static const bm_machine_definition_t pcs86_definition = {
     .id = "olivetti-pcs86",
+    .scheduler_ticks_per_second = PCS86_SCHEDULER_TICKS_PER_SECOND,
     .configuration = {
         BM_PCS86_CONFIG_TYPE,
         BM_PCS86_CONFIG_VERSION,

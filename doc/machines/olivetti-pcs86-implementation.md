@@ -61,7 +61,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; the scheduler does not yet consume CPU timing observations, so rational PIT/RTC clock accumulators still use a measured functional instruction rate |
-| Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, output callback, CPU acknowledge and EOI; no cascaded/level modes |
+| Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, fixed-priority nesting, output callback, CPU acknowledge, and non-specific or specific EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven from scheduler time without claiming cycle accuracy |
 | PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture/open-bus reads at `A0h-AEh`, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues and IRQ1 scan queue |
 | EMS selectors | Deliberate boundary | Write-only page-selector latches at `8400h-8403h`; no aperture or backing SIMMs are claimed or exposed |
@@ -71,7 +71,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | NS16450 UART | Derived portable register core | Divisor latch, IER/IIR, LCR/MCR, LSR/MSR, scratch, modem/data loopback and IRQ4 at gated `3F8h-3FFh`; no 16550 FIFO, host serial backend or baud scheduling |
 | Keyboard input | New runtime contract plus PCS 86 translation | Stable physical-key events, supported IBM Set 1 make/break bytes and IRQ1; no host scan codes in the engine, mouse input, electrical timing or complete command set |
 | PCS 86 video selection | Observed write-only boundary | Empty `C0000h-EFFFFh` option-ROM space returns ones; `46E8h` and `102h` retain the BIOS-observed arbitration writes without undocumented side effects |
-| Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer and host-neutral XRGB8888 framebuffer with CRTC cursor shape, disable, skew, display-start/offset addressing and emulated-time blink; no graphics modes or scan-event generation |
+| Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer with CRTC cursor plus standard four-plane 16-colour and chain-4 256-colour XRGB8888 output. Geometry, display start, offset, double-scan and palette selection are register-derived rather than keyed to BIOS mode numbers. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent. |
 | Complete PPI behaviour | Partial board glue | Sufficient for the validated resident diagnostics and bootstrap path; electrical/timing fidelity and undocumented bits remain unclaimed |
 | Floppy controller and storage | Functional boot subset | Caller-owned raw block media, independent 360 KiB/1.2 MiB/720 KiB/1.44 MiB drive geometry, PCS 86 jumpers, active-low disk change, reset/sense/specify/seek/recalibrate/read-ID and DMA read/write-data paths; no rotational timing, flux/track formats, formatting or weak-sector behaviour |
 
@@ -155,7 +155,9 @@ The current automated ladder uses no historical software:
 8. Focused SPP/NS16450 tests verify register reset, loopback and interrupt
    behaviour. A PCS 86 integration ROM enables both gated devices, performs a
    UART data loopback and reads the keyboard identify response. The session
-   test also verifies normalized make/break delivery and reset cleanup.
+   tests verify normalized Shift, letter, extended-key make/break delivery,
+   rejection of unsupported scan sequences, specific PIC EOI handling,
+   fixed-priority blocking and reset cleanup.
 9. The FDC test releases reset, drains the four sense-interrupt results, reads
    a complete 512-byte sector through DMA2 into guest RAM and verifies
    write-protect reporting. The PCS 86 integration test verifies a configured

@@ -180,6 +180,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
 {
     static const bm_machine_definition_t full_definition = {
         .id = "test.runtime-session",
+        .scheduler_ticks_per_second = 1000000U,
         .configuration = { "test.runtime-session.config", 1U,
                            sizeof(test_machine_t) },
         .ops = {
@@ -198,6 +199,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
     };
     static const bm_machine_definition_t required_definition = {
         .id = "test.runtime-session.required-only",
+        .scheduler_ticks_per_second = 1000000U,
         .configuration = { "test.runtime-session.config", 1U,
                            sizeof(test_machine_t) },
         .ops = { test_validate, test_create, test_destroy,

@@ -72,6 +72,10 @@ typedef struct bm_machine_ops {
 
 typedef struct bm_machine_definition {
     const char *id;
+    /* Rate of the machine's current scheduler tick domain. Frontends use this
+     * for wall-clock pacing; it is distinct from a CPU crystal frequency and
+     * may change when a machine adopts cycle-accounted scheduling. */
+    uint64_t scheduler_ticks_per_second;
     bm_configuration_contract_t configuration;
     bm_machine_ops_t ops;
     bm_engine_config_t engine;
