@@ -177,6 +177,24 @@ than pretending that the unimplemented 8080 execution mode exists. Synthetic
 tests cover reset, state transfer, stack images, interrupt entry and both
 mode-change rejection paths without firmware or host dependencies.
 
+The native-extension cut implements the documented V30 Group 3 map used by
+`ADD4S`, `SUB4S`, `CMP4S`, `ROL4`, `ROR4`, `INS` and `EXT`. Packed-BCD strings
+use DS:SI (or the selected source override) and the fixed ES:DI destination;
+only CY and Z are changed, while the manually undefined flags are preserved.
+Bit fields use the encoded byte registers, a one-to-sixteen-bit length and an
+explicit portable-memory window, then apply the documented offset-register and
+SI/DI update. `INS` honors the documented destination override instead of
+assuming that every operation is fixed to ES. The earlier
+`TEST1`/`CLR1`/`SET1`/`NOT1` path now validates its reserved ModR/M field and
+decodes memory displacement before immediate bit data. Blank Group 3 entries,
+non-register `INS`/`EXT` forms, out-of-range register operands, malformed
+immediate forms and BCD lengths outside 1-254 return
+`BM_STATUS_UNSUPPORTED`; they are never accepted as successful no-ops. The
+high half of AL after the nibble rotations is architecturally unspecified by
+the manual; the core uses explicit deterministic update ordering without
+claiming a hardware value for that undefined part. This cut remains host-,
+file- and Qt-independent and adds no cycle or prefetch claims.
+
 The prefix-control cut adds the V30-native `REPC` (`65h`) and `REPNC` (`64h`)
 conditions for `CMPS`/`SCAS`: the completed comparison controls continuation
 through CF, while a zero initial `CX` performs no data access. Using either
