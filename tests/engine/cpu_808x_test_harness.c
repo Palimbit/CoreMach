@@ -58,7 +58,9 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
         .fpo = config != NULL ? config->fpo : NULL,
         .poll = config != NULL ? config->poll : NULL,
         .coprocessor_context =
-            config != NULL ? config->coprocessor_context : NULL
+            config != NULL ? config->coprocessor_context : NULL,
+        .timing = config != NULL ? config->timing : NULL,
+        .timing_context = config != NULL ? config->timing_context : NULL
     };
     assert(bm_808x_create(&machine->host, &cpu_config, &machine->cpu) ==
            BM_STATUS_OK);

@@ -74,9 +74,10 @@ The explicit-state interpreter implements the documented V30 native and 8080
 instruction maps at instruction-boundary functional granularity. Every primary
 opcode and grouped encoding is classified by an executable synthetic matrix;
 unknown or reserved forms return `BM_STATUS_UNSUPPORTED` and are never silently
-treated as no-ops. One scheduler tick still represents one completed
-instruction, so prefetch, cycle and physical-bus timing remain deliberately
-outside this stage.
+treated as no-ops. A versioned optional observer now reports the timing facts
+known for each completed architectural boundary, while one scheduler tick still
+represents one completed instruction until that contract is sufficiently
+complete to drive machine time.
 
 The component also exposes a versioned architectural snapshot and a
 single-boundary step operation. These contracts contain registers, segments,
@@ -207,6 +208,25 @@ than inferred from the manual: the second F6h/F7h TEST encoding and the
 register-count shift `/6` behavior. This closes opcode classification; it does
 not claim exhaustive physical conformance for every operand value or replace
 the remaining cycle, prefetch and bus work.
+
+The first timing-contract cut keeps three quantities separate. Documented
+execution-unit clocks are classified for a deliberately limited set of native
+register, immediate, branch, control-transfer, flag and I/O forms; an explicit
+`execution_clocks_known` flag prevents every unclassified instruction and all
+8080-mode instructions from masquerading as zero-cycle operations. Successful
+transactions through the portable memory and I/O bus are counted separately,
+including wait states reported by mapped devices, without calling those logical
+transactions physical V30 bus cycles. Finally, taken control transfers and
+accepted interrupts report a six-byte V30 prefetch-queue invalidation and the
+new prefetch pointer. The observer is host-neutral and cannot alter execution.
+
+This establishes the boundary needed for the next CPU work without claiming a
+complete timing model. Queue fill, fetch/execution overlap, pre-decode, the
+remaining execution-clock table, physical word-transfer and alignment timing,
+and scheduler consumption of the observations remain explicit subsequent
+work. NEC's tables also state that execution clocks exclude prefetch,
+pre-decode and bus waits, which is why the contract does not combine them into
+one misleading number.
 
 The native-extension cut implements the documented V30 Group 3 map used by
 `ADD4S`, `SUB4S`, `CMP4S`, `ROL4`, `ROR4`, `INS` and `EXT`. Packed-BCD strings
@@ -380,9 +400,10 @@ limits; this is not a crystal- or battery-level simulation.
 The 8253 is a selective port of the measured edge-state core, retaining Daniel
 Balsom and Clara's attribution. It covers modes 0-5, binary and BCD counts,
 gates, stable latches and output edges. Rational accumulators drive the PIT and
-RTC from scheduler time without floating point. Until CPU cycle accounting is
-part of the engine contract, the PCS 86 uses a measured functional instruction
-rate for those domains and does not claim cycle accuracy.
+RTC from scheduler time without floating point. The CPU timing observer is not
+yet consumed by the scheduler, so the PCS 86 continues to use a measured
+functional instruction rate for those domains and does not claim cycle
+accuracy.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
