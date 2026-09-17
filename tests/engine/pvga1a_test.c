@@ -44,6 +44,40 @@ crtc_write(bm_bus_t *bus, uint8_t index, uint8_t value)
     return status == BM_STATUS_OK ? io_write(bus, 0x03d5U, value) : status;
 }
 
+static bm_status_t
+sequencer_write(bm_bus_t *bus, uint8_t index, uint8_t value)
+{
+    bm_status_t status = io_write(bus, 0x03c4U, index);
+    return status == BM_STATUS_OK ? io_write(bus, 0x03c5U, value) : status;
+}
+
+static bm_status_t
+graphics_write(bm_bus_t *bus, uint8_t index, uint8_t value)
+{
+    bm_status_t status = io_write(bus, 0x03ceU, index);
+    return status == BM_STATUS_OK ? io_write(bus, 0x03cfU, value) : status;
+}
+
+static bm_status_t
+attribute_write(bm_bus_t *bus, uint8_t index, uint8_t value)
+{
+    uint8_t ignored;
+    bm_status_t status = io_read(bus, 0x03daU, &ignored);
+    if (status == BM_STATUS_OK)
+        status = io_write(bus, 0x03c0U, index);
+    return status == BM_STATUS_OK ? io_write(bus, 0x03c0U, value) : status;
+}
+
+static void
+dac_write(bm_bus_t *bus, uint8_t index, uint8_t red, uint8_t green,
+          uint8_t blue)
+{
+    assert(io_write(bus, 0x03c8U, index) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, red) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, green) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c9U, blue) == BM_STATUS_OK);
+}
+
 int
 main(void)
 {
@@ -56,6 +90,10 @@ main(void)
     bm_video_geometry_t geometry;
     uint32_t pixels[64];
     bm_video_framebuffer_t framebuffer = { pixels, 64U, 16U, { 0, 0, BM_PIXEL_XRGB8888 } };
+    uint32_t graphics_pixels[16];
+    bm_video_framebuffer_t graphics_framebuffer = {
+        graphics_pixels, 16U, 8U, { 0, 0, BM_PIXEL_XRGB8888 }
+    };
 
     assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_pvga1a_create(&host, bus, &config, &video) == BM_STATUS_OK);
@@ -218,6 +256,86 @@ main(void)
     assert(pixels[0] == 0U && pixels[16] == 0U);
     assert(pixels[32] == 0x00ff0000U && pixels[39] == 0x00ff0000U);
     assert(pixels[48] == 0x00ff0000U && pixels[55] == 0x00ff0000U);
+
+    /* Standard four-plane VGA graphics combine one bit from each plane and
+     * pass the resulting attribute index through the DAC. The CRTC start and
+     * offset retain their display-address meaning instead of being replaced
+     * by a mode-number special case. */
+    assert(sequencer_write(bus, 1U, 1U) == BM_STATUS_OK);
+    assert(sequencer_write(bus, 4U, 4U) == BM_STATUS_OK);
+    assert(graphics_write(bus, 5U, 0U) == BM_STATUS_OK);
+    assert(graphics_write(bus, 6U, 1U) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x10U, 1U) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x12U, 0x0fU) == BM_STATUS_OK);
+    for (value = 0U; value < 16U; ++value)
+        assert(attribute_write(bus, value, value) == BM_STATUS_OK);
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c0U, 0x20U) == BM_STATUS_OK);
+    dac_write(bus, 0U, 0U, 0U, 0U);
+    dac_write(bus, 1U, 63U, 0U, 0U);
+    dac_write(bus, 2U, 0U, 63U, 0U);
+    dac_write(bus, 4U, 0U, 0U, 63U);
+    dac_write(bus, 8U, 63U, 63U, 63U);
+    dac_write(bus, 15U, 63U, 63U, 0U);
+    assert(crtc_write(bus, 1U, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 9U, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0cU, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0dU, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x12U, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x13U, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x17U, 0x80U) == BM_STATUS_OK);
+    assert(sequencer_write(bus, 2U, 1U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0100U, 0x80U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0102U, 0x80U) == BM_STATUS_OK);
+    assert(sequencer_write(bus, 2U, 2U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0100U, 0x40U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0102U, 0x80U) == BM_STATUS_OK);
+    assert(sequencer_write(bus, 2U, 4U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0100U, 0x20U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0102U, 0x80U) == BM_STATUS_OK);
+    assert(sequencer_write(bus, 2U, 8U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0100U, 0x10U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0102U, 0x80U) == BM_STATUS_OK);
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.width == 8U && geometry.height == 2U);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &graphics_framebuffer) == BM_STATUS_OK);
+    assert(graphics_pixels[0] == 0x00ff0000U);
+    assert(graphics_pixels[1] == 0x0000ff00U);
+    assert(graphics_pixels[2] == 0x000000ffU);
+    assert(graphics_pixels[3] == 0x00ffffffU);
+    assert(graphics_pixels[4] == 0U);
+    assert(graphics_pixels[8] == 0x00ffff00U);
+
+    /* Chain-4 256-colour mode fetches one byte per pixel from the interleaved
+     * planes and collapses CRTC double-scan into logical output lines. */
+    assert(sequencer_write(bus, 2U, 0x0fU) == BM_STATUS_OK);
+    assert(sequencer_write(bus, 4U, 0x08U) == BM_STATUS_OK);
+    assert(graphics_write(bus, 5U, 0x40U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 9U, 0x80U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0cU, 2U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x0dU, 0U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x12U, 3U) == BM_STATUS_OK);
+    dac_write(bus, 3U, 0U, 0U, 63U);
+    assert(memory_write(bus, 0x000a0800U, 1U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0801U, 2U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0802U, 3U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0x000a0808U, 2U) == BM_STATUS_OK);
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.width == 8U && geometry.height == 2U);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &graphics_framebuffer) == BM_STATUS_OK);
+    assert(graphics_pixels[0] == 0x00ff0000U);
+    assert(graphics_pixels[1] == 0x0000ff00U);
+    assert(graphics_pixels[2] == 0x000000ffU);
+    assert(graphics_pixels[8] == 0x0000ff00U);
+
+    /* CGA-compatible packed shift modes remain explicit until their address
+     * and palette contracts are implemented; do not render them as planar. */
+    assert(sequencer_write(bus, 4U, 4U) == BM_STATUS_OK);
+    assert(graphics_write(bus, 5U, 0x20U) == BM_STATUS_OK);
+    assert(bm_pvga1a_video_geometry(video, &geometry) ==
+           BM_STATUS_UNSUPPORTED);
 
     bm_pvga1a_destroy(video);
     bm_bus_destroy(bus);
