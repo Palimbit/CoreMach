@@ -77,7 +77,7 @@ typedef struct bm_808x_config {
     void *coprocessor_context;
 } bm_808x_config_t;
 
-#define BM_808X_ARCH_STATE_VERSION 3U
+#define BM_808X_ARCH_STATE_VERSION 4U
 
 typedef struct bm_808x_arch_state {
     uint32_t size;
@@ -109,6 +109,9 @@ typedef struct bm_808x_arch_state {
      * level itself remains an external bus pin and is not part of a snapshot. */
     uint8_t nmi_pending;
     uint8_t trap_pending;
+    /* BRKEM enables writes to MD so CALLN/interrupt plus IRET can return to
+     * emulation mode. RESET and RETEM disable them again. */
+    uint8_t md_write_enabled;
 } bm_808x_arch_state_t;
 
 bm_status_t bm_808x_create(const bm_host_services_t *host,
@@ -118,9 +121,9 @@ bm_status_t bm_808x_create(const bm_host_services_t *host,
 /* Architectural state transfer is defined only at an instruction boundary.
  * It deliberately excludes bus pins, trace bookkeeping and host callbacks,
  * but includes the architecturally observable interrupt shadows and latched
- * NMI/single-step requests. The current native-mode-only core canonicalizes
- * the NEC PSW fixed bits and rejects an input image with MD clear rather than
- * pretending to support 8080 emulation mode. */
+ * NMI/single-step requests and the MD write gate needed for mode transitions.
+ * The NEC PSW fixed bits are canonicalized in both native and 8080 emulation
+ * modes. */
 bm_status_t bm_808x_get_arch_state(const bm_cpu_t *cpu,
                                    bm_808x_arch_state_t *out_state);
 bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,

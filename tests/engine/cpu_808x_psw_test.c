@@ -47,6 +47,7 @@ test_reset_and_state_contract(void)
     cpu_808x_test_machine_create(&machine, NULL, nop, sizeof(nop));
     state = cpu_808x_test_get_state(&machine);
     assert(state.flags == 0xf002U);
+    assert(state.md_write_enabled == 0U);
     state.flags = 0x8028U;
     cpu_808x_test_set_state(&machine, &state);
     state = cpu_808x_test_get_state(&machine);
@@ -60,8 +61,13 @@ test_reset_and_state_contract(void)
     rejected = state;
     rejected.flags &= 0x7fffU;
     assert(bm_808x_set_arch_state(&machine.cpu, &rejected) ==
-           BM_STATUS_UNSUPPORTED);
+           BM_STATUS_INVALID_ARGUMENT);
     assert(cpu_808x_test_get_state(&machine).flags == 0xffd7U);
+
+    rejected.md_write_enabled = 1U;
+    assert(bm_808x_set_arch_state(&machine.cpu, &rejected) == BM_STATUS_OK);
+    rejected = cpu_808x_test_get_state(&machine);
+    assert(rejected.flags == 0x7fd7U && rejected.md_write_enabled == 1U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -143,7 +149,7 @@ test_interrupt_psw_image(void)
 }
 
 static void
-test_brkem_is_explicitly_unsupported(void)
+test_brkem_enters_emulation_mode(void)
 {
     static const uint8_t brkem[] = { 0x0fU, 0xffU, 0x12U };
     cpu_808x_test_machine_t machine;
@@ -152,11 +158,17 @@ test_brkem_is_explicitly_unsupported(void)
 
     cpu_808x_test_machine_create(&machine, NULL, brkem, sizeof(brkem));
     state = execution_state(&machine);
+    poke_word(&machine, 0x12U * 4U, 0x3456U);
+    poke_word(&machine, 0x12U * 4U + 2U, 0x1234U);
     cpu_808x_test_set_state(&machine, &state);
-    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_UNSUPPORTED);
+    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     state = cpu_808x_test_get_state(&machine);
-    assert(consumed == 0U && state.cs == 0xf000U && state.ip == 2U);
-    assert(state.flags == 0xf002U);
+    assert(consumed == 1U && state.cs == 0x1234U && state.ip == 0x3456U);
+    assert(state.sp == 0x00faU && state.flags == 0x7002U);
+    assert(state.md_write_enabled == 1U);
+    assert(peek_word(&machine, 0x200faU) == 3U);
+    assert(peek_word(&machine, 0x200fcU) == 0xf000U);
+    assert(peek_word(&machine, 0x200feU) == 0xf002U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -167,6 +179,6 @@ main(void)
     test_pushf_and_popf_images();
     test_iret_preserves_locked_md();
     test_interrupt_psw_image();
-    test_brkem_is_explicitly_unsupported();
+    test_brkem_enters_emulation_mode();
     return 0;
 }
