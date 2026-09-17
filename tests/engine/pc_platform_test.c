@@ -87,6 +87,40 @@ main(void)
     assert(!bm_pic8259_pending(pic));
     assert(irq.changes == 2U && irq.asserted == 0);
     assert(write_port(bus, 0x20U, 0x20U) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 0U, 0) == BM_STATUS_OK);
+
+    /* A repeated edge at the active priority and lower-priority work wait
+     * until EOI; a higher-priority line may still pre-empt it. */
+    assert(write_port(bus, 0x21U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 1U, 1) == BM_STATUS_OK);
+    assert(bm_pic8259_acknowledge(pic, &vector) == BM_STATUS_OK);
+    assert(vector == 9U);
+    assert(bm_pic8259_set_irq(pic, 1U, 0) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 1U, 1) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 2U, 1) == BM_STATUS_OK);
+    assert(!bm_pic8259_pending(pic));
+    assert(bm_pic8259_acknowledge(pic, &vector) == BM_STATUS_IDLE);
+    assert(bm_pic8259_set_irq(pic, 0U, 1) == BM_STATUS_OK);
+    assert(bm_pic8259_pending(pic));
+    assert(bm_pic8259_acknowledge(pic, &vector) == BM_STATUS_OK);
+    assert(vector == 8U);
+    assert(write_port(bus, 0x20U, 0x60U) == BM_STATUS_OK);
+    assert(!bm_pic8259_pending(pic));
+    assert(write_port(bus, 0x20U, 0x61U) == BM_STATUS_OK);
+    assert(bm_pic8259_pending(pic));
+    assert(bm_pic8259_acknowledge(pic, &vector) == BM_STATUS_OK);
+    assert(vector == 9U);
+    assert(write_port(bus, 0x20U, 0x61U) == BM_STATUS_OK);
+    assert(bm_pic8259_pending(pic));
+    assert(bm_pic8259_acknowledge(pic, &vector) == BM_STATUS_OK);
+    assert(vector == 10U);
+    assert(write_port(bus, 0x20U, 0x62U) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 0U, 0) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 1U, 0) == BM_STATUS_OK);
+    assert(bm_pic8259_set_irq(pic, 2U, 0) == BM_STATUS_OK);
+    bm_pic8259_reset(pic);
+    irq.changes = 0U;
+    irq.asserted = 0;
 
     /* Single-controller initialization omits ICW3. */
     assert(write_port(bus, 0x20U, 0x13U) == BM_STATUS_OK);
@@ -96,14 +130,14 @@ main(void)
     assert(read_port(bus, 0x21U) == 0xfeU);
     assert(bm_pic8259_set_irq(pic, 0, 0) == BM_STATUS_OK);
     assert(bm_pic8259_set_irq(pic, 0, 1) == BM_STATUS_OK);
-    assert(irq.changes == 3U && irq.asserted == 1);
+    assert(irq.changes == 1U && irq.asserted == 1);
     /* An edge source withdrawn before INTA must not survive as that IRQ. */
     assert(bm_pic8259_set_irq(pic, 0, 0) == BM_STATUS_OK);
     assert(!bm_pic8259_pending(pic));
-    assert(irq.changes == 4U && irq.asserted == 0);
+    assert(irq.changes == 2U && irq.asserted == 0);
     assert(bm_pic8259_set_irq(pic, 0, 1) == BM_STATUS_OK);
     bm_pic8259_reset(pic);
-    assert(irq.changes == 6U && irq.asserted == 0);
+    assert(irq.changes == 4U && irq.asserted == 0);
     assert(!bm_pic8259_pending(pic));
 
     assert(write_port(bus, 0x43U, 0x30U) == BM_STATUS_OK); /* Channel 0, mode 0, lobyte/hibyte. */
