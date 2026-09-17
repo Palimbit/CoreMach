@@ -163,7 +163,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Sarah Walker", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Isolated the PVGA1A register files, Paradise extension lock, DAC state and 256 KiB planar VRAM behind generic memory and I/O buses; added deterministic text-mode geometry and XRGB8888 rasterization from the programmed character, attribute, font and palette state. Text cursor shape, disable state, skew, character address and VSYNC-derived blink phase are rendered from CRTC state and explicit emulated time. Graphics modes and scan-event generation remain absent, and input-status timing is an explicit deterministic bring-up approximation"
+      "local_changes": "Isolated the PVGA1A register files, Paradise extension lock, DAC state and 256 KiB planar VRAM behind generic memory and I/O buses; added deterministic text-mode geometry and XRGB8888 rasterization from the programmed character, attribute, font and palette state. Text cursor shape, disable state, skew, character address and VSYNC-derived blink phase are rendered from CRTC state and explicit emulated time. Standard four-plane 16-colour and chain-4 256-colour output derive geometry, display start, offset, double-scan and palette selection from register state without BIOS mode-number cases. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent, and input-status timing is an explicit deterministic bring-up approximation"
     },
     {
       "id": "portable-runtime-session",
@@ -195,7 +195,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated paced session worker, queued lifecycle and normalized keyboard input commands, generation-safe XRGB8888 frame publication and explicit session lifecycle controls"
+      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated paced session worker, queued lifecycle and normalized keyboard input commands, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling and persistent user display preferences"
     },
     {
       "id": "headless-frontend",

@@ -12,6 +12,8 @@ struct bm_floppy_drive {
     int media_present;
     int write_protected;
     int changed;
+    uint64_t read_operations;
+    uint64_t write_operations;
 };
 
 bm_status_t
@@ -99,8 +101,11 @@ bm_floppy_drive_destroy(bm_floppy_drive_t *drive)
 void
 bm_floppy_drive_reset(bm_floppy_drive_t *drive)
 {
-    if (drive != NULL)
+    if (drive != NULL) {
         drive->cylinder = 0U;
+        drive->read_operations = 0U;
+        drive->write_operations = 0U;
+    }
 }
 
 int
@@ -159,6 +164,22 @@ bm_floppy_drive_cylinder(const bm_floppy_drive_t *drive)
 }
 
 bm_status_t
+bm_floppy_drive_state(const bm_floppy_drive_t *drive,
+                      bm_floppy_drive_state_t *state)
+{
+    if ((drive == NULL) || (state == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    state->cylinder = drive->cylinder;
+    state->installed = drive->installed;
+    state->media_present = drive->media_present;
+    state->write_protected = drive->write_protected;
+    state->changed = drive->changed;
+    state->read_operations = drive->read_operations;
+    state->write_operations = drive->write_operations;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
 bm_floppy_drive_read_sector(bm_floppy_drive_t *drive,
                             uint16_t cylinder,
                             uint8_t head,
@@ -173,7 +194,10 @@ bm_floppy_drive_read_sector(bm_floppy_drive_t *drive,
     if ((destination == NULL) ||
         (destination_size != drive->geometry.bytes_per_sector))
         return BM_STATUS_INVALID_ARGUMENT;
-    return bm_block_media_read(&drive->media, block, 1U, destination);
+    status = bm_block_media_read(&drive->media, block, 1U, destination);
+    if (status == BM_STATUS_OK)
+        ++drive->read_operations;
+    return status;
 }
 
 bm_status_t
@@ -192,5 +216,8 @@ bm_floppy_drive_write_sector(bm_floppy_drive_t *drive,
         return BM_STATUS_INVALID_ARGUMENT;
     if (drive->write_protected)
         return BM_STATUS_READ_ONLY;
-    return bm_block_media_write(&drive->media, block, 1U, source);
+    status = bm_block_media_write(&drive->media, block, 1U, source);
+    if (status == BM_STATUS_OK)
+        ++drive->write_operations;
+    return status;
 }

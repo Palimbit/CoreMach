@@ -80,7 +80,7 @@ if(BUILD_TESTING)
     )
     set_tests_properties(portable-headless.describe PROPERTIES
         PASS_REGULAR_EXPRESSION
-            "id=olivetti-pcs86 config_type=blumach.system.olivetti-pcs86.config"
+            "id=olivetti-pcs86 scheduler_hz=2000000 config_type=blumach.system.olivetti-pcs86.config"
     )
     add_test(NAME portable-headless.reject-unknown-machine
         COMMAND blumach_headless --describe not-a-machine
