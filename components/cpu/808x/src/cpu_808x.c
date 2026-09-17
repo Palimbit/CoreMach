@@ -1083,6 +1083,36 @@ execute_one(bm_808x_state_t *state)
                                        (uint16_t) (value | 0xff00U) : value;
             return BM_STATUS_OK;
         }
+        case 0xd4: { /* AAM imm8 (NEC V20/V30 measured semantics). */
+            uint8_t base = 0U;
+            uint8_t value;
+            status = fetch_byte(state, &base);
+            if (status != BM_STATUS_OK)
+                return status;
+            value = get_register_byte(state, 0U);
+            if (base == 0U) {
+                /* V20 hardware produces FF:AL instead of interrupt zero. */
+                set_register_byte(state, 4U, 0xffU);
+            } else {
+                set_register_byte(state, 4U, (uint8_t) (value / base));
+                set_register_byte(state, 0U, (uint8_t) (value % base));
+            }
+            set_logic_flags(state, get_register_byte(state, 0U), 8U);
+            return BM_STATUS_OK;
+        }
+        case 0xd5: { /* AAD imm8; NEC V20/V30 always uses decimal base 10. */
+            uint8_t encoded_base = 0U;
+            uint8_t value;
+            status = fetch_byte(state, &encoded_base);
+            if (status != BM_STATUS_OK)
+                return status;
+            (void) encoded_base;
+            value = (uint8_t) (get_register_byte(state, 0U) +
+                               get_register_byte(state, 4U) * 10U);
+            state->registers[REG_AX] = value;
+            set_logic_flags(state, value, 8U);
+            return BM_STATUS_OK;
+        }
         case 0x9e: { /* SAHF */
             uint16_t mask = FLAG_SF | FLAG_ZF | FLAG_AF | FLAG_PF | FLAG_CF;
             uint16_t ah = get_register_byte(state, 4U);
@@ -2301,4 +2331,78 @@ bm_808x_create(const bm_host_services_t *host,
         { cpu_reset, cpu_run, cpu_signal, cpu_inspect, cpu_destroy }
     };
     return BM_STATUS_OK;
+}
+
+static int
+is_808x_cpu(const bm_cpu_t *cpu)
+{
+    return (cpu != NULL) && (cpu->context != NULL) &&
+           (cpu->ops.reset == cpu_reset) && (cpu->ops.run == cpu_run) &&
+           (cpu->ops.signal == cpu_signal) &&
+           (cpu->ops.inspect == cpu_inspect) &&
+           (cpu->ops.destroy == cpu_destroy);
+}
+
+bm_status_t
+bm_808x_get_arch_state(const bm_cpu_t *cpu, bm_808x_arch_state_t *out_state)
+{
+    const bm_808x_state_t *state;
+
+    if (!is_808x_cpu(cpu) || (out_state == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    state = cpu->context;
+    *out_state = (bm_808x_arch_state_t) {
+        sizeof(*out_state), BM_808X_ARCH_STATE_VERSION, state->model,
+        state->registers[REG_AX], state->registers[REG_CX],
+        state->registers[REG_DX], state->registers[REG_BX],
+        state->registers[REG_SP], state->registers[REG_BP],
+        state->registers[REG_SI], state->registers[REG_DI],
+        state->segments[0], state->segments[1], state->segments[2],
+        state->segments[3], state->ip, state->flags,
+        (uint8_t) !!state->halted
+    };
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
+{
+    bm_808x_state_t *state;
+
+    if (!is_808x_cpu(cpu) || (state_image == NULL) ||
+        (state_image->size != sizeof(*state_image)) ||
+        (state_image->version != BM_808X_ARCH_STATE_VERSION) ||
+        (state_image->model != BM_808X_NEC_V30) ||
+        (state_image->halted > 1U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    state = cpu->context;
+    state->registers[REG_AX] = state_image->ax;
+    state->registers[REG_CX] = state_image->cx;
+    state->registers[REG_DX] = state_image->dx;
+    state->registers[REG_BX] = state_image->bx;
+    state->registers[REG_SP] = state_image->sp;
+    state->registers[REG_BP] = state_image->bp;
+    state->registers[REG_SI] = state_image->si;
+    state->registers[REG_DI] = state_image->di;
+    state->segments[0] = state_image->es;
+    state->segments[1] = state_image->cs;
+    state->segments[2] = state_image->ss;
+    state->segments[3] = state_image->ds;
+    state->ip = state_image->ip;
+    state->flags = state_image->flags;
+    state->halted = state_image->halted;
+    state->last_fetch = physical_address(state_image->cs, state_image->ip);
+    state->last_opcode = 0U;
+    state->last_effective_opcode = 0U;
+    state->last_instruction_bytes = 0U;
+    state->last_instruction_length = 0U;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed)
+{
+    if (!is_808x_cpu(cpu))
+        return BM_STATUS_INVALID_ARGUMENT;
+    return cpu_run(cpu->context, 1U, consumed);
 }
