@@ -121,6 +121,7 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     machine->pcs86.trace_context = machine;
     machine->pcs86.io_trace = capture_io;
     machine->pcs86.io_trace_context = machine;
+    machine->pcs86.ems_kib = BM_PCS86_EMS_1920_KIB;
     if (floppy != NULL) {
         machine->base.diagnostics.read_only_media_bytes =
             floppy->value.media.block_count * floppy->value.media.block_size;

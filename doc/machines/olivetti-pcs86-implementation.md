@@ -7,7 +7,8 @@
 The current PCS 86 vertical slice in BluMach's portable engine executes both
 newly authored conformance programs and, as a local-only manual validation,
 the original revision 1.09 BIOS from the real-mode reset address. It supplies an
-explicit NEC V30 state object, a generic address bus, 640 KiB of RAM, the
+explicit NEC V30 state object, a generic address bus, 640 KiB of conventional
+RAM, selectable 0/384/1920 KiB onboard EMS, the
 documented 64 KiB system-ROM window, a single 8259A, a complete 8253 mode model,
 a functional MM58167, isolated SPP and NS16450 components and the known
 motherboard-register map. The current cut also supplies a caller-owned block
@@ -58,13 +59,13 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | Subsystem | Current level | Boundary |
 |---|---|---|
 | NEC V30 | Functional instruction-boundary core derived from the inherited interpreter | Complete documented native and 8080 opcode-map classification, snapshot v4 with MD write gate, segmented 20-bit addresses, ModR/M, native and emulated stacks, hardware-vector-validated primary ALU forms, 80186-compatible and NEC extensions, FPO/POLL CPU contract, BRKEM/CALLN/RETEM, interrupt and NMI round trips, prefix shadows, interruptible REP and BUSLOCK transaction attributes; a versioned observer separates exact documented native execution clocks (including effective-address alignment, entry-stack alignment and counted shifts), logical bus transactions and reported waits, and queue-invalidating boundaries; data-dependent/formula timings, queue fill/overlap, physical bus timing and embedded floating-point execution remain explicit |
-| Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
+| Conventional RAM | Board-owned portable memory region | 640 KiB, zero-initialized and byte-addressable; the 64 KiB below the EMS frame remains visible whenever its corresponding window is disabled or selects an unavailable page |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; the scheduler does not yet consume CPU timing observations, so rational PIT/RTC clock accumulators still use a measured functional instruction rate |
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, fixed-priority nesting, output callback, CPU acknowledge, and non-specific or specific EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven from scheduler time without claiming cycle accuracy |
 | PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture/open-bus reads at `A0h-AEh`, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues and IRQ1 scan queue |
-| EMS selectors | Deliberate boundary | Write-only page-selector latches at `8400h-8403h`; no aperture or backing SIMMs are claimed or exposed |
+| Onboard EMS | Functional board implementation derived from the inherited PCS 86 model and preserved machine evidence | Selectable 0/384/1920 KiB backing store (0/24/120 pages), four readable page selectors at `8400h-8403h`, bits 6:0 as page number and bit 7 as per-window enable, with four 16 KiB windows over `80000h-8FFFFh`; port `64h` exposes the fitted-SIMM code and the common frontend defaults to 1920 KiB |
 | 8237 DMA | Functional synchronous subset derived from the inherited core | Address/count flip-flop, base/current registers, command, mode, request, masks, status, master clear and device-facing byte transfers; a separate XT latch block supplies four-bit pages and 20-bit current addresses; no asynchronous arbitration or cycle stealing |
 | MM58167 RTC | Functional portable component | PCS 86 `B0h-B7h` controls and `E0h-EFh` counter/alarm RAM, BCD millisecond calendar, alarm and periodic IRQs, reset/GO/standby commands, checksum repair and 32-byte caller-owned persistence; yearless calendar and physical crystal/battery behaviour remain approximate |
 | SPP parallel port | Derived portable register core | Data, status and control at gated `378h-37Ah`, disconnected-printer status, output callback and ACK-driven IRQ7; no EPP/ECP, printer backend, DMA or host threads |
@@ -140,25 +141,29 @@ The current automated ladder uses no historical software:
    clocks, prefix cost, explicit data-dependent unknown classification, logical
    bus and device-wait accounting, and queue invalidation on branches and
    accepted interrupts without ROM or disk inputs.
-4. The PCS 86 test creates two synthetic 32 KiB halves in memory. Their
+4. A ROM-free PCS 86 EMS test covers all three supported populations, fitted-
+   SIMM identification, readable selectors, disabled and out-of-range fallback
+   to conventional RAM, independent pages, cross-window aliasing, reset of the
+   selectors and rejection of unsupported capacities.
+5. The PCS 86 test creates two synthetic 32 KiB halves in memory. Their
    interleaved reset vector performs a far jump from physical `FFFF0h` to
    `F0100h`, writes RAM, initializes the PIC, programs the PIT, exercises the
    board-control register and reads the fixed diagnostic register before halt.
-5. Dedicated CPU tests write and read words through `ES:`, `SS:`, `DS:` and
+6. Dedicated CPU tests write and read words through `ES:`, `SS:`, `DS:` and
    `CS:`, verifies that the last repeated segment prefix wins, and covers the
    stack, near-call, segment-register and string paths added for POST. A focused
    test covers all D0-D3 rotate/shift operations, TEST register/memory forms and
    the complete compact `XCHG AX,r16` family.
-6. CPU and I/O traces verify exact instruction and port checkpoints.
-7. Firmware metadata validation rejects a supplied hash that differs from the
+7. CPU and I/O traces verify exact instruction and port checkpoints.
+8. Firmware metadata validation rejects a supplied hash that differs from the
    known PCS 86 identity.
-8. Focused SPP/NS16450 tests verify register reset, loopback and interrupt
+9. Focused SPP/NS16450 tests verify register reset, loopback and interrupt
    behaviour. A PCS 86 integration ROM enables both gated devices, performs a
    UART data loopback and reads the keyboard identify response. The session
    tests verify normalized Shift, letter, extended-key make/break delivery,
    rejection of unsupported scan sequences, specific PIC EOI handling,
    fixed-priority blocking and reset cleanup.
-9. The FDC test releases reset, drains the four sense-interrupt results, reads
+10. The FDC test releases reset, drains the four sense-interrupt results, reads
    a complete 512-byte sector through DMA2 into guest RAM and verifies
    write-protect reporting. The PCS 86 integration test verifies a configured
    720 KiB drive's jumper encoding and reset state.
@@ -213,9 +218,9 @@ BIOS 1.09 writes `40h` to I/O port `70h` at `F000:0B29` while configuring the
 upper conventional-memory path, between accesses to board ports `6Ch`, `6Bh`
 and `6Fh`. No verified bit definition is currently recorded. The engine stores
 that write in an explicit opaque latch so it remains observable, but does not
-borrow the unrelated PC/AT CMOS/NMI convention. It likewise accepts the known
-EMS selector range `8400h-8403h` without claiming that the deferred EMS aperture
-or backing memory exists.
+borrow the unrelated PC/AT CMOS/NMI convention. The independently configured
+EMS block now supplies its documented aperture and backing memory without
+assigning any meaning to the still-opaque port-`70h` bits.
 
 With the 8237 register core, external page-latch block, complete MM58167 register
 model, exact-state PIT, PVGA1A text renderer and the CPU paths required by their

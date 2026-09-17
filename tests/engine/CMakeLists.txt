@@ -83,6 +83,11 @@ target_link_libraries(portable-engine-pcs86-user-io
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
+add_executable(portable-engine-pcs86-ems pcs86_ems_test.c)
+target_link_libraries(portable-engine-pcs86-ems
+    PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
+)
+
 add_executable(portable-engine-pc-platform pc_platform_test.c)
 target_link_libraries(portable-engine-pc-platform
     PRIVATE blumach_pc_components blumach_platform_null
@@ -346,7 +351,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-base-isa portable-engine-808x-signed-math portable-engine-808x-80186-stack portable-engine-808x-80186-control portable-engine-808x-80186-io-string portable-engine-808x-interrupt-boundaries portable-engine-808x-prefix-control portable-engine-808x-interrupt-priority portable-engine-808x-psw portable-engine-808x-nec-extensions portable-engine-808x-coprocessor portable-engine-808x-emulation-mode portable-engine-808x-native-opcode-map portable-engine-808x-timing-contract portable-engine-808x-vector-runner portable-engine-legacy-io)
+foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pcs86-ems portable-engine-pc-platform portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-base-isa portable-engine-808x-signed-math portable-engine-808x-80186-stack portable-engine-808x-80186-control portable-engine-808x-80186-io-string portable-engine-808x-interrupt-boundaries portable-engine-808x-prefix-control portable-engine-808x-interrupt-priority portable-engine-808x-psw portable-engine-808x-nec-extensions portable-engine-808x-coprocessor portable-engine-808x-emulation-mode portable-engine-808x-native-opcode-map portable-engine-808x-timing-contract portable-engine-808x-vector-runner portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -374,6 +379,7 @@ add_test(NAME portable-engine.scheduler-contracts COMMAND portable-engine-schedu
 add_test(NAME portable-host.capability-contracts COMMAND portable-host-capability-contracts)
 add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-reset)
 add_test(NAME portable-engine.pcs86-user-io COMMAND portable-engine-pcs86-user-io)
+add_test(NAME portable-engine.pcs86-ems COMMAND portable-engine-pcs86-ems)
 add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 add_test(NAME portable-engine.dma8237-programming COMMAND portable-engine-dma8237)
 add_test(NAME portable-engine.fdc765-dma COMMAND portable-engine-fdc765)
@@ -424,6 +430,7 @@ set_tests_properties(
     portable-host.capability-contracts
     portable-engine.pcs86-reset-vector
     portable-engine.pcs86-user-io
+    portable-engine.pcs86-ems
     portable-engine.pc-platform
     portable-engine.dma8237-programming
     portable-engine.fdc765-dma

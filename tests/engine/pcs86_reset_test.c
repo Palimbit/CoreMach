@@ -148,7 +148,8 @@ main(void)
         .trace = capture_trace,
         .trace_context = &trace,
         .io_trace = capture_io_trace,
-        .io_trace_context = &io_trace
+        .io_trace_context = &io_trace,
+        .ems_kib = BM_PCS86_EMS_1920_KIB
     };
     config.floppy[0] = (bm_floppy_drive_config_t) {
         .installed = 1,
@@ -246,6 +247,12 @@ main(void)
                BM_STATUS_OK);
         assert(value == 0x80U);
         assert(bm_session_inspect_machine(session, "floppy0_cylinder", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0U);
+        assert(bm_session_inspect_machine(session, "ems_kib", &value) ==
+               BM_STATUS_OK);
+        assert(value == BM_PCS86_EMS_1920_KIB);
+        assert(bm_session_inspect_machine(session, "ems_selector0", &value) ==
                BM_STATUS_OK);
         assert(value == 0U);
         assert(bm_session_inspect_machine(session, "unknown", &value) ==
