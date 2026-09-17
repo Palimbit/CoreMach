@@ -109,6 +109,12 @@ NEC byte-IDIV boundary also raises divide error for a quotient of exactly -128.
 Non-string REP prefixes are accepted as observed by the hardware corpus instead
 of turning an otherwise implemented instruction into an unsupported opcode.
 
+The first 80186-compatible V30 cut adds PUSHA/POPA, sign-extending and word
+immediate PUSH, and the two three-operand immediate IMUL forms. It also closes
+the conformance matrix for all 48 primary ADD/OR/ADC/SBB/AND/SUB/XOR/CMP
+encodings. This stage exercises 540,000 hardware vectors without discrepancies,
+460,000 of them newly covered, for an accumulated 870,000-vector campaign.
+
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
 copied or executed by this test.
@@ -275,6 +281,10 @@ The following CPU cut completes both F6h/F7h TEST encodings and their byte/word
 NOT, NEG, MUL, IMUL, DIV and IDIV operations, including interrupt-zero error
 entry. Its external V20 corpus evidence remains architectural only; it does not
 claim V30 cycle, prefetch-queue or 16-bit-bus fidelity.
+
+The next cut begins the V30's 80186-compatible instruction set with PUSHA,
+POPA, immediate PUSH and immediate IMUL. Stack state and multiplication flags
+remain explicit core behavior and use only the portable memory bus.
 
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
 format-track, deleted-data distinction, flux/weak-sector formats and dynamic
