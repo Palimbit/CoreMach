@@ -99,9 +99,9 @@ SessionWorker::processCommands(bm_session_t *session)
 }
 
 bm_status_t
-SessionWorker::renderFrame(bm_session_t *session, QImage &frame)
+SessionWorker::renderFrame(bm_session_t *session, QImage &frame,
+                           bm_video_geometry_t &geometry)
 {
-    bm_video_geometry_t geometry {};
     bm_status_t status = bm_session_video_geometry(session, &geometry);
     if (status != BM_STATUS_OK)
         return status;
@@ -128,13 +128,18 @@ SessionWorker::renderFrame(bm_session_t *session, QImage &frame)
 
 void
 SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
-                       bool lifecycleResult)
+                       bool lifecycleResult,
+                       const bm_video_geometry_t *geometry)
 {
     Snapshot snapshot;
     snapshot.status = status;
     snapshot.state = session != nullptr ? bm_session_state(session) :
                                           BM_SESSION_NEW;
     snapshot.ticks = session != nullptr ? bm_session_time(session) : 0U;
+    if (geometry != nullptr) {
+        snapshot.geometry = *geometry;
+        snapshot.hasVideo = true;
+    }
     snapshot.frame = std::move(frame);
     snapshot.lifecycleResult = lifecycleResult;
     state_.store(snapshot.state);
@@ -180,8 +185,9 @@ SessionWorker::run()
                 status = bm_session_run_for(session, due);
             if ((status == BM_STATUS_OK) && (now >= nextFrame)) {
                 QImage frame;
-                status = renderFrame(session, frame);
-                publish(session, status, std::move(frame));
+                bm_video_geometry_t geometry {};
+                status = renderFrame(session, frame, geometry);
+                publish(session, status, std::move(frame), false, &geometry);
                 nextFrame = now + framePeriod;
             }
             if (status != BM_STATUS_OK) {

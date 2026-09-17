@@ -15,6 +15,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -264,6 +265,10 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         tr("%1 — BluMach Portable").arg(activeMachineId_));
     lastError_ = BM_STATUS_OK;
     lifecyclePending_ = false;
+    hasVideoGeometry_ = false;
+    presentedFrames_ = 0U;
+    presentationFps_ = 0.0;
+    frameRateTimer_.start();
     display_->setFocus();
     updateActions();
     showStatus();
@@ -282,6 +287,10 @@ PortableWindow::closeMachine()
     bindings_.clear();
     assets_.clear();
     activeMachineId_.clear();
+    hasVideoGeometry_ = false;
+    presentedFrames_ = 0U;
+    presentationFps_ = 0.0;
+    frameRateTimer_.invalidate();
     setWindowTitle(tr("BluMach Portable"));
     display_->setFrame(QImage());
     updateActions();
@@ -458,8 +467,20 @@ PortableWindow::drainSnapshots(uint64_t generation)
 void
 PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
 {
-    if (!snapshot.frame.isNull())
+    if (!snapshot.frame.isNull()) {
         display_->setFrame(snapshot.frame);
+        if (snapshot.hasVideo) {
+            videoGeometry_ = snapshot.geometry;
+            hasVideoGeometry_ = true;
+        }
+        ++presentedFrames_;
+        if (frameRateTimer_.isValid() && (frameRateTimer_.elapsed() >= 500)) {
+            presentationFps_ = static_cast<double>(presentedFrames_) * 1000.0 /
+                               static_cast<double>(frameRateTimer_.elapsed());
+            presentedFrames_ = 0U;
+            frameRateTimer_.restart();
+        }
+    }
     if (snapshot.lifecycleResult)
         lifecyclePending_ = false;
     if ((snapshot.status != BM_STATUS_OK) &&
@@ -512,10 +533,30 @@ PortableWindow::showStatus(const QString &detail)
         case BM_SESSION_CONFIGURED: state = "configured"; break;
         case BM_SESSION_NEW: state = "new"; break;
     }
-    status_->setText(tr("%1 — %2 ticks")
-                         .arg(QString::fromLatin1(state))
-                         .arg(static_cast<qulonglong>(
-                             worker_->ticks())));
+    QString text = tr("%1").arg(QString::fromLatin1(state));
+    if (hasVideoGeometry_) {
+        QString refresh = tr("unknown");
+        if ((videoGeometry_.refresh_numerator != 0U) &&
+            (videoGeometry_.refresh_denominator != 0U)) {
+            const double hz = static_cast<double>(
+                videoGeometry_.refresh_numerator) /
+                static_cast<double>(videoGeometry_.refresh_denominator);
+            refresh = QLocale().toString(hz, 'f', 1);
+        }
+        const QSize output = display_->outputPixelSize();
+        text += tr(" — %1×%2 @ %3 Hz")
+                    .arg(videoGeometry_.width)
+                    .arg(videoGeometry_.height)
+                    .arg(refresh);
+        if (!output.isEmpty())
+            text += tr(" → %1×%2").arg(output.width()).arg(output.height());
+        if (presentationFps_ > 0.0)
+            text += tr(" — %1 FPS").arg(
+                QLocale().toString(presentationFps_, 'f', 1));
+    }
+    status_->setText(text);
+    status_->setToolTip(tr("Emulated time: %1 ticks")
+                            .arg(static_cast<qulonglong>(worker_->ticks())));
 }
 
 bm_key_code_t

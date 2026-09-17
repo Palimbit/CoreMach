@@ -33,6 +33,17 @@ DisplayWidget::hasFrame() const
     return !frame_.isNull();
 }
 
+QSize
+DisplayWidget::outputPixelSize() const
+{
+    if (frame_.isNull())
+        return {};
+    const QSize logical = targetRect(frame_.size(), size(), scaleMode_).size();
+    const qreal ratio = devicePixelRatioF();
+    return { qRound(logical.width() * ratio),
+             qRound(logical.height() * ratio) };
+}
+
 void
 DisplayWidget::setScaleMode(ScaleMode mode)
 {

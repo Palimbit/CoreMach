@@ -12,6 +12,7 @@
 #include <blumach/runtime/runtime.h>
 
 #include <QHash>
+#include <QElapsedTimer>
 #include <QMainWindow>
 #include <QString>
 
@@ -90,6 +91,11 @@ private:
     bool lifecyclePending_ = false;
     bool wasMaximizedBeforeFullscreen_ = false;
     QString activeMachineId_;
+    bm_video_geometry_t videoGeometry_ {};
+    QElapsedTimer frameRateTimer_;
+    unsigned int presentedFrames_ = 0U;
+    double presentationFps_ = 0.0;
+    bool hasVideoGeometry_ = false;
 };
 
 #endif

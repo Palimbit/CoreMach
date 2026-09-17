@@ -55,7 +55,9 @@ main(void)
     unsigned int plane;
     bm_video_geometry_t geometry;
     uint32_t pixels[64];
-    bm_video_framebuffer_t framebuffer = { pixels, 64U, 16U, { 0, 0, BM_PIXEL_XRGB8888 } };
+    bm_video_framebuffer_t framebuffer = {
+        pixels, 64U, 16U, { 0, 0, BM_PIXEL_XRGB8888, 0U, 0U }
+    };
 
     assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_pvga1a_create(&host, bus, &config, &video) == BM_STATUS_OK);
@@ -158,6 +160,14 @@ main(void)
     assert(crtc_write(bus, 6U, 0xbfU) == BM_STATUS_OK);
     assert(crtc_write(bus, 7U, 0x01U) == BM_STATUS_OK); /* 449 total lines. */
     assert(io_write(bus, 0x03c2U, 0x05U) == BM_STATUS_OK); /* 28.322 MHz. */
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.refresh_numerator == UINT64_C(28322000));
+    assert(geometry.refresh_denominator == UINT64_C(359200));
+    assert(io_write(bus, 0x03c2U, 0x0dU) == BM_STATUS_OK); /* Board VCLK3. */
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.refresh_numerator == 0U &&
+           geometry.refresh_denominator == 0U);
+    assert(io_write(bus, 0x03c2U, 0x05U) == BM_STATUS_OK);
     assert(crtc_write(bus, 0x0aU, 1U) == BM_STATUS_OK);
     assert(crtc_write(bus, 0x0bU, 1U) == BM_STATUS_OK);
     assert(crtc_write(bus, 0x0eU, 0U) == BM_STATUS_OK);

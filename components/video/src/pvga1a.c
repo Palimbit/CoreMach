@@ -533,6 +533,23 @@ vertical_total_lines(const bm_pvga1a_t *video)
 }
 
 static uint64_t
+pixel_clock_hz(const bm_pvga1a_t *video)
+{
+    switch ((video->misc_output >> 2U) & 3U) {
+        case 0U: return UINT64_C(25175000);
+        case 1U: return UINT64_C(28322000);
+        default: return 0U;
+    }
+}
+
+static uint64_t
+frame_dot_count(const bm_pvga1a_t *video)
+{
+    return ((uint64_t) video->crtc[0] + 5U) *
+           text_character_width(video) * vertical_total_lines(video);
+}
+
+static uint64_t
 default_cursor_blink_half_period(uint64_t ticks_per_second)
 {
     return (ticks_per_second / 70U) * 8U +
@@ -546,21 +563,14 @@ cursor_blink_half_period(const bm_pvga1a_t *video, uint64_t ticks_per_second)
     uint64_t frame_dots;
     uint64_t numerator;
 
-    switch ((video->misc_output >> 2U) & 3U) {
-        case 0U:
-            pixel_clock = UINT64_C(25175000);
-            break;
-        case 1U:
-            pixel_clock = UINT64_C(28322000);
-            break;
-        default:
-            /* VCLK2/VCLK3 are board-defined inputs. The portable PCS 86 path
-             * does not select them, so retain a deterministic 70 Hz fallback
-             * rather than inventing a board clock. */
-            return default_cursor_blink_half_period(ticks_per_second);
+    pixel_clock = pixel_clock_hz(video);
+    if (pixel_clock == 0U) {
+        /* VCLK2/VCLK3 are board-defined inputs. The portable PCS 86 path does
+         * not select them, so retain a deterministic 70 Hz fallback rather
+         * than inventing a board clock. */
+        return default_cursor_blink_half_period(ticks_per_second);
     }
-    frame_dots = ((uint64_t) video->crtc[0] + 5U) *
-                 text_character_width(video) * vertical_total_lines(video);
+    frame_dots = frame_dot_count(video);
     if ((frame_dots == 0U) ||
         (ticks_per_second > UINT64_MAX / frame_dots / 8U))
         return default_cursor_blink_half_period(ticks_per_second);
@@ -596,6 +606,9 @@ bm_pvga1a_video_geometry(const bm_pvga1a_t *video, bm_video_geometry_t *geometry
     geometry->width = width;
     geometry->height = height;
     geometry->format = BM_PIXEL_XRGB8888;
+    geometry->refresh_numerator = pixel_clock_hz(video);
+    geometry->refresh_denominator = geometry->refresh_numerator != 0U ?
+                                    frame_dot_count(video) : 0U;
     return BM_STATUS_OK;
 }
 

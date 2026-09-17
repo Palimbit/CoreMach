@@ -20,6 +20,8 @@ public:
         bm_status_t status = BM_STATUS_OK;
         bm_session_state_t state = BM_SESSION_NEW;
         uint64_t ticks = 0U;
+        bm_video_geometry_t geometry {};
+        bool hasVideo = false;
         QImage frame;
         bool lifecycleResult = false;
     };
@@ -52,9 +54,11 @@ private:
     void enqueue(Command command);
     void run();
     bool processCommands(bm_session_t *session);
-    bm_status_t renderFrame(bm_session_t *session, QImage &frame);
+    bm_status_t renderFrame(bm_session_t *session, QImage &frame,
+                            bm_video_geometry_t &geometry);
     void publish(bm_session_t *session, bm_status_t status,
-                 QImage frame = QImage(), bool lifecycleResult = false);
+                 QImage frame = QImage(), bool lifecycleResult = false,
+                 const bm_video_geometry_t *geometry = nullptr);
 
     bm_host_services_t host_;
     const bm_machine_config_t *configuration_;

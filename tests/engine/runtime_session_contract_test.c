@@ -130,6 +130,8 @@ test_video_geometry(const void *context, bm_video_geometry_t *geometry)
     geometry->width = 320U;
     geometry->height = 200U;
     geometry->format = BM_PIXEL_XRGB8888;
+    geometry->refresh_numerator = 60U;
+    geometry->refresh_denominator = 1U;
     return BM_STATUS_OK;
 }
 
@@ -147,6 +149,8 @@ test_video_render(const void *context, bm_tick_t emulated_time,
     framebuffer->geometry.width = 320U;
     framebuffer->geometry.height = 200U;
     framebuffer->geometry.format = BM_PIXEL_XRGB8888;
+    framebuffer->geometry.refresh_numerator = 60U;
+    framebuffer->geometry.refresh_denominator = 1U;
     return BM_STATUS_OK;
 }
 
@@ -315,9 +319,10 @@ test_session_state_machine(void)
     test_machine_t machine;
     bm_machine_config_t configuration;
     bm_input_event_t input = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
-    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888 };
+    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888, 0U, 0U };
     bm_video_framebuffer_t framebuffer = { NULL, 0U, 0U,
-                                           { 0U, 0U, BM_PIXEL_XRGB8888 } };
+                                           { 0U, 0U, BM_PIXEL_XRGB8888,
+                                             0U, 0U } };
     uint64_t value = 0U;
 
     initialize_machine(&machine);
@@ -354,6 +359,8 @@ test_session_state_machine(void)
     assert(bm_session_time(session) == 5U);
     assert(bm_session_video_geometry(session, &geometry) == BM_STATUS_OK);
     assert(geometry.width == 320U && geometry.height == 200U);
+    assert(geometry.refresh_numerator == 60U &&
+           geometry.refresh_denominator == 1U);
     assert(bm_session_render_video(session, &framebuffer) == BM_STATUS_OK);
     assert(framebuffer.geometry.width == 320U);
     assert(machine.last_render_time == 5U);
@@ -398,9 +405,10 @@ test_optional_operations(void)
     test_machine_t machine;
     bm_machine_config_t configuration;
     bm_input_event_t input = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
-    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888 };
+    bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888, 0U, 0U };
     bm_video_framebuffer_t framebuffer = { NULL, 0U, 0U,
-                                           { 0U, 0U, BM_PIXEL_XRGB8888 } };
+                                           { 0U, 0U, BM_PIXEL_XRGB8888,
+                                             0U, 0U } };
     uint64_t value = 0U;
 
     initialize_machine(&machine);
