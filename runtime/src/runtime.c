@@ -34,6 +34,7 @@ bm_machine_definition_validate(const bm_machine_definition_t *definition)
 {
     if ((definition == NULL) || (definition->id == NULL) ||
         (definition->id[0] == '\0') ||
+        (definition->scheduler_ticks_per_second == 0U) ||
         (definition->configuration.type == NULL) ||
         (definition->configuration.type[0] == '\0') ||
         (definition->configuration.version == 0U) ||
