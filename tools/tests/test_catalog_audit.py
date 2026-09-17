@@ -108,6 +108,20 @@ class CatalogAuditTests(unittest.TestCase):
 
         self.assertEqual([], errors)
 
+    def test_portable_adapter_ids_are_unique_and_hyphenated(self) -> None:
+        errors: list[str] = []
+        catalog_audit.validate_portable_adapters(
+            {
+                "first": {"portable_adapter_id": "machine-a"},
+                "second": {"portable_adapter_id": "machine-a"},
+                "third": {"portable_adapter_id": "legacy_name"},
+            },
+            errors,
+        )
+
+        self.assertTrue(any("duplicates platform 'first'" in error for error in errors))
+        self.assertTrue(any("lowercase hyphenated" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

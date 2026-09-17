@@ -3,6 +3,7 @@
 #define BLUMACH_PORTABLE_WINDOW_H
 
 #include "display_widget.h"
+#include "portable_catalog.h"
 #include "session_worker.h"
 
 #include <blumach/frontend/file_inputs.h>
@@ -27,6 +28,8 @@ public:
 
     bool openInitial(const QString &machineId,
                      const QHash<QString, QString> &paths);
+    bool openInitialProduct(const QString &productId,
+                            const QHash<QString, QString> &paths);
 
 private:
     struct AssetStorage {
@@ -54,6 +57,8 @@ private:
     QAction *resetAction_;
     QAction *stopAction_;
     bm_host_services_t host_;
+    PortableCatalog catalog_;
+    QString catalogError_;
     bm_frontend_machine_t *machine_ = nullptr;
     std::unique_ptr<SessionWorker> worker_;
     std::vector<std::unique_ptr<AssetStorage>> assets_;

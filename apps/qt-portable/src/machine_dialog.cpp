@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "machine_dialog.h"
+#include "portable_catalog.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -12,7 +13,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-MachineDialog::MachineDialog(QWidget *parent) : QDialog(parent)
+MachineDialog::MachineDialog(const PortableCatalog &catalog, QWidget *parent)
+    : QDialog(parent)
 {
     auto *layout = new QVBoxLayout(this);
     auto *form = new QFormLayout;
@@ -22,12 +24,14 @@ MachineDialog::MachineDialog(QWidget *parent) : QDialog(parent)
     assetsLayout_ = new QFormLayout;
     setWindowTitle(tr("Open portable machine"));
     setMinimumWidth(620);
-    for (size_t index = 0U; index < bm_frontend_adapter_count(); ++index) {
-        const bm_frontend_adapter_t *item = bm_frontend_adapter_at(index);
-        const bm_machine_definition_t *definition =
-            bm_frontend_adapter_definition(item);
-        machines_->addItem(QString::fromUtf8(definition->id),
-                           QVariant::fromValue<qulonglong>(index));
+    for (const PortableCatalogMachine &machine : catalog.machines()) {
+        const QByteArray adapterId = machine.adapterId.toUtf8();
+        if (bm_frontend_adapter_find(adapterId.constData()) == nullptr)
+            continue;
+        machines_->addItem(tr("%1 — %2").arg(machine.name, machine.status),
+                           machine.adapterId);
+        machines_->setItemData(machines_->count() - 1, machine.productId,
+                               Qt::UserRole + 1);
     }
     form->addRow(tr("Machine"), machines_);
     layout->addLayout(form);
@@ -44,8 +48,8 @@ MachineDialog::MachineDialog(QWidget *parent) : QDialog(parent)
 const bm_frontend_adapter_t *
 MachineDialog::adapter() const
 {
-    return bm_frontend_adapter_at(
-        static_cast<size_t>(machines_->currentData().toULongLong()));
+    const QByteArray id = machines_->currentData().toString().toUtf8();
+    return bm_frontend_adapter_find(id.constData());
 }
 
 QHash<QString, QString>
@@ -62,7 +66,15 @@ MachineDialog::paths() const
 void
 MachineDialog::selectMachine(const QString &machineId)
 {
-    const int index = machines_->findText(machineId);
+    const int index = machines_->findData(machineId);
+    if (index >= 0)
+        machines_->setCurrentIndex(index);
+}
+
+void
+MachineDialog::selectProduct(const QString &productId)
+{
+    const int index = machines_->findData(productId, Qt::UserRole + 1);
     if (index >= 0)
         machines_->setCurrentIndex(index);
 }
@@ -106,6 +118,8 @@ MachineDialog::rebuildAssets()
         delete item;
     }
     editors_.clear();
+    if (adapter() == nullptr)
+        return;
     size_t count = 0U;
     const bm_frontend_asset_requirement_t *assets =
         bm_frontend_adapter_assets(adapter(), &count);
@@ -132,6 +146,11 @@ MachineDialog::rebuildAssets()
 void
 MachineDialog::accept()
 {
+    if (adapter() == nullptr) {
+        QMessageBox::warning(this, tr("No portable machine"),
+                             tr("The catalogue has no available portable machine."));
+        return;
+    }
     size_t count = 0U;
     const bm_frontend_asset_requirement_t *assets =
         bm_frontend_adapter_assets(adapter(), &count);

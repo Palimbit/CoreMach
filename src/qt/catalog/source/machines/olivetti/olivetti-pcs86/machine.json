@@ -336,6 +336,7 @@
   "platform": {
     "id": "olivetti-pcs86-platform",
     "emulator_machine_id": "olivetti_pcs86",
+    "portable_adapter_id": "olivetti-pcs86",
     "architecture": "8086"
   }
 }
