@@ -93,6 +93,9 @@ test_arch_state_contract(void)
     state.flags = 0x8fd7U;
     state.halted = 0U;
     state.interrupt_inhibit = 1U;
+    state.boundary_inhibit = 1U;
+    state.nmi_pending = 1U;
+    state.trap_pending = 1U;
     cpu_808x_test_set_state(&machine, &state);
     observed = cpu_808x_test_get_state(&machine);
     assert(observed.ax == state.ax && observed.cx == state.cx);
@@ -103,12 +106,22 @@ test_arch_state_contract(void)
     assert(observed.ss == state.ss && observed.ds == state.ds);
     assert(observed.ip == state.ip && observed.flags == state.flags);
     assert(observed.interrupt_inhibit == 1U);
+    assert(observed.boundary_inhibit == 1U);
+    assert(observed.nmi_pending == 1U && observed.trap_pending == 1U);
+
+    state = observed;
+    state.boundary_inhibit = 0U;
+    state.nmi_pending = 0U;
+    state.trap_pending = 0U;
+    cpu_808x_test_set_state(&machine, &state);
 
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     assert(consumed == 1U);
     observed = cpu_808x_test_get_state(&machine);
     assert(observed.ip == 1U && observed.ax == state.ax);
     assert(observed.interrupt_inhibit == 0U);
+    assert(observed.boundary_inhibit == 0U && observed.nmi_pending == 0U);
+    assert(observed.trap_pending == 1U);
 
     invalid = state;
     invalid.size = 0U;
@@ -124,6 +137,18 @@ test_arch_state_contract(void)
            BM_STATUS_INVALID_ARGUMENT);
     invalid = state;
     invalid.interrupt_inhibit = 2U;
+    assert(bm_808x_set_arch_state(&machine.cpu, &invalid) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    invalid = state;
+    invalid.boundary_inhibit = 2U;
+    assert(bm_808x_set_arch_state(&machine.cpu, &invalid) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    invalid = state;
+    invalid.nmi_pending = 2U;
+    assert(bm_808x_set_arch_state(&machine.cpu, &invalid) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    invalid = state;
+    invalid.trap_pending = 2U;
     assert(bm_808x_set_arch_state(&machine.cpu, &invalid) ==
            BM_STATUS_INVALID_ARGUMENT);
     assert(bm_808x_get_arch_state(NULL, &observed) ==
