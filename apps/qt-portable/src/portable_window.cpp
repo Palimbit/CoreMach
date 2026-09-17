@@ -5,13 +5,30 @@
 #include <blumach/platforms/null_host.h>
 
 #include <QAction>
+#include <QActionGroup>
+#include <QApplication>
+#include <QClipboard>
+#include <QCloseEvent>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QStatusBar>
+#include <QStyle>
 #include <QToolBar>
+
+namespace {
+constexpr auto settingsOrganization = "BluMach";
+constexpr auto settingsApplication = "BluMach Portable";
+}
 
 PortableWindow::AssetStorage::~AssetStorage()
 {
@@ -21,28 +38,110 @@ PortableWindow::AssetStorage::~AssetStorage()
 
 PortableWindow::PortableWindow(QWidget *parent)
     : QMainWindow(parent), display_(new DisplayWidget), status_(new QLabel),
+      machineToolbar_(addToolBar(tr("Machine"))),
+      pauseAction_(new QAction(tr("Pause"), this)),
+      resetAction_(new QAction(tr("Reset"), this)),
+      stopAction_(new QAction(tr("Stop"), this)),
+      fullScreenAction_(new QAction(tr("Fullscreen"), this)),
+      smoothScalingAction_(new QAction(tr("Smooth scaling"), this)),
+      statusBarAction_(new QAction(tr("Status bar"), this)),
+      copyFrameAction_(new QAction(tr("Copy frame"), this)),
+      saveFrameAction_(new QAction(tr("Save frame as…"), this)),
+      scaleGroup_(new QActionGroup(this)),
       host_(bm_null_host_services())
 {
-    auto *toolbar = addToolBar(tr("Machine"));
-    QAction *openAction = toolbar->addAction(tr("Open…"));
-    pauseAction_ = toolbar->addAction(tr("Pause"));
-    resetAction_ = toolbar->addAction(tr("Reset"));
-    stopAction_ = toolbar->addAction(tr("Stop"));
+    auto *openAction = new QAction(
+        style()->standardIcon(QStyle::SP_DialogOpenButton), tr("Open…"), this);
+    auto *quitAction = new QAction(tr("Quit"), this);
+    pauseAction_->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+    resetAction_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+    stopAction_->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
+    openAction->setShortcut(QKeySequence::Open);
+    quitAction->setShortcut(QKeySequence::Quit);
+    fullScreenAction_->setShortcut(Qt::Key_F11);
+    fullScreenAction_->setCheckable(true);
+    smoothScalingAction_->setCheckable(true);
+    statusBarAction_->setCheckable(true);
+    copyFrameAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C));
+    saveFrameAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
+
+    machineToolbar_->setObjectName(QStringLiteral("machine-toolbar"));
+    machineToolbar_->addAction(openAction);
+    machineToolbar_->addSeparator();
+    machineToolbar_->addAction(pauseAction_);
+    machineToolbar_->addAction(resetAction_);
+    machineToolbar_->addAction(stopAction_);
+
+    auto *machineMenu = menuBar()->addMenu(tr("Machine"));
+    machineMenu->addAction(openAction);
+    machineMenu->addSeparator();
+    machineMenu->addAction(pauseAction_);
+    machineMenu->addAction(resetAction_);
+    machineMenu->addAction(stopAction_);
+    machineMenu->addSeparator();
+    machineMenu->addAction(quitAction);
+
+    auto *viewMenu = menuBar()->addMenu(tr("View"));
+    auto *scaleMenu = viewMenu->addMenu(tr("Scaling"));
+    scaleGroup_->setExclusive(true);
+    const auto addScaleAction = [this, scaleMenu](const QString &label,
+                                                  DisplayWidget::ScaleMode mode) {
+        auto *action = scaleMenu->addAction(label);
+        action->setCheckable(true);
+        action->setData(static_cast<int>(mode));
+        scaleGroup_->addAction(action);
+        return action;
+    };
+    addScaleAction(tr("Fit, preserve source aspect"),
+                   DisplayWidget::ScaleMode::Fit)->setChecked(true);
+    addScaleAction(tr("Integer pixels"), DisplayWidget::ScaleMode::Integer);
+    addScaleAction(tr("Correct to 4:3"),
+                   DisplayWidget::ScaleMode::CorrectedFourThree);
+    addScaleAction(tr("Stretch to window"), DisplayWidget::ScaleMode::Stretch);
+    viewMenu->addAction(smoothScalingAction_);
+    viewMenu->addSeparator();
+    viewMenu->addAction(machineToolbar_->toggleViewAction());
+    viewMenu->addAction(statusBarAction_);
+    viewMenu->addSeparator();
+    viewMenu->addAction(fullScreenAction_);
+
+    auto *captureMenu = menuBar()->addMenu(tr("Capture"));
+    captureMenu->addAction(copyFrameAction_);
+    captureMenu->addAction(saveFrameAction_);
+
     setWindowTitle(tr("BluMach Portable"));
     setCentralWidget(display_);
     statusBar()->addPermanentWidget(status_, 1);
+    statusBarAction_->setChecked(true);
     connect(openAction, &QAction::triggered, this,
             [this] { chooseMachine(); });
+    connect(quitAction, &QAction::triggered, this, &QWidget::close);
     connect(pauseAction_, &QAction::triggered, this,
             [this] { togglePause(); });
     connect(resetAction_, &QAction::triggered, this,
             [this] { resetMachine(); });
     connect(stopAction_, &QAction::triggered, this,
             [this] { stopMachine(); });
+    connect(fullScreenAction_, &QAction::toggled, this,
+            [this](bool enabled) { toggleFullscreen(enabled); });
+    connect(smoothScalingAction_, &QAction::toggled, display_,
+            &DisplayWidget::setSmoothScaling);
+    connect(statusBarAction_, &QAction::toggled, statusBar(),
+            &QStatusBar::setVisible);
+    connect(copyFrameAction_, &QAction::triggered, this,
+            [this] { copyFrame(); });
+    connect(saveFrameAction_, &QAction::triggered, this,
+            [this] { saveFrame(); });
+    connect(scaleGroup_, &QActionGroup::triggered, this,
+            [this](QAction *action) {
+                display_->setScaleMode(static_cast<DisplayWidget::ScaleMode>(
+                    action->data().toInt()));
+            });
     display_->setKeyHandler(
         [this](QKeyEvent *event, bool pressed) { sendKey(event, pressed); });
     (void) catalog_.load(&catalogError_);
     resize(960, 600);
+    readSettings();
     updateActions();
     showStatus(catalogError_.isEmpty() ? tr("Open a machine to begin") :
                tr("Catalogue unavailable: %1").arg(catalogError_));
@@ -51,6 +150,13 @@ PortableWindow::PortableWindow(QWidget *parent)
 PortableWindow::~PortableWindow()
 {
     closeMachine();
+}
+
+void
+PortableWindow::closeEvent(QCloseEvent *event)
+{
+    writeSettings();
+    QMainWindow::closeEvent(event);
 }
 
 bool
@@ -157,6 +263,12 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         closeMachine();
         return false;
     }
+    const bm_machine_definition_t *definition =
+        bm_frontend_adapter_definition(adapter);
+    activeMachineId_ = definition != nullptr ?
+        QString::fromUtf8(definition->id) : QString();
+    setWindowTitle(activeMachineId_.isEmpty() ? tr("BluMach Portable") :
+        tr("%1 — BluMach Portable").arg(activeMachineId_));
     lastError_ = BM_STATUS_OK;
     lifecyclePending_ = false;
     display_->setFocus();
@@ -175,6 +287,8 @@ PortableWindow::closeMachine()
     machine_ = nullptr;
     bindings_.clear();
     assets_.clear();
+    activeMachineId_.clear();
+    setWindowTitle(tr("BluMach Portable"));
     display_->setFrame(QImage());
     updateActions();
 }
@@ -212,6 +326,99 @@ PortableWindow::stopMachine()
         worker_->stop();
         updateActions();
     }
+}
+
+void
+PortableWindow::toggleFullscreen(bool enabled)
+{
+    if (enabled) {
+        wasMaximizedBeforeFullscreen_ = isMaximized();
+        showFullScreen();
+    } else if (wasMaximizedBeforeFullscreen_) {
+        showMaximized();
+    } else {
+        showNormal();
+    }
+    display_->setFocus();
+}
+
+void
+PortableWindow::copyFrame()
+{
+    const QImage frame = display_->frame();
+    if (frame.isNull())
+        return;
+    QApplication::clipboard()->setImage(frame);
+    statusBar()->showMessage(tr("Frame copied to the clipboard"), 3000);
+}
+
+void
+PortableWindow::saveFrame()
+{
+    const QImage frame = display_->frame();
+    if (frame.isNull())
+        return;
+    const QString directory =
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    const QString suggestedPath = directory.isEmpty() ?
+        QStringLiteral("BluMach.png") :
+        QDir(directory).filePath(QStringLiteral("BluMach.png"));
+    QString path = QFileDialog::getSaveFileName(
+        this, tr("Save frame"), suggestedPath,
+        tr("PNG image (*.png)"));
+    if (path.isEmpty())
+        return;
+    if (QFileInfo(path).suffix().isEmpty())
+        path += QStringLiteral(".png");
+    if (!frame.save(path, "PNG")) {
+        QMessageBox::critical(this, tr("Could not save frame"),
+                              tr("The PNG image could not be written."));
+        return;
+    }
+    statusBar()->showMessage(tr("Frame saved"), 3000);
+}
+
+void
+PortableWindow::readSettings()
+{
+    QSettings settings(settingsOrganization, settingsApplication);
+    const QByteArray geometry = settings.value(QStringLiteral("window/geometry"))
+                                    .toByteArray();
+    if (!geometry.isEmpty())
+        (void) restoreGeometry(geometry);
+    const int modeValue = settings.value(
+        QStringLiteral("display/scale-mode"),
+        static_cast<int>(DisplayWidget::ScaleMode::Fit)).toInt();
+    if ((modeValue >= static_cast<int>(DisplayWidget::ScaleMode::Fit)) &&
+        (modeValue <= static_cast<int>(DisplayWidget::ScaleMode::Stretch))) {
+        const auto mode = static_cast<DisplayWidget::ScaleMode>(modeValue);
+        display_->setScaleMode(mode);
+        for (QAction *action : scaleGroup_->actions()) {
+            if (action->data().toInt() == modeValue)
+                action->setChecked(true);
+        }
+    }
+    smoothScalingAction_->setChecked(settings.value(
+        QStringLiteral("display/smooth-scaling"), false).toBool());
+    machineToolbar_->setVisible(settings.value(
+        QStringLiteral("window/toolbar-visible"), true).toBool());
+    statusBarAction_->setChecked(settings.value(
+        QStringLiteral("window/status-visible"), true).toBool());
+}
+
+void
+PortableWindow::writeSettings() const
+{
+    QSettings settings(settingsOrganization, settingsApplication);
+    settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("window/toolbar-visible"),
+                      machineToolbar_->isVisible());
+    settings.setValue(QStringLiteral("window/status-visible"),
+                      statusBar()->isVisible());
+    settings.setValue(QStringLiteral("display/scale-mode"),
+                      static_cast<int>(display_->scaleMode()));
+    settings.setValue(QStringLiteral("display/smooth-scaling"),
+                      display_->smoothScaling());
 }
 
 void
@@ -267,6 +474,8 @@ PortableWindow::updateActions()
     stopAction_->setEnabled(!lifecyclePending_ &&
                             (state == BM_SESSION_RUNNING ||
                              state == BM_SESSION_PAUSED));
+    copyFrameAction_->setEnabled(display_->hasFrame());
+    saveFrameAction_->setEnabled(display_->hasFrame());
 }
 
 void
