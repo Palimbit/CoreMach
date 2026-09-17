@@ -5,11 +5,27 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifdef _MSC_VER
+#    define BM_SCANF scanf_s
+#else
+#    define BM_SCANF scanf
+#endif
+
+static int
+read_command(char *command)
+{
+#ifdef _MSC_VER
+    return scanf_s(" %c", command, 1U) == 1;
+#else
+    return scanf(" %c", command) == 1;
+#endif
+}
+
 static int
 read_word(uint16_t *value)
 {
     unsigned int parsed;
-    if (scanf("%x", &parsed) != 1 || parsed > UINT16_MAX)
+    if (BM_SCANF("%x", &parsed) != 1 || parsed > UINT16_MAX)
         return 0;
     *value = (uint16_t) parsed;
     return 1;
@@ -49,7 +65,7 @@ main(void)
 
     cpu_808x_test_machine_create(&machine, NULL, empty_program, 0U);
     state = cpu_808x_test_get_state(&machine);
-    while (scanf(" %c", &command) == 1) {
+    while (read_command(&command)) {
         unsigned int initial_count;
         unsigned int query_count;
         unsigned int index;
@@ -59,18 +75,18 @@ main(void)
         if (command == 'Q')
             break;
         if (command != 'C' || !read_state(&state) ||
-            scanf("%u", &initial_count) != 1)
+            BM_SCANF("%u", &initial_count) != 1)
             return 2;
         state.halted = 0U;
         for (index = 0U; index < initial_count; ++index) {
             uint32_t address;
             unsigned int value;
-            if (scanf("%" SCNx32 " %x", &address, &value) != 2 ||
+            if (BM_SCANF("%" SCNx32 " %x", &address, &value) != 2 ||
                 address >= CPU_808X_TEST_IMAGE_SIZE || value > UINT8_MAX)
                 return 2;
             cpu_808x_test_poke(&machine, address, (uint8_t) value);
         }
-        if (scanf("%u", &query_count) != 1)
+        if (BM_SCANF("%u", &query_count) != 1)
             return 2;
         cpu_808x_test_set_state(&machine, &state);
         status = cpu_808x_test_step(&machine, &consumed);
@@ -80,7 +96,7 @@ main(void)
         printf(" %u", query_count);
         for (index = 0U; index < query_count; ++index) {
             uint32_t address;
-            if (scanf("%" SCNx32, &address) != 1 ||
+            if (BM_SCANF("%" SCNx32, &address) != 1 ||
                 address >= CPU_808X_TEST_IMAGE_SIZE)
                 return 2;
             printf(" %02" PRIx8, cpu_808x_test_peek(&machine, address));
