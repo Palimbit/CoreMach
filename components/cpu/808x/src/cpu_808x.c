@@ -73,6 +73,13 @@ typedef struct bm_808x_state {
     uint64_t boundary_bus_transactions;
     uint64_t boundary_wait_states;
     int boundary_prefetch_flushed;
+    int boundary_rm_valid;
+    int boundary_rm_memory;
+    uint16_t boundary_rm_offset;
+    uint16_t boundary_initial_sp;
+    uint16_t boundary_initial_bp;
+    uint8_t boundary_shift_count;
+    int boundary_shift_count_valid;
 } bm_808x_state_t;
 
 static void
@@ -233,6 +240,9 @@ decode_rm_operand(bm_808x_state_t *state, uint8_t modrm, int segment_override,
     if (mod == 3U) {
         operand->is_register = 1;
         operand->register_index = rm;
+        state->boundary_rm_valid = 1;
+        state->boundary_rm_memory = 0;
+        state->boundary_rm_offset = 0U;
         return BM_STATUS_OK;
     }
     switch (rm) {
@@ -279,6 +289,9 @@ decode_rm_operand(bm_808x_state_t *state, uint8_t modrm, int segment_override,
                                       (unsigned int) segment_override :
                                       (uses_bp ? 2U : 3U)];
     operand->offset = (uint16_t) address;
+    state->boundary_rm_valid = 1;
+    state->boundary_rm_memory = 1;
+    state->boundary_rm_offset = operand->offset;
     return BM_STATUS_OK;
 }
 
@@ -1559,6 +1572,13 @@ cpu_reset(void *context)
     state->boundary_bus_transactions = 0U;
     state->boundary_wait_states = 0U;
     state->boundary_prefetch_flushed = 0;
+    state->boundary_rm_valid = 0;
+    state->boundary_rm_memory = 0;
+    state->boundary_rm_offset = 0U;
+    state->boundary_initial_sp = 0U;
+    state->boundary_initial_bp = 0U;
+    state->boundary_shift_count = 0U;
+    state->boundary_shift_count_valid = 0;
     return BM_STATUS_OK;
 }
 
@@ -3585,6 +3605,10 @@ execute_one(bm_808x_state_t *state)
                 status = fetch_byte(state, &count);
             else
                 count = opcode == 0xd0U ? 1U : get_register_byte(state, 1U);
+            if (status == BM_STATUS_OK) {
+                state->boundary_shift_count = count;
+                state->boundary_shift_count_valid = 1;
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if (status != BM_STATUS_OK)
@@ -3613,6 +3637,10 @@ execute_one(bm_808x_state_t *state)
                 status = fetch_byte(state, &count);
             else
                 count = opcode == 0xd1U ? 1U : get_register_byte(state, 1U);
+            if (status == BM_STATUS_OK) {
+                state->boundary_shift_count = count;
+                state->boundary_shift_count_valid = 1;
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
             if (status != BM_STATUS_OK)
@@ -3767,6 +3795,41 @@ instruction_byte(const bm_808x_state_t *state, unsigned int index,
 }
 
 static int
+rm_execution_clocks(const bm_808x_state_t *state, int word,
+                    uint32_t register_clocks, uint32_t byte_memory_clocks,
+                    uint32_t even_word_memory_clocks,
+                    uint32_t odd_word_memory_clocks, uint32_t *clocks)
+{
+    if (!state->boundary_rm_valid)
+        return 0;
+    if (!state->boundary_rm_memory) {
+        *clocks = register_clocks;
+        return 1;
+    }
+    if (!word) {
+        *clocks = byte_memory_clocks;
+        return 1;
+    }
+    *clocks = (state->boundary_rm_offset & 1U) != 0U ?
+              odd_word_memory_clocks : even_word_memory_clocks;
+    return 1;
+}
+
+static int
+direct_address(const bm_808x_state_t *state, uint16_t *offset)
+{
+    uint8_t low = 0U;
+    uint8_t high = 0U;
+    unsigned int index = state->last_prefix_count + 1U;
+
+    if (!instruction_byte(state, index, &low) ||
+        !instruction_byte(state, index + 1U, &high))
+        return 0;
+    *offset = (uint16_t) (low | ((uint16_t) high << 8U));
+    return 1;
+}
+
+static int
 documented_native_execution_clocks(const bm_808x_state_t *state,
                                    uint32_t *clocks)
 {
@@ -3776,6 +3839,10 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
 
     if ((opcode >= 0x40U) && (opcode <= 0x4fU))
         base = 2U; /* INC/DEC reg16. */
+    else if ((opcode >= 0x50U) && (opcode <= 0x57U))
+        base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
+    else if ((opcode >= 0x58U) && (opcode <= 0x5fU))
+        base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
     else if ((opcode >= 0x70U) && (opcode <= 0x7fU))
         base = state->boundary_prefetch_flushed ? 14U : 4U;
     else if ((opcode >= 0x91U) && (opcode <= 0x97U))
@@ -3783,55 +3850,178 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
     else if ((opcode >= 0xb0U) && (opcode <= 0xbfU))
         base = 4U; /* MOV reg,imm. */
     else if (((opcode & 0xc4U) == 0x00U) && (opcode <= 0x3bU)) {
-        uint8_t modrm = 0U;
-        if (instruction_byte(state, state->last_prefix_count + 1U,
-                             &modrm) && ((modrm >> 6U) == 3U))
-            base = 2U; /* ALU reg,reg. */
+        int word = (opcode & 1U) != 0U;
+        int compare = (opcode & 0x38U) == 0x38U;
+        int memory_destination = (opcode & 2U) == 0U;
+
+        if (compare || !memory_destination)
+            known = rm_execution_clocks(state, word, 2U, 11U, 11U, 15U,
+                                        &base);
         else
-            known = 0;
+            known = rm_execution_clocks(state, word, 2U, 16U, 16U, 24U,
+                                        &base);
     } else {
         switch (opcode) {
+            case 0x06: case 0x0e: case 0x16: case 0x1e:
+            case 0x07: case 0x17: case 0x1f:
+            case 0x9c: case 0x9d:
+                base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
+                break;
             case 0x04: case 0x05: case 0x0c: case 0x0d:
             case 0x14: case 0x15: case 0x1c: case 0x1d:
             case 0x24: case 0x25: case 0x2c: case 0x2d:
             case 0x34: case 0x35: case 0x3c: case 0x3d:
                 base = 4U; /* ALU accumulator,immediate. */
                 break;
-            case 0x84: case 0x85: case 0x88: case 0x89:
-            case 0x8a: case 0x8b: case 0x8c: case 0x8e: {
+            case 0x27: case 0x2f:
+                base = 3U; /* ADJ4A/ADJ4S. */
+                break;
+            case 0x37: case 0x3f:
+                base = 7U; /* ADJBA/ADJBS. */
+                break;
+            case 0x60:
+                base = (state->boundary_initial_sp & 1U) ? 67U : 35U;
+                break;
+            case 0x61:
+                base = (state->boundary_initial_sp & 1U) ? 75U : 43U;
+                break;
+            case 0x66: case 0x67:
+                known = rm_execution_clocks(state, 1, 2U, 0U, 11U, 15U,
+                                            &base);
+                break;
+            case 0x68:
+                base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
+                break;
+            case 0x6a:
+                base = (state->boundary_initial_sp & 1U) ? 11U : 7U;
+                break;
+            case 0x80: case 0x81: case 0x82: case 0x83: {
                 uint8_t modrm = 0U;
-                if (instruction_byte(state, state->last_prefix_count + 1U,
-                                     &modrm) && ((modrm >> 6U) == 3U))
-                    base = 2U;
-                else
+                int word = (opcode == 0x81U) || (opcode == 0x83U);
+                if (!instruction_byte(state, state->last_prefix_count + 1U,
+                                      &modrm)) {
                     known = 0;
+                    break;
+                }
+                if (((modrm >> 3U) & 7U) == 7U)
+                    known = rm_execution_clocks(state, word, 4U, 13U, 13U,
+                                                17U, &base);
+                else
+                    known = rm_execution_clocks(state, word, 4U, 18U, 18U,
+                                                26U, &base);
                 break;
             }
             case 0x86: case 0x87: {
-                uint8_t modrm = 0U;
-                if (instruction_byte(state, state->last_prefix_count + 1U,
-                                     &modrm) && ((modrm >> 6U) == 3U))
-                    base = 3U;
+                known = rm_execution_clocks(state, opcode == 0x87U, 3U, 16U,
+                                            16U, 24U, &base);
+                break;
+            }
+            case 0x84: case 0x85:
+                known = rm_execution_clocks(state, opcode == 0x85U, 2U, 10U,
+                                            10U, 14U, &base);
+                break;
+            case 0x88: case 0x89:
+                known = rm_execution_clocks(state, opcode == 0x89U, 2U, 9U,
+                                            9U, 13U, &base);
+                break;
+            case 0x8a: case 0x8b:
+                known = rm_execution_clocks(state, opcode == 0x8bU, 2U, 11U,
+                                            11U, 15U, &base);
+                break;
+            case 0x8c:
+                known = rm_execution_clocks(state, 1, 2U, 0U, 10U, 14U,
+                                            &base);
+                break;
+            case 0x8d:
+                base = 4U; /* LDEA/LEA does not transfer the operand. */
+                break;
+            case 0x8e:
+                known = rm_execution_clocks(state, 1, 2U, 0U, 11U, 15U,
+                                            &base);
+                break;
+            case 0x8f: {
+                if (state->boundary_rm_valid && !state->boundary_rm_memory)
+                    base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
                 else
                     known = 0;
                 break;
             }
             case 0x90: base = 3U; break; /* NOP. */
+            case 0x98: base = 2U; break; /* CVTBW/CBW. */
+            case 0x9a:
+                base = (state->boundary_initial_sp & 1U) ? 29U : 21U;
+                break;
             case 0x9e: base = 3U; break; /* MOV PSW,AH. */
             case 0x9f: base = 2U; break; /* MOV AH,PSW. */
-            case 0xc2: base = (state->registers[REG_SP] & 1U) ? 24U : 20U; break;
-            case 0xc3: base = (state->registers[REG_SP] & 1U) ? 19U : 15U; break;
-            case 0xca: base = (state->registers[REG_SP] & 1U) ? 32U : 24U; break;
-            case 0xcb: base = (state->registers[REG_SP] & 1U) ? 29U : 21U; break;
+            case 0xa0: case 0xa1: case 0xa2: case 0xa3: {
+                uint16_t address = 0U;
+                int word = (opcode & 1U) != 0U;
+                int store = (opcode & 2U) != 0U;
+                if (!direct_address(state, &address)) {
+                    known = 0;
+                    break;
+                }
+                if (!word)
+                    base = store ? 9U : 10U;
+                else if (address & 1U)
+                    base = store ? 13U : 14U;
+                else
+                    base = store ? 9U : 10U;
+                break;
+            }
+            case 0xc0: case 0xc1: case 0xd0: case 0xd1:
+            case 0xd2: case 0xd3: {
+                uint32_t count;
+                int word = (opcode & 1U) != 0U;
+                if (!state->boundary_shift_count_valid) {
+                    known = 0;
+                    break;
+                }
+                count = state->boundary_shift_count;
+                if ((opcode == 0xd0U) || (opcode == 0xd1U)) {
+                    known = rm_execution_clocks(state, word, 6U, 16U, 16U,
+                                                24U, &base);
+                    break;
+                }
+                known = rm_execution_clocks(state, word, 7U + count,
+                                            19U + count, 19U + count,
+                                            27U + count, &base);
+                break;
+            }
+            case 0xc2: base = (state->boundary_initial_sp & 1U) ? 24U : 20U; break;
+            case 0xc3: base = (state->boundary_initial_sp & 1U) ? 19U : 15U; break;
+            case 0xc4: case 0xc5:
+                if (!state->boundary_rm_valid || !state->boundary_rm_memory)
+                    known = 0;
+                else
+                    base = (state->boundary_rm_offset & 1U) ? 26U : 18U;
+                break;
+            case 0xc6: case 0xc7:
+                known = rm_execution_clocks(state, opcode == 0xc7U, 4U, 11U,
+                                            11U, 15U, &base);
+                break;
+            case 0xc9:
+                base = (state->boundary_initial_bp & 1U) ? 10U : 6U;
+                break;
+            case 0xca: base = (state->boundary_initial_sp & 1U) ? 32U : 24U; break;
+            case 0xcb: base = (state->boundary_initial_sp & 1U) ? 29U : 21U; break;
             case 0xcc: case 0xcd:
-                base = (state->registers[REG_SP] & 1U) ? 50U : 38U;
+                base = (state->boundary_initial_sp & 1U) ? 50U : 38U;
                 break;
             case 0xce:
                 base = state->boundary_prefetch_flushed ?
-                       ((state->registers[REG_SP] & 1U) ? 52U : 40U) : 3U;
+                       ((state->boundary_initial_sp & 1U) ? 52U : 40U) : 3U;
                 break;
             case 0xcf:
-                base = (state->registers[REG_SP] & 1U) ? 39U : 27U;
+                base = (state->boundary_initial_sp & 1U) ? 39U : 27U;
+                break;
+            case 0xd4: base = 15U; break; /* CVTBD/AAM. */
+            case 0xd5: base = 7U; break;  /* CVTDB/AAD. */
+            case 0xd7: base = 9U; break;  /* TRANS/XLAT. */
+            case 0xd8: case 0xd9: case 0xda: case 0xdb:
+            case 0xdc: case 0xdd: case 0xde: case 0xdf:
+                known = rm_execution_clocks(state, 1, 2U, 0U, 11U, 15U,
+                                            &base);
                 break;
             case 0xe0: case 0xe1: case 0xe2:
                 base = state->boundary_prefetch_flushed ? 13U : 5U;
@@ -3860,7 +4050,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 break;
             }
             case 0xe8:
-                base = (state->registers[REG_SP] & 1U) ? 20U : 16U;
+                base = (state->boundary_initial_sp & 1U) ? 20U : 16U;
                 break;
             case 0xe9: base = 13U; break;
             case 0xea: base = 15U; break;
@@ -3873,6 +4063,66 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0xef:
                 base = (state->registers[REG_DX] & 1U) ? 12U : 8U;
                 break;
+            case 0xf6: case 0xf7: {
+                uint8_t modrm = 0U;
+                unsigned int operation;
+                int word = opcode == 0xf7U;
+                if (!instruction_byte(state, state->last_prefix_count + 1U,
+                                      &modrm)) {
+                    known = 0;
+                    break;
+                }
+                operation = (modrm >> 3U) & 7U;
+                if (operation <= 1U)
+                    known = rm_execution_clocks(state, word, 4U, 11U, 11U,
+                                                15U, &base);
+                else if ((operation == 2U) || (operation == 3U))
+                    known = rm_execution_clocks(state, word, 2U, 16U, 16U,
+                                                24U, &base);
+                else if (operation == 6U) {
+                    if (!state->boundary_rm_valid)
+                        known = 0;
+                    else if (!word)
+                        base = state->boundary_rm_memory ? 25U : 19U;
+                    else if (!state->boundary_rm_memory)
+                        base = 25U;
+                    else
+                        base = (state->boundary_rm_offset & 1U) ? 34U : 30U;
+                } else {
+                    /* MUL, IMUL and IDIV are explicitly data-dependent. */
+                    known = 0;
+                }
+                break;
+            }
+            case 0xfe:
+                known = rm_execution_clocks(state, 0, 2U, 16U, 0U, 0U,
+                                            &base);
+                break;
+            case 0xff: {
+                uint8_t modrm = 0U;
+                unsigned int operation;
+                if (!instruction_byte(state, state->last_prefix_count + 1U,
+                                      &modrm)) {
+                    known = 0;
+                    break;
+                }
+                operation = (modrm >> 3U) & 7U;
+                if ((operation == 0U) || (operation == 1U))
+                    known = rm_execution_clocks(state, 1, 2U, 0U, 16U, 24U,
+                                                &base);
+                else if ((operation == 2U) && state->boundary_rm_valid &&
+                         !state->boundary_rm_memory)
+                    base = (state->boundary_initial_sp & 1U) ? 18U : 14U;
+                else if (operation == 4U)
+                    known = rm_execution_clocks(state, 1, 11U, 0U, 20U, 24U,
+                                                &base);
+                else if (operation == 5U)
+                    known = rm_execution_clocks(state, 1, 0U, 0U, 27U, 35U,
+                                                &base);
+                else
+                    known = 0;
+                break;
+            }
             case 0xf4: case 0xf5: case 0xf8: case 0xf9:
             case 0xfa: case 0xfb: case 0xfc: case 0xfd:
                 base = 2U;
@@ -3893,6 +4143,13 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_bus_transactions = 0U;
     state->boundary_wait_states = 0U;
     state->boundary_prefetch_flushed = 0;
+    state->boundary_rm_valid = 0;
+    state->boundary_rm_memory = 0;
+    state->boundary_rm_offset = 0U;
+    state->boundary_initial_sp = state->registers[REG_SP];
+    state->boundary_initial_bp = state->registers[REG_BP];
+    state->boundary_shift_count = 0U;
+    state->boundary_shift_count_valid = 0;
 }
 
 static void
@@ -4207,6 +4464,13 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->boundary_bus_transactions = 0U;
     state->boundary_wait_states = 0U;
     state->boundary_prefetch_flushed = 0;
+    state->boundary_rm_valid = 0;
+    state->boundary_rm_memory = 0;
+    state->boundary_rm_offset = 0U;
+    state->boundary_initial_sp = 0U;
+    state->boundary_initial_bp = 0U;
+    state->boundary_shift_count = 0U;
+    state->boundary_shift_count_valid = 0;
     return BM_STATUS_OK;
 }
 

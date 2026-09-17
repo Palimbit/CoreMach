@@ -57,7 +57,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | Functional instruction-boundary core derived from the inherited interpreter | Complete documented native and 8080 opcode-map classification, snapshot v4 with MD write gate, segmented 20-bit addresses, ModR/M, native and emulated stacks, hardware-vector-validated primary ALU forms, 80186-compatible and NEC extensions, FPO/POLL CPU contract, BRKEM/CALLN/RETEM, interrupt and NMI round trips, prefix shadows, interruptible REP and BUSLOCK transaction attributes; a versioned observer separates an initial documented native execution-clock subset, logical bus transactions and reported waits, and queue-invalidating boundaries; no queue fill/overlap, complete clock table, physical bus timing or embedded floating-point execution |
+| NEC V30 | Functional instruction-boundary core derived from the inherited interpreter | Complete documented native and 8080 opcode-map classification, snapshot v4 with MD write gate, segmented 20-bit addresses, ModR/M, native and emulated stacks, hardware-vector-validated primary ALU forms, 80186-compatible and NEC extensions, FPO/POLL CPU contract, BRKEM/CALLN/RETEM, interrupt and NMI round trips, prefix shadows, interruptible REP and BUSLOCK transaction attributes; a versioned observer separates exact documented native execution clocks (including effective-address alignment, entry-stack alignment and counted shifts), logical bus transactions and reported waits, and queue-invalidating boundaries; data-dependent/formula timings, queue fill/overlap, physical bus timing and embedded floating-point execution remain explicit |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; the scheduler does not yet consume CPU timing observations, so rational PIT/RTC clock accumulators still use a measured functional instruction rate |
@@ -135,10 +135,11 @@ The current automated ladder uses no historical software:
    D4h/D5h, ADC/SBB primary forms, decimal/ASCII adjustments, CWD, INT3/INTO
    and the eight 82h groups, while intentionally excluding V20 cycle traces
    from V30 timing claims.
-   A synthetic timing-contract test separately checks documented fixed and
-   taken/not-taken clocks, prefix cost, explicit unknown classification,
-   logical bus and device-wait accounting, and queue invalidation on branches
-   and accepted interrupts without ROM or disk inputs.
+   A synthetic timing-contract test separately checks documented fixed,
+   taken/not-taken, memory-alignment, entry-stack-alignment and counted-shift
+   clocks, prefix cost, explicit data-dependent unknown classification, logical
+   bus and device-wait accounting, and queue invalidation on branches and
+   accepted interrupts without ROM or disk inputs.
 4. The PCS 86 test creates two synthetic 32 KiB halves in memory. Their
    interleaved reset vector performs a far jump from physical `FFFF0h` to
    `F0100h`, writes RAM, initializes the PIC, programs the PIT, exercises the

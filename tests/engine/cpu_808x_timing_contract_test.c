@@ -180,7 +180,7 @@ test_bus_waits_are_reported_but_not_folded_into_execution_clocks(void)
 }
 
 static void
-test_unclassified_timing_is_explicit(void)
+test_memory_timing_uses_operand_form_and_alignment(void)
 {
     static const uint8_t program[] = { 0x88U, 0x07U }; /* MOV [BW],AL. */
     timing_capture_t capture = { 0 };
@@ -199,10 +199,118 @@ test_unclassified_timing_is_explicit(void)
     state.ax = 0x005aU;
     cpu_808x_test_set_state(&machine, &state);
     step_once(&machine, &capture);
-    assert(capture.last.execution_clocks_known == 0U);
-    assert(capture.last.execution_clocks == 0U);
+    assert(capture.last.execution_clocks_known == 1U);
+    assert(capture.last.execution_clocks == 9U);
     assert(capture.last.logical_bus_transactions == 3U);
     assert(cpu_808x_test_peek(&machine, 0x10040U) == 0x5aU);
+    cpu_808x_test_machine_destroy(&machine);
+
+    {
+        static const uint8_t add_word[] = { 0x01U, 0x07U }; /* ADD [BW],AW. */
+        unsigned int odd;
+
+        for (odd = 0U; odd <= 1U; ++odd) {
+            memset(&capture, 0, sizeof(capture));
+            cpu_808x_test_machine_create(&machine, &config, add_word,
+                                         sizeof(add_word));
+            start_program(&machine);
+            state = cpu_808x_test_get_state(&machine);
+            state.ds = 0x1000U;
+            state.bx = (uint16_t) (0x0040U + odd);
+            state.ax = 1U;
+            cpu_808x_test_set_state(&machine, &state);
+            cpu_808x_test_poke(&machine, 0x10040U + odd, 2U);
+            cpu_808x_test_poke(&machine, 0x10041U + odd, 0U);
+            step_once(&machine, &capture);
+            assert(capture.last.execution_clocks_known == 1U);
+            assert(capture.last.execution_clocks == (odd ? 24U : 16U));
+            cpu_808x_test_machine_destroy(&machine);
+        }
+    }
+}
+
+static void
+test_counted_and_stack_timing(void)
+{
+    static const uint8_t shift[] = { 0xc1U, 0xe0U, 0x05U }; /* SHL AW,5. */
+    static const uint8_t shift_cl[] = { 0xd2U, 0xe1U }; /* SHL CL,CL. */
+    static const uint8_t push[] = { 0x50U }; /* PUSH AW. */
+    static const uint8_t ret_adjust[] = { 0xc2U, 0x01U, 0x00U };
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+
+    cpu_808x_test_machine_create(&machine, &config, shift, sizeof(shift));
+    start_program(&machine);
+    step_once(&machine, &capture);
+    assert(capture.last.execution_clocks_known == 1U);
+    assert(capture.last.execution_clocks == 12U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, shift_cl,
+                                 sizeof(shift_cl));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.cx = 2U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    state = cpu_808x_test_get_state(&machine);
+    assert((state.cx & 0x00ffU) == 8U);
+    assert(capture.last.execution_clocks_known == 1U);
+    assert(capture.last.execution_clocks == 9U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, push, sizeof(push));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ss = 0x1000U;
+    state.sp = 0x0101U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert(capture.last.execution_clocks_known == 1U);
+    assert(capture.last.execution_clocks == 12U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    /* The cleanup makes the final SP odd; timing follows the initial stack
+     * transfer address, which was even. */
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, ret_adjust,
+                                 sizeof(ret_adjust));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ss = 0x1000U;
+    state.sp = 0x0100U;
+    cpu_808x_test_set_state(&machine, &state);
+    cpu_808x_test_poke(&machine, 0x10100U, 0x03U);
+    cpu_808x_test_poke(&machine, 0x10101U, 0x00U);
+    step_once(&machine, &capture);
+    assert(capture.last.execution_clocks_known == 1U);
+    assert(capture.last.execution_clocks == 20U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
+static void
+test_data_dependent_timing_is_explicit(void)
+{
+    static const uint8_t program[] = { 0xf6U, 0xe8U }; /* IMUL AL. */
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+
+    cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
+    start_program(&machine);
+    step_once(&machine, &capture);
+    assert(capture.last.execution_clocks_known == 0U);
+    assert(capture.last.execution_clocks == 0U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -258,7 +366,9 @@ main(void)
     test_fixed_execution_clocks_and_prefix_cost();
     test_taken_branch_flushes_even_when_target_is_sequential();
     test_bus_waits_are_reported_but_not_folded_into_execution_clocks();
-    test_unclassified_timing_is_explicit();
+    test_memory_timing_uses_operand_form_and_alignment();
+    test_counted_and_stack_timing();
+    test_data_dependent_timing_is_explicit();
     test_interrupt_boundary_reports_queue_flush();
     return 0;
 }
