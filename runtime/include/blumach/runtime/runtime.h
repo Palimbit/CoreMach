@@ -46,6 +46,8 @@ typedef bm_status_t (*bm_machine_inspect_fn)(const void *machine,
                                              uint64_t *value);
 typedef bm_status_t (*bm_machine_input_fn)(void *machine,
                                           const bm_input_event_t *event);
+typedef bm_status_t (*bm_machine_keyboard_leds_fn)(
+    const void *machine, bm_keyboard_led_state_t *state);
 typedef bm_status_t (*bm_machine_video_geometry_fn)(const void *machine,
                                                      bm_video_geometry_t *geometry);
 /* Rendering observes session time but cannot advance it. Frontends that render
@@ -72,6 +74,7 @@ typedef struct bm_machine_ops {
     bm_machine_storage_count_fn storage_count;
     bm_machine_storage_status_fn storage_status;
     bm_machine_storage_media_fn storage_media;
+    bm_machine_keyboard_leds_fn keyboard_leds;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_definition {
@@ -134,6 +137,8 @@ bm_status_t bm_session_inspect_machine(const bm_session_t *session,
                                        uint64_t *value);
 bm_status_t bm_session_send_input(bm_session_t *session,
                                   const bm_input_event_t *event);
+bm_status_t bm_session_keyboard_leds(const bm_session_t *session,
+                                     bm_keyboard_led_state_t *state);
 bm_status_t bm_session_storage_device_count(const bm_session_t *session,
                                             size_t *count);
 bm_status_t bm_session_storage_device_status(

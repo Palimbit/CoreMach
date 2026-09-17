@@ -539,6 +539,13 @@ or the machine resets. This matters for software that reads the byte in a
 hooked IRQ1 handler and then chains the previous handler; both readers observe
 the same hardware datum without manufacturing a second input event.
 
+Keyboard indicators are guest-owned state. The PCS 86 keyboard channel now
+acknowledges the two-byte `EDh` command, retains only its defined Scroll, Num
+and Caps bits, and clears them on reset. An optional runtime query publishes
+that state without exposing board ports or guest commands. Qt renders the
+three indicators from the query; it never substitutes the host operating
+system's lock-key state.
+
 Each accepted make or break transition is followed by two milliseconds of
 emulated execution derived from that same declared scheduler rate. This
 deterministic separation prevents a burst from the Qt event loop from

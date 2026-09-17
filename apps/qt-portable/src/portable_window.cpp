@@ -41,7 +41,7 @@ PortableWindow::AssetStorage::~AssetStorage()
 
 PortableWindow::PortableWindow(QWidget *parent)
     : QMainWindow(parent), display_(new DisplayWidget), status_(new QLabel),
-      storageStatus_(new QLabel),
+      storageStatus_(new QLabel), keyboardStatus_(new QLabel),
       machineToolbar_(addToolBar(tr("Machine"))),
       pauseAction_(new QAction(tr("Pause"), this)),
       resetAction_(new QAction(tr("Reset"), this)),
@@ -125,6 +125,9 @@ PortableWindow::PortableWindow(QWidget *parent)
     setWindowTitle(tr("BluMach Portable"));
     setCentralWidget(display_);
     statusBar()->addPermanentWidget(status_, 1);
+    keyboardStatus_->setTextFormat(Qt::RichText);
+    keyboardStatus_->setVisible(false);
+    statusBar()->addPermanentWidget(keyboardStatus_);
     storageStatus_->setTextFormat(Qt::RichText);
     statusBar()->addPermanentWidget(storageStatus_);
     statusBarAction_->setChecked(true);
@@ -328,6 +331,8 @@ PortableWindow::closeMachine()
     frameRateTimer_.invalidate();
     activityTimer_.invalidate();
     storagePresentation_.clear();
+    keyboardStatus_->clear();
+    keyboardStatus_->setVisible(false);
     storageStatus_->clear();
     setWindowTitle(tr("BluMach Portable"));
     display_->setFrame(QImage());
@@ -572,6 +577,7 @@ PortableWindow::drainSnapshots(uint64_t generation)
 void
 PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
 {
+    updateKeyboardStatus(snapshot.hasKeyboardLeds, snapshot.keyboardLeds);
     if (!snapshot.frame.isNull()) {
         display_->setFrame(snapshot.frame);
         if (snapshot.hasVideo) {
@@ -598,6 +604,34 @@ PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
     }
     updateActions();
     showStatus();
+}
+
+void
+PortableWindow::updateKeyboardStatus(
+    bool available, const bm_keyboard_led_state_t &state)
+{
+    keyboardStatus_->setVisible(available);
+    if (!available) {
+        keyboardStatus_->clear();
+        return;
+    }
+    const auto indicator = [](const QString &name, bool active) {
+        const QString color = active ? QStringLiteral("#2eae4e") :
+                                       QStringLiteral("#777777");
+        return QStringLiteral("<span style=\"color:%1\">● %2</span>")
+            .arg(color, name.toHtmlEscaped());
+    };
+    keyboardStatus_->setText(
+        indicator(tr("Caps"),
+                  (state.indicators & BM_KEYBOARD_LED_CAPS_LOCK) != 0U) +
+        QStringLiteral(" &nbsp; ") +
+        indicator(tr("Num"),
+                  (state.indicators & BM_KEYBOARD_LED_NUM_LOCK) != 0U) +
+        QStringLiteral(" &nbsp; ") +
+        indicator(tr("Scroll"),
+                  (state.indicators & BM_KEYBOARD_LED_SCROLL_LOCK) != 0U));
+    keyboardStatus_->setToolTip(
+        tr("Keyboard indicators controlled by the guest"));
 }
 
 void

@@ -55,6 +55,8 @@ typedef struct bm_pcs86_machine {
     uint8_t ps2_queue[2][16];
     uint8_t ps2_queue_start[2];
     uint8_t ps2_queue_end[2];
+    uint8_t ps2_pending_command[2];
+    uint8_t keyboard_leds;
     uint8_t scan_queue[64];
     uint8_t scan_queue_start;
     uint8_t scan_queue_end;
@@ -278,6 +280,19 @@ pcs86_ps2_command(bm_pcs86_machine_t *machine, unsigned int channel,
     unsigned int response_size = 1U;
     bm_status_t status;
 
+    if ((channel == 0U) && (command < 0xedU) &&
+        (machine->ps2_pending_command[channel] == 0xedU)) {
+        if (pcs86_queue_free(machine->ps2_queue_start[channel],
+                             machine->ps2_queue_end[channel], 0x0fU) < 1U)
+            return BM_STATUS_CAPACITY_EXCEEDED;
+        status = pcs86_ps2_queue_push(machine, channel, 0xfaU);
+        if (status == BM_STATUS_OK) {
+            machine->keyboard_leds = command & 0x07U;
+            machine->ps2_pending_command[channel] = 0U;
+        }
+        return status;
+    }
+
     if ((command == 0xf2U) || (command == 0xffU))
         response_size = (channel == 1U) ? 3U :
                         ((command == 0xf2U) ? 3U : 2U);
@@ -288,6 +303,8 @@ pcs86_ps2_command(bm_pcs86_machine_t *machine, unsigned int channel,
     status = pcs86_ps2_queue_push(machine, channel, 0xfaU);
     if (status != BM_STATUS_OK)
         return status;
+    machine->ps2_pending_command[channel] =
+        ((channel == 0U) && (command == 0xedU)) ? command : 0U;
     if (command == 0xf2U) {
         if (channel == 0U) {
             status = pcs86_ps2_queue_push(machine, channel, 0xabU);
@@ -296,6 +313,8 @@ pcs86_ps2_command(bm_pcs86_machine_t *machine, unsigned int channel,
         } else
             status = pcs86_ps2_queue_push(machine, channel, 0x00U);
     } else if (command == 0xffU) {
+        if (channel == 0U)
+            machine->keyboard_leds = 0U;
         status = pcs86_ps2_queue_push(machine, channel, 0xaaU);
         if ((status == BM_STATUS_OK) && (channel == 1U))
             status = pcs86_ps2_queue_push(machine, channel, 0x00U);
@@ -900,6 +919,16 @@ pcs86_storage_status(const void *context, size_t index,
 }
 
 static bm_status_t
+pcs86_keyboard_leds(const void *context, bm_keyboard_led_state_t *state)
+{
+    const bm_pcs86_machine_t *machine = context;
+    if ((machine == NULL) || (state == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    state->indicators = machine->keyboard_leds;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
 pcs86_storage_media(void *context, bm_storage_device_kind_t kind,
                     uint32_t unit, const bm_storage_media_change_t *change)
 {
@@ -1188,6 +1217,9 @@ pcs86_reset(void *context)
     memset(machine->ps2_queue, 0, sizeof(machine->ps2_queue));
     memset(machine->ps2_queue_start, 0, sizeof(machine->ps2_queue_start));
     memset(machine->ps2_queue_end, 0, sizeof(machine->ps2_queue_end));
+    memset(machine->ps2_pending_command, 0,
+           sizeof(machine->ps2_pending_command));
+    machine->keyboard_leds = 0U;
     memset(machine->scan_queue, 0, sizeof(machine->scan_queue));
     machine->scan_queue_start = 0U;
     machine->scan_queue_end = 0U;
@@ -1372,7 +1404,8 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_input,
         pcs86_storage_count,
         pcs86_storage_status,
-        pcs86_storage_media
+        pcs86_storage_media,
+        pcs86_keyboard_leds
     },
     .engine = { 1U, 10U }
 };
