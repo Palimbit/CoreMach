@@ -48,13 +48,17 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
     assert(bm_engine_create(&machine->host, &engine_config, &machine->engine) ==
            BM_STATUS_OK);
     cpu_config = (bm_808x_config_t) {
-        BM_808X_NEC_V30,
-        10000000U,
-        machine->bus,
-        config != NULL ? config->trace : NULL,
-        config != NULL ? config->trace_context : NULL,
-        config != NULL ? config->interrupt_ack : NULL,
-        config != NULL ? config->interrupt_context : NULL
+        .model = BM_808X_NEC_V30,
+        .frequency_hz = 10000000U,
+        .bus = machine->bus,
+        .trace = config != NULL ? config->trace : NULL,
+        .trace_context = config != NULL ? config->trace_context : NULL,
+        .interrupt_ack = config != NULL ? config->interrupt_ack : NULL,
+        .interrupt_context = config != NULL ? config->interrupt_context : NULL,
+        .fpo = config != NULL ? config->fpo : NULL,
+        .poll = config != NULL ? config->poll : NULL,
+        .coprocessor_context =
+            config != NULL ? config->coprocessor_context : NULL
     };
     assert(bm_808x_create(&machine->host, &cpu_config, &machine->cpu) ==
            BM_STATUS_OK);
