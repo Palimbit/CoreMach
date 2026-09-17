@@ -70,11 +70,13 @@ at `F0000h-FFFFFh`. The machine validates the known firmware hashes when a
 frontend supplies them, but test firmware may omit a hash so repository tests
 can use newly authored synthetic bytes.
 
-The explicit-state interpreter remains an incomplete V30 implementation. Any
-unknown opcode returns `BM_STATUS_UNSUPPORTED`; it is never silently treated as
-a no-op. One scheduler tick currently represents one completed instruction, so
-cycle and bus timing remain deliberately outside this stage even though the
-implemented subset can execute a substantial original-BIOS path.
+The explicit-state interpreter implements the documented V30 native and 8080
+instruction maps at instruction-boundary functional granularity. Every primary
+opcode and grouped encoding is classified by an executable synthetic matrix;
+unknown or reserved forms return `BM_STATUS_UNSUPPORTED` and are never silently
+treated as no-ops. One scheduler tick still represents one completed
+instruction, so prefetch, cycle and physical-bus timing remain deliberately
+outside this stage.
 
 The component also exposes a versioned architectural snapshot and a
 single-boundary step operation. These contracts contain registers, segments,
@@ -193,6 +195,18 @@ with IE set it enters the native interrupt path. Undefined holes in the NEC
 silently adopted. This is an instruction-boundary functional implementation:
 8080/V30 cycle counts, prefetch, bus-status pins and electrical timing remain
 outside this cut.
+
+The native-map closure test executes all 256 primary bytes with a valid form
+where the byte introduces a group or prefix, then exhausts the NEC Group 3 map
+and every operation field of the immediate, shift, Group 1, Group 2, segment
+transfer and reserved-field families. NEC-defined primary holes `63h`, `D6h`
+and `F1h`, V33A/V53A-only `BRKXA`/`RETXA`, memory-only register encodings and
+reserved group fields remain explicit unsupported results. Two deliberately
+documented exceptions are retained from the pinned physical V20 corpus rather
+than inferred from the manual: the second F6h/F7h TEST encoding and the
+register-count shift `/6` behavior. This closes opcode classification; it does
+not claim exhaustive physical conformance for every operand value or replace
+the remaining cycle, prefetch and bus work.
 
 The native-extension cut implements the documented V30 Group 3 map used by
 `ADD4S`, `SUB4S`, `CMP4S`, `ROL4`, `ROR4`, `INS` and `EXT`. Packed-BCD strings
