@@ -13,6 +13,7 @@ typedef struct pcs86_frontend_machine {
 
 static const uint64_t firmware_sizes[] = { BM_PCS86_FIRMWARE_HALF_SIZE };
 static const uint64_t floppy_sizes[] = { 737280U, 1474560U };
+static const uint64_t hard_disk_sizes[] = { 21411840U };
 
 static const bm_frontend_asset_requirement_t assets[] = {
     { "firmware-even", "Even firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1,
@@ -20,7 +21,10 @@ static const bm_frontend_asset_requirement_t assets[] = {
     { "firmware-odd", "Odd firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1,
       firmware_sizes, sizeof(firmware_sizes) / sizeof(firmware_sizes[0]), 0U },
     { "floppy-0", "Drive A floppy image", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
-      0, floppy_sizes, sizeof(floppy_sizes) / sizeof(floppy_sizes[0]), 512U }
+      0, floppy_sizes, sizeof(floppy_sizes) / sizeof(floppy_sizes[0]), 512U },
+    { "hard-disk-0", "Conner CP3026 XTA disk image",
+      BM_FRONTEND_ASSET_READ_ONLY_MEDIA, 0, hard_disk_sizes,
+      sizeof(hard_disk_sizes) / sizeof(hard_disk_sizes[0]), 512U }
 };
 
 static const bm_pcs86_firmware_identity_t *
@@ -75,6 +79,8 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
         bindings, binding_count, "firmware-odd");
     const bm_frontend_asset_binding_t *floppy = bm_frontend_binding_find(
         bindings, binding_count, "floppy-0");
+    const bm_frontend_asset_binding_t *hard_disk = bm_frontend_binding_find(
+        bindings, binding_count, "hard-disk-0");
     const bm_pcs86_firmware_identity_t *identities;
     const bm_pcs86_firmware_identity_t *even_identity;
     const bm_pcs86_firmware_identity_t *odd_identity;
@@ -97,6 +103,14 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
          (floppy->value.media.block_size != 512U) ||
          ((floppy->value.media.block_count != 1440U) &&
           (floppy->value.media.block_count != 2880U))))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((hard_disk != NULL) &&
+        ((hard_disk->kind != BM_FRONTEND_ASSET_READ_ONLY_MEDIA) ||
+         (hard_disk->value.media.read == NULL) ||
+         (hard_disk->value.media.write != NULL) ||
+         !hard_disk->value.media.read_only ||
+         (hard_disk->value.media.block_size != 512U) ||
+         (hard_disk->value.media.block_count != 41820U)))
         return BM_STATUS_INVALID_ARGUMENT;
     machine = calloc(1U, sizeof(*machine));
     if (machine == NULL)
@@ -131,6 +145,13 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
               (uint8_t) (floppy->value.media.block_count == 1440U ? 9U : 18U),
               512U },
             floppy->value.media
+        };
+    }
+    if (hard_disk != NULL) {
+        machine->base.diagnostics.read_only_media_bytes +=
+            hard_disk->value.media.block_count * hard_disk->value.media.block_size;
+        machine->pcs86.hard_disk = (bm_pcs86_hard_disk_config_t) {
+            1, { 615U, 4U, 17U }, hard_disk->value.media
         };
     }
     machine->base.configuration = bm_pcs86_machine_config(&machine->pcs86);

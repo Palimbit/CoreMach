@@ -78,12 +78,13 @@ int
 headless_run_machine(const bm_frontend_adapter_t *adapter,
                      const headless_run_options_t *options)
 {
-    bm_frontend_asset_binding_t bindings[3];
+    bm_frontend_asset_binding_t bindings[4];
     size_t binding_count = 2U;
     bm_host_services_t host = bm_null_host_services();
     bm_frontend_blob_t even = { NULL, 0U };
     bm_frontend_blob_t odd = { NULL, 0U };
     bm_frontend_readonly_media_t floppy = { 0 };
+    bm_frontend_readonly_media_t hard_disk = { 0 };
     bm_frontend_machine_t *machine = NULL;
     bm_frontend_diagnostics_t diagnostics = { 0 };
     bm_session_t *session = NULL;
@@ -136,6 +137,20 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             { .media = floppy.media }
         };
         binding_count = 3U;
+    }
+    if (options->hard_disk_path != NULL) {
+        if (!bm_frontend_readonly_media_open(options->hard_disk_path, 512U,
+                                             &hard_disk) ||
+            (hard_disk.size != 21411840U)) {
+            fputs("hard disk image must be a raw 615/4/17 CP3026 image\n",
+                  stderr);
+            result = 2;
+            goto cleanup;
+        }
+        bindings[binding_count++] = (bm_frontend_asset_binding_t) {
+            "hard-disk-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+            { .media = hard_disk.media }
+        };
     }
     status = bm_frontend_machine_open(adapter, bindings, binding_count, &machine);
     if (status != BM_STATUS_OK) {
@@ -206,8 +221,8 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
            (int) video_status, geometry.width, geometry.height, nonblack,
            frame_crc, (frame_written && options->frame_path != NULL) ?
                       options->frame_path : "");
-    printf("firmware_hash=unchecked floppy_bytes=%" PRIu64
-           " floppy_read_only=%d\n",
+    printf("firmware_hash=unchecked read_only_media_bytes=%" PRIu64
+           " media_read_only=%d\n",
            diagnostics.read_only_media_bytes,
            diagnostics.read_only_media_bytes != 0U ? 1 : 0);
     if (options->text_action_count != 0U)
@@ -227,6 +242,7 @@ cleanup:
     free(pixels);
     bm_frontend_machine_close(machine);
     bm_frontend_readonly_media_close(&floppy);
+    bm_frontend_readonly_media_close(&hard_disk);
     bm_frontend_blob_release(&even);
     bm_frontend_blob_release(&odd);
     return result;

@@ -15,6 +15,7 @@ typedef struct headless_run_options {
     const char *firmware_even_path;
     const char *firmware_odd_path;
     const char *floppy_path;
+    const char *hard_disk_path;
     const char *frame_path;
     const char *scenario_path;
     uint64_t ticks;

@@ -33,7 +33,9 @@ main(void)
         { "firmware-odd", BM_FRONTEND_ASSET_BLOB,
           { .blob = { "test-odd", odd_bytes, sizeof(odd_bytes), NULL } } },
         { "floppy-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
-          { .media = { NULL, 1440U, 512U, 1, read_zero_blocks, NULL } } }
+          { .media = { NULL, 1440U, 512U, 1, read_zero_blocks, NULL } } },
+        { "hard-disk-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+          { .media = { NULL, 41820U, 512U, 1, read_zero_blocks, NULL } } }
     };
     bm_frontend_diagnostics_t diagnostics;
     const bm_frontend_asset_binding_t unknown_binding = {
@@ -52,7 +54,7 @@ main(void)
     assert(strcmp(definition->id, "olivetti-pcs86") == 0);
     assets = bm_frontend_adapter_assets(adapter, &asset_count);
     assert(assets != NULL);
-    assert(asset_count == 3U);
+    assert(asset_count == 4U);
     assert(strcmp(assets[0].role, "firmware-even") == 0);
     assert(assets[0].required);
     assert(assets[0].accepted_size_count == 1U);
@@ -62,6 +64,10 @@ main(void)
     assert(assets[2].kind == BM_FRONTEND_ASSET_READ_ONLY_MEDIA);
     assert(assets[2].accepted_size_count == 2U);
     assert(assets[2].block_size == 512U);
+    assert(strcmp(assets[3].role, "hard-disk-0") == 0);
+    assert(!assets[3].required);
+    assert(assets[3].accepted_size_count == 1U);
+    assert(assets[3].accepted_sizes[0] == 21411840U);
 
     assert(bm_machine_registry_create(&host, bm_frontend_adapter_count(),
                                       &registry) == BM_STATUS_OK);
@@ -82,7 +88,7 @@ main(void)
     assert(bm_frontend_machine_config(machine)->definition == definition);
     assert(bm_frontend_machine_diagnostics(machine, &diagnostics) ==
            BM_STATUS_OK);
-    assert(diagnostics.read_only_media_bytes == 737280U);
+    assert(diagnostics.read_only_media_bytes == 22149120U);
     assert(diagnostics.instructions == 0U);
     bm_frontend_machine_close(machine);
     return 0;
