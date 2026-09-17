@@ -310,6 +310,18 @@ set_register_byte(bm_808x_state_t *state, unsigned int index, uint8_t value)
         *word = (uint16_t) ((*word & 0x00ffU) | ((uint16_t) value << 8U));
 }
 
+static int32_t
+signed_byte(uint8_t value)
+{
+    return (value & 0x80U) != 0U ? (int32_t) value - 0x100L : value;
+}
+
+static int32_t
+signed_word(uint16_t value)
+{
+    return (value & 0x8000U) != 0U ? (int32_t) value - 0x10000L : value;
+}
+
 static int
 even_parity(uint8_t value)
 {
@@ -967,10 +979,6 @@ execute_one(bm_808x_state_t *state)
         };
         state->trace(state->trace_context, &trace);
     }
-
-    if (repeat && ((opcode < 0xa4U) || (opcode > 0xa7U)) &&
-        ((opcode < 0xaaU) || (opcode > 0xafU)))
-        return BM_STATUS_UNSUPPORTED;
 
     if ((opcode >= 0xb8U) && (opcode <= 0xbfU)) {
         uint16_t immediate;
@@ -1778,7 +1786,7 @@ execute_one(bm_808x_state_t *state)
                 status = write_operand_word(state, &operand, value);
             return status;
         }
-        case 0xf7: { /* TEST/NOT/NEG/MUL/DIV r/m16 subset. */
+        case 0xf7: { /* TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m16. */
             uint8_t modrm;
             unsigned int operation;
             uint16_t value = 0;
@@ -1787,13 +1795,11 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
-            if ((operation != 0U) && (operation != 2U) && (operation != 3U) &&
-                (operation != 4U) && (operation != 6U))
-                return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
-            if ((status == BM_STATUS_OK) && (operation == 0U)) {
+            if ((status == BM_STATUS_OK) &&
+                ((operation == 0U) || (operation == 1U))) {
                 uint16_t immediate = 0;
                 status = fetch_word(state, &immediate);
                 if (status == BM_STATUS_OK)
@@ -1811,7 +1817,16 @@ execute_one(bm_808x_state_t *state)
                 state->flags &= (uint16_t) ~(FLAG_CF | FLAG_OF);
                 if ((result & 0xffff0000UL) != 0U)
                     state->flags |= FLAG_CF | FLAG_OF;
-            } else if (status == BM_STATUS_OK) {
+            } else if ((status == BM_STATUS_OK) && (operation == 5U)) {
+                int32_t result = signed_word(state->registers[REG_AX]) *
+                                 signed_word(value);
+                uint32_t bits = (uint32_t) result;
+                state->registers[REG_AX] = (uint16_t) bits;
+                state->registers[REG_DX] = (uint16_t) (bits >> 16U);
+                state->flags &= (uint16_t) ~(FLAG_CF | FLAG_OF);
+                if ((result < -32768L) || (result > 32767L))
+                    state->flags |= FLAG_CF | FLAG_OF;
+            } else if ((status == BM_STATUS_OK) && (operation == 6U)) {
                 uint32_t dividend = ((uint32_t) state->registers[REG_DX] << 16U) |
                                     state->registers[REG_AX];
                 uint32_t quotient;
@@ -1822,6 +1837,24 @@ execute_one(bm_808x_state_t *state)
                     return enter_interrupt(state, 0U);
                 state->registers[REG_AX] = (uint16_t) quotient;
                 state->registers[REG_DX] = (uint16_t) (dividend % value);
+            } else if (status == BM_STATUS_OK) {
+                uint32_t dividend_bits =
+                    ((uint32_t) state->registers[REG_DX] << 16U) |
+                    state->registers[REG_AX];
+                int64_t dividend = (dividend_bits & 0x80000000UL) != 0U ?
+                    (int64_t) dividend_bits - 0x100000000LL :
+                    (int64_t) dividend_bits;
+                int64_t divisor = signed_word(value);
+                int64_t quotient;
+                int64_t remainder;
+                if (divisor == 0)
+                    return enter_interrupt(state, 0U);
+                quotient = dividend / divisor;
+                remainder = dividend % divisor;
+                if ((quotient < -32768L) || (quotient > 32767L))
+                    return enter_interrupt(state, 0U);
+                state->registers[REG_AX] = (uint16_t) quotient;
+                state->registers[REG_DX] = (uint16_t) remainder;
             }
             return status;
         }
@@ -1887,7 +1920,7 @@ execute_one(bm_808x_state_t *state)
             }
             return push_word(state, value);
         }
-        case 0xf6: { /* TEST/NOT/NEG/MUL/DIV r/m8 subset. */
+        case 0xf6: { /* TEST/NOT/NEG/MUL/IMUL/DIV/IDIV r/m8. */
             uint8_t modrm;
             unsigned int operation;
             uint8_t value = 0;
@@ -1896,14 +1929,11 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
-            if ((operation != 0U) && (operation != 2U) &&
-                (operation != 3U) && (operation != 4U) &&
-                (operation != 6U))
-                return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
-            if ((status == BM_STATUS_OK) && (operation == 0U)) {
+            if ((status == BM_STATUS_OK) &&
+                ((operation == 0U) || (operation == 1U))) {
                 uint8_t immediate = 0;
                 status = fetch_byte(state, &immediate);
                 if (status == BM_STATUS_OK)
@@ -1920,7 +1950,14 @@ execute_one(bm_808x_state_t *state)
                 state->flags &= (uint16_t) ~(FLAG_CF | FLAG_OF);
                 if ((result & 0xff00U) != 0U)
                     state->flags |= FLAG_CF | FLAG_OF;
-            } else if (status == BM_STATUS_OK) {
+            } else if ((status == BM_STATUS_OK) && (operation == 5U)) {
+                int32_t result = signed_byte((uint8_t) state->registers[REG_AX]) *
+                                 signed_byte(value);
+                state->registers[REG_AX] = (uint16_t) result;
+                state->flags &= (uint16_t) ~(FLAG_CF | FLAG_OF);
+                if ((result < -128) || (result > 127))
+                    state->flags |= FLAG_CF | FLAG_OF;
+            } else if ((status == BM_STATUS_OK) && (operation == 6U)) {
                 uint16_t dividend = state->registers[REG_AX];
                 uint16_t quotient;
                 if (value == 0U)
@@ -1930,6 +1967,20 @@ execute_one(bm_808x_state_t *state)
                     return enter_interrupt(state, 0U);
                 set_register_byte(state, 0U, (uint8_t) quotient);
                 set_register_byte(state, 4U, (uint8_t) (dividend % value));
+            } else if (status == BM_STATUS_OK) {
+                int32_t dividend = signed_word(state->registers[REG_AX]);
+                int32_t divisor = signed_byte(value);
+                int32_t quotient;
+                int32_t remainder;
+                if (divisor == 0)
+                    return enter_interrupt(state, 0U);
+                quotient = dividend / divisor;
+                remainder = dividend % divisor;
+                /* Hardware V20 vectors report divide error for -128 too. */
+                if ((quotient <= -128) || (quotient > 127))
+                    return enter_interrupt(state, 0U);
+                set_register_byte(state, 0U, (uint8_t) quotient);
+                set_register_byte(state, 4U, (uint8_t) remainder);
             }
             return status;
         }
