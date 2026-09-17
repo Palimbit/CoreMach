@@ -49,6 +49,11 @@ typedef struct bm_808x_state {
     int halted;
     int interrupt_asserted;
     uint8_t interrupt_inhibit;
+    uint8_t boundary_inhibit;
+    int nmi_line_asserted;
+    int nmi_pending;
+    int trap_pending;
+    int interrupt_entered;
     int bus_lock_active;
     bm_808x_trace_fn trace;
     void *trace_context;
@@ -279,8 +284,29 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
         state->ip = new_ip;
         state->segments[1] = new_cs;
         state->halted = 0;
+        state->trap_pending = 0;
+        state->interrupt_entered = 1;
     }
     return status;
+}
+
+static bm_status_t
+service_nmi_at(bm_808x_state_t *state, uint16_t return_ip)
+{
+    bm_status_t status;
+
+    state->ip = return_ip;
+    state->nmi_pending = 0;
+    status = enter_interrupt(state, 2U);
+    if (status != BM_STATUS_OK)
+        state->nmi_pending = 1;
+    return status;
+}
+
+static bm_status_t
+service_nmi(bm_808x_state_t *state)
+{
+    return service_nmi_at(state, state->ip);
 }
 
 static bm_status_t
@@ -310,6 +336,49 @@ maskable_interrupt_ready(const bm_808x_state_t *state)
     return state->interrupt_asserted &&
            ((state->flags & FLAG_IF) != 0U) &&
            (state->interrupt_inhibit == 0U);
+}
+
+static int
+nmi_ready(const bm_808x_state_t *state)
+{
+    return state->nmi_pending && (state->boundary_inhibit == 0U);
+}
+
+static int
+trap_ready(const bm_808x_state_t *state)
+{
+    return state->trap_pending && (state->boundary_inhibit == 0U);
+}
+
+static int
+boundary_interrupt_ready(const bm_808x_state_t *state)
+{
+    return nmi_ready(state) || maskable_interrupt_ready(state) ||
+           trap_ready(state);
+}
+
+static bm_status_t
+service_boundary_interrupt(bm_808x_state_t *state)
+{
+    if (nmi_ready(state))
+        return service_nmi(state);
+    if (maskable_interrupt_ready(state))
+        return service_interrupt(state);
+    return enter_interrupt(state, 1U);
+}
+
+static int
+external_interrupt_ready(const bm_808x_state_t *state)
+{
+    return nmi_ready(state) || maskable_interrupt_ready(state);
+}
+
+static bm_status_t
+service_external_interrupt_at(bm_808x_state_t *state, uint16_t return_ip)
+{
+    if (nmi_ready(state))
+        return service_nmi_at(state, return_ip);
+    return service_interrupt_at(state, return_ip);
 }
 
 static uint8_t
@@ -854,8 +923,8 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
             break;
         if ((state->registers[REG_CX] != 0U) &&
             !state->bus_lock_active &&
-            maskable_interrupt_ready(state))
-            return service_interrupt_at(state, repeat_ip);
+            external_interrupt_ready(state))
+            return service_external_interrupt_at(state, repeat_ip);
     }
     return BM_STATUS_OK;
 }
@@ -985,8 +1054,8 @@ execute_io_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
         state->registers[REG_CX] = (uint16_t) (state->registers[REG_CX] - 1U);
         if ((state->registers[REG_CX] != 0U) &&
             !state->bus_lock_active &&
-            maskable_interrupt_ready(state))
-            return service_interrupt_at(state, repeat_ip);
+            external_interrupt_ready(state))
+            return service_external_interrupt_at(state, repeat_ip);
     }
     return BM_STATUS_OK;
 }
@@ -1008,6 +1077,11 @@ cpu_reset(void *context)
     state->halted = 0;
     state->interrupt_asserted = 0;
     state->interrupt_inhibit = 0U;
+    state->boundary_inhibit = 0U;
+    state->nmi_line_asserted = 0;
+    state->nmi_pending = 0;
+    state->trap_pending = 0;
+    state->interrupt_entered = 0;
     state->bus_lock_active = 0;
     return BM_STATUS_OK;
 }
@@ -1371,6 +1445,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->segments[0] = value;
                 state->interrupt_inhibit = 2U;
+                state->boundary_inhibit = 2U;
             }
             return status;
         }
@@ -1380,6 +1455,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->segments[3] = value;
                 state->interrupt_inhibit = 2U;
+                state->boundary_inhibit = 2U;
             }
             return status;
         }
@@ -1389,6 +1465,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->segments[2] = value;
                 state->interrupt_inhibit = 2U;
+                state->boundary_inhibit = 2U;
             }
             return status;
         }
@@ -1994,6 +2071,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->segments[segment] = value;
                 state->interrupt_inhibit = 2U;
+                state->boundary_inhibit = 2U;
             }
             return status;
         }
@@ -2012,6 +2090,8 @@ execute_one(bm_808x_state_t *state)
                 status = write_operand_word(state, &operand, state->segments[segment]);
                 if (status == BM_STATUS_OK)
                     state->interrupt_inhibit = 2U;
+                if (status == BM_STATUS_OK)
+                    state->boundary_inhibit = 2U;
             }
             return status;
         }
@@ -2378,6 +2458,7 @@ execute_one(bm_808x_state_t *state)
                 state->registers[(modrm >> 3U) & 7U] = offset;
                 state->segments[opcode == 0xc4U ? 0U : 3U] = segment;
                 state->interrupt_inhibit = 2U;
+                state->boundary_inhibit = 2U;
             }
             return status;
         }
@@ -2662,8 +2743,10 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
         return BM_STATUS_INVALID_ARGUMENT;
     *consumed = 0;
     while (*consumed < budget) {
-        if (maskable_interrupt_ready(state)) {
-            status = service_interrupt(state);
+        int trap_was_enabled;
+
+        if (boundary_interrupt_ready(state)) {
+            status = service_boundary_interrupt(state);
             if (status != BM_STATUS_OK)
                 return status;
             ++*consumed;
@@ -2671,15 +2754,22 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
         }
         if (state->halted)
             return BM_STATUS_IDLE;
+        trap_was_enabled = (state->flags & FLAG_TF) != 0U;
+        state->interrupt_entered = 0;
         status = execute_one(state);
         state->bus_lock_active = 0;
         if (status != BM_STATUS_OK)
             return status;
         if (state->interrupt_inhibit != 0U)
             --state->interrupt_inhibit;
+        if (state->boundary_inhibit != 0U)
+            --state->boundary_inhibit;
+        if (trap_was_enabled && !state->interrupt_entered &&
+            (state->boundary_inhibit == 0U))
+            state->trap_pending = 1;
         ++*consumed;
         if (state->halted) {
-            if (maskable_interrupt_ready(state)) {
+            if (boundary_interrupt_ready(state)) {
                 state->halted = 0;
                 continue;
             }
@@ -2693,13 +2783,21 @@ static bm_status_t
 cpu_signal(void *context, uint32_t line, int asserted)
 {
     bm_808x_state_t *state = context;
-    if (line != 0)
-        return BM_STATUS_UNSUPPORTED;
-    state->interrupt_asserted = !!asserted;
-    if (asserted && ((state->flags & FLAG_IF) != 0U) &&
-        (state->interrupt_inhibit == 0U))
-        state->halted = 0;
-    return BM_STATUS_OK;
+    if (line == BM_808X_SIGNAL_INT) {
+        state->interrupt_asserted = !!asserted;
+        if (asserted && maskable_interrupt_ready(state))
+            state->halted = 0;
+        return BM_STATUS_OK;
+    }
+    if (line == BM_808X_SIGNAL_NMI) {
+        if (asserted && !state->nmi_line_asserted)
+            state->nmi_pending = 1;
+        state->nmi_line_asserted = !!asserted;
+        if (nmi_ready(state))
+            state->halted = 0;
+        return BM_STATUS_OK;
+    }
+    return BM_STATUS_UNSUPPORTED;
 }
 
 static bm_status_t
@@ -2820,7 +2918,9 @@ bm_808x_get_arch_state(const bm_cpu_t *cpu, bm_808x_arch_state_t *out_state)
         state->registers[REG_SI], state->registers[REG_DI],
         state->segments[0], state->segments[1], state->segments[2],
         state->segments[3], state->ip, state->flags,
-        (uint8_t) !!state->halted, state->interrupt_inhibit
+        (uint8_t) !!state->halted, state->interrupt_inhibit,
+        state->boundary_inhibit, (uint8_t) !!state->nmi_pending,
+        (uint8_t) !!state->trap_pending
     };
     return BM_STATUS_OK;
 }
@@ -2835,7 +2935,10 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
         (state_image->version != BM_808X_ARCH_STATE_VERSION) ||
         (state_image->model != BM_808X_NEC_V30) ||
         (state_image->halted > 1U) ||
-        (state_image->interrupt_inhibit > 1U))
+        (state_image->interrupt_inhibit > 1U) ||
+        (state_image->boundary_inhibit > 1U) ||
+        (state_image->nmi_pending > 1U) ||
+        (state_image->trap_pending > 1U))
         return BM_STATUS_INVALID_ARGUMENT;
     state = cpu->context;
     state->registers[REG_AX] = state_image->ax;
@@ -2854,11 +2957,15 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->flags = state_image->flags;
     state->halted = state_image->halted;
     state->interrupt_inhibit = state_image->interrupt_inhibit;
+    state->boundary_inhibit = state_image->boundary_inhibit;
+    state->nmi_pending = state_image->nmi_pending;
+    state->trap_pending = state_image->trap_pending;
     state->last_fetch = physical_address(state_image->cs, state_image->ip);
     state->last_opcode = 0U;
     state->last_effective_opcode = 0U;
     state->last_instruction_bytes = 0U;
     state->last_instruction_length = 0U;
+    state->interrupt_entered = 0;
     state->bus_lock_active = 0;
     return BM_STATUS_OK;
 }

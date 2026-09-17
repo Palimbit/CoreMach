@@ -143,17 +143,30 @@ failure preserves the progress of completed iterations but does not advance
 the failing iteration. This remains functional instruction-domain behavior:
 the current string executor does not yet expose V30 bus-cycle timing.
 
-The prefix/interrupt cut implements the interrupt-disable windows documented
-for the V30. A pending maskable interrupt is accepted only after the instruction
-following `EI`, `MOV` to or from a segment register, `POP` to a segment register,
-or the segment half of `LES`/`LDS`. Prefix bytes and their effective instruction
-remain one acceptance unit. Repeated memory and I/O operations can accept an
-interrupt only after a completed iteration; the saved return address points to
-the retained prefix sequence, `CX` and the indexes preserve completed progress,
-and `IRET` resumes the remaining iterations. The V30 retains at most three
-prefixes in that return address, which is covered synthetically. The engine
-currently exposes only the maskable interrupt input; NMI, single-step traps,
-prefetch state and physical cycle timing remain explicit later work.
+The prefix/interrupt cut implements the maskable interrupt-disable windows
+documented for the V30. A pending maskable interrupt is accepted only after the
+instruction following `EI`, `MOV` to or from a segment register, `POP` to a
+segment register, or the segment half of `LES`/`LDS`. Prefix bytes and their
+effective instruction remain one acceptance unit. Repeated memory and I/O
+operations can accept an interrupt only after a completed iteration; the saved
+return address points to the retained prefix sequence, `CX` and the indexes
+preserve completed progress, and `IRET` resumes the remaining iterations. The
+V30 retains at most three prefixes in that return address, which is covered
+synthetically.
+
+The later interrupt-priority cut adds a distinct rising-edge NMI input and the
+BRK/single-step trap controlled by PSW bit 8. NMI is latched while acceptance is
+blocked, ignores IE, wakes HALT and has priority over maskable INT, which in turn
+has priority over a pending single-step trap. Interrupt entry clears IE and BRK;
+an instruction which enters a synchronous software interrupt does not also
+schedule a single-step trap. The version-3 architectural snapshot preserves the
+NMI and trap latches plus two explicit shadows: `EI` delays maskable INT only,
+while segment-register transfers also defer NMI and single-step recognition
+through the following instruction. Non-locked repeated blocks may accept NMI
+after a completed iteration and restart at their retained prefixes; BUSLOCK
+keeps the edge latched until the complete repeated block ends. Prefetch state,
+physical cycle timing and full MD/PSW write semantics remain explicit later
+work.
 
 The prefix-control cut adds the V30-native `REPC` (`65h`) and `REPNC` (`64h`)
 conditions for `CMPS`/`SCAS`: the completed comparison controls continuation

@@ -14,6 +14,11 @@ typedef enum bm_808x_model {
     BM_808X_NEC_V30 = 0
 } bm_808x_model_t;
 
+typedef enum bm_808x_signal {
+    BM_808X_SIGNAL_INT = 0,
+    BM_808X_SIGNAL_NMI = 1
+} bm_808x_signal_t;
+
 typedef struct bm_808x_trace {
     uint16_t cs;
     uint16_t ip;
@@ -36,7 +41,7 @@ typedef struct bm_808x_config {
     void *interrupt_context;
 } bm_808x_config_t;
 
-#define BM_808X_ARCH_STATE_VERSION 2U
+#define BM_808X_ARCH_STATE_VERSION 3U
 
 typedef struct bm_808x_arch_state {
     uint32_t size;
@@ -61,6 +66,13 @@ typedef struct bm_808x_arch_state {
      * may be accepted. This is observable state after EI and segment-register
      * transfers, so snapshots must preserve it. */
     uint8_t interrupt_inhibit;
+    /* Segment-register transfers also suppress NMI and single-step recognition
+     * through the following instruction. EI deliberately does not set this. */
+    uint8_t boundary_inhibit;
+    /* Internally latched requests at an architectural boundary. The NMI input
+     * level itself remains an external bus pin and is not part of a snapshot. */
+    uint8_t nmi_pending;
+    uint8_t trap_pending;
 } bm_808x_arch_state_t;
 
 bm_status_t bm_808x_create(const bm_host_services_t *host,
@@ -69,7 +81,8 @@ bm_status_t bm_808x_create(const bm_host_services_t *host,
 
 /* Architectural state transfer is defined only at an instruction boundary.
  * It deliberately excludes bus pins, trace bookkeeping and host callbacks,
- * but includes the architecturally observable maskable-interrupt inhibit. */
+ * but includes the architecturally observable interrupt shadows and latched
+ * NMI/single-step requests. */
 bm_status_t bm_808x_get_arch_state(const bm_cpu_t *cpu,
                                    bm_808x_arch_state_t *out_state);
 bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,
