@@ -57,7 +57,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 
 | Subsystem | Current level | Boundary |
 |---|---|---|
-| NEC V30 | New behavioural subset derived from the inherited core | Reset state, versioned architectural snapshot/restore and one-boundary step, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, hardware-vector-validated primary ALU forms, NEC 82h alias, DAA/DAS/AAA/AAS, AAM/AAD, signed/unsigned multiply and divide, PUSHA/POPA, immediate PUSH/IMUL, CWD, INT3/INTO, shift paths, direct/indirect near calls, near/far returns with cleanup, software and maskable interrupt entry, IRET, stack, SAHF/LAHF and flag control, byte/word MOVS/STOS/LODS/SCAS with REP/REPE/REPNE and basic IN/OUT; no complete ISA or cycle timing |
+| NEC V30 | New behavioural subset derived from the inherited core | Reset state, versioned architectural snapshot/restore including interrupt inhibit and one-boundary step, segmented 20-bit addresses, all four segment overrides, ModR/M effective addresses, hardware-vector-validated primary ALU forms, NEC 82h alias, DAA/DAS/AAA/AAS, AAM/AAD, signed/unsigned multiply and divide, PUSHA/POPA, immediate PUSH/IMUL, CWD, INT3/INTO, shift paths, direct/indirect near calls, near/far returns with cleanup, software and maskable interrupt entry, documented EI/segment-transfer delay, IRET, stack, SAHF/LAHF and flag control, byte/word memory and I/O strings with REP/REPE/REPNE plus interruptible restart; no complete ISA, NMI/trap path or cycle timing |
 | Conventional RAM | New generic component | 640 KiB, zero-initialized, byte-addressable bus region |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; rational PIT/RTC clock accumulators use a measured functional instruction rate, not V30 cycle accounting |
@@ -124,7 +124,10 @@ The current automated ladder uses no historical software:
    latches, effective 20-bit addresses and independent reset semantics.
 3. The V30 tests reproduce the BIOS register/flag self-test, exercise its
    segmented checksum-loop pattern and verify maskable-interrupt stack/vector
-   entry using newly authored memory images.
+   entry using newly authored memory images. A focused boundary test verifies
+   the delayed acceptance after `EI` and segment-register transfers, `EI; HLT`,
+   restart of REP memory and I/O operations, completed-iteration progress and
+   the V30's three-prefix retention limit.
    A separate manual adapter streams externally supplied hardware-generated
    SingleStepTests/V20 vectors through the same public state and step contracts.
    The current native-ISA gate covers 250,000 cases with no mismatch across
@@ -186,9 +189,17 @@ INSB/INSW/OUTSB/OUTSW. Synthetic bus tests fix ES:DI as the input destination,
 permit source overrides only for output, keep DX fixed under REP, cover both DF
 directions, zero CX, byte order and port wrapping for word transfers, and
 preserve completed progress on a later bus failure. It remains independent of
-the PCS 86 firmware and devices. REP is still executed inside one portable
-instruction step, so interruptible restart between iterations and physical
-V30 bus timing remain explicit later work.
+the PCS 86 firmware and devices.
+
+The next CPU cut follows the NEC interrupt-disable and block-restart rules.
+Maskable interrupt acceptance is delayed across the instruction after `EI` and
+after segment-register transfers, including `POP`, `LES` and `LDS`. REP memory
+and I/O loops can enter an interrupt after a successful iteration and save the
+retained prefix address, so `IRET` repeats only the remaining work. The public
+architectural snapshot is version 2 and includes this observable inhibit state.
+Synthetic tests cover both string paths and the hardware's maximum of three
+retained prefixes. NMI, single-step traps, prefetch state and physical V30 bus
+timing are not claimed by this cut.
 
 BIOS 1.09 writes `40h` to I/O port `70h` at `F000:0B29` while configuring the
 upper conventional-memory path, between accesses to board ports `6Ch`, `6Bh`

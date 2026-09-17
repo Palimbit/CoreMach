@@ -48,6 +48,7 @@ typedef struct bm_808x_state {
     uint8_t last_instruction_length;
     int halted;
     int interrupt_asserted;
+    uint8_t interrupt_inhibit;
     bm_808x_trace_fn trace;
     void *trace_context;
     bm_808x_interrupt_ack_fn interrupt_ack;
@@ -280,7 +281,7 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
 }
 
 static bm_status_t
-service_interrupt(bm_808x_state_t *state)
+service_interrupt_at(bm_808x_state_t *state, uint16_t return_ip)
 {
     uint8_t vector;
     bm_status_t status;
@@ -290,7 +291,22 @@ service_interrupt(bm_808x_state_t *state)
     status = state->interrupt_ack(state->interrupt_context, &vector);
     if (status != BM_STATUS_OK)
         return status;
+    state->ip = return_ip;
     return enter_interrupt(state, vector);
+}
+
+static bm_status_t
+service_interrupt(bm_808x_state_t *state)
+{
+    return service_interrupt_at(state, state->ip);
+}
+
+static int
+maskable_interrupt_ready(const bm_808x_state_t *state)
+{
+    return state->interrupt_asserted &&
+           ((state->flags & FLAG_IF) != 0U) &&
+           (state->interrupt_inhibit == 0U);
 }
 
 static uint8_t
@@ -729,7 +745,7 @@ rotate_shift16(bm_808x_state_t *state, uint16_t value,
 
 static bm_status_t
 execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
-               int segment_override)
+               int segment_override, uint16_t repeat_ip)
 {
     bm_status_t status;
     unsigned int width = (opcode & 1U) != 0U ? 2U : 1U;
@@ -831,6 +847,9 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
             (((repeat_mode == 1) && ((state->flags & FLAG_ZF) == 0)) ||
              ((repeat_mode == 2) && ((state->flags & FLAG_ZF) != 0))))
             break;
+        if ((state->registers[REG_CX] != 0U) &&
+            maskable_interrupt_ready(state))
+            return service_interrupt_at(state, repeat_ip);
     }
     return BM_STATUS_OK;
 }
@@ -908,7 +927,7 @@ io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
 
 static bm_status_t
 execute_io_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
-                  int segment_override)
+                  int segment_override, uint16_t repeat_ip)
 {
     unsigned int width = (opcode & 1U) != 0U ? 2U : 1U;
     unsigned int source_segment = (segment_override >= 0) ?
@@ -956,6 +975,9 @@ execute_io_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
         if (repeat_mode == 0)
             break;
         state->registers[REG_CX] = (uint16_t) (state->registers[REG_CX] - 1U);
+        if ((state->registers[REG_CX] != 0U) &&
+            maskable_interrupt_ready(state))
+            return service_interrupt_at(state, repeat_ip);
     }
     return BM_STATUS_OK;
 }
@@ -976,6 +998,7 @@ cpu_reset(void *context)
     state->last_instruction_length = 0U;
     state->halted = 0;
     state->interrupt_asserted = 0;
+    state->interrupt_inhibit = 0U;
     return BM_STATUS_OK;
 }
 
@@ -989,6 +1012,7 @@ execute_one(bm_808x_state_t *state)
     int segment_override = -1;
     int repeat = 0;
     bm_status_t status;
+    uint16_t repeat_ip;
 
     state->last_instruction_bytes = 0U;
     state->last_instruction_length = 0U;
@@ -1022,6 +1046,8 @@ execute_one(bm_808x_state_t *state)
     }
 
     state->last_effective_opcode = opcode;
+    repeat_ip = (uint16_t) (instruction_ip +
+                 (prefix_count > 3U ? prefix_count - 3U : 0U));
     if (state->trace != NULL) {
         bm_808x_trace_t trace = {
             .cs = state->segments[1],
@@ -1219,7 +1245,8 @@ execute_one(bm_808x_state_t *state)
         case 0x6d: /* INSW. */
         case 0x6e: /* OUTSB. */
         case 0x6f: /* OUTSW. */
-            return execute_io_string(state, opcode, repeat, segment_override);
+            return execute_io_string(state, opcode, repeat, segment_override,
+                                     repeat_ip);
         case 0x0f: { /* NEC V30 bit operations. */
             uint8_t extension;
             uint8_t modrm;
@@ -1319,22 +1346,28 @@ execute_one(bm_808x_state_t *state)
         case 0x07: { /* POP ES */
             uint16_t value;
             status = pop_word(state, &value);
-            if (status == BM_STATUS_OK)
+            if (status == BM_STATUS_OK) {
                 state->segments[0] = value;
+                state->interrupt_inhibit = 2U;
+            }
             return status;
         }
         case 0x1f: { /* POP DS */
             uint16_t value;
             status = pop_word(state, &value);
-            if (status == BM_STATUS_OK)
+            if (status == BM_STATUS_OK) {
                 state->segments[3] = value;
+                state->interrupt_inhibit = 2U;
+            }
             return status;
         }
         case 0x17: { /* POP SS */
             uint16_t value;
             status = pop_word(state, &value);
-            if (status == BM_STATUS_OK)
+            if (status == BM_STATUS_OK) {
                 state->segments[2] = value;
+                state->interrupt_inhibit = 2U;
+            }
             return status;
         }
         case 0x90: /* NOP */
@@ -1421,7 +1454,8 @@ execute_one(bm_808x_state_t *state)
         case 0xad: /* LODSW */
         case 0xae: /* SCASB */
         case 0xaf: /* SCASW */
-            return execute_string(state, opcode, repeat, segment_override);
+            return execute_string(state, opcode, repeat, segment_override,
+                                  repeat_ip);
         case 0x04: /* ADD AL,imm8 */
         case 0x0c: /* OR AL,imm8 */
         case 0x14: /* ADC AL,imm8 */
@@ -1935,8 +1969,10 @@ execute_one(bm_808x_state_t *state)
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
-            if (status == BM_STATUS_OK)
+            if (status == BM_STATUS_OK) {
                 state->segments[segment] = value;
+                state->interrupt_inhibit = 2U;
+            }
             return status;
         }
         case 0x8c: { /* MOV r/m16,Sreg. */
@@ -1950,8 +1986,11 @@ execute_one(bm_808x_state_t *state)
             if (segment >= 4U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
-            if (status == BM_STATUS_OK)
+            if (status == BM_STATUS_OK) {
                 status = write_operand_word(state, &operand, state->segments[segment]);
+                if (status == BM_STATUS_OK)
+                    state->interrupt_inhibit = 2U;
+            }
             return status;
         }
         case 0x8f: { /* POP r/m16. */
@@ -2316,6 +2355,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->registers[(modrm >> 3U) & 7U] = offset;
                 state->segments[opcode == 0xc4U ? 0U : 3U] = segment;
+                state->interrupt_inhibit = 2U;
             }
             return status;
         }
@@ -2574,6 +2614,7 @@ execute_one(bm_808x_state_t *state)
             return BM_STATUS_OK;
         case 0xfb: /* STI */
             state->flags |= FLAG_IF;
+            state->interrupt_inhibit = 2U;
             return BM_STATUS_OK;
         case 0xfc: /* CLD */
             state->flags &= (uint16_t) ~FLAG_DF;
@@ -2598,23 +2639,29 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
     if (consumed == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
     *consumed = 0;
-    if (state->interrupt_asserted && ((state->flags & FLAG_IF) != 0)) {
-        status = service_interrupt(state);
-        if (status != BM_STATUS_OK)
-            return status;
-        ++*consumed;
-    }
-    if (*consumed >= budget)
-        return BM_STATUS_OK;
-    if (state->halted)
-        return BM_STATUS_IDLE;
     while (*consumed < budget) {
+        if (maskable_interrupt_ready(state)) {
+            status = service_interrupt(state);
+            if (status != BM_STATUS_OK)
+                return status;
+            ++*consumed;
+            continue;
+        }
+        if (state->halted)
+            return BM_STATUS_IDLE;
         status = execute_one(state);
         if (status != BM_STATUS_OK)
             return status;
+        if (state->interrupt_inhibit != 0U)
+            --state->interrupt_inhibit;
         ++*consumed;
-        if (state->halted)
+        if (state->halted) {
+            if (maskable_interrupt_ready(state)) {
+                state->halted = 0;
+                continue;
+            }
             return BM_STATUS_IDLE;
+        }
     }
     return BM_STATUS_OK;
 }
@@ -2626,7 +2673,8 @@ cpu_signal(void *context, uint32_t line, int asserted)
     if (line != 0)
         return BM_STATUS_UNSUPPORTED;
     state->interrupt_asserted = !!asserted;
-    if (asserted && ((state->flags & FLAG_IF) != 0))
+    if (asserted && ((state->flags & FLAG_IF) != 0U) &&
+        (state->interrupt_inhibit == 0U))
         state->halted = 0;
     return BM_STATUS_OK;
 }
@@ -2749,7 +2797,7 @@ bm_808x_get_arch_state(const bm_cpu_t *cpu, bm_808x_arch_state_t *out_state)
         state->registers[REG_SI], state->registers[REG_DI],
         state->segments[0], state->segments[1], state->segments[2],
         state->segments[3], state->ip, state->flags,
-        (uint8_t) !!state->halted
+        (uint8_t) !!state->halted, state->interrupt_inhibit
     };
     return BM_STATUS_OK;
 }
@@ -2763,7 +2811,8 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
         (state_image->size != sizeof(*state_image)) ||
         (state_image->version != BM_808X_ARCH_STATE_VERSION) ||
         (state_image->model != BM_808X_NEC_V30) ||
-        (state_image->halted > 1U))
+        (state_image->halted > 1U) ||
+        (state_image->interrupt_inhibit > 1U))
         return BM_STATUS_INVALID_ARGUMENT;
     state = cpu->context;
     state->registers[REG_AX] = state_image->ax;
@@ -2781,6 +2830,7 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->ip = state_image->ip;
     state->flags = state_image->flags;
     state->halted = state_image->halted;
+    state->interrupt_inhibit = state_image->interrupt_inhibit;
     state->last_fetch = physical_address(state_image->cs, state_image->ip);
     state->last_opcode = 0U;
     state->last_effective_opcode = 0U;

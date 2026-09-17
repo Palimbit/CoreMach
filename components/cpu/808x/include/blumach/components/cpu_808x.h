@@ -36,7 +36,7 @@ typedef struct bm_808x_config {
     void *interrupt_context;
 } bm_808x_config_t;
 
-#define BM_808X_ARCH_STATE_VERSION 1U
+#define BM_808X_ARCH_STATE_VERSION 2U
 
 typedef struct bm_808x_arch_state {
     uint32_t size;
@@ -57,6 +57,10 @@ typedef struct bm_808x_arch_state {
     uint16_t ip;
     uint16_t flags;
     uint8_t halted;
+    /* Remaining completed instruction boundaries before a maskable interrupt
+     * may be accepted. This is observable state after EI and segment-register
+     * transfers, so snapshots must preserve it. */
+    uint8_t interrupt_inhibit;
 } bm_808x_arch_state_t;
 
 bm_status_t bm_808x_create(const bm_host_services_t *host,
@@ -64,7 +68,8 @@ bm_status_t bm_808x_create(const bm_host_services_t *host,
                            bm_cpu_t *out_cpu);
 
 /* Architectural state transfer is defined only at an instruction boundary.
- * It deliberately excludes bus pins, trace bookkeeping and host callbacks. */
+ * It deliberately excludes bus pins, trace bookkeeping and host callbacks,
+ * but includes the architecturally observable maskable-interrupt inhibit. */
 bm_status_t bm_808x_get_arch_state(const bm_cpu_t *cpu,
                                    bm_808x_arch_state_t *out_state);
 bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,
