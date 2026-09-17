@@ -9,7 +9,10 @@
 #include <vector>
 
 namespace {
-constexpr uint64_t maximumChunk = UINT64_C(250000);
+/* Keep the emulation boundary short enough that input queued by the UI is not
+ * held behind a long catch-up slice.  At the current 10 MHz session rate this
+ * caps the worker-side contribution to input latency at five milliseconds. */
+constexpr uint64_t maximumChunk = UINT64_C(50000);
 constexpr auto framePeriod = std::chrono::milliseconds(16);
 }
 

@@ -245,14 +245,7 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         worker_ = std::make_unique<SessionWorker>(
             host_, bm_frontend_machine_config(machine_), UINT64_C(10000000),
             [this, generation](SessionWorker::Snapshot snapshot) {
-                QMetaObject::invokeMethod(
-                    this,
-                    [this, generation,
-                     snapshot = std::move(snapshot)]() mutable {
-                        if (generation == workerGeneration_)
-                            handleSnapshot(std::move(snapshot));
-                    },
-                    Qt::QueuedConnection);
+                queueSnapshot(generation, std::move(snapshot));
             });
         result = worker_->start();
     }
@@ -283,6 +276,7 @@ PortableWindow::closeMachine()
     ++workerGeneration_;
     lifecyclePending_ = false;
     worker_.reset();
+    snapshotMailbox_.clear();
     bm_frontend_machine_close(machine_);
     machine_ = nullptr;
     bindings_.clear();
@@ -438,6 +432,27 @@ PortableWindow::sendKey(QKeyEvent *event, bool pressed)
     };
     worker_->sendInput(input);
     event->accept();
+}
+
+void
+PortableWindow::queueSnapshot(uint64_t generation,
+                              SessionWorker::Snapshot snapshot)
+{
+    if (!snapshotMailbox_.submit(std::move(snapshot)))
+        return;
+    QMetaObject::invokeMethod(
+        this, [this, generation] { drainSnapshots(generation); },
+        Qt::QueuedConnection);
+}
+
+void
+PortableWindow::drainSnapshots(uint64_t generation)
+{
+    std::deque<SessionWorker::Snapshot> snapshots = snapshotMailbox_.take();
+    if (generation != workerGeneration_)
+        return;
+    for (SessionWorker::Snapshot &snapshot : snapshots)
+        handleSnapshot(std::move(snapshot));
 }
 
 void

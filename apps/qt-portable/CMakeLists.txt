@@ -17,6 +17,8 @@ add_executable(blumach_portable_qt WIN32
     src/portable_catalog.h
     src/session_worker.cpp
     src/session_worker.h
+    src/snapshot_mailbox.cpp
+    src/snapshot_mailbox.h
     src/tick_pacer.cpp
     src/tick_pacer.h
     ${BLUMACH_PORTABLE_CATALOG_QRC}
@@ -95,6 +97,36 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME portable-qt.tick-pacer
         COMMAND blumach_portable_pacer_test
+    )
+
+    add_executable(blumach_portable_snapshot_mailbox_test
+        src/snapshot_mailbox.cpp
+        tests/snapshot_mailbox_test.cpp
+    )
+    target_include_directories(blumach_portable_snapshot_mailbox_test PRIVATE
+        src
+    )
+    target_link_libraries(blumach_portable_snapshot_mailbox_test PRIVATE
+        blumach_runtime
+        Qt6::Gui
+    )
+    target_compile_features(blumach_portable_snapshot_mailbox_test PRIVATE
+        cxx_std_17
+    )
+    set_target_properties(blumach_portable_snapshot_mailbox_test PROPERTIES
+        CXX_EXTENSIONS OFF
+    )
+    if(MSVC)
+        target_compile_options(blumach_portable_snapshot_mailbox_test PRIVATE
+            /W4 /WX /UNDEBUG
+        )
+    else()
+        target_compile_options(blumach_portable_snapshot_mailbox_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+        )
+    endif()
+    add_test(NAME portable-qt.snapshot-mailbox
+        COMMAND blumach_portable_snapshot_mailbox_test
     )
 
     add_executable(blumach_portable_catalog_test

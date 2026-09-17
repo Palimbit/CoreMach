@@ -5,6 +5,7 @@
 #include "display_widget.h"
 #include "portable_catalog.h"
 #include "session_worker.h"
+#include "snapshot_mailbox.h"
 
 #include <blumach/frontend/file_inputs.h>
 #include <blumach/frontend/frontend.h>
@@ -57,6 +58,8 @@ private:
     void readSettings();
     void writeSettings() const;
     void sendKey(QKeyEvent *event, bool pressed);
+    void queueSnapshot(uint64_t generation, SessionWorker::Snapshot snapshot);
+    void drainSnapshots(uint64_t generation);
     void handleSnapshot(SessionWorker::Snapshot snapshot);
     void updateActions();
     void showStatus(const QString &detail = QString());
@@ -79,6 +82,7 @@ private:
     QString catalogError_;
     bm_frontend_machine_t *machine_ = nullptr;
     std::unique_ptr<SessionWorker> worker_;
+    SnapshotMailbox snapshotMailbox_;
     std::vector<std::unique_ptr<AssetStorage>> assets_;
     std::vector<bm_frontend_asset_binding_t> bindings_;
     bm_status_t lastError_ = BM_STATUS_OK;
