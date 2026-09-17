@@ -93,6 +93,7 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
     uint32_t *pixels = NULL;
     size_t pixel_count = 0U;
     size_t nonblack = 0U;
+    size_t storage_count = 0U;
     uint32_t frame_crc = 0U;
     int frame_matches = !options->expect_frame_crc32;
     int frame_written = options->frame_path == NULL;
@@ -189,6 +190,8 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
         }
     }
     (void) bm_frontend_machine_diagnostics(machine, &diagnostics);
+    if (session != NULL)
+        (void) bm_session_storage_device_count(session, &storage_count);
     printf("machine=%s status=%d requested_ticks=%" PRIu64
            " elapsed_ticks=%" PRIu64 " instructions=%" PRIu64
            " io=%" PRIu64 "\n",
@@ -212,6 +215,22 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
            " floppy_read_only=%d\n",
            diagnostics.read_only_media_bytes,
            diagnostics.read_only_media_bytes != 0U ? 1 : 0);
+    {
+        size_t index;
+        for (index = 0U; index < storage_count; ++index) {
+            bm_storage_device_status_t device;
+            if (bm_session_storage_device_status(session, index, &device) ==
+                BM_STATUS_OK) {
+                printf("storage=%u unit=%" PRIu32 " installed=%d media=%d"
+                       " read_only=%d motor=%d reads=%" PRIu64
+                       " writes=%" PRIu64 "\n",
+                       (unsigned int) device.kind, device.unit,
+                       device.installed, device.media_present,
+                       device.write_protected, device.motor_active,
+                       device.read_operations, device.write_operations);
+            }
+        }
+    }
     if (options->text_action_count != 0U)
         printf("input_actions=%zu key_ticks=%" PRIu64 "\n",
                options->text_action_count, options->key_ticks);
