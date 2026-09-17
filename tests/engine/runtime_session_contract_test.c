@@ -26,6 +26,8 @@ typedef struct test_machine {
     unsigned int geometry_calls;
     unsigned int render_calls;
     unsigned int storage_status_calls;
+    unsigned int storage_media_calls;
+    bm_storage_media_change_t last_media_change;
     bm_tick_t last_render_time;
     bm_input_event_t last_input;
 } test_machine_t;
@@ -47,6 +49,29 @@ test_storage_status(const void *context, size_t index,
     *status = (bm_storage_device_status_t) {
         BM_STORAGE_DEVICE_FLOPPY, 0U, 1, 1, 1, 1, 7U, 0U
     };
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+test_storage_media(void *context, bm_storage_device_kind_t kind, uint32_t unit,
+                   const bm_storage_media_change_t *change)
+{
+    test_machine_t *machine = context;
+    if ((machine == NULL) || (kind != BM_STORAGE_DEVICE_FLOPPY) ||
+        (unit != 0U) || (change == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    ++machine->storage_media_calls;
+    machine->last_media_change = *change;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+test_media_read(void *context, uint64_t first_block, uint32_t block_count,
+                uint8_t *destination)
+{
+    (void) context;
+    (void) first_block;
+    memset(destination, 0, block_count);
     return BM_STATUS_OK;
 }
 
@@ -193,7 +218,8 @@ make_configuration(test_machine_t *machine, int optional_operations)
             test_inspect,
             test_input,
             test_storage_count,
-            test_storage_status
+            test_storage_status,
+            test_storage_media
         },
         .engine = { 1U, 2U }
     };
@@ -203,7 +229,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
         .configuration = { "test.runtime-session.config", 1U,
                            sizeof(test_machine_t) },
         .ops = { test_validate, test_create, test_destroy,
-                 NULL, NULL, NULL, NULL, NULL, NULL, NULL },
+                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL },
         .engine = { 1U, 2U }
     };
     bm_machine_config_t configuration = {
@@ -349,6 +375,9 @@ test_session_state_machine(void)
                                            { 0U, 0U, BM_PIXEL_XRGB8888,
                                              0U, 0U } };
     bm_storage_device_status_t storage;
+    bm_storage_media_change_t media_change = {
+        1, 1, { NULL, 1U, 1U, 1, test_media_read, NULL }
+    };
     size_t storage_count = 0U;
     uint64_t value = 0U;
 
@@ -374,6 +403,9 @@ test_session_state_machine(void)
     assert(bm_session_storage_device_count(session, &storage_count) ==
            BM_STATUS_INVALID_STATE);
     assert(bm_session_storage_device_status(session, 0U, &storage) ==
+           BM_STATUS_INVALID_STATE);
+    assert(bm_session_replace_storage_media(
+               session, BM_STORAGE_DEVICE_FLOPPY, 0U, &media_change) ==
            BM_STATUS_INVALID_STATE);
 
     assert(bm_session_configure(session, &configuration) == BM_STATUS_OK);
@@ -407,6 +439,11 @@ test_session_state_machine(void)
     assert(storage.media_present && storage.write_protected &&
            storage.motor_active && storage.read_operations == 7U);
     assert(machine.storage_status_calls == 1U);
+    assert(bm_session_replace_storage_media(
+               session, BM_STORAGE_DEVICE_FLOPPY, 0U, &media_change) ==
+           BM_STATUS_OK);
+    assert(machine.storage_media_calls == 1U);
+    assert(machine.last_media_change.media_present);
     assert(bm_session_storage_device_status(session, 1U, &storage) ==
            BM_STATUS_INVALID_ARGUMENT);
 
@@ -451,6 +488,7 @@ test_optional_operations(void)
                                            { 0U, 0U, BM_PIXEL_XRGB8888,
                                              0U, 0U } };
     bm_storage_device_status_t storage;
+    bm_storage_media_change_t media_change = { 0 };
     size_t storage_count = 0U;
     uint64_t value = 0U;
 
@@ -467,6 +505,9 @@ test_optional_operations(void)
     assert(bm_session_storage_device_count(session, &storage_count) ==
            BM_STATUS_UNSUPPORTED);
     assert(bm_session_storage_device_status(session, 0U, &storage) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(bm_session_replace_storage_media(
+               session, BM_STORAGE_DEVICE_FLOPPY, 0U, &media_change) ==
            BM_STATUS_UNSUPPORTED);
     assert(bm_session_reset(session) == BM_STATUS_OK);
 
@@ -489,6 +530,12 @@ test_optional_operations(void)
     assert(bm_session_storage_device_status(NULL, 0U, &storage) ==
            BM_STATUS_INVALID_ARGUMENT);
     assert(bm_session_storage_device_status(session, 0U, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_replace_storage_media(
+               NULL, BM_STORAGE_DEVICE_FLOPPY, 0U, &media_change) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_replace_storage_media(
+               session, BM_STORAGE_DEVICE_FLOPPY, 0U, NULL) ==
            BM_STATUS_INVALID_ARGUMENT);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);

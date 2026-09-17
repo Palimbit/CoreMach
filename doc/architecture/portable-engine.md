@@ -491,10 +491,11 @@ or firmware boundary. NMI, trap handling and V30 bus-cycle accounting remain
 separate future cuts.
 
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
-format-track, deleted-data distinction, flux/weak-sector formats and dynamic
-media insertion. Those are explicit future fidelity work, while deterministic
-raw-sector loading through the DOS banner is the validated boundary of this
-cut.
+format-track, deleted-data distinction and flux/weak-sector formats. Dynamic
+raw-media insertion and ejection are explicit session operations at an engine
+instruction boundary; the drive validates the replacement before changing its
+state and raises the existing disk-change indication. This does not claim the
+omitted physical-media behavior.
 
 ## Portable Qt presentation boundary
 
@@ -557,6 +558,10 @@ Storage telemetry follows the same boundary. A machine may enumerate generic
 device status containing media presence, write protection, motor state and
 cumulative completed read/write operations. The PCS 86 composes those values
 from its floppy drive and FDC, while Qt only presents snapshots and short
-activity pulses. The contract contains no path, file handle or UI object and
-does not yet authorize inserting, ejecting or making a caller-owned medium
-writable.
+activity pulses. A separate runtime command identifies a device by generic kind
+and unit and supplies caller-owned block callbacks for insertion or no medium
+for ejection. The PCS 86 accepts its supported 720 KiB and 1.44 MiB geometries;
+invalid replacements leave the current medium unchanged. The Qt worker owns a
+successful replacement until another replacement, ejection or session teardown,
+so no callback can outlive its file resource. Paths, file handles and Qt types
+remain outside the runtime and engine, and the GUI exposes only read-only media.

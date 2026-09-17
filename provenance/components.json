@@ -39,7 +39,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Independent floppy-drive geometry, change state and raw-sector access over the host-neutral block-media contract"
+      "local_changes": "Independent floppy-drive geometry, atomic media replacement/ejection, change state and raw-sector access over the host-neutral block-media contract"
     },
     {
       "id": "nec-v30-bring-up-interpreter",
@@ -171,7 +171,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, and normalized physical-key input events independent of guest scan-code sets"
+      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, normalized physical-key input events independent of guest scan-code sets, and generic caller-owned storage-media replacement"
     },
     {
       "id": "null-host-platform",
@@ -187,7 +187,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Frontend-neutral machine adapter registry, declarative asset requirements and typed configuration preparation over caller-owned blobs and block media; optional file helpers remain separate from the adapter contract"
+      "local_changes": "Frontend-neutral machine adapter registry, declarative asset and replaceable-storage requirements, and typed configuration preparation over caller-owned blobs and block media; optional file helpers remain separate from the adapter contract"
     },
     {
       "id": "portable-qt-frontend",
@@ -195,7 +195,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated paced session worker, queued lifecycle and normalized keyboard input commands, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling and persistent user display preferences"
+      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated definition-rate-paced session worker, queued lifecycle, normalized keyboard and read-only removable-media commands, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling and persistent user display preferences"
     },
     {
       "id": "headless-frontend",
@@ -225,7 +225,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with four banked windows and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery, a uPD765-compatible controller with IRQ6/DMA2, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Mouse input and cycle-accurate timing remain absent"
+      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with four banked windows and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Mouse input and cycle-accurate timing remain absent"
     }
   ],
   "external_dependencies": []

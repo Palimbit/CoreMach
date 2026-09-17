@@ -25,6 +25,9 @@ typedef struct bm_frontend_asset_requirement {
     const uint64_t *accepted_sizes;
     size_t accepted_size_count;
     uint32_t block_size;
+    int replaceable;
+    bm_storage_device_kind_t storage_kind;
+    uint32_t storage_unit;
 } bm_frontend_asset_requirement_t;
 
 typedef struct bm_frontend_asset_binding {

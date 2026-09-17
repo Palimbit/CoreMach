@@ -49,6 +49,9 @@ int bm_floppy_drive_media_present(const bm_floppy_drive_t *drive);
 int bm_floppy_drive_write_protected(const bm_floppy_drive_t *drive);
 int bm_floppy_drive_changed(const bm_floppy_drive_t *drive);
 void bm_floppy_drive_clear_changed(bm_floppy_drive_t *drive);
+bm_status_t bm_floppy_drive_replace_media(
+    bm_floppy_drive_t *drive, const bm_floppy_geometry_t *geometry,
+    const bm_block_media_t *media, int write_protected);
 const bm_floppy_geometry_t *bm_floppy_drive_geometry(const bm_floppy_drive_t *drive);
 bm_status_t bm_floppy_drive_seek(bm_floppy_drive_t *drive, uint16_t cylinder);
 uint16_t bm_floppy_drive_cylinder(const bm_floppy_drive_t *drive);

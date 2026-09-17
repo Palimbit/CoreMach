@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -33,7 +34,7 @@ public:
 
     SessionWorker(const bm_host_services_t &host,
                   const bm_machine_config_t *configuration,
-                  uint64_t ticksPerSecond, SnapshotHandler handler);
+                  SnapshotHandler handler);
     ~SessionWorker();
 
     SessionWorker(const SessionWorker &) = delete;
@@ -45,14 +46,29 @@ public:
     void reset();
     void stop();
     void sendInput(const bm_input_event_t &event);
+    void replaceStorageMedia(bm_storage_device_kind_t kind, uint32_t unit,
+                             const bm_storage_media_change_t &change,
+                             std::shared_ptr<void> owner);
     bm_session_state_t state() const;
     uint64_t ticks() const;
 
 private:
-    enum class CommandKind { Pause, Resume, Reset, Stop, Input, Shutdown };
+    enum class CommandKind {
+        Pause, Resume, Reset, Stop, Input, StorageMedia, Shutdown
+    };
     struct Command {
+        explicit Command(CommandKind value) : kind(value) {}
         CommandKind kind;
         bm_input_event_t input {};
+        bm_storage_device_kind_t storageKind = BM_STORAGE_DEVICE_FLOPPY;
+        uint32_t storageUnit = 0U;
+        bm_storage_media_change_t mediaChange {};
+        std::shared_ptr<void> mediaOwner;
+    };
+    struct MountedMedia {
+        bm_storage_device_kind_t kind;
+        uint32_t unit;
+        std::shared_ptr<void> owner;
     };
 
     void enqueue(Command command);
@@ -77,6 +93,7 @@ private:
     std::mutex mutex_;
     std::condition_variable condition_;
     std::deque<Command> commands_;
+    std::vector<MountedMedia> mountedMedia_;
     std::thread thread_;
     bool ready_ = false;
     bm_status_t startStatus_ = BM_STATUS_INVALID_STATE;

@@ -316,3 +316,24 @@ bm_session_storage_device_status(const bm_session_t *session, size_t index,
     return session->configuration.definition->ops.storage_status(
         session->machine, index, status);
 }
+
+bm_status_t
+bm_session_replace_storage_media(bm_session_t *session,
+                                 bm_storage_device_kind_t kind,
+                                 uint32_t unit,
+                                 const bm_storage_media_change_t *change)
+{
+    if ((session == NULL) || (change == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.storage_media == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    if (change->media_present &&
+        (bm_block_media_validate(&change->media) != BM_STATUS_OK))
+        return BM_STATUS_INVALID_ARGUMENT;
+    return session->configuration.definition->ops.storage_media(
+        session->machine, kind, unit, change);
+}

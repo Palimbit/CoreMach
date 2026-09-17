@@ -16,15 +16,25 @@ static const uint64_t floppy_sizes[] = { 737280U, 1474560U };
 static const uint64_t hard_disk_sizes[] = { 21411840U };
 
 static const bm_frontend_asset_requirement_t assets[] = {
-    { "firmware-even", "Even firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1,
-      firmware_sizes, sizeof(firmware_sizes) / sizeof(firmware_sizes[0]), 0U },
-    { "firmware-odd", "Odd firmware EPROM", BM_FRONTEND_ASSET_BLOB, 1,
-      firmware_sizes, sizeof(firmware_sizes) / sizeof(firmware_sizes[0]), 0U },
-    { "floppy-0", "Drive A floppy image", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
-      0, floppy_sizes, sizeof(floppy_sizes) / sizeof(floppy_sizes[0]), 512U },
-    { "hard-disk-0", "Conner CP3026 XTA disk image",
-      BM_FRONTEND_ASSET_READ_ONLY_MEDIA, 0, hard_disk_sizes,
-      sizeof(hard_disk_sizes) / sizeof(hard_disk_sizes[0]), 512U }
+    { .role = "firmware-even", .label = "Even firmware EPROM",
+      .kind = BM_FRONTEND_ASSET_BLOB, .required = 1,
+      .accepted_sizes = firmware_sizes,
+      .accepted_size_count = sizeof(firmware_sizes) / sizeof(firmware_sizes[0]) },
+    { .role = "firmware-odd", .label = "Odd firmware EPROM",
+      .kind = BM_FRONTEND_ASSET_BLOB, .required = 1,
+      .accepted_sizes = firmware_sizes,
+      .accepted_size_count = sizeof(firmware_sizes) / sizeof(firmware_sizes[0]) },
+    { .role = "floppy-0", .label = "Drive A floppy image",
+      .kind = BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+      .accepted_sizes = floppy_sizes,
+      .accepted_size_count = sizeof(floppy_sizes) / sizeof(floppy_sizes[0]),
+      .block_size = 512U, .replaceable = 1,
+      .storage_kind = BM_STORAGE_DEVICE_FLOPPY, .storage_unit = 0U },
+    { .role = "hard-disk-0", .label = "Conner CP3026 XTA disk image",
+      .kind = BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+      .accepted_sizes = hard_disk_sizes,
+      .accepted_size_count = sizeof(hard_disk_sizes) / sizeof(hard_disk_sizes[0]),
+      .block_size = 512U }
 };
 
 static const bm_pcs86_firmware_identity_t *

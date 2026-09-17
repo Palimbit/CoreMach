@@ -900,6 +900,35 @@ pcs86_storage_status(const void *context, size_t index,
 }
 
 static bm_status_t
+pcs86_storage_media(void *context, bm_storage_device_kind_t kind,
+                    uint32_t unit, const bm_storage_media_change_t *change)
+{
+    bm_pcs86_machine_t *machine = context;
+    bm_floppy_geometry_t geometry;
+
+    if ((machine == NULL) || (change == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((kind != BM_STORAGE_DEVICE_FLOPPY) || (unit >= 2U) ||
+        (machine->floppy[unit] == NULL) ||
+        !bm_floppy_drive_installed(machine->floppy[unit]))
+        return BM_STATUS_UNSUPPORTED;
+    if (!change->media_present)
+        return bm_floppy_drive_replace_media(machine->floppy[unit], NULL,
+                                             NULL, 0);
+    if ((change->media.block_size != 512U) ||
+        ((change->media.block_count != 1440U) &&
+         (change->media.block_count != 2880U)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    geometry = (bm_floppy_geometry_t) {
+        80U, 2U,
+        (uint8_t) (change->media.block_count == 1440U ? 9U : 18U), 512U
+    };
+    return bm_floppy_drive_replace_media(machine->floppy[unit], &geometry,
+                                         &change->media,
+                                         change->write_protected);
+}
+
+static bm_status_t
 pcs86_create(bm_engine_t *engine,
              const bm_host_services_t *host,
              const bm_configuration_view_t *configuration,
@@ -1342,7 +1371,8 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_inspect,
         pcs86_input,
         pcs86_storage_count,
-        pcs86_storage_status
+        pcs86_storage_status,
+        pcs86_storage_media
     },
     .engine = { 1U, 10U }
 };

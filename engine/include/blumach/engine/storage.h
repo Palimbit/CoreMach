@@ -47,6 +47,14 @@ typedef struct bm_storage_device_status {
     uint64_t write_operations;
 } bm_storage_device_status_t;
 
+/* Caller-owned replacement media. A present medium and its callback context
+ * must remain valid until it is replaced again or the session is destroyed. */
+typedef struct bm_storage_media_change {
+    int media_present;
+    int write_protected;
+    bm_block_media_t media;
+} bm_storage_media_change_t;
+
 bm_status_t bm_block_media_validate(const bm_block_media_t *media);
 bm_status_t bm_block_media_read(const bm_block_media_t *media,
                                 uint64_t first_block,

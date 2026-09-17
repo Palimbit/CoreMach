@@ -28,17 +28,17 @@ ticksForInterval(uint64_t ticksPerSecond, uint64_t intervalsPerSecond)
 
 SessionWorker::SessionWorker(const bm_host_services_t &host,
                              const bm_machine_config_t *configuration,
-                             uint64_t ticksPerSecond,
                              SnapshotHandler handler)
     : host_(host), configuration_(configuration),
-      ticksPerSecond_(ticksPerSecond), handler_(std::move(handler))
+      ticksPerSecond_(configuration->definition->scheduler_ticks_per_second),
+      handler_(std::move(handler))
 {
 }
 
 SessionWorker::~SessionWorker()
 {
     if (thread_.joinable()) {
-        enqueue({ CommandKind::Shutdown, {} });
+        enqueue(Command(CommandKind::Shutdown));
         thread_.join();
     }
 }
@@ -58,15 +58,31 @@ SessionWorker::start()
     return startStatus_;
 }
 
-void SessionWorker::pause() { enqueue({ CommandKind::Pause, {} }); }
-void SessionWorker::resume() { enqueue({ CommandKind::Resume, {} }); }
-void SessionWorker::reset() { enqueue({ CommandKind::Reset, {} }); }
-void SessionWorker::stop() { enqueue({ CommandKind::Stop, {} }); }
+void SessionWorker::pause() { enqueue(Command(CommandKind::Pause)); }
+void SessionWorker::resume() { enqueue(Command(CommandKind::Resume)); }
+void SessionWorker::reset() { enqueue(Command(CommandKind::Reset)); }
+void SessionWorker::stop() { enqueue(Command(CommandKind::Stop)); }
 
 void
 SessionWorker::sendInput(const bm_input_event_t &event)
 {
-    enqueue({ CommandKind::Input, event });
+    Command command(CommandKind::Input);
+    command.input = event;
+    enqueue(std::move(command));
+}
+
+void
+SessionWorker::replaceStorageMedia(bm_storage_device_kind_t kind,
+                                   uint32_t unit,
+                                   const bm_storage_media_change_t &change,
+                                   std::shared_ptr<void> owner)
+{
+    Command command(CommandKind::StorageMedia);
+    command.storageKind = kind;
+    command.storageUnit = unit;
+    command.mediaChange = change;
+    command.mediaOwner = std::move(owner);
+    enqueue(std::move(command));
 }
 
 bm_session_state_t SessionWorker::state() const { return state_.load(); }
@@ -107,6 +123,26 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                     status = bm_session_run_for(session, inputTransitionTicks);
                     if (status == BM_STATUS_OK)
                         pacer.account(inputTransitionTicks);
+                }
+                break;
+            case CommandKind::StorageMedia:
+                status = bm_session_replace_storage_media(
+                    session, command.storageKind, command.storageUnit,
+                    &command.mediaChange);
+                if (status == BM_STATUS_OK) {
+                    auto mounted = std::find_if(
+                        mountedMedia_.begin(), mountedMedia_.end(),
+                        [&command](const MountedMedia &entry) {
+                            return entry.kind == command.storageKind &&
+                                   entry.unit == command.storageUnit;
+                        });
+                    if (mounted == mountedMedia_.end()) {
+                        mountedMedia_.push_back({ command.storageKind,
+                                                  command.storageUnit,
+                                                  command.mediaOwner });
+                    } else {
+                        mounted->owner = command.mediaOwner;
+                    }
                 }
                 break;
             case CommandKind::Shutdown: return false;

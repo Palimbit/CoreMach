@@ -357,6 +357,56 @@ test_absent_and_read_only_drives(void)
     bm_floppy_drive_destroy(drive);
 }
 
+static void
+test_drive_media_replacement(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    test_media_t first;
+    test_media_t second;
+    bm_floppy_drive_config_t config;
+    bm_floppy_drive_t *drive = NULL;
+    bm_floppy_drive_state_t state;
+    bm_floppy_geometry_t geometry = {
+        2U, 2U, 3U, TEST_BLOCK_SIZE
+    };
+    bm_block_media_t media;
+    uint8_t bytes[TEST_BLOCK_SIZE];
+
+    memset(&first, 0, sizeof(first));
+    memset(&second, 0, sizeof(second));
+    second.bytes[0] = 0xa5U;
+    config = make_drive_config(&first, 0);
+    assert(bm_floppy_drive_create(&host, &config, &drive) == BM_STATUS_OK);
+    bm_floppy_drive_clear_changed(drive);
+
+    assert(bm_floppy_drive_replace_media(drive, NULL, NULL, 0) ==
+           BM_STATUS_OK);
+    assert(bm_floppy_drive_state(drive, &state) == BM_STATUS_OK);
+    assert(!state.media_present && state.changed);
+    assert(bm_floppy_drive_read_sector(drive, 0U, 0U, 1U, bytes,
+                                       sizeof(bytes)) ==
+           BM_STATUS_INVALID_STATE);
+
+    media = make_media(&second, 1);
+    assert(bm_floppy_drive_replace_media(drive, &geometry, &media, 0) ==
+           BM_STATUS_OK);
+    assert(bm_floppy_drive_state(drive, &state) == BM_STATUS_OK);
+    assert(state.media_present && state.write_protected && state.changed);
+    assert(bm_floppy_drive_read_sector(drive, 0U, 0U, 1U, bytes,
+                                       sizeof(bytes)) == BM_STATUS_OK);
+    assert(bytes[0] == 0xa5U);
+
+    media.block_count -= 1U;
+    assert(bm_floppy_drive_replace_media(drive, &geometry, &media, 0) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_floppy_drive_media_present(drive));
+    assert(bm_floppy_drive_replace_media(drive, NULL, &media, 0) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_floppy_drive_replace_media(NULL, NULL, NULL, 0) ==
+           BM_STATUS_INVALID_STATE);
+    bm_floppy_drive_destroy(drive);
+}
+
 int
 main(void)
 {
@@ -365,6 +415,7 @@ main(void)
     test_drive_configuration();
     test_drive_access_and_state();
     test_absent_and_read_only_drives();
+    test_drive_media_replacement();
 
     assert(!bm_floppy_drive_installed(NULL));
     assert(!bm_floppy_drive_media_present(NULL));

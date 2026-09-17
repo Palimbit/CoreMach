@@ -46,6 +46,8 @@ PortableWindow::PortableWindow(QWidget *parent)
       pauseAction_(new QAction(tr("Pause"), this)),
       resetAction_(new QAction(tr("Reset"), this)),
       stopAction_(new QAction(tr("Stop"), this)),
+      insertFloppyAction_(new QAction(tr("Insert disk in A…"), this)),
+      ejectFloppyAction_(new QAction(tr("Eject disk from A"), this)),
       fullScreenAction_(new QAction(tr("Fullscreen"), this)),
       smoothScalingAction_(new QAction(tr("Smooth scaling"), this)),
       statusBarAction_(new QAction(tr("Status bar"), this)),
@@ -75,6 +77,9 @@ PortableWindow::PortableWindow(QWidget *parent)
     machineToolbar_->addAction(pauseAction_);
     machineToolbar_->addAction(resetAction_);
     machineToolbar_->addAction(stopAction_);
+    machineToolbar_->addSeparator();
+    machineToolbar_->addAction(insertFloppyAction_);
+    machineToolbar_->addAction(ejectFloppyAction_);
 
     auto *machineMenu = menuBar()->addMenu(tr("Machine"));
     machineMenu->addAction(openAction);
@@ -84,6 +89,10 @@ PortableWindow::PortableWindow(QWidget *parent)
     machineMenu->addAction(stopAction_);
     machineMenu->addSeparator();
     machineMenu->addAction(quitAction);
+
+    auto *mediaMenu = menuBar()->addMenu(tr("Media"));
+    mediaMenu->addAction(insertFloppyAction_);
+    mediaMenu->addAction(ejectFloppyAction_);
 
     auto *viewMenu = menuBar()->addMenu(tr("View"));
     auto *scaleMenu = viewMenu->addMenu(tr("Scaling"));
@@ -128,6 +137,10 @@ PortableWindow::PortableWindow(QWidget *parent)
             [this] { resetMachine(); });
     connect(stopAction_, &QAction::triggered, this,
             [this] { stopMachine(); });
+    connect(insertFloppyAction_, &QAction::triggered, this,
+            [this] { insertFloppy(); });
+    connect(ejectFloppyAction_, &QAction::triggered, this,
+            [this] { ejectFloppy(); });
     connect(fullScreenAction_, &QAction::toggled, this,
             [this](bool enabled) { toggleFullscreen(enabled); });
     connect(smoothScalingAction_, &QAction::toggled, display_,
@@ -203,6 +216,14 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         bm_frontend_adapter_assets(adapter, &requirementCount);
     closeMachine();
     for (size_t index = 0U; index < requirementCount; ++index) {
+        if (requirements[index].replaceable &&
+            (requirements[index].storage_kind == BM_STORAGE_DEVICE_FLOPPY) &&
+            (requirements[index].storage_unit == 0U)) {
+            replaceableFloppy_ = &requirements[index];
+            break;
+        }
+    }
+    for (size_t index = 0U; index < requirementCount; ++index) {
         const QString role = QString::fromUtf8(requirements[index].role);
         const QString path = paths.value(role);
         if (path.isEmpty())
@@ -249,7 +270,7 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
     if (result == BM_STATUS_OK) {
         const uint64_t generation = workerGeneration_;
         worker_ = std::make_unique<SessionWorker>(
-            host_, bm_frontend_machine_config(machine_), UINT64_C(10000000),
+            host_, bm_frontend_machine_config(machine_),
             [this, generation](SessionWorker::Snapshot snapshot) {
                 queueSnapshot(generation, std::move(snapshot));
             });
@@ -276,6 +297,11 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
     frameRateTimer_.start();
     activityTimer_.start();
     storagePresentation_.clear();
+    if (replaceableFloppy_ != nullptr) {
+        const QString role = QString::fromUtf8(replaceableFloppy_->role);
+        replaceableFloppyPresent_ = paths.contains(role) &&
+                                    !paths.value(role).isEmpty();
+    }
     display_->setFocus();
     updateActions();
     showStatus();
@@ -293,6 +319,8 @@ PortableWindow::closeMachine()
     machine_ = nullptr;
     bindings_.clear();
     assets_.clear();
+    replaceableFloppy_ = nullptr;
+    replaceableFloppyPresent_ = false;
     activeMachineId_.clear();
     hasVideoGeometry_ = false;
     presentedFrames_ = 0U;
@@ -339,6 +367,67 @@ PortableWindow::stopMachine()
         worker_->stop();
         updateActions();
     }
+}
+
+void
+PortableWindow::insertFloppy()
+{
+    if ((worker_ == nullptr) || (replaceableFloppy_ == nullptr) ||
+        lifecyclePending_)
+        return;
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("Insert disk in A"), QString(),
+        tr("Disk images (*.img *.ima);;All files (*)"));
+    if (path.isEmpty())
+        return;
+    const QFileInfo info(path);
+    bool accepted = false;
+    for (size_t index = 0U; index < replaceableFloppy_->accepted_size_count;
+         ++index) {
+        if (static_cast<uint64_t>(info.size()) ==
+            replaceableFloppy_->accepted_sizes[index]) {
+            accepted = true;
+            break;
+        }
+    }
+    if (!accepted) {
+        QMessageBox::critical(
+            this, tr("Invalid disk image"),
+            tr("The selected image does not have a supported size."));
+        return;
+    }
+    auto storage = std::make_shared<AssetStorage>();
+    const QByteArray nativePath = path.toLocal8Bit();
+    if (!bm_frontend_readonly_media_open(nativePath.constData(),
+                                         replaceableFloppy_->block_size,
+                                         &storage->media)) {
+        QMessageBox::critical(
+            this, tr("Invalid disk image"),
+            tr("The selected image could not be opened read-only."));
+        return;
+    }
+    const bm_storage_media_change_t change {
+        1, 1, storage->media.media
+    };
+    lifecyclePending_ = true;
+    worker_->replaceStorageMedia(replaceableFloppy_->storage_kind,
+                                 replaceableFloppy_->storage_unit, change,
+                                 storage);
+    updateActions();
+}
+
+void
+PortableWindow::ejectFloppy()
+{
+    if ((worker_ == nullptr) || (replaceableFloppy_ == nullptr) ||
+        lifecyclePending_)
+        return;
+    const bm_storage_media_change_t change {};
+    lifecyclePending_ = true;
+    worker_->replaceStorageMedia(replaceableFloppy_->storage_kind,
+                                 replaceableFloppy_->storage_unit, change,
+                                 {});
+    updateActions();
 }
 
 void
@@ -525,6 +614,10 @@ PortableWindow::updateStorageStatus(
         StoragePresentation &presentation = storagePresentation_[index];
         if (!device.installed)
             continue;
+        if ((replaceableFloppy_ != nullptr) &&
+            (device.kind == replaceableFloppy_->storage_kind) &&
+            (device.unit == replaceableFloppy_->storage_unit))
+            replaceableFloppyPresent_ = device.media_present;
         if (presentation.initialized) {
             if (device.read_operations > presentation.reads)
                 presentation.readPulseUntil = now + pulseMilliseconds;
@@ -579,6 +672,12 @@ PortableWindow::updateActions()
     stopAction_->setEnabled(!lifecyclePending_ &&
                             (state == BM_SESSION_RUNNING ||
                              state == BM_SESSION_PAUSED));
+    const bool canChangeMedia = !lifecyclePending_ &&
+        (replaceableFloppy_ != nullptr) &&
+        (state == BM_SESSION_RUNNING || state == BM_SESSION_PAUSED);
+    insertFloppyAction_->setEnabled(canChangeMedia);
+    ejectFloppyAction_->setEnabled(canChangeMedia &&
+                                    replaceableFloppyPresent_);
     copyFrameAction_->setEnabled(display_->hasFrame());
     saveFrameAction_->setEnabled(display_->hasFrame());
 }
