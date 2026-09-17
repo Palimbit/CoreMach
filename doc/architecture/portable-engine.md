@@ -99,6 +99,16 @@ measured NEC flag and carry thresholds rather than assuming the behaviour of a
 different x86 generation. Undefined flags are excluded with the corpus masks;
 the interpreter still gives them a deterministic internal value.
 
+The complete F6h/F7h campaign raises that total to 410,000 hardware vectors.
+Both TEST encodings, NOT, NEG, unsigned and signed multiply, and unsigned and
+signed divide now cover their byte and word forms. Divide errors enter vector
+zero only after consuming the full instruction and leave the dividend intact;
+the external adapter masks architecturally undefined saved-FLAGS bits without
+weakening comparisons of the saved return address or other memory. The measured
+NEC byte-IDIV boundary also raises divide error for a quotient of exactly -128.
+Non-string REP prefixes are accepted as observed by the hardware corpus instead
+of turning an otherwise implemented instruction into an unsupported opcode.
+
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
 copied or executed by this test.
@@ -260,6 +270,11 @@ prefixes, while inspection exposes up to the first eight consumed instruction
 bytes and their full length. Each behavior is covered with synthetic memory and
 machine-independent tests; opcode handling does not depend on firmware
 addresses, image contents or host services.
+
+The following CPU cut completes both F6h/F7h TEST encodings and their byte/word
+NOT, NEG, MUL, IMUL, DIV and IDIV operations, including interrupt-zero error
+entry. Its external V20 corpus evidence remains architectural only; it does not
+claim V30 cycle, prefetch-queue or 16-bit-bus fidelity.
 
 The FDC deliberately omits rotational and command latency, non-DMA transfer,
 format-track, deleted-data distinction, flux/weak-sector formats and dynamic

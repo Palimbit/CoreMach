@@ -41,7 +41,7 @@ def expected_registers(test: dict) -> dict[str, int]:
     return result
 
 
-def encode_case(test: dict) -> tuple[str, list[int]]:
+def encode_case(test: dict) -> tuple[str, list[list[int]]]:
     registers = test["initial"]["regs"]
     initial_ram = test["initial"].get("ram", [])
     final_ram = test["final"].get("ram", [])
@@ -52,10 +52,10 @@ def encode_case(test: dict) -> tuple[str, list[int]]:
         fields.extend((f"{address:x}", f"{value:x}"))
     fields.append(str(len(final_ram)))
     fields.extend(f"{address:x}" for address, _ in final_ram)
-    return " ".join(fields) + "\n", [value for _, value in final_ram]
+    return " ".join(fields) + "\n", final_ram
 
 
-def compare_case(test: dict, response: str, expected_ram: list[int],
+def compare_case(test: dict, response: str, expected_ram: list[list[int]],
                  flags_mask: int) -> list[str]:
     fields = response.split()
     if len(fields) < 18 or fields[0] != "R":
@@ -81,8 +81,28 @@ def compare_case(test: dict, response: str, expected_ram: list[int],
                 f"{name}={actual[name]:04X}, expected={expected[name]:04X}, "
                 f"mask={mask:04X}"
             )
-    if query_count != len(expected_ram) or actual_ram != expected_ram:
-        errors.append(f"ram={actual_ram}, expected={expected_ram}")
+    expected_ram_values = [value for _, value in expected_ram]
+    ram_matches = query_count == len(expected_ram)
+    final = expected_registers(test)
+    interrupt_stack = (
+        final["sp"] == ((test["initial"]["regs"]["sp"] - 6) & 0xffff)
+    )
+    saved_flags_address = (
+        ((final["ss"] << 4) + ((final["sp"] + 4) & 0xffff)) & 0xfffff
+    )
+    if ram_matches:
+        for (actual_value, (address, expected_value)) in zip(
+                actual_ram, expected_ram, strict=True):
+            byte_mask = 0xff
+            if interrupt_stack and address == saved_flags_address:
+                byte_mask = flags_mask & 0xff
+            elif interrupt_stack and address == ((saved_flags_address + 1) & 0xfffff):
+                byte_mask = (flags_mask >> 8) & 0xff
+            if (actual_value & byte_mask) != (expected_value & byte_mask):
+                ram_matches = False
+                break
+    if not ram_matches:
+        errors.append(f"ram={actual_ram}, expected={expected_ram_values}")
     return errors
 
 
