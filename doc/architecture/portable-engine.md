@@ -75,6 +75,22 @@ a no-op. One scheduler tick currently represents one completed instruction, so
 cycle and bus timing remain deliberately outside this stage even though the
 implemented subset can execute a substantial original-BIOS path.
 
+The component also exposes a versioned architectural snapshot and a
+single-boundary step operation. These contracts contain registers, segments,
+IP, FLAGS and halt state, but deliberately exclude bus pins, trace bookkeeping
+and host callbacks. They allow external conformance tools to establish an
+arbitrary documented state without adding test-only globals or host services to
+the interpreter.
+
+`tools/run_v20_conformance.py` can stream an explicitly supplied
+SingleStepTests/V20 corpus through the manual vector runner. The corpus remains
+outside BluMach and its cycle and queue traces are ignored: native V20 results
+are evidence for the architectural ISA shared with V30, not for the V30's
+16-bit bus timing. The initial D4h/D5h campaign passes all 20,000 hardware
+vectors and records two NEC distinctions: `AAM 00h` produces `AH=FFh` without
+interrupt zero, while `AAD` always uses decimal base ten regardless of its
+encoded second byte.
+
 The test ROM jumps from physical `FFFF0h` to `F0100h`, writes a byte through
 the memory bus and halts. No Olivetti firmware or guest media is compiled,
 copied or executed by this test.

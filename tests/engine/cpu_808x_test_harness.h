@@ -46,5 +46,11 @@ void cpu_808x_test_write(cpu_808x_test_machine_t *machine,
 void cpu_808x_test_poke(cpu_808x_test_machine_t *machine,
                         uint64_t address,
                         uint8_t value);
+bm_808x_arch_state_t cpu_808x_test_get_state(
+    const cpu_808x_test_machine_t *machine);
+void cpu_808x_test_set_state(cpu_808x_test_machine_t *machine,
+                             const bm_808x_arch_state_t *state);
+bm_status_t cpu_808x_test_step(cpu_808x_test_machine_t *machine,
+                               bm_tick_t *consumed);
 
 #endif

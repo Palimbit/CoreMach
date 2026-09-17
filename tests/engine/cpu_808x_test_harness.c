@@ -130,3 +130,27 @@ cpu_808x_test_poke(cpu_808x_test_machine_t *machine,
 {
     cpu_808x_test_write(machine, address, &value, 1U);
 }
+
+bm_808x_arch_state_t
+cpu_808x_test_get_state(const cpu_808x_test_machine_t *machine)
+{
+    bm_808x_arch_state_t state;
+    assert(machine != NULL);
+    assert(bm_808x_get_arch_state(&machine->cpu, &state) == BM_STATUS_OK);
+    return state;
+}
+
+void
+cpu_808x_test_set_state(cpu_808x_test_machine_t *machine,
+                        const bm_808x_arch_state_t *state)
+{
+    assert(machine != NULL);
+    assert(bm_808x_set_arch_state(&machine->cpu, state) == BM_STATUS_OK);
+}
+
+bm_status_t
+cpu_808x_test_step(cpu_808x_test_machine_t *machine, bm_tick_t *consumed)
+{
+    assert(machine != NULL);
+    return bm_808x_step(&machine->cpu, consumed);
+}
