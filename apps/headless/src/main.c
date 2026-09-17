@@ -226,9 +226,11 @@ main(int argc, char **argv)
             fprintf(stderr, "unknown machine: %s\n", argv[2]);
             result = 3;
         } else {
-            printf("id=%s config_type=%s config_version=%" PRIu32
+            printf("id=%s scheduler_hz=%" PRIu64
+                   " config_type=%s config_version=%" PRIu32
                    " config_size=%zu max_cpus=%zu max_events=%zu\n",
-                   definition->id, definition->configuration.type,
+                   definition->id, definition->scheduler_ticks_per_second,
+                   definition->configuration.type,
                    definition->configuration.version,
                    definition->configuration.size, definition->engine.max_cpus,
                    definition->engine.max_events);

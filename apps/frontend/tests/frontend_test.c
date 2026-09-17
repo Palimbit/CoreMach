@@ -52,6 +52,7 @@ main(void)
     definition = bm_frontend_adapter_definition(adapter);
     assert(definition != NULL);
     assert(strcmp(definition->id, "olivetti-pcs86") == 0);
+    assert(definition->scheduler_ticks_per_second == UINT64_C(2000000));
     assets = bm_frontend_adapter_assets(adapter, &asset_count);
     assert(assets != NULL);
     assert(asset_count == 4U);

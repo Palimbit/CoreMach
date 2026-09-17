@@ -532,6 +532,52 @@ vertical_total_lines(const bm_pvga1a_t *video)
     return (uint16_t) (lines + 2U);
 }
 
+typedef enum pvga1a_display_mode {
+    PVGA1A_DISPLAY_TEXT = 0,
+    PVGA1A_DISPLAY_PLANAR_4,
+    PVGA1A_DISPLAY_CHAIN4_8,
+    PVGA1A_DISPLAY_UNSUPPORTED
+} pvga1a_display_mode_t;
+
+static pvga1a_display_mode_t
+display_mode(const bm_pvga1a_t *video)
+{
+    if (((video->graphics[6] | video->attribute[0x10]) & 1U) == 0U)
+        return PVGA1A_DISPLAY_TEXT;
+    if ((video->graphics[5] & 0x60U) == 0U)
+        return PVGA1A_DISPLAY_PLANAR_4;
+    if (((video->graphics[5] & 0x60U) == 0x40U) &&
+        ((video->sequencer[4] & 0x08U) != 0U))
+        return PVGA1A_DISPLAY_CHAIN4_8;
+    return PVGA1A_DISPLAY_UNSUPPORTED;
+}
+
+static uint32_t
+graphics_height(const bm_pvga1a_t *video)
+{
+    uint32_t height = vertical_display_lines(video);
+    if ((video->crtc[9] & 0x80U) != 0U)
+        height = (height + 1U) / 2U;
+    return height;
+}
+
+static uint64_t
+pixel_clock_hz(const bm_pvga1a_t *video)
+{
+    switch ((video->misc_output >> 2U) & 3U) {
+        case 0U: return UINT64_C(25175000);
+        case 1U: return UINT64_C(28322000);
+        default: return 0U;
+    }
+}
+
+static uint64_t
+frame_dot_count(const bm_pvga1a_t *video)
+{
+    return ((uint64_t) video->crtc[0] + 5U) *
+           text_character_width(video) * vertical_total_lines(video);
+}
+
 static uint64_t
 default_cursor_blink_half_period(uint64_t ticks_per_second)
 {
@@ -546,21 +592,14 @@ cursor_blink_half_period(const bm_pvga1a_t *video, uint64_t ticks_per_second)
     uint64_t frame_dots;
     uint64_t numerator;
 
-    switch ((video->misc_output >> 2U) & 3U) {
-        case 0U:
-            pixel_clock = UINT64_C(25175000);
-            break;
-        case 1U:
-            pixel_clock = UINT64_C(28322000);
-            break;
-        default:
-            /* VCLK2/VCLK3 are board-defined inputs. The portable PCS 86 path
-             * does not select them, so retain a deterministic 70 Hz fallback
-             * rather than inventing a board clock. */
-            return default_cursor_blink_half_period(ticks_per_second);
+    pixel_clock = pixel_clock_hz(video);
+    if (pixel_clock == 0U) {
+        /* VCLK2/VCLK3 are board-defined inputs. The portable PCS 86 path does
+         * not select them, so retain a deterministic 70 Hz fallback rather
+         * than inventing a board clock. */
+        return default_cursor_blink_half_period(ticks_per_second);
     }
-    frame_dots = ((uint64_t) video->crtc[0] + 5U) *
-                 text_character_width(video) * vertical_total_lines(video);
+    frame_dots = frame_dot_count(video);
     if ((frame_dots == 0U) ||
         (ticks_per_second > UINT64_MAX / frame_dots / 8U))
         return default_cursor_blink_half_period(ticks_per_second);
@@ -579,28 +618,38 @@ cursor_blink_visible(const bm_pvga1a_t *video, bm_tick_t emulated_time,
 bm_status_t
 bm_pvga1a_video_geometry(const bm_pvga1a_t *video, bm_video_geometry_t *geometry)
 {
+    pvga1a_display_mode_t mode;
     uint32_t columns;
     uint32_t width;
     uint32_t height;
 
     if ((video == NULL) || (geometry == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
-    if (((video->graphics[6] | video->attribute[0x10]) & 1U) != 0U)
+    mode = display_mode(video);
+    if (mode == PVGA1A_DISPLAY_UNSUPPORTED)
         return BM_STATUS_UNSUPPORTED;
     columns = (uint32_t) video->crtc[1] + 1U;
-    width = columns * text_character_width(video);
-    height = vertical_display_lines(video);
+    if (mode == PVGA1A_DISPLAY_TEXT) {
+        width = columns * text_character_width(video);
+        height = vertical_display_lines(video);
+    } else {
+        width = columns * 8U;
+        height = graphics_height(video);
+    }
     if ((columns > 160U) || (width == 0U) || (width > 2880U) ||
         (height == 0U) || (height > 1024U))
         return BM_STATUS_DEVICE_ERROR;
     geometry->width = width;
     geometry->height = height;
     geometry->format = BM_PIXEL_XRGB8888;
+    geometry->refresh_numerator = pixel_clock_hz(video);
+    geometry->refresh_denominator = geometry->refresh_numerator != 0U ?
+                                    frame_dot_count(video) : 0U;
     return BM_STATUS_OK;
 }
 
 static uint8_t
-text_palette_index(const bm_pvga1a_t *video, uint8_t color)
+attribute_palette_index(const bm_pvga1a_t *video, uint8_t color)
 {
     uint8_t index;
     if ((video->attribute[0x10] & 0x80U) != 0U)
@@ -613,9 +662,9 @@ text_palette_index(const bm_pvga1a_t *video, uint8_t color)
 }
 
 static uint32_t
-palette_color(const bm_pvga1a_t *video, uint8_t color)
+dac_color(const bm_pvga1a_t *video, uint8_t index)
 {
-    uint8_t index = text_palette_index(video, color);
+    index &= video->dac_mask;
     uint32_t red = (uint32_t) ((video->palette[index][0] << 2U) |
                                (video->palette[index][0] >> 4U));
     uint32_t green = (uint32_t) ((video->palette[index][1] << 2U) |
@@ -623,6 +672,12 @@ palette_color(const bm_pvga1a_t *video, uint8_t color)
     uint32_t blue = (uint32_t) ((video->palette[index][2] << 2U) |
                                 (video->palette[index][2] >> 4U));
     return (red << 16U) | (green << 8U) | blue;
+}
+
+static uint32_t
+attribute_color(const bm_pvga1a_t *video, uint8_t color)
+{
+    return dac_color(video, attribute_palette_index(video, color));
 }
 
 static uint16_t
@@ -636,12 +691,81 @@ font_base(const bm_pvga1a_t *video, int use_map_b)
                        ((select & 0x10U) ? 0x2000U : 0U));
 }
 
+static int
+display_blanked(const bm_pvga1a_t *video)
+{
+    return ((video->sequencer[1] & 0x20U) != 0U) ||
+           ((video->crtc[0x17] & 0x80U) == 0U) ||
+           (video->attribute_palette_enable == 0U);
+}
+
+static void
+render_planar_graphics(const bm_pvga1a_t *video,
+                       const bm_video_geometry_t *geometry,
+                       bm_video_framebuffer_t *framebuffer)
+{
+    uint16_t start = (uint16_t) (((uint16_t) video->crtc[0x0c] << 8U) |
+                                 video->crtc[0x0d]);
+    uint32_t row_stride = (uint32_t) video->crtc[0x13] * 2U;
+    uint32_t y;
+
+    for (y = 0U; y < geometry->height; ++y) {
+        uint32_t *line = framebuffer->pixels + (size_t) y * framebuffer->stride;
+        uint32_t x;
+        uint16_t row = (uint16_t) (start + y * row_stride);
+        if (display_blanked(video)) {
+            memset(line, 0, (size_t) geometry->width * sizeof(*line));
+            continue;
+        }
+        for (x = 0U; x < geometry->width; ++x) {
+            uint16_t offset = (uint16_t) (row + x / 8U);
+            uint8_t mask = (uint8_t) (0x80U >> (x & 7U));
+            uint8_t color = 0U;
+            unsigned int plane;
+            for (plane = 0U; plane < 4U; ++plane) {
+                if ((video->vram[plane_address(plane, offset)] & mask) != 0U)
+                    color |= (uint8_t) (1U << plane);
+            }
+            color &= video->attribute[0x12] & 0x0fU;
+            line[x] = attribute_color(video, color);
+        }
+    }
+}
+
+static void
+render_chain4_graphics(const bm_pvga1a_t *video,
+                       const bm_video_geometry_t *geometry,
+                       bm_video_framebuffer_t *framebuffer)
+{
+    uint16_t start = (uint16_t) (((uint16_t) video->crtc[0x0c] << 8U) |
+                                 video->crtc[0x0d]);
+    uint32_t row_stride = (uint32_t) video->crtc[0x13] * 2U;
+    uint32_t y;
+
+    for (y = 0U; y < geometry->height; ++y) {
+        uint32_t *line = framebuffer->pixels + (size_t) y * framebuffer->stride;
+        uint32_t x;
+        uint16_t row = (uint16_t) (start + y * row_stride);
+        if (display_blanked(video)) {
+            memset(line, 0, (size_t) geometry->width * sizeof(*line));
+            continue;
+        }
+        for (x = 0U; x < geometry->width; ++x) {
+            unsigned int plane = x & 3U;
+            uint16_t offset = (uint16_t) (row + x / 4U);
+            line[x] = dac_color(
+                video, video->vram[plane_address(plane, offset)]);
+        }
+    }
+}
+
 bm_status_t
 bm_pvga1a_render(const bm_pvga1a_t *video, bm_tick_t emulated_time,
                  uint64_t ticks_per_second,
                  bm_video_framebuffer_t *framebuffer)
 {
     bm_video_geometry_t geometry;
+    pvga1a_display_mode_t mode;
     uint32_t columns;
     uint32_t character_width;
     uint32_t character_height;
@@ -664,6 +788,15 @@ bm_pvga1a_render(const bm_pvga1a_t *video, bm_tick_t emulated_time,
         (framebuffer->pixel_capacity / framebuffer->stride < geometry.height))
         return BM_STATUS_CAPACITY_EXCEEDED;
     framebuffer->geometry = geometry;
+    mode = display_mode(video);
+    if (mode == PVGA1A_DISPLAY_PLANAR_4) {
+        render_planar_graphics(video, &geometry, framebuffer);
+        return BM_STATUS_OK;
+    }
+    if (mode == PVGA1A_DISPLAY_CHAIN4_8) {
+        render_chain4_graphics(video, &geometry, framebuffer);
+        return BM_STATUS_OK;
+    }
     columns = (uint32_t) video->crtc[1] + 1U;
     character_width = text_character_width(video);
     character_height = (uint32_t) (video->crtc[9] & 0x1fU) + 1U;
@@ -687,9 +820,7 @@ bm_pvga1a_render(const bm_pvga1a_t *video, bm_tick_t emulated_time,
     for (y = 0; y < geometry.height; ++y) {
         uint32_t *line = framebuffer->pixels + (size_t) y * framebuffer->stride;
         uint32_t column;
-        if (((video->sequencer[1] & 0x20U) != 0U) ||
-            ((video->crtc[0x17] & 0x80U) == 0U) ||
-            (video->attribute_palette_enable == 0U)) {
+        if (display_blanked(video)) {
             memset(line, 0, (size_t) geometry.width * sizeof(*line));
             continue;
         }
@@ -722,7 +853,7 @@ bm_pvga1a_render(const bm_pvga1a_t *video, bm_tick_t emulated_time,
                     set = ((character & 0xe0U) == 0xc0U) &&
                           ((video->attribute[0x10] & 4U) != 0U) &&
                           ((glyph & 1U) != 0U);
-                line[column * character_width + x] = palette_color(
+                line[column * character_width + x] = attribute_color(
                     video, draw_cursor ? foreground :
                            (set ? foreground : background));
             }

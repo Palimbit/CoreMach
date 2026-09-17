@@ -233,7 +233,7 @@ main(int argc, char **argv)
     uint64_t dx = 0;
     uint64_t instruction_bytes = 0;
     uint64_t instruction_length = 0;
-    bm_video_geometry_t geometry = { 0, 0, BM_PIXEL_XRGB8888 };
+    bm_video_geometry_t geometry = { 0, 0, BM_PIXEL_XRGB8888, 0U, 0U };
     bm_status_t video_status = BM_STATUS_INVALID_STATE;
     uint32_t *pixels = NULL;
     size_t pixel_count = 0;

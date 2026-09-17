@@ -860,6 +860,42 @@ pcs86_video_render(const void *context, bm_tick_t emulated_time,
                             PCS86_SCHEDULER_TICKS_PER_SECOND, framebuffer);
 }
 
+static size_t
+pcs86_storage_count(const void *context)
+{
+    return context != NULL ? 2U : 0U;
+}
+
+static bm_status_t
+pcs86_storage_status(const void *context, size_t index,
+                     bm_storage_device_status_t *status)
+{
+    const bm_pcs86_machine_t *machine = context;
+    bm_floppy_drive_state_t drive_state;
+    bm_fdc765_state_t fdc_state;
+
+    if ((machine == NULL) || (status == NULL) || (index >= 2U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    memset(status, 0, sizeof(*status));
+    status->kind = BM_STORAGE_DEVICE_FLOPPY;
+    status->unit = (uint32_t) index;
+    if (machine->floppy[index] == NULL)
+        return BM_STATUS_OK;
+    if (bm_floppy_drive_state(machine->floppy[index], &drive_state) !=
+        BM_STATUS_OK)
+        return BM_STATUS_DEVICE_ERROR;
+    status->installed = drive_state.installed;
+    status->media_present = drive_state.media_present;
+    status->write_protected = drive_state.write_protected;
+    status->read_operations = drive_state.read_operations;
+    status->write_operations = drive_state.write_operations;
+    if ((machine->fdc != NULL) &&
+        (bm_fdc765_state(machine->fdc, &fdc_state) == BM_STATUS_OK))
+        status->motor_active =
+            (fdc_state.digital_output & (uint8_t) (0x10U << index)) != 0U;
+    return BM_STATUS_OK;
+}
+
 static bm_status_t
 pcs86_create(bm_engine_t *engine,
              const bm_host_services_t *host,
@@ -1286,6 +1322,7 @@ bm_pcs86_expected_firmware(size_t *count)
 
 static const bm_machine_definition_t pcs86_definition = {
     .id = "olivetti-pcs86",
+    .scheduler_ticks_per_second = PCS86_SCHEDULER_TICKS_PER_SECOND,
     .configuration = {
         BM_PCS86_CONFIG_TYPE,
         BM_PCS86_CONFIG_VERSION,
@@ -1299,7 +1336,9 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_video_render,
         pcs86_reset,
         pcs86_inspect,
-        pcs86_input
+        pcs86_input,
+        pcs86_storage_count,
+        pcs86_storage_status
     },
     .engine = { 1U, 10U }
 };

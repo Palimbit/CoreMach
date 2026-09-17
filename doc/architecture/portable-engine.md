@@ -33,6 +33,9 @@ those facilities without exposing them to an emulated component.
 - Every mutable value belongs to an engine, session, machine or component.
 - A session has an explicit lifecycle and supports safe partial cleanup.
 - Time uses integer ticks and same-time events use insertion order.
+- Every machine definition declares the rate of its current scheduler tick
+  domain so a frontend never substitutes CPU crystal frequency for engine
+  time. The rate is pacing metadata, not a claim of cycle accuracy.
 - CPU implementations receive a bounded budget and report consumed time.
 - Buses model memory, I/O, program and data spaces independently.
 - Debug and initiator-held lock state are explicit transaction attributes, not
@@ -415,10 +418,15 @@ Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
 and the V30 asks the PIC for a vector before pushing FLAGS/CS/IP and reading the
 real-mode vector table. A withdrawn edge request no longer survives as its
-original IRQ before the first interrupt acknowledgement. Neither component
-owns the other. The added SPP, NS16450 and keyboard paths follow the same
-ownership rule and communicate only through explicit callbacks and runtime
-events. Mouse delivery and complete V30 coverage remain subsequent cuts.
+original IRQ before the first interrupt acknowledgement. Non-specific and
+specific EOI commands release their corresponding in-service state, and fixed
+priority prevents the same or a lower-priority request from recursively
+entering an active handler. This matters for the PCS 86 BIOS, which uses
+specific `61h` and `66h` EOI commands for keyboard and floppy interrupts.
+Neither component owns the other. The added SPP, NS16450 and keyboard paths
+follow the same ownership rule and communicate only through explicit callbacks
+and runtime events. Mouse delivery and complete V30 coverage remain subsequent
+cuts.
 
 ### PCS86-4 floppy/bootstrap status
 
@@ -487,3 +495,39 @@ format-track, deleted-data distinction, flux/weak-sector formats and dynamic
 media insertion. Those are explicit future fidelity work, while deterministic
 raw-sector loading through the DOS banner is the validated boundary of this
 cut.
+
+## Portable Qt presentation boundary
+
+The Qt6 frontend owns window geometry, menus, fullscreen state, presentation
+scaling, interpolation and image export. These are user preferences rather
+than emulated-machine state: changing them cannot affect engine time, video
+memory or the framebuffer returned by the runtime. The first presentation cut
+offers source-aspect fit, integer-pixel, corrected 4:3 and stretched layouts,
+with independently selectable nearest-neighbour or smooth interpolation.
+
+Frame copying and PNG export consume the frontend's last published image. File
+dialogs, clipboard access and persistent settings remain on the Qt side of the
+boundary; no path, native window, settings object or Qt type crosses into the
+frontend adapter, runtime or engine. Advanced GPU renderers, shaders and CRT
+effects remain later presentation layers and must consume the same immutable
+frame contract rather than depending on inherited emulator globals.
+
+The interactive worker limits each catch-up slice to five milliseconds at the
+current frontend rate and coalesces consecutive ordinary frames before they
+cross to the Qt event loop. Lifecycle results and errors remain ordered and
+cannot be discarded. This bounds the worker-side keyboard delay and prevents a
+busy UI from presenting an accumulated queue of obsolete images.
+
+Video geometry also carries an optional exact refresh rational. PVGA1A derives
+it from the programmed CRTC totals and a selected documented clock; board-defined
+external clocks remain zero/unknown instead of being assigned a guessed rate.
+Headless reports the rational directly. Qt labels source resolution and guest
+refresh separately from physical output size and measured presentation FPS.
+
+Storage telemetry follows the same boundary. A machine may enumerate generic
+device status containing media presence, write protection, motor state and
+cumulative completed read/write operations. The PCS 86 composes those values
+from its floppy drive and FDC, while Qt only presents snapshots and short
+activity pulses. The contract contains no path, file handle or UI object and
+does not yet authorize inserting, ejecting or making a caller-owned medium
+writable.

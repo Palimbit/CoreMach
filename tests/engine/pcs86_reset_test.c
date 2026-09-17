@@ -132,7 +132,7 @@ main(void)
     uint32_t pixels[9];
     bm_video_framebuffer_t framebuffer = {
         pixels, sizeof(pixels) / sizeof(pixels[0]), 9U,
-        { 0, 0, BM_PIXEL_XRGB8888 }
+        { 0, 0, BM_PIXEL_XRGB8888, 0U, 0U }
     };
     const bm_input_event_t key_down = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
     const bm_input_event_t key_up = { BM_INPUT_KEY, BM_KEY_A, 0, 0 };

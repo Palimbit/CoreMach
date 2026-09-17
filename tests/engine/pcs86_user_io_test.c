@@ -115,6 +115,69 @@ test_absent_xta_slots(const bm_host_services_t *host,
     bm_session_destroy(session);
 }
 
+static void
+test_keyboard_scan_stream(const bm_host_services_t *host)
+{
+    uint8_t even[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    uint8_t odd[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
+    static const uint8_t program[] = {
+        0xba, 0x60, 0x00, /* MOV DX,0060h. */
+        0xec, 0xec, 0xec, 0xec, 0xec, 0xec, /* Read six scan bytes. */
+        0xf4
+    };
+    static const bm_input_event_t events[] = {
+        { BM_INPUT_KEY, BM_KEY_LEFT_SHIFT, 1, 0 },
+        { BM_INPUT_KEY, BM_KEY_P, 1, 0 },
+        { BM_INPUT_KEY, BM_KEY_P, 0, 0 },
+        { BM_INPUT_KEY, BM_KEY_LEFT_SHIFT, 0, 0 },
+        { BM_INPUT_KEY, BM_KEY_RIGHT_CONTROL, 1, 0 }
+    };
+    static const uint8_t expected[] = {
+        0x2aU, 0x19U, 0x99U, 0xaaU, 0xe0U, 0x1dU
+    };
+    const bm_input_event_t unsupported = {
+        BM_INPUT_KEY, BM_KEY_PRINT_SCREEN, 1, 0
+    };
+    bm_pcs86_config_t config;
+    bm_machine_config_t machine;
+    bm_session_t *session = NULL;
+    io_trace_sink_t io_trace = { 0 };
+    size_t index;
+
+    for (index = 0U; index < sizeof(reset_jump); ++index)
+        put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
+    for (index = 0U; index < sizeof(program); ++index)
+        put_combined_byte(even, odd, 0x0100U + index, program[index]);
+    config = (bm_pcs86_config_t) {
+        .firmware_even = { "synthetic-even", even, sizeof(even), NULL },
+        .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL },
+        .io_trace = capture_io_trace,
+        .io_trace_context = &io_trace
+    };
+    machine = bm_pcs86_machine_config(&config);
+    assert(bm_session_create(host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_send_input(session, &unsupported) ==
+           BM_STATUS_UNSUPPORTED);
+    for (index = 0U; index < sizeof(events) / sizeof(events[0]); ++index)
+        assert(bm_session_send_input(session, &events[index]) == BM_STATUS_OK);
+    assert(inspect_machine(session, "keyboard_queue_depth") ==
+           sizeof(expected) / sizeof(expected[0]));
+    assert(bm_session_run_for(session, 16U) == BM_STATUS_OK);
+    assert(inspect_cpu(session, "halted") == 1U);
+    assert(io_trace.count == sizeof(expected) / sizeof(expected[0]));
+    for (index = 0U; index < sizeof(expected) / sizeof(expected[0]); ++index) {
+        assert(io_trace.entries[index].operation == BM_BUS_READ);
+        assert(io_trace.entries[index].port == 0x0060U);
+        assert(io_trace.entries[index].value == expected[index]);
+    }
+    assert(inspect_machine(session, "keyboard_queue_depth") == 0U);
+    assert(bm_session_stop(session) == BM_STATUS_OK);
+    bm_session_destroy(session);
+}
+
 int
 main(void)
 {
@@ -193,5 +256,6 @@ main(void)
     test_absent_xta_slots(&host, &config, even, odd);
     test_unmapped_output(&host, &config, even, odd, 0x02f1U);
     test_unmapped_output(&host, &config, even, odd, 0x06f2U);
+    test_keyboard_scan_stream(&host);
     return 0;
 }

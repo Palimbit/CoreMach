@@ -4,6 +4,7 @@
 
 #include <blumach/engine/engine.h>
 #include <blumach/engine/input.h>
+#include <blumach/engine/storage.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,6 +53,9 @@ typedef bm_status_t (*bm_machine_video_geometry_fn)(const void *machine,
 typedef bm_status_t (*bm_machine_video_render_fn)(const void *machine,
                                                    bm_tick_t emulated_time,
                                                    bm_video_framebuffer_t *framebuffer);
+typedef size_t (*bm_machine_storage_count_fn)(const void *machine);
+typedef bm_status_t (*bm_machine_storage_status_fn)(
+    const void *machine, size_t index, bm_storage_device_status_t *status);
 
 typedef struct bm_machine_ops {
     bm_machine_validate_fn validate;
@@ -62,10 +66,16 @@ typedef struct bm_machine_ops {
     bm_machine_reset_fn reset;
     bm_machine_inspect_fn inspect;
     bm_machine_input_fn input;
+    bm_machine_storage_count_fn storage_count;
+    bm_machine_storage_status_fn storage_status;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_definition {
     const char *id;
+    /* Rate of the machine's current scheduler tick domain. Frontends use this
+     * for wall-clock pacing; it is distinct from a CPU crystal frequency and
+     * may change when a machine adopts cycle-accounted scheduling. */
+    uint64_t scheduler_ticks_per_second;
     bm_configuration_contract_t configuration;
     bm_machine_ops_t ops;
     bm_engine_config_t engine;
@@ -120,6 +130,11 @@ bm_status_t bm_session_inspect_machine(const bm_session_t *session,
                                        uint64_t *value);
 bm_status_t bm_session_send_input(bm_session_t *session,
                                   const bm_input_event_t *event);
+bm_status_t bm_session_storage_device_count(const bm_session_t *session,
+                                            size_t *count);
+bm_status_t bm_session_storage_device_status(
+    const bm_session_t *session, size_t index,
+    bm_storage_device_status_t *status);
 
 #ifdef __cplusplus
 }
