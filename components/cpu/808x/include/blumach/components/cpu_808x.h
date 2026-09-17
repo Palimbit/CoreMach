@@ -31,6 +31,35 @@ typedef struct bm_808x_trace {
 typedef void (*bm_808x_trace_fn)(void *context, const bm_808x_trace_t *trace);
 typedef bm_status_t (*bm_808x_interrupt_ack_fn)(void *context, uint8_t *vector);
 
+typedef enum bm_808x_fpo_family {
+    BM_808X_FPO1 = 1,
+    BM_808X_FPO2 = 2
+} bm_808x_fpo_family_t;
+
+/* Host-neutral observation delivered to an optional floating-point component.
+ * For a memory form the CPU has already performed the documented auxiliary
+ * address calculation and memory-read cycle. memory_value is the word seen on
+ * that cycle; the CPU itself discards it. Register forms set memory_operand to
+ * zero and leave all address/value fields zero. */
+typedef struct bm_808x_fpo_request {
+    uint32_t size;
+    bm_808x_fpo_family_t family;
+    uint8_t opcode;
+    uint8_t modrm;
+    uint8_t memory_operand;
+    uint8_t reserved;
+    uint16_t segment;
+    uint16_t offset;
+    uint32_t physical_address;
+    uint16_t memory_value;
+} bm_808x_fpo_request_t;
+
+typedef bm_status_t (*bm_808x_fpo_fn)(
+    void *context, const bm_808x_fpo_request_t *request);
+/* ready is one when the active-low V30 POLL input is asserted. A callback must
+ * write exactly zero or one. The callback may return a device status. */
+typedef bm_status_t (*bm_808x_poll_fn)(void *context, int *ready);
+
 typedef struct bm_808x_config {
     bm_808x_model_t model;
     uint32_t frequency_hz;
@@ -39,6 +68,13 @@ typedef struct bm_808x_config {
     void *trace_context;
     bm_808x_interrupt_ack_fn interrupt_ack;
     void *interrupt_context;
+    /* A null FPO callback models no attached coprocessor: register forms are
+     * CPU no-ops and memory forms still issue their documented read cycle. A
+     * null POLL callback is different: the external pin level is unknown, so
+     * POLL returns BM_STATUS_UNSUPPORTED instead of assuming ready or busy. */
+    bm_808x_fpo_fn fpo;
+    bm_808x_poll_fn poll;
+    void *coprocessor_context;
 } bm_808x_config_t;
 
 #define BM_808X_ARCH_STATE_VERSION 3U

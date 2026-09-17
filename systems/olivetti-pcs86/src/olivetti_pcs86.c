@@ -928,9 +928,13 @@ pcs86_create(bm_engine_t *engine,
                             pcs86_video_arbitration_access, machine);
     if (status == BM_STATUS_OK) {
         bm_808x_config_t cpu_config = {
-            BM_808X_NEC_V30, 10000000U, machine->bus,
-            config->trace, config->trace_context,
-            pcs86_interrupt_acknowledge, machine
+            .model = BM_808X_NEC_V30,
+            .frequency_hz = 10000000U,
+            .bus = machine->bus,
+            .trace = config->trace,
+            .trace_context = config->trace_context,
+            .interrupt_ack = pcs86_interrupt_acknowledge,
+            .interrupt_context = machine
         };
         status = bm_808x_create(host, &cpu_config, &cpu);
     }

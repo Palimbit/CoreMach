@@ -25,7 +25,9 @@ main(void)
     };
     trace_capture_t capture = { 0 };
     cpu_808x_test_config_t config = {
-        1U, capture_trace, &capture, NULL, NULL
+        .bus_capacity = 1U,
+        .trace = capture_trace,
+        .trace_context = &capture
     };
     cpu_808x_test_machine_t machine;
 

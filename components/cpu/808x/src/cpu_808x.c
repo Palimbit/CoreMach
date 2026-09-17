@@ -62,6 +62,9 @@ typedef struct bm_808x_state {
     void *trace_context;
     bm_808x_interrupt_ack_fn interrupt_ack;
     void *interrupt_context;
+    bm_808x_fpo_fn fpo;
+    bm_808x_poll_fn poll;
+    void *coprocessor_context;
 } bm_808x_state_t;
 
 static uint16_t
@@ -277,6 +280,60 @@ write_operand_word(bm_808x_state_t *state, const bm_808x_operand_t *operand, uin
         return BM_STATUS_OK;
     }
     return write_word(state, operand->segment, operand->offset, value);
+}
+
+static bm_status_t
+execute_fpo(bm_808x_state_t *state, uint8_t opcode, int segment_override,
+            bm_808x_fpo_family_t family)
+{
+    bm_808x_fpo_request_t request = {
+        .size = sizeof(request),
+        .family = family,
+        .opcode = opcode
+    };
+    bm_808x_operand_t operand;
+    bm_status_t status;
+
+    status = fetch_byte(state, &request.modrm);
+    if (status != BM_STATUS_OK)
+        return status;
+    status = decode_rm_operand(state, request.modrm, segment_override, &operand);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (!operand.is_register) {
+        request.memory_operand = 1U;
+        request.segment = operand.segment;
+        request.offset = operand.offset;
+        request.physical_address = physical_address(operand.segment,
+                                                    operand.offset);
+        status = read_word(state, operand.segment, operand.offset,
+                           &request.memory_value);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    if (state->fpo == NULL)
+        return BM_STATUS_OK;
+    return state->fpo(state->coprocessor_context, &request);
+}
+
+static bm_status_t
+execute_poll(bm_808x_state_t *state, uint16_t instruction_ip, int bus_lock)
+{
+    bm_status_t status;
+    int ready = -1;
+
+    if (bus_lock)
+        return BM_STATUS_UNSUPPORTED;
+    if (state->poll == NULL)
+        return BM_STATUS_UNSUPPORTED;
+    status = state->poll(state->coprocessor_context, &ready);
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((ready != 0) && (ready != 1))
+        return BM_STATUS_DEVICE_ERROR;
+    if (!ready)
+        state->ip = instruction_ip;
+    return BM_STATUS_OK;
 }
 
 static bm_status_t
@@ -1807,6 +1864,11 @@ execute_one(bm_808x_state_t *state)
                 restore_native_psw(state, value);
             return status;
         }
+        case 0x9b: /* POLL/WAIT: external active-low input. */
+            return execute_poll(state, instruction_ip, bus_lock);
+        case 0x66: /* FPO2 fp-op,reg/mem. */
+        case 0x67:
+            return execute_fpo(state, opcode, segment_override, BM_808X_FPO2);
         case 0xa4: /* MOVSB */
         case 0xa5: /* MOVSW */
         case 0xa6: /* CMPSB */
@@ -2885,6 +2947,15 @@ execute_one(bm_808x_state_t *state)
                 set_register_byte(state, 0U, value);
             return status;
         }
+        case 0xd8: /* FPO1/ESC fp-op,reg/mem. */
+        case 0xd9:
+        case 0xda:
+        case 0xdb:
+        case 0xdc:
+        case 0xdd:
+        case 0xde:
+        case 0xdf:
+            return execute_fpo(state, opcode, segment_override, BM_808X_FPO1);
         case 0xa0: /* MOV AL,moffs8 */
         case 0xa1: /* MOV AX,moffs16 */
         case 0xa2: /* MOV moffs8,AL */
@@ -3148,6 +3219,9 @@ bm_808x_create(const bm_host_services_t *host,
     state->trace_context = config->trace_context;
     state->interrupt_ack = config->interrupt_ack;
     state->interrupt_context = config->interrupt_context;
+    state->fpo = config->fpo;
+    state->poll = config->poll;
+    state->coprocessor_context = config->coprocessor_context;
     *out_cpu = (bm_cpu_t) {
         "nec-v30-bring-up",
         state,

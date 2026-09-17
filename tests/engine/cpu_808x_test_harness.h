@@ -17,6 +17,9 @@ typedef struct cpu_808x_test_config {
     void *trace_context;
     bm_808x_interrupt_ack_fn interrupt_ack;
     void *interrupt_context;
+    bm_808x_fpo_fn fpo;
+    bm_808x_poll_fn poll;
+    void *coprocessor_context;
 } cpu_808x_test_config_t;
 
 typedef struct cpu_808x_test_machine {

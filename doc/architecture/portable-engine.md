@@ -195,6 +195,28 @@ the manual; the core uses explicit deterministic update ordering without
 claiming a hardware value for that undefined part. This cut remains host-,
 file- and Qt-independent and adds no cycle or prefetch claims.
 
+The coprocessor-contract cut adds the CPU side of NEC `FPO1`/`ESC`
+(`D8h`-`DFh`), `FPO2` (`66h`/`67h`) and `POLL`/`WAIT` (`9Bh`). Register FPO
+forms perform no CPU data operation. Memory forms decode the effective address,
+start the documented word read and discard it from CPU state; an optional
+host-neutral callback receives the raw opcode/ModR/M, FPO family, resolved
+address and word observed on that bus cycle. With no callback the instruction
+still performs those documented CPU-side actions and completes, which models
+an absent floating-point component without pretending to execute arithmetic.
+Callback failures and memory-bus failures propagate without being converted to
+success.
+
+`POLL` samples a separate callback representing the V30's external active-low
+POLL input. Ready completes the instruction, while busy restores the
+instruction address so another deterministic portable step samples again.
+Because an unconnected software callback does not establish the electrical pin
+level, absence returns `BM_STATUS_UNSUPPORTED` rather than inventing ready or
+an 8087-style exception. The vector-7 behavior documented for V33A/V53A is not
+applied to V30. `BUSLOCK POLL` is also rejected, following NEC's explicit
+caution. The current retry is an instruction-boundary functional model; the
+documented five-clock sampling interval, queue behavior, bus ownership and an
+actual floating-point execution component remain outside this cut.
+
 The prefix-control cut adds the V30-native `REPC` (`65h`) and `REPNC` (`64h`)
 conditions for `CMPS`/`SCAS`: the completed comparison controls continuation
 through CF, while a zero initial `CX` performs no data access. Using either
