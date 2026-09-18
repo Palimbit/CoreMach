@@ -119,13 +119,19 @@ main(void)
     bm_xta_set_enabled(xta, 1);
     assert(io_read(bus, 0x0322U) == 0xa5U);
     io_write(bus, 0x0323U, 0x02U);
+    io_write(bus, 0x0322U, 0U); /* DCB phase retains its internal marker. */
+    assert(bm_xta_state(xta, &state) == BM_STATUS_OK);
+    assert(state.status == 0x8dU);
+    assert(io_read(bus, 0x0321U) == 0x0dU); /* Mask only DCB on bus reads. */
     send_command(bus, read_dcb);
     assert(io_read(bus, 0x0321U) == 0x0bU);
     for (index = 0U; index < 512U; ++index)
         assert(io_read(bus, 0x0320U) == (uint8_t) index);
     assert(irq == 1);
+    assert((io_read(bus, 0x0321U) & 0x20U) != 0U);
     assert(io_read(bus, 0x0320U) == 0U);
     assert(irq == 0);
+    assert(io_read(bus, 0x0321U) == 0U);
 
     io_write(bus, 0x000cU, 0U);       /* Clear DMA byte pointer. */
     io_write(bus, 0x0006U, 0x00U);    /* Channel 3 address 1000h. */
