@@ -78,7 +78,7 @@ endif()
 
 add_executable(portable-engine-clocked-scheduler clocked_engine_test.c)
 target_link_libraries(portable-engine-clocked-scheduler
-    PRIVATE blumach_engine blumach_platform_null
+    PRIVATE blumach_engine blumach_bus blumach_platform_null
 )
 target_compile_features(portable-engine-clocked-scheduler PRIVATE c_std_11)
 set_target_properties(portable-engine-clocked-scheduler PROPERTIES C_EXTENSIONS OFF)

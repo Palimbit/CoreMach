@@ -69,9 +69,12 @@ overflow is reported without changing the clock position.
   deterministic delay rather than asserting false cycle accuracy.
 - HALT/idle, wake-up, reset and invalid-progress paths have initial tests.
   Events created during a CPU step are recognized before the next step.
-  A 1:1000 synthetic rate test guards against starvation. Interrupt delivery,
-  bus waits and sustained mixed workloads with guest-visible transactions
-  still need tests before a real CPU migrates.
+  A 1:1000 synthetic rate test guards against starvation. Synthetic tests also
+  cover a bus transaction adding two wait cycles and an interrupt line asserted
+  between instructions. They do not establish a real Z80/808x acknowledge
+  protocol or cycle-level placement of the bus access. Sustained mixed
+  workloads with guest-visible transactions still need testing before a real
+  CPU migrates.
 - The existing PCS 86 suite remains unchanged and green. V30 migration is a
   later change, with independently measured instruction-cycle coverage and
   known unknowns; Z80 integration must not alter the legacy V30 tick meaning.

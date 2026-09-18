@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <blumach/engine/engine.h>
+#include <blumach/components/bus.h>
 #include <blumach/platforms/null_host.h>
 
 #include <assert.h>
@@ -21,6 +22,9 @@ typedef struct synthetic_cpu {
     uint64_t cycles_per_step;
     bm_engine_t *engine;
     int schedule_event;
+    bm_bus_t *bus;
+    int interrupt_pending;
+    unsigned int interrupts_seen;
 } synthetic_cpu_t;
 
 typedef struct event_observation {
@@ -45,6 +49,8 @@ cpu_reset(void *context)
 {
     synthetic_cpu_t *cpu = context;
     cpu->steps = 0U;
+    cpu->interrupt_pending = 0;
+    cpu->interrupts_seen = 0U;
     return BM_STATUS_OK;
 }
 
@@ -52,6 +58,10 @@ static bm_status_t
 cpu_step(void *context, bm_tick_t start_ns, uint64_t *cycles)
 {
     synthetic_cpu_t *cpu = context;
+    bm_bus_transaction_t access = {
+        BM_ADDRESS_IO, BM_BUS_READ, 0x10U, 0U, 1U, 1U, 0U,
+        BM_ENDIAN_LITTLE, 0U
+    };
 
     if (cpu->idle) {
         *cycles = 0U;
@@ -67,10 +77,32 @@ cpu_step(void *context, bm_tick_t start_ns, uint64_t *cycles)
                                      observe_quarter_second, cpu->trace) == BM_STATUS_OK);
         cpu->schedule_event = 0;
     }
+    if (cpu->interrupt_pending) {
+        ++cpu->interrupts_seen;
+        cpu->interrupt_pending = 0;
+        if (cpu->trace != NULL)
+            record(cpu->trace, 7U);
+    }
     if (cpu->trace != NULL)
         record(cpu->trace, cpu->id);
     ++cpu->steps;
     *cycles = cpu->cycles_per_step != 0U ? cpu->cycles_per_step : 1U;
+    if (cpu->bus != NULL) {
+        bm_status_t status = bm_bus_transact(cpu->bus, &access);
+        if (status != BM_STATUS_OK)
+            return status;
+        *cycles += access.wait_states;
+    }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+add_two_bus_waits(void *context, bm_bus_transaction_t *transaction)
+{
+    unsigned int *calls = context;
+    ++*calls;
+    transaction->value = 0x5aU;
+    transaction->wait_states += 2U;
     return BM_STATUS_OK;
 }
 
@@ -79,8 +111,10 @@ cpu_signal(void *context, uint32_t line, int asserted)
 {
     synthetic_cpu_t *cpu = context;
     (void) line;
-    if (asserted)
+    if (asserted) {
         cpu->idle = 0;
+        cpu->interrupt_pending = 1;
+    }
     return BM_STATUS_OK;
 }
 
@@ -294,6 +328,73 @@ test_multi_cycle_boundaries(void)
     bm_engine_destroy(engine);
 }
 
+static void
+test_bus_waits_affect_clocked_time(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    bm_engine_t *engine = make_engine();
+    bm_bus_t *bus = NULL;
+    trace_t trace = { 0 };
+    synthetic_cpu_t context = { 0 };
+    bm_cpu_t cpu;
+    unsigned int accesses = 0U;
+
+    assert(bm_bus_create(&host, 1U, &bus) == BM_STATUS_OK);
+    assert(bm_bus_map(bus, BM_ADDRESS_IO, 0x10U, 0x10U,
+                      add_two_bus_waits, &accesses) == BM_STATUS_OK);
+    context.trace = &trace;
+    context.id = 1U;
+    context.bus = bus;
+    cpu = make_cpu(&context);
+    assert(bm_engine_add_clocked_cpu(engine, &cpu, cpu_step, 10U, NULL) ==
+           BM_STATUS_OK);
+    assert(bm_engine_schedule_at(engine, UINT64_C(250000000),
+                                 observe_quarter_second, &trace) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(600000000)) == BM_STATUS_OK);
+    assert(context.steps == 2U);
+    assert(accesses == 2U);
+    assert(trace.count == 3U);
+    assert(trace.values[0] == 1U);
+    assert(trace.values[1] == 9U);
+    assert(trace.values[2] == 1U);
+    bm_engine_destroy(engine);
+    bm_bus_destroy(bus);
+}
+
+static void
+signal_interrupt_at_quarter_second(bm_engine_t *engine, void *context)
+{
+    bm_cpu_id_t *id = context;
+    assert(bm_engine_now(engine) == UINT64_C(250000000));
+    assert(bm_engine_signal_cpu(engine, *id, 0U, 1) == BM_STATUS_OK);
+}
+
+static void
+test_interrupt_reaches_next_boundary(void)
+{
+    bm_engine_t *engine = make_engine();
+    trace_t trace = { 0 };
+    synthetic_cpu_t context = { 0 };
+    bm_cpu_t cpu;
+    bm_cpu_id_t id = UINT32_MAX;
+
+    context.trace = &trace;
+    context.id = 1U;
+    cpu = make_cpu(&context);
+    assert(bm_engine_add_clocked_cpu(engine, &cpu, cpu_step, 2U, &id) ==
+           BM_STATUS_OK);
+    assert(bm_engine_schedule_at(engine, UINT64_C(250000000),
+                                 signal_interrupt_at_quarter_second, &id) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(1000000000)) == BM_STATUS_OK);
+    assert(context.steps == 2U);
+    assert(context.interrupts_seen == 1U);
+    assert(trace.count == 3U);
+    assert(trace.values[0] == 1U);
+    assert(trace.values[1] == 7U);
+    assert(trace.values[2] == 1U);
+    bm_engine_destroy(engine);
+}
+
 int
 main(void)
 {
@@ -310,5 +411,7 @@ main(void)
     test_invalid_progress();
     test_mixed_load_has_no_starvation();
     test_multi_cycle_boundaries();
+    test_bus_waits_affect_clocked_time();
+    test_interrupt_reaches_next_boundary();
     return 0;
 }
