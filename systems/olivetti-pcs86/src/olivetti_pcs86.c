@@ -989,7 +989,7 @@ pcs86_create(bm_engine_t *engine,
         0xf0U | pcs86_floppy_jumper_code(&config->floppy[0]) |
         (uint8_t) (pcs86_floppy_jumper_code(&config->floppy[1]) << 2U));
     if (config->hard_disk.present)
-        machine->jumpers &= (uint8_t) ~0x80U;
+        machine->jumpers = (uint8_t) (machine->jumpers & ~0x80U);
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
     machine->ems_size = (size_t) config->ems_kib * 1024U;
