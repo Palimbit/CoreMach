@@ -76,6 +76,20 @@ else()
     target_compile_options(portable-engine-clock-math PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 endif()
 
+add_executable(portable-engine-clocked-scheduler clocked_engine_test.c)
+target_link_libraries(portable-engine-clocked-scheduler
+    PRIVATE blumach_engine blumach_platform_null
+)
+target_compile_features(portable-engine-clocked-scheduler PRIVATE c_std_11)
+set_target_properties(portable-engine-clocked-scheduler PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-clocked-scheduler PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-clocked-scheduler
+        PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+    )
+endif()
+
 add_executable(portable-host-capability-contracts host_capability_contract_test.c)
 target_link_libraries(portable-host-capability-contracts
     PRIVATE blumach_engine blumach_platform_null
@@ -393,6 +407,7 @@ add_test(NAME portable-runtime.machine-registry-contracts
 )
 add_test(NAME portable-engine.scheduler-contracts COMMAND portable-engine-scheduler-contracts)
 add_test(NAME portable-engine.clock-math COMMAND portable-engine-clock-math)
+add_test(NAME portable-engine.clocked-scheduler COMMAND portable-engine-clocked-scheduler)
 add_test(NAME portable-host.capability-contracts COMMAND portable-host-capability-contracts)
 add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-reset)
 add_test(NAME portable-engine.pcs86-user-io COMMAND portable-engine-pcs86-user-io)
