@@ -447,13 +447,13 @@ xta_access(void *context, bm_bus_transaction_t *transaction)
         value = 0xffU;
         if (reg == 0U) {
             if ((xta->status & XTA_STAT_IRQ) != 0U) {
-                xta->status &= (uint8_t) ~XTA_STAT_IRQ;
+                xta->status = (uint8_t) (xta->status & ~XTA_STAT_IRQ);
                 xta_set_irq(xta, 0);
             }
             if (xta->phase == XTA_SEND_DATA) {
                 value = xta->buffer[xta->buffer_index++];
                 if (xta->buffer_index == xta->buffer_length) {
-                    xta->status &= (uint8_t) ~XTA_STAT_REQ;
+                    xta->status = (uint8_t) (xta->status & ~XTA_STAT_REQ);
                     if (xta->active_command == XTA_CMD_READ_SECTORS)
                         xta_finish_sector(xta, 0);
                     else
@@ -465,7 +465,7 @@ xta_access(void *context, bm_bus_transaction_t *transaction)
                 xta->status = 0U;
             }
         } else if (reg == 1U) {
-            value = xta->status & (uint8_t) ~XTA_STAT_DCB;
+            value = (uint8_t) (xta->status & ~XTA_STAT_DCB);
         } else if (reg == 2U) {
             value = xta->option_switches;
         }
@@ -483,7 +483,7 @@ xta_access(void *context, bm_bus_transaction_t *transaction)
         else
             xta->buffer[xta->buffer_index] = value;
         if (++xta->buffer_index == xta->buffer_length) {
-            xta->status &= (uint8_t) ~(XTA_STAT_REQ | XTA_STAT_CD);
+            xta->status = (uint8_t) (xta->status & ~(XTA_STAT_REQ | XTA_STAT_CD));
             if (xta->phase == XTA_RECEIVE_DCB)
                 xta_execute(xta);
             else
