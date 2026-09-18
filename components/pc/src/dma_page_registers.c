@@ -40,12 +40,13 @@ page_access(void *context, bm_bus_transaction_t *transaction)
         return BM_STATUS_OK;
     }
 
-    registers->latch[offset] =
-        (uint8_t) transaction->value & registers->page_mask;
+    /* The readable latch retains all bits; only wired address outputs are
+     * masked. This matches the inherited page_l / page distinction. */
+    registers->latch[offset] = (uint8_t) transaction->value;
     channel = channel_for_offset[offset];
     if (channel >= 0)
         return bm_dma8237_set_page(registers->dma, (unsigned int) channel,
-                                   registers->latch[offset]);
+                                   registers->latch[offset] & registers->page_mask);
     return BM_STATUS_OK;
 }
 

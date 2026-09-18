@@ -67,7 +67,7 @@ typedef struct bm_pcs86_machine {
     uint8_t memory_control_latch;
     uint8_t video_setup_latch;
     uint8_t video_select_latch;
-    uint8_t ems_page_selector[4];
+    uint8_t ems_page_selector[6][4];
     bm_tick_t last_clock_time;
     uint64_t pit_clock_remainder;
     uint64_t rtc_clock_remainder;
@@ -81,8 +81,8 @@ typedef struct bm_pcs86_machine {
 #define PCS86_SCHEDULER_TICKS_PER_SECOND UINT64_C(2000000)
 #define PCS86_PIT_TICKS_PER_SECOND UINT64_C(1193182)
 #define PCS86_CLOCK_QUANTUM UINT64_C(64)
-#define PCS86_EMS_APERTURE_BASE UINT32_C(0x80000)
-#define PCS86_EMS_APERTURE_SIZE UINT32_C(0x10000)
+#define PCS86_EMS_APERTURE_BASE UINT32_C(0x40000)
+#define PCS86_EMS_APERTURE_SIZE UINT32_C(0x60000)
 #define PCS86_EMS_WINDOW_SIZE UINT32_C(0x4000)
 
 static uint8_t *
@@ -91,11 +91,13 @@ pcs86_memory_pointer(bm_pcs86_machine_t *machine, uint64_t address)
     if ((address >= PCS86_EMS_APERTURE_BASE) &&
         (address < PCS86_EMS_APERTURE_BASE + PCS86_EMS_APERTURE_SIZE)) {
         size_t aperture_offset = (size_t) (address - PCS86_EMS_APERTURE_BASE);
-        size_t window = aperture_offset / PCS86_EMS_WINDOW_SIZE;
-        uint8_t selector = machine->ems_page_selector[window];
+        size_t bank = aperture_offset >> 16U;
+        size_t window = (aperture_offset / PCS86_EMS_WINDOW_SIZE) & 3U;
+        uint8_t selector = machine->ems_page_selector[bank][window];
         size_t page = (size_t) (selector & 0x7fU);
 
-        if (((selector & 0x80U) != 0U) && (page < machine->ems_pages))
+        if (((machine->glue[11] & (1U << (bank + 1U))) != 0U) &&
+            ((selector & 0x80U) != 0U) && (page < machine->ems_pages))
             return &machine->ems_ram[page * PCS86_EMS_WINDOW_SIZE +
                                      (aperture_offset & (PCS86_EMS_WINDOW_SIZE - 1U))];
     }
@@ -161,6 +163,17 @@ pcs86_lpt_irq(void *context, int asserted)
     bm_pcs86_machine_t *machine = context;
     (void) bm_pic8259_set_irq(machine->pic, 7U,
                               ((machine->control & 0x02U) != 0) && asserted);
+}
+
+static bm_status_t
+pcs86_coprocessor_poll(void *context, int *ready)
+{
+    (void) context;
+    /* This machine configuration has no 8087. Match the inherited board's
+     * nonblocking WAIT behaviour without inventing floating-point results.
+     * A future fitted coprocessor must provide its own busy/ready signal. */
+    *ready = 1;
+    return BM_STATUS_OK;
 }
 
 static void
@@ -537,15 +550,21 @@ pcs86_ems_selector_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
     size_t window;
+    size_t bank;
 
     if ((transaction->size != 1U) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
 
-    window = (size_t) (transaction->address - 0x8400U);
+    /* Original Customer computes N400h for a frame at N0000h and selects
+     * port-6Bh bit N-3. The BIOS uses the same scheme with N=8. This extends
+     * the inherited fixed frame; it is software-derived, not a pin-level
+     * claim about the remaining memory-control registers. */
+    bank = (size_t) ((transaction->address >> 12U) - 4U);
+    window = (size_t) (transaction->address & 3U);
     if (transaction->operation == BM_BUS_READ)
-        transaction->value = machine->ems_page_selector[window];
+        transaction->value = machine->ems_page_selector[bank][window];
     else
-        machine->ems_page_selector[window] = (uint8_t) transaction->value;
+        machine->ems_page_selector[bank][window] = (uint8_t) transaction->value;
     return BM_STATUS_OK;
 }
 
@@ -995,7 +1014,7 @@ pcs86_create(bm_engine_t *engine,
     machine->ems_size = (size_t) config->ems_kib * 1024U;
     machine->ems_pages = (uint16_t) (machine->ems_size / PCS86_EMS_WINDOW_SIZE);
 
-    status = bm_bus_create(host, 32, &machine->bus);
+    status = bm_bus_create(host, 40, &machine->bus);
     if (status == BM_STATUS_OK)
         bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
     if (status == BM_STATUS_OK) {
@@ -1133,6 +1152,12 @@ pcs86_create(bm_engine_t *engine,
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0070U, 0x0070U,
                             pcs86_memory_control_access, machine);
     if (status == BM_STATUS_OK)
+        /* machine_common_init installs XT pages at 80h-87h only. The AT
+         * high-channel page bank and following 90h-9Fh board region are
+         * absent, not aliases of the XT bank. */
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0088U, 0x009fU,
+                            pcs86_open_bus_access, machine);
+    if (status == BM_STATUS_OK)
         /* No AT CMOS data device: the inherited PCS 86 uses its MM58167
          * windows instead. Keep 70h's independent board latch unchanged. */
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0071U, 0x0071U,
@@ -1156,8 +1181,9 @@ pcs86_create(bm_engine_t *engine,
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x02f8U, 0x02ffU,
                             pcs86_open_bus_access, machine);
-    if (status == BM_STATUS_OK)
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x8400U, 0x8403U,
+    for (index = 4U; (status == BM_STATUS_OK) && (index <= 9U); ++index)
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO,
+                            (index << 12U) + 0x400U, (index << 12U) + 0x403U,
                             pcs86_ems_selector_access, machine);
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0102U, 0x0102U,
@@ -1173,7 +1199,8 @@ pcs86_create(bm_engine_t *engine,
             .trace = config->trace,
             .trace_context = config->trace_context,
             .interrupt_ack = pcs86_interrupt_acknowledge,
-            .interrupt_context = machine
+            .interrupt_context = machine,
+            .poll = pcs86_coprocessor_poll
         };
         status = bm_808x_create(host, &cpu_config, &cpu);
     }
@@ -1304,7 +1331,7 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
                (strncmp(name, "ems_selector", strlen("ems_selector")) == 0) &&
                (name[strlen("ems_selector")] >= '0') &&
                (name[strlen("ems_selector")] <= '3')) {
-        *value = machine->ems_page_selector[name[strlen("ems_selector")] - '0'];
+        *value = machine->ems_page_selector[4][name[strlen("ems_selector")] - '0'];
     } else if ((strcmp(name, "lpt_data") == 0) ||
                (strcmp(name, "lpt_status") == 0) ||
                (strcmp(name, "lpt_control") == 0)) {

@@ -71,15 +71,15 @@ main(void)
     assert(write_port(bus, 0x83U, 0x0bU) == BM_STATUS_OK);
     assert(write_port(bus, 0x81U, 0x0cU) == BM_STATUS_OK);
     assert(write_port(bus, 0x82U, 0x0dU) == BM_STATUS_OK);
-    assert(read_port(bus, 0x87U, &value) == BM_STATUS_OK && value == 0x0aU);
+    assert(read_port(bus, 0x87U, &value) == BM_STATUS_OK && value == 0xfaU);
     assert_page(dma, 0, 0x0aU, 0x000a0010U);
     assert_page(dma, 1, 0x0bU, 0x000b0021U);
     assert_page(dma, 2, 0x0cU, 0x000c0032U);
     assert_page(dma, 3, 0x0dU, 0x000d0043U);
 
     /* Reserved ports are still independent latches, not invented channels. */
-    assert(write_port(bus, 0x80U, 0x07U) == BM_STATUS_OK);
-    assert(read_port(bus, 0x80U, &value) == BM_STATUS_OK && value == 0x07U);
+    assert(write_port(bus, 0x80U, 0xf7U) == BM_STATUS_OK);
+    assert(read_port(bus, 0x80U, &value) == BM_STATUS_OK && value == 0xf7U);
     assert_page(dma, 0, 0x0aU, 0x000a0010U);
 
     /* 8237 master clear cannot reset the physically external page latches. */
