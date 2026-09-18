@@ -323,6 +323,7 @@ main(void)
     assert(sequencer_write(bus, 2U, 0x0fU) == BM_STATUS_OK);
     assert(sequencer_write(bus, 4U, 0x08U) == BM_STATUS_OK);
     assert(graphics_write(bus, 5U, 0x40U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 1U, 1U) == BM_STATUS_OK);
     assert(crtc_write(bus, 9U, 0x80U) == BM_STATUS_OK);
     assert(crtc_write(bus, 0x0cU, 2U) == BM_STATUS_OK);
     assert(crtc_write(bus, 0x0dU, 0U) == BM_STATUS_OK);
@@ -340,6 +341,27 @@ main(void)
     assert(graphics_pixels[1] == 0x0000ff00U);
     assert(graphics_pixels[2] == 0x000000ffU);
     assert(graphics_pixels[8] == 0x0000ff00U);
+
+    /* Mode-13-style scan repetition uses maximum scan line = 1, without
+     * the separate double-scan bit. Do not consume a new VRAM row twice. */
+    assert(crtc_write(bus, 9U, 1U) == BM_STATUS_OK);
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.width == 8U && geometry.height == 2U);
+    assert(bm_pvga1a_render(video, 0U, UINT64_C(1000000),
+                            &graphics_framebuffer) == BM_STATUS_OK);
+    assert(graphics_pixels[8] == 0x0000ff00U);
+    assert(crtc_write(bus, 9U, 0x81U) == BM_STATUS_OK);
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.height == 1U);
+    assert(graphics_write(bus, 0x0fU, 5U) == BM_STATUS_OK);
+    assert(graphics_write(bus, 0x0eU, 1U) == BM_STATUS_OK);
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.width == 16U); /* Paradise PR4 high-resolution override. */
+    assert(graphics_write(bus, 0x0eU, 0U) == BM_STATUS_OK);
+    assert(sequencer_write(bus, 1U, 9U) == BM_STATUS_OK);
+    assert(bm_pvga1a_video_geometry(video, &geometry) == BM_STATUS_OK);
+    assert(geometry.width == 16U); /* Dot-clock division is independent. */
+    assert(sequencer_write(bus, 1U, 1U) == BM_STATUS_OK);
 
     /* CGA-compatible packed shift modes remain explicit until their address
      * and palette contracts are implemented; do not render them as planar. */

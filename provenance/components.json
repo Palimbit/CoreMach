@@ -69,7 +69,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Sarah Walker", "Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core with synchronous device-facing memory transfers, external XT page latches with explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement"
+      "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core with synchronous device-facing memory transfers, external XT page latches with full-byte readback, separately masked physical address outputs, explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement"
     },
     {
       "id": "portable-upd765-fdc",
@@ -163,7 +163,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Sarah Walker", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Isolated the PVGA1A register files, Paradise extension lock, DAC state and 256 KiB planar VRAM behind generic memory and I/O buses; added deterministic text-mode geometry and XRGB8888 rasterization from the programmed character, attribute, font and palette state. Text cursor shape, disable state, skew, character address and VSYNC-derived blink phase are rendered from CRTC state and explicit emulated time. Standard four-plane 16-colour and chain-4 256-colour output derive geometry, display start, offset, double-scan and palette selection from register state without BIOS mode-number cases. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent, and input-status timing is an explicit deterministic bring-up approximation"
+      "local_changes": "Isolated the PVGA1A register files, Paradise extension lock, DAC state and 256 KiB planar VRAM behind generic memory and I/O buses; added deterministic text-mode geometry and XRGB8888 rasterization from the programmed character, attribute, font and palette state. Text cursor shape, disable state, skew, character address and VSYNC-derived blink phase are rendered from CRTC state and explicit emulated time. Standard four-plane 16-colour and chain-4 256-colour output derive geometry, display start, offset, maximum-scan-line repetition, double-scan, Paradise PR4 pixel rate and palette selection from register state without BIOS mode-number cases. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent, and input-status timing is an explicit deterministic bring-up approximation"
     },
     {
       "id": "portable-runtime-session",
@@ -221,11 +221,11 @@
       "destination": ["systems/olivetti-pcs86/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "08893f4fd0392ea6e95e9abbe108f0d8f1fbbe1c",
-      "origin_paths": ["src/machine/m_xt_olivetti_pcs86.c", "src/device/keyboard_at.c", "doc/machines/olivetti-pcs86.md"],
+      "origin_paths": ["src/machine/m_xt_olivetti_pcs86.c", "src/machine/machine.c", "src/dma.c", "src/cpu/808x.c", "src/device/keyboard_at.c", "doc/machines/olivetti-pcs86.md"],
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
-      "copyright_holders": ["Miran Grca", "Fred N. van Kempen", "rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with four banked windows and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and keyboard EDh indicator state, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Mouse input and cycle-accurate timing remain absent; explicitly model the absent AT CMOS data port 71h as open bus, matching inherited device composition without adding a CMOS or changing the MM58167"
+      "copyright_holders": ["Andrew Jenner", "Sarah Walker", "Miran Grca", "Fred N. van Kempen", "rtzor", "BluMach contributors"],
+      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with software-derived relocatable frames at 40000h-9FFFFh, independent selector banks gated by port 6Bh and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and keyboard EDh indicator state, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Mouse input and cycle-accurate timing remain absent; explicitly model the absent AT CMOS data port 71h as open bus, matching inherited device composition without adding a CMOS or changing the MM58167; model the inherited unclaimed 88h-9Fh region as open bus, and explicitly supply absent-coprocessor POLL ready without implementing an 8087"
     }
   ],
   "external_dependencies": []

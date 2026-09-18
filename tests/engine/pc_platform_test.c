@@ -183,6 +183,20 @@ main(void)
     assert(bm_pit8253_advance(pit, 1U) == BM_STATUS_OK);
     assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 1);
 
+    /* A physical I/O sequence spans a PIT edge, while the portable scheduler
+     * can batch adjacent instructions. A read resolves a completed pending
+     * load instead of exposing the previous counter as undefined data. */
+    assert(bm_pit8253_set_gate(pit, 2U, 0) == BM_STATUS_OK);
+    assert(write_port(bus, 0x43U, 0xb8U) == BM_STATUS_OK); /* Ch2 mode 4. */
+    assert(write_port(bus, 0x42U, 0x00U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x42U, 0x01U) == BM_STATUS_OK);
+    assert(read_port(bus, 0x42U) == 0x00U);
+    assert(read_port(bus, 0x42U) == 0x01U);
+    assert(write_port(bus, 0x42U, 0x00U) == BM_STATUS_OK);
+    assert(write_port(bus, 0x42U, 0x02U) == BM_STATUS_OK);
+    assert(read_port(bus, 0x42U) == 0x00U);
+    assert(read_port(bus, 0x42U) == 0x02U);
+
     assert(write_port(bus, 0x43U, 0x31U) == BM_STATUS_OK); /* Mode 0, BCD 0010. */
     assert(write_port(bus, 0x40U, 0x10U) == BM_STATUS_OK);
     assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);

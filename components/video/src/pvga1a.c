@@ -556,9 +556,10 @@ static uint32_t
 graphics_height(const bm_pvga1a_t *video)
 {
     uint32_t height = vertical_display_lines(video);
+    uint32_t repeats = (video->crtc[9] & 0x1fU) + 1U;
     if ((video->crtc[9] & 0x80U) != 0U)
-        height = (height + 1U) / 2U;
-    return height;
+        repeats *= 2U;
+    return (height + repeats - 1U) / repeats;
 }
 
 static uint64_t
@@ -634,6 +635,14 @@ bm_pvga1a_video_geometry(const bm_pvga1a_t *video, bm_video_geometry_t *geometry
         height = vertical_display_lines(video);
     } else {
         width = columns * 8U;
+        if (mode == PVGA1A_DISPLAY_CHAIN4_8) {
+            /* Paradise PR4 bit 0 selects high-resolution 256-colour output;
+             * otherwise one source pixel occupies two display dots. */
+            if ((video->sequencer[1] & 8U) != 0U)
+                width *= 2U;
+            if ((video->graphics[0x0e] & 1U) == 0U)
+                width /= 2U;
+        }
         height = graphics_height(video);
     }
     if ((columns > 160U) || (width == 0U) || (width > 2880U) ||

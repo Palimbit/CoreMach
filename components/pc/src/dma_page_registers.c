@@ -18,7 +18,8 @@ struct bm_dma_page_registers {
     bm_dma8237_t *dma;
     uint16_t io_base;
     uint8_t page_mask;
-    uint8_t latch[8];
+    uint8_t register_count;
+    uint8_t latch[32];
 };
 
 static const int8_t channel_for_offset[8] = {
@@ -40,12 +41,14 @@ page_access(void *context, bm_bus_transaction_t *transaction)
         return BM_STATUS_OK;
     }
 
-    registers->latch[offset] =
-        (uint8_t) transaction->value & registers->page_mask;
-    channel = channel_for_offset[offset];
+    /* The readable latch retains all bits; only wired address outputs are
+     * masked. This matches the inherited page_l / page distinction. */
+    registers->latch[offset] = (uint8_t) transaction->value;
+    channel = offset < sizeof(channel_for_offset) ?
+                  channel_for_offset[offset] : -1;
     if (channel >= 0)
         return bm_dma8237_set_page(registers->dma, (unsigned int) channel,
-                                   registers->latch[offset]);
+                                   registers->latch[offset] & registers->page_mask);
     return BM_STATUS_OK;
 }
 
@@ -58,12 +61,18 @@ bm_dma_page_registers_create(const bm_host_services_t *host,
     bm_dma_page_registers_t *registers;
     bm_status_t status;
     uint32_t end;
+    uint8_t register_count;
 
     if ((bm_host_services_validate(host) != BM_STATUS_OK) || (bus == NULL) ||
         (config == NULL) || (config->dma == NULL) || (out_registers == NULL) ||
         (config->page_mask == 0))
         return BM_STATUS_INVALID_ARGUMENT;
-    end = (uint32_t) config->io_base + 7U;
+    register_count = config->register_count == 0U ? 8U :
+                                                      config->register_count;
+    if ((register_count < 8U) ||
+        (register_count > sizeof(registers->latch)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    end = (uint32_t) config->io_base + register_count - 1U;
     if (end > UINT16_MAX)
         return BM_STATUS_INVALID_ARGUMENT;
     *out_registers = NULL;
@@ -75,6 +84,7 @@ bm_dma_page_registers_create(const bm_host_services_t *host,
     registers->dma = config->dma;
     registers->io_base = config->io_base;
     registers->page_mask = config->page_mask;
+    registers->register_count = register_count;
     bm_dma_page_registers_reset(registers);
     status = bm_bus_map(bus, BM_ADDRESS_IO, config->io_base, end,
                         page_access, registers);
@@ -99,7 +109,7 @@ bm_dma_page_registers_reset(bm_dma_page_registers_t *registers)
     unsigned int channel;
     if (registers == NULL)
         return;
-    memset(registers->latch, 0, sizeof(registers->latch));
+    memset(registers->latch, 0, registers->register_count);
     for (channel = 0; channel < 4; ++channel)
         (void) bm_dma8237_set_page(registers->dma, channel, 0);
 }

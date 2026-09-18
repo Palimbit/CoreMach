@@ -249,6 +249,15 @@ bm_pit_exact_data_read(bm_pit_exact_device_t *pit, unsigned int selected)
     if (selected >= 3U)
         return 0xffU;
     channel = &pit->channel[selected];
+    /* A completed count write is transferred on the next input clock. The
+     * portable scheduler may execute several adjacent I/O instructions before
+     * its next clock event, although a physical bus transaction spans enough
+     * CPU cycles for that edge to occur. Reading while the transfer is still
+     * pending is hardware-undefined; choose the newly completed count rather
+     * than leaking the previous counting element. This changes no active
+     * counter and remains independent of scheduler/host granularity. */
+    if (channel->state == BM_PIT_LOAD_NEXT)
+        load_counting_element(channel);
     value = channel->count_latched ? channel->output_latch :
         visible_count(channel->counting_element);
     if (!channel->count_latched && (channel->rw_mode == 3U) &&

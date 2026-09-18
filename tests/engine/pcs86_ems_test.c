@@ -39,14 +39,16 @@ run_ems_variant(const bm_host_services_t *host,
                 uint8_t simm_code,
                 uint16_t expected_bx,
                 uint16_t expected_cx,
-                uint16_t expected_dx)
+                uint16_t expected_dx,
+                uint8_t aperture)
 {
     static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
-    static const uint8_t program[] = {
-        0xb8, 0x00, 0x80,             /* MOV AX,8000h. */
+    const uint8_t program[] = {
+        0xb0, (uint8_t) (1U << (aperture - 3U)), 0xe6, 0x6b,
+        0xb8, 0x00, (uint8_t) (aperture << 4U),
         0x8e, 0xd8,                   /* MOV DS,AX. */
         0xc6, 0x06, 0x00, 0x00, 0x11, /* Conventional RAM under window 0. */
-        0xba, 0x00, 0x84,             /* MOV DX,8400h. */
+        0xba, 0x00, (uint8_t) ((aperture << 4U) | 4U),
         0xb0, 0x80, 0xee,             /* Enable window 0 on EMS page 0. */
         0xc6, 0x06, 0x00, 0x00, 0x22,
         0xb0, 0x81, 0xee,             /* Select page 1 and write it. */
@@ -59,18 +61,21 @@ run_ems_variant(const bm_host_services_t *host,
         0x8a, 0x0e, 0x00, 0x00,       /* CL=underlying conventional RAM. */
         0xb0, 0xff, 0xee,
         0x8a, 0x2e, 0x00, 0x00,       /* CH=RAM for invalid page 127. */
-        0xb8, 0x00, 0x84,
-        0x8e, 0xd8,                   /* DS=8400h, window 1. */
-        0xba, 0x01, 0x84,
+        0xb8, 0x00, (uint8_t) ((aperture << 4U) | 4U),
+        0x8e, 0xd8,                   /* DS points to window 1 of this frame. */
+        0xba, 0x01, (uint8_t) ((aperture << 4U) | 4U),
         0xb0, 0x80, 0xee,
         0xc6, 0x06, 0x00, 0x00, 0x44, /* Window 1 aliases page 0. */
-        0xb8, 0x00, 0x80,
+        0xb8, 0x00, (uint8_t) (aperture << 4U),
         0x8e, 0xd8,
-        0xba, 0x00, 0x84,
+        0xba, 0x00, (uint8_t) ((aperture << 4U) | 4U),
         0xb0, 0x80, 0xee,
         0xec,                         /* Selector registers are readable. */
         0x88, 0xc6,                   /* DH=80h. */
         0x8a, 0x16, 0x00, 0x00,       /* DL=page 0 byte written via window 1. */
+        0xb0, 0x00, 0xe6, 0x6b,       /* Disable aperture without losing page. */
+        0xa0, 0x00, 0x00, 0x30, 0xe4,
+        0x89, 0xc6,                   /* SI=underlying conventional byte. */
         0xe4, 0x64,                   /* Read installed-SIMM code. */
         0x88, 0xc4,                   /* AH=AL. */
         0xf4
@@ -104,9 +109,10 @@ run_ems_variant(const bm_host_services_t *host,
     assert(inspect_cpu(session, "bx") == expected_bx);
     assert(inspect_cpu(session, "cx") == expected_cx);
     assert(inspect_cpu(session, "dx") == expected_dx);
+    assert(inspect_cpu(session, "si") == (ems_pages != 0U ? 0x11U : 0x33U));
     assert(inspect_cpu(session, "ax") == (uint16_t) (simm_code * 0x0101U));
-    assert(inspect_machine(session, "ems_selector0") == 0x80U);
-    assert(inspect_machine(session, "ems_selector1") == 0x80U);
+    assert(inspect_machine(session, "ems_selector0") == (aperture == 8U ? 0x80U : 0U));
+    assert(inspect_machine(session, "ems_selector1") == (aperture == 8U ? 0x80U : 0U));
     assert(bm_session_reset(session) == BM_STATUS_OK);
     assert(inspect_machine(session, "ems_selector0") == 0U);
     assert(inspect_machine(session, "ems_selector1") == 0U);
@@ -128,12 +134,15 @@ main(void)
     bm_machine_config_t machine = bm_pcs86_machine_config(&invalid);
     bm_session_t *session = NULL;
 
-    run_ems_variant(&host, BM_PCS86_EMS_NONE_KIB, 0U, 0x00U,
-                    0x3333U, 0x3333U, 0x8033U);
-    run_ems_variant(&host, BM_PCS86_EMS_384_KIB, 24U, 0x20U,
-                    0x3322U, 0x1111U, 0x8044U);
-    run_ems_variant(&host, BM_PCS86_EMS_1920_KIB, 120U, 0x40U,
-                    0x3322U, 0x1111U, 0x8044U);
+    uint8_t aperture;
+    for (aperture = 4U; aperture <= 9U; ++aperture) {
+        run_ems_variant(&host, BM_PCS86_EMS_NONE_KIB, 0U, 0x00U,
+                        0x3333U, 0x3333U, 0x8033U, aperture);
+        run_ems_variant(&host, BM_PCS86_EMS_384_KIB, 24U, 0x20U,
+                        0x3322U, 0x1111U, 0x8044U, aperture);
+        run_ems_variant(&host, BM_PCS86_EMS_1920_KIB, 120U, 0x40U,
+                        0x3322U, 0x1111U, 0x8044U, aperture);
+    }
 
     assert(bm_session_create(&host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_INVALID_ARGUMENT);

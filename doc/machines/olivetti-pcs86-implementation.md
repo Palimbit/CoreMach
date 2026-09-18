@@ -75,8 +75,8 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, fixed-priority nesting, output callback, CPU acknowledge, and non-specific or specific EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven from scheduler time without claiming cycle accuracy |
 | PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture/open-bus reads at `A0h-AEh`, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues, IRQ1 scan queue and the keyboard `EDh` LED parameter |
-| Onboard EMS | Functional board implementation derived from the inherited PCS 86 model and preserved machine evidence | Selectable 0/384/1920 KiB backing store (0/24/120 pages), four readable page selectors at `8400h-8403h`, bits 6:0 as page number and bit 7 as per-window enable, with four 16 KiB windows over `80000h-8FFFFh`; port `64h` exposes the fitted-SIMM code and the common frontend defaults to 1920 KiB |
-| 8237 DMA | Functional synchronous subset derived from the inherited core | Address/count flip-flop, base/current registers, command, mode, request, masks, status, master clear and device-facing byte transfers; a separate XT latch block supplies four-bit pages and 20-bit current addresses; no asynchronous arbitration or cycle stealing |
+| Onboard EMS | Functional board implementation derived from the inherited model and original software | Selectable 0/384/1920 KiB backing store (0/24/120 pages), four readable selectors at each `N400h-N403h`, for N=4 through 9, bits 6:0 as page number and bit 7 as window enable. Each 64 KiB frame at `N0000h` is gated by port `6Bh` bit N-3; this relocation is inferred from original Customer and BIOS code, not physically verified. Port `64h` exposes the fitted-SIMM code; the frontend defaults to 1920 KiB |
+| 8237 DMA | Functional synchronous subset derived from the inherited core and physical Customer observation | Address/count flip-flop, base/current registers, command, mode, request, masks, status, master clear and device-facing byte transfers; a configurable board latch block decodes `80h-9Fh` on PCS 86, with only `81h/82h/83h/87h` supplying four-bit pages and 20-bit current addresses. The wider independent readback is observed through the passing Spanish Customer test on a physical BIOS 1.08 machine; no asynchronous arbitration or cycle stealing |
 | MM58167 RTC | Functional portable component | PCS 86 `B0h-B7h` controls and `E0h-EFh` counter/alarm RAM, BCD millisecond calendar, alarm and periodic IRQs, reset/GO/standby commands, checksum repair and 32-byte caller-owned persistence; yearless calendar and physical crystal/battery behaviour remain approximate |
 | SPP parallel port | Derived portable register core | Data, status and control at gated `378h-37Ah`, disconnected-printer status, output callback and ACK-driven IRQ7; no EPP/ECP, printer backend, DMA or host threads |
 | NS16450 UART | Derived portable register core | Divisor latch, IER/IIR, LCR/MCR, LSR/MSR, scratch, modem/data loopback and IRQ4 at gated `3F8h-3FFh`; no 16550 FIFO, host serial backend or baud scheduling |
@@ -133,8 +133,10 @@ The current automated ladder uses no historical software:
    edge requests and all six 8253 modes, gates, BCD and latching, and verify the
    8237 register, mask, request, status, byte-pointer, master-clear and real
    device-to-memory/memory-to-device transfer contracts. A separate
-   test verifies the page-port-to-channel map, four-bit masking, reserved
-   latches, effective 20-bit addresses and independent reset semantics.
+   test verifies the page-port-to-channel map, four-bit effective-address
+   masking, full-byte readable values, the PCS 86's 32 independent latches,
+   its original Customer pattern sequence and independent reset semantics.
+   The PIT test also covers immediate reads of a completed pending mode-4 load.
 3. The V30 tests reproduce the BIOS register/flag self-test, exercise its
    segmented checksum-loop pattern and verify maskable-interrupt stack/vector
    entry using newly authored memory images. A focused boundary test verifies
@@ -251,9 +253,10 @@ firmware self-tests, the local BIOS probe executes 6,256,860 instructions and
 2,960 successful I/O transactions. The
 firmware writes and reads page ports in the observed channel order `87h`,
 `83h`, `81h`, `82h`.
-The PCS 86 component masks each latch to four bits and combines it with the
-8237 current offset without pretending that the controller can yet own the bus
-or move a byte. The MM58167 component handles the control and counter windows,
+The PCS 86 component preserves each readable latch byte, masks only the four
+page bits wired to a real DMA channel and combines those with the 8237 current
+offset without pretending that the controller can yet own the bus or move a
+byte. The MM58167 component handles the control and counter windows,
 advances a BCD calendar and passes the firmware's Clock/Calendar diagnostic.
 The exact-state PIT and corrected PIC edge withdrawal pass Timer 0. The probe
 completes the following long memory test, reads ones while
