@@ -527,6 +527,27 @@ transitions encountered a 1.4-second post-UI-delivery paint gap during native
 UI automation. Its cause is unconfirmed; it is not excluded from the report.
 Other platforms and end-to-end physical keyboard/display latency are unmeasured.
 
+### Bounded headless debug observation
+
+The frontend adapter exposes an optional host-neutral observer for completed
+CPU instructions, accepted interrupt vectors and I/O transactions. It is disabled by default, owns no
+files and cannot alter execution. The headless runner's `--trace-tail N`
+option retains only the most recent `N` interleaved events (maximum 4096) and
+prints them in original sequence order. This provides a bounded diagnostic
+trail around failures without permanent multi-million-instruction logs.
+
+When tracing is enabled, headless also retains the most recent 32 accepted
+interrupt boundaries. Each entry records the last completed instruction, the
+PIC vector and the first instruction at the target. The most recent boundary
+is printed separately, and a failed run reports the complete architectural CPU
+register set. These fixed-size records remain bounded even when a guest loops
+for a long time after the event that caused a failure.
+
+The observer carries architectural addresses, opcodes, accepted interrupt
+vectors and byte-wide PCS 86 I/O values only. Output policy remains in the headless frontend; the engine and
+machine receive no paths, streams or host APIs. A disabled observer has no
+trace buffer and the existing diagnostic counters remain unchanged.
+
 The CPU still reports instruction-based ticks. FAST/SLOW port behavior and the
 physical slow clock remain a separate pending implementation/measurement.
 

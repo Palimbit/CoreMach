@@ -21,6 +21,7 @@ typedef struct headless_run_options {
     const char *scenario_path;
     uint64_t ticks;
     uint64_t key_ticks;
+    size_t trace_tail;
     headless_text_action_t text_actions[HEADLESS_MAX_TEXT_ACTIONS];
     char scenario_text[HEADLESS_MAX_TEXT_ACTIONS][HEADLESS_MAX_ACTION_TEXT];
     size_t text_action_count;

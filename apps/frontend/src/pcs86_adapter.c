@@ -63,14 +63,49 @@ capture_instruction(void *context, const bm_808x_trace_t *trace)
     diagnostics->last_effective_opcode = trace->effective_opcode;
     diagnostics->last_prefix_count = trace->prefix_count;
     diagnostics->has_last_instruction = 1;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_INSTRUCTION,
+            .sequence = machine->base.debug_sequence++,
+            .value.instruction = {
+                trace->cs, trace->ip, trace->physical_address,
+                trace->opcode, trace->effective_opcode, trace->prefix_count
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
 }
 
 static void
 capture_io(void *context, const bm_pcs86_io_trace_t *trace)
 {
     pcs86_frontend_machine_t *machine = context;
-    (void) trace;
     ++machine->base.diagnostics.io_operations;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_IO,
+            .sequence = machine->base.debug_sequence++,
+            .value.io = {
+                trace->port, trace->value, 1U,
+                (uint8_t) (trace->operation == BM_BUS_WRITE)
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
+}
+
+static void
+capture_interrupt(void *context, uint8_t vector)
+{
+    pcs86_frontend_machine_t *machine = context;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_INTERRUPT,
+            .sequence = machine->base.debug_sequence++,
+            .value.interrupt = { vector }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
 }
 
 static void
@@ -148,6 +183,8 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     machine->pcs86.trace_context = machine;
     machine->pcs86.io_trace = capture_io;
     machine->pcs86.io_trace_context = machine;
+    machine->pcs86.interrupt_trace = capture_interrupt;
+    machine->pcs86.interrupt_trace_context = machine;
     machine->pcs86.ems_kib = BM_PCS86_EMS_1920_KIB;
     if (floppy != NULL) {
         machine->base.diagnostics.read_only_media_bytes =

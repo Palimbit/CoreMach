@@ -26,11 +26,12 @@ print_usage(const char *program)
             " [--hard-disk <path> | --working-hard-disk <path>]"
             " [--ticks <count>]"
             " [--frame <path>] [--type-at <tick> --type-text <text>]..."
-            " [--key-ticks <count>] [--expect-frame-crc32 <hex>]\n"
+            " [--key-ticks <count>] [--trace-tail <1..4096>]"
+            " [--expect-frame-crc32 <hex>]\n"
             "  %s --machine <machine-id> --firmware-even <path>"
             " --firmware-odd <path> [--floppy <path>]"
             " [--hard-disk <path> | --working-hard-disk <path>]"
-            " --scenario <path> [--frame <path>]\n"
+            " --scenario <path> [--frame <path>] [--trace-tail <1..4096>]\n"
             "     text accepts \\n, \\r, \\t, \\b and \\\\ escapes\n",
             program, program, program, program, program);
 }
@@ -102,6 +103,7 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
     int key_ticks_was_set = 0;
     int frame_crc_was_set = 0;
     int scenario_was_set = 0;
+    int trace_tail_was_set = 0;
 
     *options = (headless_run_options_t) { 0 };
     options->ticks = UINT64_C(10000000);
@@ -160,6 +162,13 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
             if (key_ticks_was_set || !parse_ticks(value, &options->key_ticks))
                 return 0;
             key_ticks_was_set = 1;
+        } else if (strcmp(argument, "--trace-tail") == 0) {
+            uint64_t count;
+            if (trace_tail_was_set || !parse_ticks(value, &count) ||
+                (count > 4096U))
+                return 0;
+            options->trace_tail = (size_t) count;
+            trace_tail_was_set = 1;
         } else if (strcmp(argument, "--expect-frame-crc32") == 0) {
             if (frame_crc_was_set ||
                 !parse_crc32(value, &options->expected_frame_crc32))

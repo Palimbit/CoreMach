@@ -11,6 +11,161 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define DEBUG_INTERRUPT_HISTORY_CAPACITY 32U
+
+typedef struct debug_interrupt_boundary {
+    bm_frontend_debug_event_t interrupt;
+    bm_frontend_debug_event_t source;
+    bm_frontend_debug_event_t target;
+    int has_source;
+    int has_target;
+} debug_interrupt_boundary_t;
+
+typedef struct debug_tail {
+    bm_frontend_debug_event_t *events;
+    size_t capacity;
+    size_t count;
+    size_t next;
+    bm_frontend_debug_event_t last_interrupt;
+    bm_frontend_debug_event_t interrupt_source;
+    bm_frontend_debug_event_t interrupt_target;
+    bm_frontend_debug_event_t last_instruction;
+    int has_last_interrupt;
+    int has_interrupt_source;
+    int has_interrupt_target;
+    int has_last_instruction;
+    int awaiting_interrupt_target;
+    debug_interrupt_boundary_t interrupt_history[DEBUG_INTERRUPT_HISTORY_CAPACITY];
+    size_t interrupt_history_count;
+    size_t interrupt_history_next;
+    size_t current_interrupt;
+} debug_tail_t;
+
+static void
+capture_debug_event(void *context, const bm_frontend_debug_event_t *event)
+{
+    debug_tail_t *tail = context;
+    if ((tail == NULL) || (event == NULL) || (tail->capacity == 0U))
+        return;
+    tail->events[tail->next] = *event;
+    tail->next = (tail->next + 1U) % tail->capacity;
+    if (tail->count < tail->capacity)
+        ++tail->count;
+    if (event->kind == BM_FRONTEND_DEBUG_INTERRUPT) {
+        debug_interrupt_boundary_t *boundary =
+            &tail->interrupt_history[tail->interrupt_history_next];
+        *boundary = (debug_interrupt_boundary_t) { 0 };
+        boundary->interrupt = *event;
+        boundary->has_source = tail->has_last_instruction;
+        if (tail->has_last_instruction)
+            boundary->source = tail->last_instruction;
+        tail->current_interrupt = tail->interrupt_history_next;
+        tail->interrupt_history_next = (tail->interrupt_history_next + 1U) %
+                                       DEBUG_INTERRUPT_HISTORY_CAPACITY;
+        if (tail->interrupt_history_count < DEBUG_INTERRUPT_HISTORY_CAPACITY)
+            ++tail->interrupt_history_count;
+        tail->last_interrupt = *event;
+        tail->has_last_interrupt = 1;
+        tail->has_interrupt_source = tail->has_last_instruction;
+        if (tail->has_last_instruction)
+            tail->interrupt_source = tail->last_instruction;
+        tail->has_interrupt_target = 0;
+        tail->awaiting_interrupt_target = 1;
+    } else if (event->kind == BM_FRONTEND_DEBUG_INSTRUCTION) {
+        if (tail->awaiting_interrupt_target) {
+            debug_interrupt_boundary_t *boundary =
+                &tail->interrupt_history[tail->current_interrupt];
+            tail->interrupt_target = *event;
+            tail->has_interrupt_target = 1;
+            boundary->target = *event;
+            boundary->has_target = 1;
+            tail->awaiting_interrupt_target = 0;
+        }
+        tail->last_instruction = *event;
+        tail->has_last_instruction = 1;
+    }
+}
+
+static void
+print_debug_tail(const debug_tail_t *tail)
+{
+    size_t index;
+    const size_t first = tail->count == tail->capacity ? tail->next : 0U;
+    printf("debug_tail=%zu\n", tail->count);
+    if (tail->has_last_interrupt) {
+        printf("debug_last_interrupt_sequence=%" PRIu64 " vector=%02x\n",
+               tail->last_interrupt.sequence,
+               (unsigned int) tail->last_interrupt.value.interrupt.vector);
+        if (tail->has_interrupt_source) {
+            printf("debug_interrupt_source=%04x:%04x opcode=%02x\n",
+                   tail->interrupt_source.value.instruction.cs,
+                   tail->interrupt_source.value.instruction.ip,
+                   tail->interrupt_source.value.instruction.opcode);
+        }
+        if (tail->has_interrupt_target) {
+            printf("debug_interrupt_target=%04x:%04x opcode=%02x\n",
+                   tail->interrupt_target.value.instruction.cs,
+                   tail->interrupt_target.value.instruction.ip,
+                   tail->interrupt_target.value.instruction.opcode);
+        }
+    } else {
+        puts("debug_last_interrupt=none");
+    }
+    printf("debug_interrupt_history=%zu\n", tail->interrupt_history_count);
+    for (index = 0U; index < tail->interrupt_history_count; ++index) {
+        const size_t first_interrupt =
+            tail->interrupt_history_count == DEBUG_INTERRUPT_HISTORY_CAPACITY ?
+                tail->interrupt_history_next : 0U;
+        const debug_interrupt_boundary_t *boundary =
+            &tail->interrupt_history[(first_interrupt + index) %
+                                     DEBUG_INTERRUPT_HISTORY_CAPACITY];
+        printf("debug interrupt_sequence=%" PRIu64 " vector=%02x",
+               boundary->interrupt.sequence,
+               (unsigned int) boundary->interrupt.value.interrupt.vector);
+        if (boundary->has_source) {
+            printf(" source=%04x:%04x/%02x",
+                   boundary->source.value.instruction.cs,
+                   boundary->source.value.instruction.ip,
+                   boundary->source.value.instruction.opcode);
+        }
+        if (boundary->has_target) {
+            printf(" target=%04x:%04x/%02x",
+                   boundary->target.value.instruction.cs,
+                   boundary->target.value.instruction.ip,
+                   boundary->target.value.instruction.opcode);
+        }
+        putchar('\n');
+    }
+    for (index = 0U; index < tail->count; ++index) {
+        const bm_frontend_debug_event_t *event =
+            &tail->events[(first + index) % tail->capacity];
+        if (event->kind == BM_FRONTEND_DEBUG_INSTRUCTION) {
+            printf("debug sequence=%" PRIu64
+                   " kind=instruction cs=%04x ip=%04x physical=%05" PRIx32
+                   " opcode=%02x effective=%02x prefixes=%u\n",
+                   event->sequence, event->value.instruction.cs,
+                   event->value.instruction.ip,
+                   event->value.instruction.physical_address,
+                   event->value.instruction.opcode,
+                   event->value.instruction.effective_opcode,
+                   (unsigned int) event->value.instruction.prefix_count);
+        } else if (event->kind == BM_FRONTEND_DEBUG_IO) {
+            printf("debug sequence=%" PRIu64
+                   " kind=io direction=%s address=%04" PRIx64
+                   " width=%u value=%02" PRIx64 "\n",
+                   event->sequence, event->value.io.write ? "write" : "read",
+                   event->value.io.address,
+                   (unsigned int) event->value.io.width,
+                   event->value.io.value);
+        } else if (event->kind == BM_FRONTEND_DEBUG_INTERRUPT) {
+            printf("debug sequence=%" PRIu64
+                   " kind=interrupt vector=%02x\n",
+                   event->sequence,
+                   (unsigned int) event->value.interrupt.vector);
+        }
+    }
+}
+
 static uint32_t
 crc32_pixels(const uint32_t *pixels, size_t count)
 {
@@ -90,6 +245,7 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
     bm_session_t *session = NULL;
     bm_status_t status = BM_STATUS_INVALID_STATE;
     bm_status_t video_status = BM_STATUS_INVALID_STATE;
+    debug_tail_t debug_tail = { 0 };
     bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888, 0U, 0U };
     uint32_t *pixels = NULL;
     size_t pixel_count = 0U;
@@ -165,6 +321,19 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
         result = 2;
         goto cleanup;
     }
+    if (options->trace_tail != 0U) {
+        debug_tail.events = calloc(options->trace_tail,
+                                   sizeof(*debug_tail.events));
+        if (debug_tail.events == NULL) {
+            status = BM_STATUS_OUT_OF_MEMORY;
+            goto cleanup;
+        }
+        debug_tail.capacity = options->trace_tail;
+        status = bm_frontend_machine_set_debug_observer(
+            machine, capture_debug_event, &debug_tail);
+        if (status != BM_STATUS_OK)
+            goto cleanup;
+    }
     status = bm_session_create(&host, &session);
     if (status == BM_STATUS_OK)
         status = bm_session_configure(session,
@@ -219,6 +388,21 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             fprintf(stderr, "failure_instruction_bytes_le=%016" PRIx64
                     " length=%" PRIu64 " dx=%04" PRIx64 "\n", bytes, length, dx);
         }
+        {
+            static const char *const names[] = {
+                "ax", "bx", "cx", "dx", "sp", "bp", "si", "di",
+                "cs", "ds", "es", "ss", "ip", "flags"
+            };
+            size_t index;
+            fputs("failure_cpu", stderr);
+            for (index = 0U; index < sizeof(names) / sizeof(names[0]); ++index) {
+                uint64_t value;
+                if (bm_session_inspect_cpu(session, 0, names[index], &value) ==
+                    BM_STATUS_OK)
+                    fprintf(stderr, " %s=%04" PRIx64, names[index], value);
+            }
+            fputc('\n', stderr);
+        }
     }
     if (session != NULL)
         (void) bm_session_storage_device_count(session, &storage_count);
@@ -264,6 +448,8 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
     if (options->text_action_count != 0U)
         printf("input_actions=%zu key_ticks=%" PRIu64 "\n",
                options->text_action_count, options->key_ticks);
+    if (debug_tail.capacity != 0U)
+        print_debug_tail(&debug_tail);
     if (options->expect_frame_crc32)
         printf("expected_frame_crc32=%08" PRIx32 " matched=%d\n",
                options->expected_frame_crc32, frame_matches);
@@ -276,6 +462,7 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
 cleanup:
     bm_session_destroy(session);
     free(pixels);
+    free(debug_tail.events);
     bm_frontend_machine_close(machine);
     bm_frontend_readonly_media_close(&floppy);
     bm_frontend_readonly_media_close(&hard_disk);

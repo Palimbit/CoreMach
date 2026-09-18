@@ -12,12 +12,25 @@ typedef struct io_trace_sink {
     size_t count;
 } io_trace_sink_t;
 
+typedef struct interrupt_trace_sink {
+    uint8_t vector;
+    size_t count;
+} interrupt_trace_sink_t;
+
 static void
 capture_io_trace(void *context, const bm_pcs86_io_trace_t *trace)
 {
     io_trace_sink_t *sink = context;
     assert(sink->count < (sizeof(sink->entries) / sizeof(sink->entries[0])));
     sink->entries[sink->count++] = *trace;
+}
+
+static void
+capture_interrupt_trace(void *context, uint8_t vector)
+{
+    interrupt_trace_sink_t *sink = context;
+    sink->vector = vector;
+    ++sink->count;
 }
 
 static void
@@ -176,6 +189,50 @@ test_keyboard_scan_stream(const bm_host_services_t *host)
         assert(io_trace.entries[index].value == expected[index]);
     }
     assert(inspect_machine(session, "keyboard_queue_depth") == 0U);
+    assert(bm_session_stop(session) == BM_STATUS_OK);
+    bm_session_destroy(session);
+}
+
+static void
+test_interrupt_trace(const bm_host_services_t *host)
+{
+    uint8_t even[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    uint8_t odd[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
+    static const uint8_t program[] = {
+        0xb0, 0xfd,       /* MOV AL,FDh: unmask IRQ1 only. */
+        0xe6, 0x21,       /* OUT 21h,AL. */
+        0xfb,             /* STI. */
+        0x90,             /* Complete the STI interrupt shadow. */
+        0xf4              /* HLT if no interrupt is accepted. */
+    };
+    const bm_input_event_t key = {
+        .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
+    };
+    interrupt_trace_sink_t interrupt_trace = { 0 };
+    bm_pcs86_config_t config;
+    bm_machine_config_t machine;
+    bm_session_t *session = NULL;
+    size_t index;
+
+    for (index = 0U; index < sizeof(reset_jump); ++index)
+        put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
+    for (index = 0U; index < sizeof(program); ++index)
+        put_combined_byte(even, odd, 0x0100U + index, program[index]);
+    config = (bm_pcs86_config_t) {
+        .firmware_even = { "synthetic-even", even, sizeof(even), NULL },
+        .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL },
+        .interrupt_trace = capture_interrupt_trace,
+        .interrupt_trace_context = &interrupt_trace
+    };
+    machine = bm_pcs86_machine_config(&config);
+    assert(bm_session_create(host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_send_input(session, &key) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 16U) == BM_STATUS_OK);
+    assert(interrupt_trace.count == 1U);
+    assert(interrupt_trace.vector == 0x09U);
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
 }
@@ -444,6 +501,7 @@ main(void)
     test_unmapped_output(&host, &config, even, odd, 0x02f1U);
     test_unmapped_output(&host, &config, even, odd, 0x06f2U);
     test_keyboard_scan_stream(&host);
+    test_interrupt_trace(&host);
     test_keyboard_led_protocol(&host);
     test_ps2_mouse_stream(&host);
     return 0;
