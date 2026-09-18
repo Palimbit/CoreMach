@@ -54,6 +54,8 @@ PortableWindow::PortableWindow(QWidget *parent)
       copyFrameAction_(new QAction(tr("Copy frame"), this)),
       saveFrameAction_(new QAction(tr("Save frame as…"), this)),
       scaleGroup_(new QActionGroup(this)),
+      rendererGroup_(new QActionGroup(this)),
+      effectGroup_(new QActionGroup(this)),
       host_(bm_null_host_services())
 {
     auto *openAction = new QAction(
@@ -112,6 +114,33 @@ PortableWindow::PortableWindow(QWidget *parent)
                    DisplayWidget::ScaleMode::CorrectedFourThree);
     addScaleAction(tr("Stretch to window"), DisplayWidget::ScaleMode::Stretch);
     viewMenu->addAction(smoothScalingAction_);
+    auto *rendererMenu = viewMenu->addMenu(tr("Renderer"));
+    rendererGroup_->setExclusive(true);
+    const auto addRendererAction =
+        [this, rendererMenu](const QString &label,
+                             DisplayWidget::Renderer renderer) {
+            auto *action = rendererMenu->addAction(label);
+            action->setCheckable(true);
+            action->setData(static_cast<int>(renderer));
+            rendererGroup_->addAction(action);
+            return action;
+        };
+    addRendererAction(tr("OpenGL"),
+                      DisplayWidget::Renderer::OpenGL);
+    addRendererAction(tr("Software"), DisplayWidget::Renderer::Software)->setChecked(true);
+    auto *effectMenu = viewMenu->addMenu(tr("Effects"));
+    effectGroup_->setExclusive(true);
+    const auto addEffectAction =
+        [this, effectMenu](const QString &label, DisplayWidget::Effect effect) {
+            auto *action = effectMenu->addAction(label);
+            action->setCheckable(true);
+            action->setData(static_cast<int>(effect));
+            effectGroup_->addAction(action);
+            return action;
+        };
+    addEffectAction(tr("None"), DisplayWidget::Effect::None)->setChecked(true);
+    addEffectAction(tr("CRT scanlines and vignette"),
+                    DisplayWidget::Effect::Crt);
     viewMenu->addSeparator();
     viewMenu->addAction(machineToolbar_->toggleViewAction());
     viewMenu->addAction(statusBarAction_);
@@ -158,6 +187,18 @@ PortableWindow::PortableWindow(QWidget *parent)
             [this](QAction *action) {
                 display_->setScaleMode(static_cast<DisplayWidget::ScaleMode>(
                     action->data().toInt()));
+            });
+    connect(rendererGroup_, &QActionGroup::triggered, this,
+            [this](QAction *action) {
+                display_->setRenderer(static_cast<DisplayWidget::Renderer>(
+                    action->data().toInt()));
+                showStatus();
+            });
+    connect(effectGroup_, &QActionGroup::triggered, this,
+            [this](QAction *action) {
+                display_->setEffect(static_cast<DisplayWidget::Effect>(
+                    action->data().toInt()));
+                showStatus();
             });
     display_->setKeyHandler(
         [this](QKeyEvent *event, bool pressed) { sendKey(event, pressed); });
@@ -507,6 +548,29 @@ PortableWindow::readSettings()
     }
     smoothScalingAction_->setChecked(settings.value(
         QStringLiteral("display/smooth-scaling"), false).toBool());
+    const int rendererValue = settings.value(
+        QStringLiteral("display/renderer"),
+        static_cast<int>(DisplayWidget::Renderer::Software)).toInt();
+    if ((rendererValue >= static_cast<int>(DisplayWidget::Renderer::Software)) &&
+        (rendererValue <= static_cast<int>(DisplayWidget::Renderer::OpenGL))) {
+        display_->setRenderer(
+            static_cast<DisplayWidget::Renderer>(rendererValue));
+        for (QAction *action : rendererGroup_->actions()) {
+            if (action->data().toInt() == rendererValue)
+                action->setChecked(true);
+        }
+    }
+    const int effectValue = settings.value(
+        QStringLiteral("display/effect"),
+        static_cast<int>(DisplayWidget::Effect::None)).toInt();
+    if ((effectValue >= static_cast<int>(DisplayWidget::Effect::None)) &&
+        (effectValue <= static_cast<int>(DisplayWidget::Effect::Crt))) {
+        display_->setEffect(static_cast<DisplayWidget::Effect>(effectValue));
+        for (QAction *action : effectGroup_->actions()) {
+            if (action->data().toInt() == effectValue)
+                action->setChecked(true);
+        }
+    }
     machineToolbar_->setVisible(settings.value(
         QStringLiteral("window/toolbar-visible"), true).toBool());
     statusBarAction_->setChecked(settings.value(
@@ -526,6 +590,10 @@ PortableWindow::writeSettings() const
                       static_cast<int>(display_->scaleMode()));
     settings.setValue(QStringLiteral("display/smooth-scaling"),
                       display_->smoothScaling());
+    settings.setValue(QStringLiteral("display/renderer"),
+                      static_cast<int>(display_->renderer()));
+    settings.setValue(QStringLiteral("display/effect"),
+                      static_cast<int>(display_->effect()));
 }
 
 void

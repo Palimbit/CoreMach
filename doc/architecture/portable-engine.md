@@ -506,12 +506,20 @@ memory or the framebuffer returned by the runtime. The first presentation cut
 offers source-aspect fit, integer-pixel, corrected 4:3 and stretched layouts,
 with independently selectable nearest-neighbour or smooth interpolation.
 
-Frame copying and PNG export consume the frontend's last published image. File
-dialogs, clipboard access and persistent settings remain on the Qt side of the
-boundary; no path, native window, settings object or Qt type crosses into the
-frontend adapter, runtime or engine. Advanced GPU renderers, shaders and CRT
-effects remain later presentation layers and must consume the same immutable
-frame contract rather than depending on inherited emulator globals.
+Frame copying and PNG export consume the frontend's last published image, not
+the composited window. The application offers a Qt OpenGL presentation surface
+and a software surface over that same immutable XRGB8888 image. Software is the
+default; an OpenGL widget is created only when selected and destroyed when
+returning to software. A
+first optional CRT profile adds scanlines and an edge vignette after scaling;
+it does not modify the source image, video memory or emulated video state.
+Renderer, effect, scaling and interpolation choices are persistent host
+preferences. File dialogs, clipboard access and settings remain on the Qt side
+of the boundary; no path, native window, settings object or Qt type crosses
+into the frontend adapter, runtime or engine. This is a new, deliberately small
+presentation layer, not a port of the inherited renderer or shader globals.
+Additional multipass or user-supplied shaders may be layered here later while
+preserving the same clean framebuffer contract.
 
 The interactive worker derives a five-millisecond catch-up slice from the
 machine definition's scheduler rate and coalesces consecutive ordinary frames

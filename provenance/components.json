@@ -195,7 +195,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated definition-rate-paced session worker, queued lifecycle, normalized keyboard and read-only removable-media commands, guest-controlled Caps/Num/Scroll presentation, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling and persistent user display preferences"
+      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated definition-rate-paced session worker, queued lifecycle, normalized keyboard and read-only removable-media commands, guest-controlled Caps/Num/Scroll presentation, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling, selectable Qt OpenGL and software surfaces, a non-destructive scanline/vignette CRT profile, clean source-frame capture and persistent user display preferences"
     },
     {
       "id": "headless-frontend",

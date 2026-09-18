@@ -37,6 +37,12 @@ keyboard/mouse queues are present. FDC rotational/command timing, asynchronous
 DMA arbitration, mouse input and writable-media product integration remain
 absent.
 
+The portable Qt application can present the published framebuffer through a
+Qt OpenGL surface or its retained software surface. Its optional CRT profile is
+a host-side scanline and vignette composition only. Captures and clipboard
+copies still use the unmodified machine framebuffer, and neither presentation
+choice changes PVGA1A state, guest timing or headless output.
+
 The processor identity, 10 MHz clock, memory size, two 32 KiB firmware halves,
 interleaving, ROM address and known firmware hashes come from the canonical
 PCS 86 record. Execution of the synthetic test is observed. The small opcode
