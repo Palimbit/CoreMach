@@ -4,6 +4,9 @@
 
 Status: foundation for `0.2.0-dev`.
 
+The proposed multi-clock execution model and its current evidence boundary are
+tracked in [Virtual time across CPU architectures](virtual-time.md).
+
 The portable engine is developed beside the inherited product and does not call
 into its global state, configuration, device registry or user interfaces. The
 two implementations can be enabled independently with
