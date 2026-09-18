@@ -70,6 +70,41 @@ step is to establish the actual PCS 86 decode with documentation or the owner's
 physical machine, or identify why this diagnostic selects that test. The old
 implementation is evidence of software lineage, not proof of hardware behaviour.
 
+## Follow-up: board sequence and checksum
+
+On 2026-09-18, the same read-only configuration was traced through the seven
+MAIN_DIA /A dispatch-table entries. A temporary host probe injected F2 at
+100,000,000 ticks to acknowledge the DMA error; it did not alter guest memory,
+device responses or firmware. At 160,000,000 ticks the guest displayed the
+board-test failure summary, with status 0, 159,998,356 retired instructions,
+865,771 I/O accesses, 297 floppy reads, zero writes and framebuffer C7CAC508.
+
+| Guest test | Return at the common dispatcher |
+| --- | --- |
+| CPU | 1 (success) |
+| ROM checksum | 1 (success) |
+| DMA | 0 (failure) |
+| Interrupt controller | 1 (success) |
+| Timer | 1 (success) |
+| Clock | 1 (success) |
+| Speaker routine | 1 (success; no audible-output validation) |
+
+The ROM routine at relocated 0F09:0086 sums 65,536 bytes from F000:0000;
+at 0F09:009B it returns AX=0000, which its wrapper converts to success.
+The earlier red-checksum report from the excluded unidentified 1.44 MiB media
+is not reproduced by these Spanish originals with BIOS 1.09. This is not a
+claim that the old diagnostic/media combination has been repaired.
+
+No DMA decode change follows from this result. A bounded documentation search
+did not establish the PCS 86 behaviour at 88h-9Fh; other Olivetti models' port
+maps cannot justify it. The next decisive comparison is the same Spanish
+MAIN_DIA on the owner's physical PCS 86, recording BIOS revision and the DMA
+result. If necessary, follow with a small purpose-built register probe under
+controlled conditions, not arbitrary writes during a live DOS session.
+
+Temporary tracing and key injection were removed. No live Qt visual test,
+hardware measurement or new emulation fix is claimed in this follow-up.
+
 ## ROM-free coverage
 
 Synthetic tests cover all six EMS frames with 0/384/1920 KiB, page switching,
