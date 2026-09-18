@@ -93,4 +93,6 @@ jobs:
       - name: Build
         run: cmake --build build/portable-qt --parallel 4
       - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build/portable-qt --output-on-failure
