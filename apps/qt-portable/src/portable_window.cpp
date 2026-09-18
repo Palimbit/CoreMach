@@ -2,6 +2,7 @@
 #include "portable_window.h"
 #include "machine_dialog.h"
 #include "qt_key_map.h"
+#include "latency_trace.h"
 
 #include <blumach/platforms/null_host.h>
 
@@ -647,7 +648,8 @@ PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
 {
     updateKeyboardStatus(snapshot.hasKeyboardLeds, snapshot.keyboardLeds);
     if (!snapshot.frame.isNull()) {
-        display_->setFrame(snapshot.frame);
+        LatencyTrace::event("ui-frame", snapshot.traceFrame, snapshot.traceInput);
+        display_->setFrame(snapshot.frame, snapshot.traceFrame);
         if (snapshot.hasVideo) {
             videoGeometry_ = snapshot.geometry;
             hasVideoGeometry_ = true;

@@ -6,6 +6,7 @@
 #include <QRect>
 #include <QWidget>
 
+#include <cstdint>
 #include <functional>
 
 class QKeyEvent;
@@ -34,7 +35,7 @@ public:
     using KeyHandler = std::function<void(QKeyEvent *, bool)>;
 
     explicit DisplayWidget(QWidget *parent = nullptr);
-    void setFrame(const QImage &frame);
+    void setFrame(const QImage &frame, uint64_t traceFrame = 0U);
     QImage frame() const;
     bool hasFrame() const;
     QSize outputPixelSize() const;
@@ -60,6 +61,7 @@ private:
     friend class SoftwareDisplayCanvas;
     void paintPresentation(QPainter &painter, const QRect &viewport) const;
     QImage frame_;
+    uint64_t traceFrame_ = 0U;
     KeyHandler keyHandler_;
     QStackedLayout *surfaces_;
     QWidget *canvas_;
