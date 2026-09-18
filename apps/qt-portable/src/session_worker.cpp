@@ -25,6 +25,15 @@ ticksForInterval(uint64_t ticksPerSecond, uint64_t intervalsPerSecond)
 {
     return std::max(UINT64_C(1), ticksPerSecond / intervalsPerSecond);
 }
+
+int32_t
+saturatingPointerDelta(int32_t current, int32_t added)
+{
+    const int64_t result = static_cast<int64_t>(current) + added;
+    return static_cast<int32_t>(std::clamp(
+        result, static_cast<int64_t>(std::numeric_limits<int32_t>::min()),
+        static_cast<int64_t>(std::numeric_limits<int32_t>::max())));
+}
 }
 
 SessionWorker::SessionWorker(const bm_host_services_t &host,
@@ -71,7 +80,22 @@ SessionWorker::sendInput(const bm_input_event_t &event)
     command.input = event;
     command.traceInput = LatencyTrace::nextId();
     LatencyTrace::event("input-queued", command.traceInput);
-    enqueue(std::move(command));
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if ((event.kind == BM_INPUT_RELATIVE_POINTER) && !commands_.empty() &&
+            (commands_.back().kind == CommandKind::Input) &&
+            (commands_.back().input.kind == BM_INPUT_RELATIVE_POINTER)) {
+            Command &pending = commands_.back();
+            pending.input.delta_x = saturatingPointerDelta(
+                pending.input.delta_x, event.delta_x);
+            pending.input.delta_y = saturatingPointerDelta(
+                pending.input.delta_y, event.delta_y);
+            pending.input.buttons = event.buttons;
+            pending.traceInput = command.traceInput;
+        } else
+            commands_.push_back(std::move(command));
+    }
+    wakeup_.notify();
 }
 
 void
@@ -122,6 +146,7 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                 LatencyTrace::event("input-dispatch", traceInput_);
                 status = bm_session_send_input(session, &command.input);
                 if ((status == BM_STATUS_OK) &&
+                    (command.input.kind == BM_INPUT_KEY) &&
                     (bm_session_state(session) == BM_SESSION_RUNNING)) {
                     const uint64_t inputTransitionTicks = ticksForInterval(
                         ticksPerSecond_, inputTransitionsPerSecond);

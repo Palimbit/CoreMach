@@ -122,7 +122,9 @@ static bm_status_t
 send_transition(bm_session_t *session, bm_key_code_t key, int pressed,
                 uint64_t key_ticks)
 {
-    const bm_input_event_t event = { BM_INPUT_KEY, key, pressed, 0 };
+    const bm_input_event_t event = {
+        .kind = BM_INPUT_KEY, .key = key, .pressed = pressed
+    };
     bm_status_t status = bm_session_send_input(session, &event);
     if (status == BM_STATUS_OK)
         status = bm_session_run_for(session, key_ticks);

@@ -201,6 +201,17 @@ PortableWindow::PortableWindow(QWidget *parent)
                     action->data().toInt()));
                 showStatus();
             });
+    display_->setPointerHandler(
+        [this](int32_t deltaX, int32_t deltaY, Qt::MouseButtons qtButtons) {
+            uint8_t buttons = 0U;
+            if (qtButtons.testFlag(Qt::LeftButton))
+                buttons |= BM_POINTER_BUTTON_LEFT;
+            if (qtButtons.testFlag(Qt::RightButton))
+                buttons |= BM_POINTER_BUTTON_RIGHT;
+            if (qtButtons.testFlag(Qt::MiddleButton))
+                buttons |= BM_POINTER_BUTTON_MIDDLE;
+            sendPointer(deltaX, deltaY, buttons);
+        });
     display_->setKeyHandler(
         [this](QKeyEvent *event, bool pressed) { sendKey(event, pressed); });
     (void) catalog_.load(&catalogError_);
@@ -625,10 +636,23 @@ PortableWindow::sendKey(QKeyEvent *event, bool pressed)
         return;
     }
     const bm_input_event_t input {
-        BM_INPUT_KEY, key, pressed ? 1 : 0, event->isAutoRepeat() ? 1 : 0
+        BM_INPUT_KEY, key, pressed ? 1 : 0,
+        event->isAutoRepeat() ? 1 : 0, 0, 0, 0U
     };
     worker_->sendInput(input);
     event->accept();
+}
+
+void
+PortableWindow::sendPointer(int32_t deltaX, int32_t deltaY, uint8_t buttons)
+{
+    if ((worker_ == nullptr) || (worker_->state() != BM_SESSION_RUNNING))
+        return;
+    const bm_input_event_t input {
+        BM_INPUT_RELATIVE_POINTER, static_cast<bm_key_code_t>(0), 0, 0,
+        deltaX, deltaY, buttons
+    };
+    worker_->sendInput(input);
 }
 
 void

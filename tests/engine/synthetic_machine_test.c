@@ -359,7 +359,9 @@ main(void)
     assert(bm_session_start(second) == BM_STATUS_OK);
 
     {
-        bm_input_event_t event = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
+        bm_input_event_t event = {
+            .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
+        };
         assert(bm_session_send_input(first, &event) == BM_STATUS_OK);
         assert(first_sink.received_input);
         assert(first_sink.last_input.key == BM_KEY_A);

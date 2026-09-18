@@ -61,6 +61,7 @@ private:
     void readSettings();
     void writeSettings() const;
     void sendKey(QKeyEvent *event, bool pressed);
+    void sendPointer(int32_t deltaX, int32_t deltaY, uint8_t buttons);
     void queueSnapshot(uint64_t generation, SessionWorker::Snapshot snapshot);
     void drainSnapshots(uint64_t generation);
     void handleSnapshot(SessionWorker::Snapshot snapshot);

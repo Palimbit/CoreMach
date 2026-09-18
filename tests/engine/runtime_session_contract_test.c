@@ -383,7 +383,9 @@ test_session_state_machine(void)
     bm_session_t *session = NULL;
     test_machine_t machine;
     bm_machine_config_t configuration;
-    bm_input_event_t input = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
+    bm_input_event_t input = {
+        .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
+    };
     bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888, 0U, 0U };
     bm_video_framebuffer_t framebuffer = { NULL, 0U, 0U,
                                            { 0U, 0U, BM_PIXEL_XRGB8888,
@@ -505,7 +507,9 @@ test_optional_operations(void)
     bm_session_t *session = NULL;
     test_machine_t machine;
     bm_machine_config_t configuration;
-    bm_input_event_t input = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
+    bm_input_event_t input = {
+        .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
+    };
     bm_video_geometry_t geometry = { 0U, 0U, BM_PIXEL_XRGB8888, 0U, 0U };
     bm_video_framebuffer_t framebuffer = { NULL, 0U, 0U,
                                            { 0U, 0U, BM_PIXEL_XRGB8888,

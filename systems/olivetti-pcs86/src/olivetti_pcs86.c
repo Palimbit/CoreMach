@@ -57,6 +57,15 @@ typedef struct bm_pcs86_machine {
     uint8_t ps2_queue_end[2];
     uint8_t ps2_pending_command[2];
     uint8_t keyboard_leds;
+    uint8_t mouse_buttons;
+    uint8_t mouse_enabled;
+    uint8_t mouse_remote;
+    uint8_t mouse_scaling_2_to_1;
+    uint8_t mouse_resolution;
+    uint8_t mouse_sample_rate;
+    uint8_t mouse_reported_buttons;
+    int32_t mouse_delta_x;
+    int32_t mouse_delta_y;
     uint8_t scan_queue[64];
     uint8_t scan_queue_start;
     uint8_t scan_queue_end;
@@ -286,12 +295,108 @@ pcs86_ps2_queue_pop(bm_pcs86_machine_t *machine, unsigned int channel,
     return value;
 }
 
+static void
+pcs86_mouse_defaults(bm_pcs86_machine_t *machine)
+{
+    machine->mouse_enabled = 0U;
+    machine->mouse_remote = 0U;
+    machine->mouse_scaling_2_to_1 = 0U;
+    machine->mouse_resolution = 2U;
+    machine->mouse_sample_rate = 100U;
+    machine->mouse_buttons = 0U;
+    machine->mouse_reported_buttons = 0U;
+    machine->mouse_delta_x = 0;
+    machine->mouse_delta_y = 0;
+}
+
+static int32_t
+pcs86_mouse_scale_2_to_1(int32_t value)
+{
+    static const int8_t scaled[] = { 0, 1, 1, 3, 6, 9 };
+    const int negative = value < 0;
+    uint32_t magnitude = (uint32_t) (negative ? -value : value);
+    int32_t result = magnitude < sizeof(scaled) ? scaled[magnitude] :
+                                                   (int32_t) (magnitude * 2U);
+    return negative ? -result : result;
+}
+
+static bm_status_t
+pcs86_mouse_queue_packet(bm_pcs86_machine_t *machine)
+{
+    int32_t raw_x, raw_y, delta_x, delta_y;
+    uint8_t header = 0x08U | (machine->mouse_buttons & 0x07U);
+    bm_status_t status;
+
+    if (pcs86_queue_free(machine->ps2_queue_start[1],
+                         machine->ps2_queue_end[1], 0x0fU) < 3U)
+        return BM_STATUS_CAPACITY_EXCEEDED;
+    raw_x = machine->mouse_delta_x < -256 ? -256 :
+            (machine->mouse_delta_x > 255 ? 255 : machine->mouse_delta_x);
+    raw_y = machine->mouse_delta_y < -256 ? -256 :
+            (machine->mouse_delta_y > 255 ? 255 : machine->mouse_delta_y);
+    machine->mouse_delta_x -= raw_x;
+    machine->mouse_delta_y -= raw_y;
+    delta_x = machine->mouse_scaling_2_to_1 ?
+        pcs86_mouse_scale_2_to_1(raw_x) : raw_x;
+    delta_y = machine->mouse_scaling_2_to_1 ?
+        pcs86_mouse_scale_2_to_1(raw_y) : raw_y;
+    if ((machine->mouse_delta_x != 0) || (delta_x < -256) || (delta_x > 255))
+        header |= 0x40U;
+    if ((machine->mouse_delta_y != 0) || (delta_y < -256) || (delta_y > 255))
+        header |= 0x80U;
+    if (delta_x < -256)
+        delta_x = -256;
+    else if (delta_x > 255)
+        delta_x = 255;
+    if (delta_y < -256)
+        delta_y = -256;
+    else if (delta_y > 255)
+        delta_y = 255;
+    if (delta_x < 0)
+        header |= 0x10U;
+    if (delta_y < 0)
+        header |= 0x20U;
+    status = pcs86_ps2_queue_push(machine, 1U, header);
+    if (status == BM_STATUS_OK)
+        status = pcs86_ps2_queue_push(machine, 1U, (uint8_t) delta_x);
+    if (status == BM_STATUS_OK)
+        status = pcs86_ps2_queue_push(machine, 1U, (uint8_t) delta_y);
+    if (status == BM_STATUS_OK)
+        machine->mouse_reported_buttons = machine->mouse_buttons;
+    return status;
+}
+
+static bm_status_t
+pcs86_mouse_flush_stream(bm_pcs86_machine_t *machine)
+{
+    if (!machine->mouse_enabled || machine->mouse_remote ||
+        ((machine->mouse_delta_x == 0) && (machine->mouse_delta_y == 0) &&
+         (machine->mouse_buttons == machine->mouse_reported_buttons)) ||
+        (pcs86_queue_free(machine->ps2_queue_start[1],
+                          machine->ps2_queue_end[1], 0x0fU) < 3U))
+        return BM_STATUS_OK;
+    return pcs86_mouse_queue_packet(machine);
+}
+
 static bm_status_t
 pcs86_ps2_command(bm_pcs86_machine_t *machine, unsigned int channel,
                   uint8_t command)
 {
     unsigned int response_size = 1U;
     bm_status_t status;
+
+    if ((channel == 1U) && (machine->ps2_pending_command[1] != 0U) &&
+        (command != 0xffU)) {
+        status = pcs86_ps2_queue_push(machine, 1U, 0xfaU);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (machine->ps2_pending_command[1] == 0xe8U)
+            machine->mouse_resolution = command & 0x03U;
+        else
+            machine->mouse_sample_rate = command;
+        machine->ps2_pending_command[1] = 0U;
+        return BM_STATUS_OK;
+    }
 
     if ((channel == 0U) && (command < 0xedU) &&
         (machine->ps2_pending_command[channel] == 0xedU)) {
@@ -306,18 +411,33 @@ pcs86_ps2_command(bm_pcs86_machine_t *machine, unsigned int channel,
         return status;
     }
 
-    if ((command == 0xf2U) || (command == 0xffU))
-        response_size = (channel == 1U) ? 3U :
-                        ((command == 0xf2U) ? 3U : 2U);
+    if ((channel == 1U) && ((command == 0xe9U) || (command == 0xebU)))
+        response_size = 4U;
+    else if ((command == 0xf2U) || (command == 0xffU))
+        response_size = (channel == 1U) ?
+            ((command == 0xffU) ? 3U : 2U) :
+            ((command == 0xf2U) ? 3U : 2U);
     if (pcs86_queue_free(machine->ps2_queue_start[channel],
                          machine->ps2_queue_end[channel], 0x0fU) < response_size)
         return BM_STATUS_CAPACITY_EXCEEDED;
+
+    if ((channel == 1U) &&
+        (command != 0xe6U) && (command != 0xe7U) &&
+        (command != 0xe8U) && (command != 0xe9U) &&
+        (command != 0xeaU) && (command != 0xebU) &&
+        (command != 0xf0U) && (command != 0xf2U) &&
+        (command != 0xf3U) && (command != 0xf4U) &&
+        (command != 0xf5U) && (command != 0xf6U) &&
+        (command != 0xffU))
+        return pcs86_ps2_queue_push(machine, channel, 0xfeU);
 
     status = pcs86_ps2_queue_push(machine, channel, 0xfaU);
     if (status != BM_STATUS_OK)
         return status;
     machine->ps2_pending_command[channel] =
-        ((channel == 0U) && (command == 0xedU)) ? command : 0U;
+        (((channel == 0U) && (command == 0xedU)) ||
+         ((channel == 1U) && ((command == 0xe8U) ||
+                              (command == 0xf3U)))) ? command : 0U;
     if (command == 0xf2U) {
         if (channel == 0U) {
             status = pcs86_ps2_queue_push(machine, channel, 0xabU);
@@ -326,11 +446,45 @@ pcs86_ps2_command(bm_pcs86_machine_t *machine, unsigned int channel,
         } else
             status = pcs86_ps2_queue_push(machine, channel, 0x00U);
     } else if (command == 0xffU) {
+        machine->ps2_pending_command[channel] = 0U;
         if (channel == 0U)
             machine->keyboard_leds = 0U;
+        else
+            pcs86_mouse_defaults(machine);
         status = pcs86_ps2_queue_push(machine, channel, 0xaaU);
         if ((status == BM_STATUS_OK) && (channel == 1U))
             status = pcs86_ps2_queue_push(machine, channel, 0x00U);
+    } else if (channel == 1U) {
+        switch (command) {
+            case 0xe6U: machine->mouse_scaling_2_to_1 = 0U; break;
+            case 0xe7U: machine->mouse_scaling_2_to_1 = 1U; break;
+            case 0xe9U:
+                status = pcs86_ps2_queue_push(
+                    machine, channel,
+                    (uint8_t) ((machine->mouse_remote ? 0x40U : 0U) |
+                               (machine->mouse_enabled ? 0x20U : 0U) |
+                               (machine->mouse_scaling_2_to_1 ? 0x10U : 0U) |
+                               ((machine->mouse_buttons &
+                                 BM_POINTER_BUTTON_LEFT) ? 0x04U : 0U) |
+                               ((machine->mouse_buttons &
+                                 BM_POINTER_BUTTON_MIDDLE) ? 0x02U : 0U) |
+                               ((machine->mouse_buttons &
+                                 BM_POINTER_BUTTON_RIGHT) ? 0x01U : 0U)));
+                if (status == BM_STATUS_OK)
+                    status = pcs86_ps2_queue_push(machine, channel,
+                                                   machine->mouse_resolution);
+                if (status == BM_STATUS_OK)
+                    status = pcs86_ps2_queue_push(machine, channel,
+                                                   machine->mouse_sample_rate);
+                break;
+            case 0xeaU: machine->mouse_remote = 0U; break;
+            case 0xebU: status = pcs86_mouse_queue_packet(machine); break;
+            case 0xf0U: machine->mouse_remote = 1U; break;
+            case 0xf4U: machine->mouse_enabled = 1U; break;
+            case 0xf5U: machine->mouse_enabled = 0U; break;
+            case 0xf6U: pcs86_mouse_defaults(machine); break;
+            default: break;
+        }
     }
     return status;
 }
@@ -446,9 +600,28 @@ pcs86_input(void *context, const bm_input_event_t *event)
     int extended;
     bm_status_t status;
 
-    if ((machine == NULL) || (event == NULL) ||
-        (event->kind != BM_INPUT_KEY))
+    int64_t next;
+
+    if ((machine == NULL) || (event == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
+    if (event->kind == BM_INPUT_RELATIVE_POINTER) {
+        machine->mouse_buttons = event->buttons & 0x07U;
+        if (!machine->mouse_enabled) {
+            machine->mouse_reported_buttons = machine->mouse_buttons;
+            machine->mouse_delta_x = 0;
+            machine->mouse_delta_y = 0;
+            return BM_STATUS_OK;
+        }
+        next = (int64_t) machine->mouse_delta_x + event->delta_x;
+        machine->mouse_delta_x = next < INT32_MIN ? INT32_MIN :
+                                 (next > INT32_MAX ? INT32_MAX : (int32_t) next);
+        next = (int64_t) machine->mouse_delta_y + event->delta_y;
+        machine->mouse_delta_y = next < INT32_MIN ? INT32_MIN :
+                                 (next > INT32_MAX ? INT32_MAX : (int32_t) next);
+        return pcs86_mouse_flush_stream(machine);
+    }
+    if (event->kind != BM_INPUT_KEY)
+        return BM_STATUS_UNSUPPORTED;
     status = pcs86_key_to_set1(event->key, &scan, &extended);
     if (status != BM_STATUS_OK)
         return status;
@@ -657,6 +830,8 @@ pcs86_board_access(void *context, bm_bus_transaction_t *transaction)
                 value = pcs86_ps2_queue_pop(machine,
                                              (unsigned int) (port - 0x0067U),
                                              machine->ps2[port - 0x0066U]);
+                if (port == 0x0068U)
+                    (void) pcs86_mouse_flush_stream(machine);
                 break;
             case 0x006a:
                 value = 0;
@@ -1268,6 +1443,7 @@ pcs86_reset(void *context)
     memset(machine->ps2_pending_command, 0,
            sizeof(machine->ps2_pending_command));
     machine->keyboard_leds = 0U;
+    pcs86_mouse_defaults(machine);
     memset(machine->scan_queue, 0, sizeof(machine->scan_queue));
     machine->scan_queue_start = 0U;
     machine->scan_queue_end = 0U;
