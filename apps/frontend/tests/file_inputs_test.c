@@ -5,6 +5,19 @@
 #include <stdio.h>
 #include <string.h>
 
+static FILE *
+open_file(const char *path, const char *mode)
+{
+    FILE *file = NULL;
+#ifdef _MSC_VER
+    if (fopen_s(&file, path, mode) != 0)
+        file = NULL;
+#else
+    file = fopen(path, mode);
+#endif
+    return file;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -16,7 +29,7 @@ main(int argc, char **argv)
     size_t index;
 
     assert(argc == 2);
-    file = fopen(argv[1], "wb");
+    file = open_file(argv[1], "wb");
     assert(file != NULL);
     assert(fwrite(zero, 1U, sizeof(zero), file) == sizeof(zero));
     assert(fwrite(zero, 1U, sizeof(zero), file) == sizeof(zero));
@@ -37,7 +50,7 @@ main(int argc, char **argv)
     assert(bm_block_media_write(&media.media, 1U, 1U, pattern) == BM_STATUS_OK);
     bm_frontend_readonly_media_close(&media);
 
-    file = fopen(argv[1], "rb");
+    file = open_file(argv[1], "rb");
     assert(file != NULL);
     assert(fseek(file, 512L, SEEK_SET) == 0);
     assert(fread(observed, 1U, sizeof(observed), file) == sizeof(observed));
