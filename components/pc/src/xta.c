@@ -15,6 +15,7 @@ enum xta_phase {
     XTA_RECEIVE_DCB,
     XTA_RECEIVE_DATA,
     XTA_SEND_DATA,
+    XTA_DMA_PENDING,
     XTA_COMPLETION
 };
 
@@ -80,6 +81,8 @@ struct bm_xta {
     uint8_t head;
     uint8_t sector;
     unsigned int remaining;
+    uint64_t read_operations;
+    uint64_t write_operations;
     uint8_t active_command;
     int drive_present;
     int enabled;
@@ -143,18 +146,26 @@ static bm_status_t
 xta_media_read(bm_xta_t *xta)
 {
     uint64_t block;
+    bm_status_t status;
     if (!xta_block(xta, xta->cylinder, xta->head, xta->sector, &block))
         return BM_STATUS_INVALID_ARGUMENT;
-    return bm_block_media_read(&xta->media, block, 1U, xta->sector_buffer);
+    status = bm_block_media_read(&xta->media, block, 1U, xta->sector_buffer);
+    if (status == BM_STATUS_OK)
+        ++xta->read_operations;
+    return status;
 }
 
 static bm_status_t
 xta_media_write(bm_xta_t *xta)
 {
     uint64_t block;
+    bm_status_t status;
     if (!xta_block(xta, xta->cylinder, xta->head, xta->sector, &block))
         return BM_STATUS_INVALID_ARGUMENT;
-    return bm_block_media_write(&xta->media, block, 1U, xta->sector_buffer);
+    status = bm_block_media_write(&xta->media, block, 1U, xta->sector_buffer);
+    if (status == BM_STATUS_OK)
+        ++xta->write_operations;
+    return status;
 }
 
 static uint8_t
@@ -262,6 +273,14 @@ xta_transfer_dma(bm_xta_t *xta, int writing)
 }
 
 static void
+xta_begin_dma(bm_xta_t *xta)
+{
+    xta->phase = XTA_DMA_PENDING;
+    xta->status = XTA_STAT_BSY;
+    (void) bm_dma8237_set_dreq(xta->dma, xta->dma_channel, 1);
+}
+
+static void
 xta_format(bm_xta_t *xta, int whole_drive)
 {
     uint16_t first_cylinder = whole_drive ? 0U : xta->cylinder;
@@ -334,13 +353,13 @@ xta_execute(bm_xta_t *xta)
             break;
         case XTA_CMD_READ_SECTORS:
             if ((xta->interrupt_mask & XTA_DMA_ENABLE) != 0U)
-                xta_transfer_dma(xta, 0);
+                xta_begin_dma(xta);
             else
                 xta_prepare_pio_sector(xta, 1);
             break;
         case XTA_CMD_WRITE_SECTORS:
             if ((xta->interrupt_mask & XTA_DMA_ENABLE) != 0U)
-                xta_transfer_dma(xta, 1);
+                xta_begin_dma(xta);
             else
                 xta_prepare_pio_sector(xta, 0);
             break;
@@ -584,6 +603,8 @@ bm_xta_reset(bm_xta_t *xta)
     xta->remaining = 0U;
     xta->active_command = 0U;
     xta->active_geometry = xta->physical_geometry;
+    xta->read_operations = 0U;
+    xta->write_operations = 0U;
 }
 
 void
@@ -596,6 +617,27 @@ bm_xta_set_enabled(bm_xta_t *xta, int enabled)
         bm_xta_reset(xta);
 }
 
+void
+bm_xta_service(bm_xta_t *xta)
+{
+    bm_dma8237_channel_state_t state;
+    uint8_t transfer_type;
+    int writing;
+
+    if ((xta == NULL) || (xta->phase != XTA_DMA_PENDING))
+        return;
+    if (bm_dma8237_channel_state(xta->dma, xta->dma_channel, &state) !=
+        BM_STATUS_OK)
+        return;
+    writing = xta->active_command == XTA_CMD_WRITE_SECTORS;
+    transfer_type = state.mode & 0x0cU;
+    if (state.masked || ((bm_dma8237_command(xta->dma) & 0x04U) != 0U) ||
+        ((transfer_type != 0U) &&
+         (transfer_type != (writing ? 0x08U : 0x04U))))
+        return;
+    xta_transfer_dma(xta, writing);
+}
+
 bm_status_t
 bm_xta_state(const bm_xta_t *xta, bm_xta_state_t *state)
 {
@@ -606,6 +648,10 @@ bm_xta_state(const bm_xta_t *xta, bm_xta_state_t *state)
     state->completion = xta->completion;
     state->interrupt_mask = xta->interrupt_mask;
     state->cylinder = xta->cylinder;
+    state->read_operations = xta->read_operations;
+    state->write_operations = xta->write_operations;
+    state->drive_present = xta->drive_present;
+    state->write_protected = xta->media.read_only;
     state->enabled = xta->enabled;
     state->interrupt_asserted = xta->interrupt_asserted;
     return BM_STATUS_OK;

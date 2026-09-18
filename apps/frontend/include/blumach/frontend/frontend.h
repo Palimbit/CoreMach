@@ -14,7 +14,9 @@ extern "C" {
 
 typedef enum bm_frontend_asset_kind {
     BM_FRONTEND_ASSET_BLOB = 0,
-    BM_FRONTEND_ASSET_READ_ONLY_MEDIA = 1
+    BM_FRONTEND_ASSET_READ_ONLY_MEDIA = 1,
+    /* Accepts either explicitly writable media or a protected binding. */
+    BM_FRONTEND_ASSET_BLOCK_MEDIA = 2
 } bm_frontend_asset_kind_t;
 
 typedef struct bm_frontend_asset_requirement {

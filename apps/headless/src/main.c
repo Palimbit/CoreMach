@@ -22,12 +22,14 @@ print_usage(const char *program)
             "  %s --list-machines\n"
             "  %s --describe <machine-id>\n"
             "  %s --machine <machine-id> --firmware-even <path>"
-            " --firmware-odd <path> [--floppy <path>] [--hard-disk <path>]"
+            " --firmware-odd <path> [--floppy <path>]"
+            " [--hard-disk <path> | --working-hard-disk <path>]"
             " [--ticks <count>]"
             " [--frame <path>] [--type-at <tick> --type-text <text>]..."
             " [--key-ticks <count>] [--expect-frame-crc32 <hex>]\n"
             "  %s --machine <machine-id> --firmware-even <path>"
-            " --firmware-odd <path> [--floppy <path>] [--hard-disk <path>]"
+            " --firmware-odd <path> [--floppy <path>]"
+            " [--hard-disk <path> | --working-hard-disk <path>]"
             " --scenario <path> [--frame <path>]\n"
             "     text accepts \\n, \\r, \\t, \\b and \\\\ escapes\n",
             program, program, program, program, program);
@@ -125,6 +127,10 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
         } else if (strcmp(argument, "--hard-disk") == 0) {
             if (!assign_once(&options->hard_disk_path, value))
                 return 0;
+        } else if (strcmp(argument, "--working-hard-disk") == 0) {
+            if (!assign_once(&options->hard_disk_path, value))
+                return 0;
+            options->hard_disk_writable = 1;
         } else if (strcmp(argument, "--frame") == 0) {
             if (!assign_once(&options->frame_path, value))
                 return 0;

@@ -104,6 +104,8 @@ MachineDialog::requirementText(
         text += tr(" (%1)").arg(sizes.join(tr(" or ")));
     if (!asset.required)
         text += tr(" — optional");
+    if (asset.kind == BM_FRONTEND_ASSET_BLOCK_MEDIA)
+        text += tr(" — writable working image");
     return text;
 }
 

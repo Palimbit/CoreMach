@@ -81,8 +81,10 @@ bm_frontend_machine_open(const bm_frontend_adapter_t *adapter,
             if ((bindings[binding_index].role != NULL) &&
                 (strcmp(bindings[binding_index].role,
                         adapter->assets[requirement_index].role) == 0) &&
-                (bindings[binding_index].kind ==
-                 adapter->assets[requirement_index].kind))
+                ((bindings[binding_index].kind ==
+                  adapter->assets[requirement_index].kind) ||
+                 ((adapter->assets[requirement_index].kind == BM_FRONTEND_ASSET_BLOCK_MEDIA) &&
+                  (bindings[binding_index].kind == BM_FRONTEND_ASSET_READ_ONLY_MEDIA))))
                 {
                     matched = &adapter->assets[requirement_index];
                     ++matches;
