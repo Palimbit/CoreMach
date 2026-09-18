@@ -205,6 +205,15 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
         }
     }
     (void) bm_frontend_machine_diagnostics(machine, &diagnostics);
+    if ((status != BM_STATUS_OK) && (session != NULL)) {
+        uint64_t bytes = 0U, length = 0U, dx = 0U;
+        if (bm_session_inspect_cpu(session, 0, "last_instruction_bytes", &bytes) == BM_STATUS_OK &&
+            bm_session_inspect_cpu(session, 0, "last_instruction_length", &length) == BM_STATUS_OK) {
+            (void) bm_session_inspect_cpu(session, 0, "dx", &dx);
+            fprintf(stderr, "failure_instruction_bytes_le=%016" PRIx64
+                    " length=%" PRIu64 " dx=%04" PRIx64 "\n", bytes, length, dx);
+        }
+    }
     if (session != NULL)
         (void) bm_session_storage_device_count(session, &storage_count);
     printf("machine=%s status=%d requested_ticks=%" PRIu64

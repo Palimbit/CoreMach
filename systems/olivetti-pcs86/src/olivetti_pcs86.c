@@ -1133,6 +1133,11 @@ pcs86_create(bm_engine_t *engine,
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0070U, 0x0070U,
                             pcs86_memory_control_access, machine);
     if (status == BM_STATUS_OK)
+        /* No AT CMOS data device: the inherited PCS 86 uses its MM58167
+         * windows instead. Keep 70h's independent board latch unchanged. */
+        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0071U, 0x0071U,
+                            pcs86_open_bus_access, machine);
+    if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0378U, 0x037aU,
                             pcs86_lpt_access, machine);
     if (status == BM_STATUS_OK)
