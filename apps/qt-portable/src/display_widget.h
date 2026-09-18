@@ -10,6 +10,8 @@
 #include <functional>
 
 class QKeyEvent;
+class QFocusEvent;
+class QMouseEvent;
 class QPainter;
 class QStackedLayout;
 class OpenGLDisplayCanvas;
@@ -33,6 +35,8 @@ public:
     };
 
     using KeyHandler = std::function<void(QKeyEvent *, bool)>;
+    using PointerHandler =
+        std::function<void(int32_t, int32_t, Qt::MouseButtons)>;
 
     explicit DisplayWidget(QWidget *parent = nullptr);
     void setFrame(const QImage &frame, uint64_t traceFrame = 0U);
@@ -48,6 +52,9 @@ public:
     void setEffect(Effect effect);
     Effect effect() const;
     void setKeyHandler(KeyHandler handler);
+    void setPointerHandler(PointerHandler handler);
+    void setMouseCaptured(bool captured);
+    bool mouseCaptured() const;
 
     static QRect targetRect(const QSize &frameSize, const QSize &viewportSize,
                             ScaleMode mode);
@@ -55,6 +62,10 @@ public:
 protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
 
 private:
     friend class OpenGLDisplayCanvas;
@@ -63,12 +74,14 @@ private:
     QImage frame_;
     uint64_t traceFrame_ = 0U;
     KeyHandler keyHandler_;
+    PointerHandler pointerHandler_;
     QStackedLayout *surfaces_;
     QWidget *canvas_;
     ScaleMode scaleMode_ = ScaleMode::Fit;
     bool smoothScaling_ = false;
     Renderer renderer_ = Renderer::Software;
     Effect effect_ = Effect::None;
+    bool mouseCaptured_ = false;
 };
 
 #endif

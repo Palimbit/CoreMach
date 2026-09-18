@@ -4,6 +4,8 @@
 #include <QApplication>
 #include <QColor>
 #include <QImage>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QOpenGLWidget>
 
 #include <cassert>
@@ -54,6 +56,31 @@ main(int argc, char **argv)
     assert(widget.renderer() == DisplayWidget::Renderer::Software);
     widget.show();
     application.processEvents();
+    int pointerX = 0;
+    int pointerY = 0;
+    Qt::MouseButtons pointerButtons;
+    widget.setPointerHandler(
+        [&pointerX, &pointerY, &pointerButtons](
+            int32_t x, int32_t y, Qt::MouseButtons buttons) {
+            pointerX = x;
+            pointerY = y;
+            pointerButtons = buttons;
+        });
+    widget.setMouseCaptured(true);
+    assert(widget.mouseCaptured());
+    const QPoint globalCenter = widget.mapToGlobal(widget.rect().center());
+    QMouseEvent pointerMove(
+        QEvent::MouseMove, QPointF(widget.rect().center() + QPoint(7, -4)),
+        QPointF(globalCenter + QPoint(7, -4)), Qt::NoButton,
+        Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(&widget, &pointerMove);
+    assert(pointerX == 7);
+    assert(pointerY == 4);
+    assert(pointerButtons == Qt::LeftButton);
+    QKeyEvent releaseCapture(QEvent::KeyPress, Qt::Key_G,
+                             Qt::ControlModifier | Qt::AltModifier);
+    QApplication::sendEvent(&widget, &releaseCapture);
+    assert(!widget.mouseCaptured());
     QImage clean(widget.size(), QImage::Format_RGB32);
     clean.fill(Qt::magenta);
     widget.render(&clean);

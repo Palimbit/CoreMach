@@ -62,14 +62,26 @@ typedef enum bm_key_code {
 } bm_key_code_t;
 
 typedef enum bm_input_event_kind {
-    BM_INPUT_KEY = 1
+    BM_INPUT_KEY = 1,
+    BM_INPUT_RELATIVE_POINTER = 2
 } bm_input_event_kind_t;
+
+typedef enum bm_pointer_button {
+    BM_POINTER_BUTTON_LEFT = 1U << 0,
+    BM_POINTER_BUTTON_RIGHT = 1U << 1,
+    BM_POINTER_BUTTON_MIDDLE = 1U << 2
+} bm_pointer_button_t;
 
 typedef struct bm_input_event {
     bm_input_event_kind_t kind;
+    /* Key fields are meaningful only for BM_INPUT_KEY. */
     bm_key_code_t key;
     int pressed;
     int repeat;
+    /* Relative motion is host-neutral; positive Y points upwards. */
+    int32_t delta_x;
+    int32_t delta_y;
+    uint8_t buttons;
 } bm_input_event_t;
 
 typedef enum bm_keyboard_led {

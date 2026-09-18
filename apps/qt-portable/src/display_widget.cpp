@@ -3,6 +3,9 @@
 #include "latency_trace.h"
 
 #include <QKeyEvent>
+#include <QCursor>
+#include <QFocusEvent>
+#include <QMouseEvent>
 #include <QOpenGLWidget>
 #include <QPainter>
 #include <QPaintEvent>
@@ -63,6 +66,8 @@ DisplayWidget::DisplayWidget(QWidget *parent)
       canvas_(new SoftwareDisplayCanvas(this))
 {
     setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
+    setToolTip(tr("Click to capture the mouse; press Ctrl+Alt+G to release it."));
     setMinimumSize(720, 400);
     setAutoFillBackground(false);
     surfaces_->setContentsMargins(0, 0, 0, 0);
@@ -172,6 +177,34 @@ DisplayWidget::setKeyHandler(KeyHandler handler)
     keyHandler_ = std::move(handler);
 }
 
+void
+DisplayWidget::setPointerHandler(PointerHandler handler)
+{
+    pointerHandler_ = std::move(handler);
+}
+
+void
+DisplayWidget::setMouseCaptured(bool captured)
+{
+    if (mouseCaptured_ == captured)
+        return;
+    mouseCaptured_ = captured;
+    if (captured) {
+        setFocus(Qt::MouseFocusReason);
+        grabMouse(Qt::BlankCursor);
+        QCursor::setPos(mapToGlobal(rect().center()));
+    } else {
+        releaseMouse();
+        unsetCursor();
+    }
+}
+
+bool
+DisplayWidget::mouseCaptured() const
+{
+    return mouseCaptured_;
+}
+
 QRect
 DisplayWidget::targetRect(const QSize &frameSize, const QSize &viewportSize,
                           ScaleMode mode)
@@ -240,6 +273,16 @@ DisplayWidget::paintPresentation(QPainter &painter, const QRect &viewport) const
 void
 DisplayWidget::keyPressEvent(QKeyEvent *event)
 {
+    if (mouseCaptured_ && !event->isAutoRepeat() &&
+        (event->key() == Qt::Key_G) &&
+        event->modifiers().testFlag(Qt::ControlModifier) &&
+        event->modifiers().testFlag(Qt::AltModifier)) {
+        if (pointerHandler_)
+            pointerHandler_(0, 0, Qt::NoButton);
+        setMouseCaptured(false);
+        event->accept();
+        return;
+    }
     if (keyHandler_)
         keyHandler_(event, true);
     else
@@ -253,4 +296,55 @@ DisplayWidget::keyReleaseEvent(QKeyEvent *event)
         keyHandler_(event, false);
     else
         QWidget::keyReleaseEvent(event);
+}
+
+void
+DisplayWidget::mousePressEvent(QMouseEvent *event)
+{
+    if (!mouseCaptured_) {
+        setMouseCaptured(true);
+        event->accept();
+        return;
+    }
+    if (pointerHandler_)
+        pointerHandler_(0, 0, event->buttons());
+    event->accept();
+}
+
+void
+DisplayWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (!mouseCaptured_) {
+        event->ignore();
+        return;
+    }
+    if (pointerHandler_)
+        pointerHandler_(0, 0, event->buttons());
+    event->accept();
+}
+
+void
+DisplayWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!mouseCaptured_) {
+        event->ignore();
+        return;
+    }
+    const QPoint center = mapToGlobal(rect().center());
+    const QPoint position = event->globalPosition().toPoint();
+    const QPoint delta = position - center;
+    if (!delta.isNull() && pointerHandler_)
+        pointerHandler_(delta.x(), -delta.y(), event->buttons());
+    if (!delta.isNull())
+        QCursor::setPos(center);
+    event->accept();
+}
+
+void
+DisplayWidget::focusOutEvent(QFocusEvent *event)
+{
+    if (mouseCaptured_ && pointerHandler_)
+        pointerHandler_(0, 0, Qt::NoButton);
+    setMouseCaptured(false);
+    QWidget::focusOutEvent(event);
 }

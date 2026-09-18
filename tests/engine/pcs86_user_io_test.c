@@ -128,18 +128,18 @@ test_keyboard_scan_stream(const bm_host_services_t *host)
         0xf4
     };
     static const bm_input_event_t events[] = {
-        { BM_INPUT_KEY, BM_KEY_LEFT_SHIFT, 1, 0 },
-        { BM_INPUT_KEY, BM_KEY_P, 1, 0 },
-        { BM_INPUT_KEY, BM_KEY_P, 0, 0 },
-        { BM_INPUT_KEY, BM_KEY_LEFT_SHIFT, 0, 0 },
-        { BM_INPUT_KEY, BM_KEY_RIGHT_CONTROL, 1, 0 },
-        { BM_INPUT_KEY, BM_KEY_NON_US_BACKSLASH, 1, 0 }
+        { .kind = BM_INPUT_KEY, .key = BM_KEY_LEFT_SHIFT, .pressed = 1 },
+        { .kind = BM_INPUT_KEY, .key = BM_KEY_P, .pressed = 1 },
+        { .kind = BM_INPUT_KEY, .key = BM_KEY_P },
+        { .kind = BM_INPUT_KEY, .key = BM_KEY_LEFT_SHIFT },
+        { .kind = BM_INPUT_KEY, .key = BM_KEY_RIGHT_CONTROL, .pressed = 1 },
+        { .kind = BM_INPUT_KEY, .key = BM_KEY_NON_US_BACKSLASH, .pressed = 1 }
     };
     static const uint8_t expected[] = {
         0x2aU, 0x19U, 0x99U, 0xaaU, 0xe0U, 0x1dU, 0x56U, 0x56U
     };
     const bm_input_event_t unsupported = {
-        BM_INPUT_KEY, BM_KEY_PRINT_SCREEN, 1, 0
+        .kind = BM_INPUT_KEY, .key = BM_KEY_PRINT_SCREEN, .pressed = 1
     };
     bm_pcs86_config_t config;
     bm_machine_config_t machine;
@@ -255,6 +255,69 @@ test_absent_at_cmos(const bm_host_services_t *host, bm_pcs86_config_t *config,
     assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == 0xffffU);
+    bm_session_destroy(session);
+}
+
+static void
+test_ps2_mouse_stream(const bm_host_services_t *host)
+{
+    uint8_t even[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    uint8_t odd[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
+    static const uint8_t program[] = {
+        0xb0, 0xf4, 0xe6, 0x68, /* Enable stream reporting. */
+        0xe4, 0x68,             /* Consume ACK. */
+        0xba, 0x6a, 0x00,       /* Wait for auxiliary output. */
+        0xec, 0xa8, 0x04, 0x74, 0xfb,
+        0xe4, 0x68, 0x88, 0xc3, /* BL=packet header. */
+        0xe4, 0x68, 0x88, 0xc1, /* CL=X. */
+        0xe4, 0x68, 0x88, 0xc2, /* DL=Y. */
+        0xb0, 0xe8, 0xe6, 0x68, 0xe4, 0x68, /* Set resolution. */
+        0xb0, 0x03, 0xe6, 0x68, 0xe4, 0x68,
+        0xb0, 0xf3, 0xe6, 0x68, 0xe4, 0x68, /* Set 80 Hz rate. */
+        0xb0, 0x50, 0xe6, 0x68, 0xe4, 0x68,
+        0xb0, 0xe9, 0xe6, 0x68, 0xe4, 0x68, /* Status ACK. */
+        0xe4, 0x68, 0x88, 0xc4, /* AH=enabled/stream/buttons. */
+        0xe4, 0x68, 0x88, 0xc5, /* CH=resolution. */
+        0xe4, 0x68, 0x88, 0xc6, /* DH=sample rate. */
+        0xb0, 0xe1, 0xe6, 0x68, /* Undefined command must request resend. */
+        0xe4, 0x68, 0x88, 0xc7, /* BH=FEh, not a fabricated ACK. */
+        0xf4
+    };
+    const bm_input_event_t pointer = {
+        .kind = BM_INPUT_RELATIVE_POINTER,
+        .delta_x = 12,
+        .delta_y = -5,
+        .buttons = BM_POINTER_BUTTON_LEFT
+    };
+    bm_pcs86_config_t config;
+    bm_machine_config_t machine;
+    bm_session_t *session = NULL;
+    size_t index;
+
+    for (index = 0U; index < sizeof(reset_jump); ++index)
+        put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
+    for (index = 0U; index < sizeof(program); ++index)
+        put_combined_byte(even, odd, 0x0100U + index, program[index]);
+    config = (bm_pcs86_config_t) {
+        .firmware_even = { "synthetic-even", even, sizeof(even), NULL },
+        .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL }
+    };
+    machine = bm_pcs86_machine_config(&config);
+    assert(bm_session_create(host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_send_input(session, &pointer) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 24U) == BM_STATUS_OK);
+    assert(inspect_cpu(session, "halted") == 0U);
+    assert(bm_session_send_input(session, &pointer) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 160U) == BM_STATUS_OK);
+    assert(inspect_cpu(session, "halted") == 1U);
+    assert(inspect_cpu(session, "ax") == 0x24feU);
+    assert(inspect_cpu(session, "bx") == 0xfe29U);
+    assert(inspect_cpu(session, "cx") == 0x030cU);
+    assert(inspect_cpu(session, "dx") == 0x50fbU);
+    assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
 }
 
@@ -382,5 +445,6 @@ main(void)
     test_unmapped_output(&host, &config, even, odd, 0x06f2U);
     test_keyboard_scan_stream(&host);
     test_keyboard_led_protocol(&host);
+    test_ps2_mouse_stream(&host);
     return 0;
 }

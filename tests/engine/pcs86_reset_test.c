@@ -134,8 +134,12 @@ main(void)
         pixels, sizeof(pixels) / sizeof(pixels[0]), 9U,
         { 0, 0, BM_PIXEL_XRGB8888, 0U, 0U }
     };
-    const bm_input_event_t key_down = { BM_INPUT_KEY, BM_KEY_A, 1, 0 };
-    const bm_input_event_t key_up = { BM_INPUT_KEY, BM_KEY_A, 0, 0 };
+    const bm_input_event_t key_down = {
+        .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
+    };
+    const bm_input_event_t key_up = {
+        .kind = BM_INPUT_KEY, .key = BM_KEY_A
+    };
 
     for (index = 0; index < sizeof(reset_jump); ++index)
         put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
