@@ -139,9 +139,13 @@ main(void)
     io_write(bus, 0x0007U, 0xffU);    /* 512-byte count. */
     io_write(bus, 0x0007U, 0x01U);
     io_write(bus, 0x000bU, 0x47U);    /* Single, device-to-memory, channel 3. */
-    io_write(bus, 0x000aU, 0x03U);    /* Unmask channel 3. */
     io_write(bus, 0x0323U, 0x03U);    /* Enable XTA DMA and IRQ. */
     send_command(bus, read_dcb);
+    assert(irq == 0);                 /* DREQ waits for emulated bus time. */
+    bm_xta_service(xta);              /* Masked channel cannot acknowledge. */
+    assert(irq == 0);
+    io_write(bus, 0x000aU, 0x03U);    /* Unmask channel 3 after the DCB. */
+    bm_xta_service(xta);
     assert(irq == 1);
     assert(io_read(bus, 0x0320U) == 0U);
     for (index = 0U; index < 512U; ++index) {
@@ -171,6 +175,9 @@ main(void)
 
     assert(bm_xta_state(xta, &state) == BM_STATUS_OK);
     assert(state.sense == 0U);
+    assert(state.drive_present && !state.write_protected);
+    assert(state.read_operations == 2U);
+    assert(state.write_operations == 1U);
     bm_xta_set_enabled(xta, 0);
     assert(io_read(bus, 0x0321U) == 0xffU);
     bm_xta_destroy(xta);

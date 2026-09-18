@@ -29,6 +29,10 @@ void bm_frontend_blob_release(bm_frontend_blob_t *blob);
 int bm_frontend_readonly_media_open(const char *path, uint32_t block_size,
                                     bm_frontend_readonly_media_t *media);
 void bm_frontend_readonly_media_close(bm_frontend_readonly_media_t *media);
+/* Open an existing caller-owned working image without truncation. Never use
+ * this on preservation originals; creation/copy policy belongs to the caller. */
+int bm_frontend_working_media_open(const char *path, uint32_t block_size,
+                                   bm_frontend_readonly_media_t *media);
 
 #ifdef __cplusplus
 }

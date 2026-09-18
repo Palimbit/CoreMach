@@ -43,6 +43,10 @@ typedef struct bm_xta_state {
     uint8_t completion;
     uint8_t interrupt_mask;
     uint16_t cylinder;
+    uint64_t read_operations;
+    uint64_t write_operations;
+    int drive_present;
+    int write_protected;
     int enabled;
     int interrupt_asserted;
 } bm_xta_state_t;
@@ -55,6 +59,8 @@ bm_status_t bm_xta_create(const bm_host_services_t *host,
 void bm_xta_destroy(bm_xta_t *xta);
 void bm_xta_reset(bm_xta_t *xta);
 void bm_xta_set_enabled(bm_xta_t *xta, int enabled);
+/* Service a pending DREQ after guest software has programmed the 8237. */
+void bm_xta_service(bm_xta_t *xta);
 bm_status_t bm_xta_state(const bm_xta_t *xta, bm_xta_state_t *state);
 
 #ifdef __cplusplus

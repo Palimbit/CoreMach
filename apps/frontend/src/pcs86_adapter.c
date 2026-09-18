@@ -31,7 +31,7 @@ static const bm_frontend_asset_requirement_t assets[] = {
       .block_size = 512U, .replaceable = 1,
       .storage_kind = BM_STORAGE_DEVICE_FLOPPY, .storage_unit = 0U },
     { .role = "hard-disk-0", .label = "Conner CP3026 XTA disk image",
-      .kind = BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+      .kind = BM_FRONTEND_ASSET_BLOCK_MEDIA,
       .accepted_sizes = hard_disk_sizes,
       .accepted_size_count = sizeof(hard_disk_sizes) / sizeof(hard_disk_sizes[0]),
       .block_size = 512U }
@@ -115,10 +115,13 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
           (floppy->value.media.block_count != 2880U))))
         return BM_STATUS_INVALID_ARGUMENT;
     if ((hard_disk != NULL) &&
-        ((hard_disk->kind != BM_FRONTEND_ASSET_READ_ONLY_MEDIA) ||
+        (((hard_disk->kind != BM_FRONTEND_ASSET_READ_ONLY_MEDIA) &&
+          (hard_disk->kind != BM_FRONTEND_ASSET_BLOCK_MEDIA)) ||
          (hard_disk->value.media.read == NULL) ||
-         (hard_disk->value.media.write != NULL) ||
-         !hard_disk->value.media.read_only ||
+         (hard_disk->value.media.read_only ?
+             (hard_disk->value.media.write != NULL) :
+             ((hard_disk->kind != BM_FRONTEND_ASSET_BLOCK_MEDIA) ||
+              (hard_disk->value.media.write == NULL))) ||
          (hard_disk->value.media.block_size != 512U) ||
          (hard_disk->value.media.block_count != 41820U)))
         return BM_STATUS_INVALID_ARGUMENT;
@@ -158,8 +161,9 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
         };
     }
     if (hard_disk != NULL) {
-        machine->base.diagnostics.read_only_media_bytes +=
-            hard_disk->value.media.block_count * hard_disk->value.media.block_size;
+        if (hard_disk->value.media.read_only)
+            machine->base.diagnostics.read_only_media_bytes +=
+                hard_disk->value.media.block_count * hard_disk->value.media.block_size;
         machine->pcs86.hard_disk = (bm_pcs86_hard_disk_config_t) {
             1, { 615U, 4U, 17U }, hard_disk->value.media
         };

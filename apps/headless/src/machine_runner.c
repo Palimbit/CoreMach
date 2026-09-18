@@ -140,8 +140,12 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
         binding_count = 3U;
     }
     if (options->hard_disk_path != NULL) {
-        if (!bm_frontend_readonly_media_open(options->hard_disk_path, 512U,
-                                             &hard_disk) ||
+        const int opened = options->hard_disk_writable ?
+            bm_frontend_working_media_open(options->hard_disk_path, 512U,
+                                           &hard_disk) :
+            bm_frontend_readonly_media_open(options->hard_disk_path, 512U,
+                                            &hard_disk);
+        if (!opened ||
             (hard_disk.size != 21411840U)) {
             fputs("hard disk image must be a raw 615/4/17 CP3026 image\n",
                   stderr);
@@ -149,7 +153,9 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             goto cleanup;
         }
         bindings[binding_count++] = (bm_frontend_asset_binding_t) {
-            "hard-disk-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+            "hard-disk-0", options->hard_disk_writable ?
+                BM_FRONTEND_ASSET_BLOCK_MEDIA :
+                BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
             { .media = hard_disk.media }
         };
     }

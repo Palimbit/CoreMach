@@ -83,9 +83,30 @@ read_blocks(void *context, uint64_t first_block, uint32_t block_count,
     return BM_STATUS_OK;
 }
 
-int
-bm_frontend_readonly_media_open(const char *path, uint32_t block_size,
-                                bm_frontend_readonly_media_t *media)
+static bm_status_t
+write_blocks(void *context, uint64_t first_block, uint32_t block_count,
+             const uint8_t *source)
+{
+    bm_frontend_readonly_media_t *media = context;
+    uint64_t offset, count;
+    if ((media == NULL) || (media->file == NULL) || (source == NULL) ||
+        media->media.read_only || (first_block > media->media.block_count) ||
+        ((uint64_t) block_count > media->media.block_count - first_block))
+        return BM_STATUS_INVALID_ARGUMENT;
+    offset = first_block * media->media.block_size;
+    count = (uint64_t) block_count * media->media.block_size;
+    if ((offset > (uint64_t) LONG_MAX) || (count > SIZE_MAX))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((fseek(media->file, (long) offset, SEEK_SET) != 0) ||
+        (fwrite(source, 1U, (size_t) count, media->file) != (size_t) count) ||
+        (fflush(media->file) != 0))
+        return BM_STATUS_DEVICE_ERROR;
+    return BM_STATUS_OK;
+}
+
+static int
+media_open(const char *path, uint32_t block_size,
+           bm_frontend_readonly_media_t *media, int writable)
 {
     FILE *file;
     long length;
@@ -93,7 +114,7 @@ bm_frontend_readonly_media_open(const char *path, uint32_t block_size,
     if ((path == NULL) || (media == NULL) || (block_size == 0U))
         return 0;
     memset(media, 0, sizeof(*media));
-    file = open_file(path, "rb");
+    file = open_file(path, writable ? "r+b" : "rb");
     if (file == NULL)
         return 0;
     if ((fseek(file, 0L, SEEK_END) != 0) || ((length = ftell(file)) <= 0L) ||
@@ -105,10 +126,24 @@ bm_frontend_readonly_media_open(const char *path, uint32_t block_size,
     media->file = file;
     media->size = (size_t) length;
     media->media = (bm_block_media_t) {
-        media, (uint64_t) media->size / block_size, block_size, 1,
-        read_blocks, NULL
+        media, (uint64_t) media->size / block_size, block_size, !writable,
+        read_blocks, writable ? write_blocks : NULL
     };
     return 1;
+}
+
+int
+bm_frontend_readonly_media_open(const char *path, uint32_t block_size,
+                                bm_frontend_readonly_media_t *media)
+{
+    return media_open(path, block_size, media, 0);
+}
+
+int
+bm_frontend_working_media_open(const char *path, uint32_t block_size,
+                               bm_frontend_readonly_media_t *media)
+{
+    return media_open(path, block_size, media, 1);
 }
 
 void

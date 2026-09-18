@@ -31,7 +31,8 @@ typedef struct bm_block_media {
 } bm_block_media_t;
 
 typedef enum bm_storage_device_kind {
-    BM_STORAGE_DEVICE_FLOPPY = 0
+    BM_STORAGE_DEVICE_FLOPPY = 0,
+    BM_STORAGE_DEVICE_HARD_DISK = 1
 } bm_storage_device_kind_t;
 
 /* Frontend-neutral, read-only device telemetry. Operation counters are

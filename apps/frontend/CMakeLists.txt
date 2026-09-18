@@ -49,4 +49,26 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME portable-frontend.adapters COMMAND blumach_frontend_test)
+
+    add_executable(blumach_frontend_file_inputs_test tests/file_inputs_test.c)
+    target_link_libraries(blumach_frontend_file_inputs_test PRIVATE
+        blumach_frontend_files
+    )
+    target_compile_features(blumach_frontend_file_inputs_test PRIVATE c_std_11)
+    set_target_properties(blumach_frontend_file_inputs_test PROPERTIES
+        C_EXTENSIONS OFF
+    )
+    if(MSVC)
+        target_compile_options(blumach_frontend_file_inputs_test PRIVATE
+            /W4 /WX /UNDEBUG
+        )
+    else()
+        target_compile_options(blumach_frontend_file_inputs_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+        )
+    endif()
+    add_test(NAME portable-frontend.file-inputs
+        COMMAND blumach_frontend_file_inputs_test
+            "${CMAKE_CURRENT_BINARY_DIR}/portable-frontend-media-test.img"
+    )
 endif()

@@ -870,6 +870,8 @@ pcs86_clock_event(bm_engine_t *engine, void *context)
     if (pit_ticks != 0U)
         (void) bm_pit8253_advance(machine->pit, (uint32_t) pit_ticks);
 
+    bm_xta_service(machine->xta);
+
     machine->rtc_clock_remainder += elapsed * UINT64_C(1000000);
     rtc_microseconds = machine->rtc_clock_remainder / PCS86_SCHEDULER_TICKS_PER_SECOND;
     machine->rtc_clock_remainder %= PCS86_SCHEDULER_TICKS_PER_SECOND;
@@ -904,7 +906,7 @@ pcs86_video_render(const void *context, bm_tick_t emulated_time,
 static size_t
 pcs86_storage_count(const void *context)
 {
-    return context != NULL ? 2U : 0U;
+    return context != NULL ? 3U : 0U;
 }
 
 static bm_status_t
@@ -914,10 +916,23 @@ pcs86_storage_status(const void *context, size_t index,
     const bm_pcs86_machine_t *machine = context;
     bm_floppy_drive_state_t drive_state;
     bm_fdc765_state_t fdc_state;
+    bm_xta_state_t xta_state;
 
-    if ((machine == NULL) || (status == NULL) || (index >= 2U))
+    if ((machine == NULL) || (status == NULL) || (index >= 3U))
         return BM_STATUS_INVALID_ARGUMENT;
     memset(status, 0, sizeof(*status));
+    if (index == 2U) {
+        if (bm_xta_state(machine->xta, &xta_state) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        status->kind = BM_STORAGE_DEVICE_HARD_DISK;
+        status->unit = 0U;
+        status->installed = xta_state.drive_present;
+        status->media_present = xta_state.drive_present;
+        status->write_protected = xta_state.write_protected;
+        status->read_operations = xta_state.read_operations;
+        status->write_operations = xta_state.write_operations;
+        return BM_STATUS_OK;
+    }
     status->kind = BM_STORAGE_DEVICE_FLOPPY;
     status->unit = (uint32_t) index;
     if (machine->floppy[index] == NULL)

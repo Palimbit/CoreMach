@@ -16,6 +16,17 @@ read_zero_blocks(void *context, uint64_t first_block, uint32_t block_count,
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+write_zero_blocks(void *context, uint64_t first_block, uint32_t block_count,
+                  const uint8_t *source)
+{
+    (void) context;
+    (void) first_block;
+    (void) block_count;
+    (void) source;
+    return BM_STATUS_OK;
+}
+
 int
 main(void)
 {
@@ -38,8 +49,18 @@ main(void)
         { "hard-disk-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
           { .media = { NULL, 41820U, 512U, 1, read_zero_blocks, NULL } } }
     };
+    const bm_frontend_asset_binding_t writable_bindings[] = {
+        { "firmware-even", BM_FRONTEND_ASSET_BLOB,
+          { .blob = { "test-even", even_bytes, sizeof(even_bytes), NULL } } },
+        { "firmware-odd", BM_FRONTEND_ASSET_BLOB,
+          { .blob = { "test-odd", odd_bytes, sizeof(odd_bytes), NULL } } },
+        { "hard-disk-0", BM_FRONTEND_ASSET_BLOCK_MEDIA,
+          { .media = { NULL, 41820U, 512U, 0, read_zero_blocks,
+                       write_zero_blocks } } }
+    };
     bm_frontend_diagnostics_t diagnostics;
     bm_storage_device_status_t storage_status;
+    size_t storage_count = 0U;
     bm_storage_media_change_t media_change = { 0 };
     const bm_frontend_asset_binding_t unknown_binding = {
         "unknown", BM_FRONTEND_ASSET_BLOB,
@@ -73,6 +94,7 @@ main(void)
     assert(assets[2].storage_unit == 0U);
     assert(strcmp(assets[3].role, "hard-disk-0") == 0);
     assert(!assets[3].required);
+    assert(assets[3].kind == BM_FRONTEND_ASSET_BLOCK_MEDIA);
     assert(assets[3].accepted_size_count == 1U);
     assert(assets[3].accepted_sizes[0] == 21411840U);
     assert(!assets[3].replaceable);
@@ -102,6 +124,14 @@ main(void)
     assert(bm_session_configure(session, bm_frontend_machine_config(machine)) ==
            BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_storage_device_count(session, &storage_count) ==
+           BM_STATUS_OK);
+    assert(storage_count == 3U);
+    assert(bm_session_storage_device_status(session, 2U, &storage_status) ==
+           BM_STATUS_OK);
+    assert(storage_status.kind == BM_STORAGE_DEVICE_HARD_DISK);
+    assert(storage_status.installed && storage_status.media_present);
+    assert(storage_status.write_protected);
     assert(bm_session_replace_storage_media(
                session, BM_STORAGE_DEVICE_FLOPPY, 0U, &media_change) ==
            BM_STATUS_OK);
@@ -121,6 +151,17 @@ main(void)
                session, BM_STORAGE_DEVICE_FLOPPY, 1U, &media_change) ==
            BM_STATUS_UNSUPPORTED);
     bm_session_destroy(session);
+    bm_frontend_machine_close(machine);
+
+    machine = NULL;
+    assert(bm_frontend_machine_open(
+               adapter, writable_bindings,
+               sizeof(writable_bindings) / sizeof(writable_bindings[0]),
+               &machine) == BM_STATUS_OK);
+    assert(machine != NULL);
+    assert(bm_frontend_machine_diagnostics(machine, &diagnostics) ==
+           BM_STATUS_OK);
+    assert(diagnostics.read_only_media_bytes == 0U);
     bm_frontend_machine_close(machine);
     return 0;
 }

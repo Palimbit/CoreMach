@@ -295,11 +295,20 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
                                    storage->blob.data, storage->blob.size,
                                    nullptr };
         } else {
-            if (!bm_frontend_readonly_media_open(
+            const bool writable = requirements[index].kind ==
+                                  BM_FRONTEND_ASSET_BLOCK_MEDIA;
+            const int opened = writable ?
+                bm_frontend_working_media_open(
                     nativePath.constData(), requirements[index].block_size,
-                    &storage->media)) {
+                    &storage->media) :
+                bm_frontend_readonly_media_open(
+                    nativePath.constData(), requirements[index].block_size,
+                    &storage->media);
+            if (!opened) {
                 QMessageBox::critical(this, tr("Invalid asset"),
-                                      tr("Could not open %1 as read-only media.")
+                                      (writable ?
+                                       tr("Could not open %1 as a writable working image.") :
+                                       tr("Could not open %1 as read-only media."))
                                           .arg(QString::fromUtf8(
                                               requirements[index].label)));
                 closeMachine();
@@ -733,7 +742,7 @@ PortableWindow::updateStorageStatus(
         presentation.initialized = true;
         const QString unit = device.kind == BM_STORAGE_DEVICE_FLOPPY ?
             QString(QChar(static_cast<char16_t>(u'A' + device.unit))) :
-            QString::number(device.unit);
+            tr("HD%1").arg(device.unit);
         if (!device.media_present) {
             labels.push_back(tr("%1: empty").arg(unit));
             continue;
@@ -757,7 +766,7 @@ PortableWindow::updateStorageStatus(
     }
     storageStatus_->setText(labels.join(QStringLiteral(" &nbsp; ")));
     storageStatus_->setToolTip(
-        tr("Removable media state and completed read/write operations"));
+        tr("Storage state and completed read/write operations"));
 }
 
 void
