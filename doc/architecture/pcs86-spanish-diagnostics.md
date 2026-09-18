@@ -21,7 +21,8 @@ is excluded. No firmware, executable media or local captures are distributed.
   page reveals the unchanged conventional RAM. This is an inference from
   original software, not a schematic or physical bus measurement. Remaining
   control bits in 64h/6Fh/70h and the 6Ch protection sequence are not certified.
-- **Absent-device composition:** inherited machine_common_init installs XT
+- **Initial absent-device composition (superseded by the physical comparison
+  below):** inherited machine_common_init installs XT
   page ports 80h-87h, not the AT high-channel pages or another device in
   88h-9Fh. These absent locations now read FFh and ignore writes. They are not
   page aliases or invented storage. Other unmapped ports remain errors.
@@ -70,7 +71,7 @@ step is to establish the actual PCS 86 decode with documentation or the owner's
 physical machine, or identify why this diagnostic selects that test. The old
 implementation is evidence of software lineage, not proof of hardware behaviour.
 
-## Follow-up: board sequence and checksum
+## Initial follow-up: board sequence and checksum
 
 On 2026-09-18, the same read-only configuration was traced through the seven
 MAIN_DIA /A dispatch-table entries. A temporary host probe injected F2 at
@@ -105,12 +106,44 @@ controlled conditions, not arbitrary writes during a live DOS session.
 Temporary tracing and key injection were removed. No live Qt visual test,
 hardware measurement or new emulation fix is claimed in this follow-up.
 
+## Physical comparison and portable correction
+
+Later on 2026-09-18, the owner wrote the preserved Spanish 720 KiB Customer
+image to a physical floppy and ran it on the original PCS 86 previously
+identified as BIOS 1.08. The owner observed MAIN_DIA complete successfully,
+including CPU, ROM, DMA, system timer and the remaining board-device checks.
+This is owner-observed physical evidence; no logic-analyser trace or individual
+port dump was taken.
+
+The physical pass establishes that the Customer sequence is applicable to this
+machine and that its writes through 96h do not see the inherited open bus. The
+portable page-register component therefore has a configurable readable latch
+count. PCS 86 selects 32 latches at 80h-9Fh; only offsets 1, 2, 3 and 7 retain
+their existing connections to DMA channels 2, 3, 1 and 0. The additional
+latches neither alias those channels nor invent further DMA channels.
+
+A second traced disagreement was independent of the extended latches. The
+Customer disables PIT channel 2's gate, writes a two-byte mode-4 count and reads
+it immediately. The physical I/O instructions span an input-clock edge, while
+the portable scheduler can batch them before its next 64-instruction clock
+event. The 8253 core now resolves a completed `LOAD_NEXT` before a data read.
+Intel specifies a read before the load edge as undefined; choosing the completed
+new count makes the result independent of scheduler granularity without ticking
+an active counter or adding a BIOS-specific condition.
+
+With both general behaviours, the original MAIN_DIA /A returns to DOS without
+F2 and leaves ERRORLEVEL zero. A 140,000,000-tick headless run reports status 0,
+139,998,372 retired instructions, 1,106,197 I/O accesses, 297 floppy reads,
+zero writes and framebuffer CRC F0553006; conditional DOS output shows
+`BOARD_OK`. The original firmware and disk hashes remain unchanged.
+
 ## ROM-free coverage
 
 Synthetic tests cover all six EMS frames with 0/384/1920 KiB, page switching,
 shared-page aliases, invalid pages, gate-off conventional RAM, reset, full-byte
-DMA readback with masked effective addresses, absent-port reads after writes,
-adjacent unmapped ports and absent-coprocessor WAIT. Video tests cover pixels,
+DMA readback with masked effective addresses, the exact four-base/sixteen-byte
+Customer latch sequence, pending 8253 mode-4 loads, adjacent unmapped ports and
+absent-coprocessor WAIT. Video tests cover pixels,
 CRTC scan repetitions, combined double-scan, PR4 and clock division.
 
 Windows UCRT64 GCC strict build passes, with 65/65 CTest tests passing;

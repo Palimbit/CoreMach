@@ -259,20 +259,22 @@ test_absent_at_cmos(const bm_host_services_t *host, bm_pcs86_config_t *config,
 }
 
 static void
-test_absent_coprocessor_and_dma(const bm_host_services_t *host,
-                               bm_pcs86_config_t *config,
-                               uint8_t *even, uint8_t *odd)
+test_absent_coprocessor_and_extended_dma_latches(
+    const bm_host_services_t *host, bm_pcs86_config_t *config,
+    uint8_t *even, uint8_t *odd)
 {
     static const uint8_t jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
     static const uint8_t program[] = {
         0x9b,                         /* No coprocessor is busy on this board. */
         0xb0, 0x05, 0xe6, 0x87,       /* Real XT DMA channel-0 page. */
-        0xba, 0x88, 0x00, 0xb9, 24, 0, /* Absent AT pages and 90h-9Fh. */
-        0xb0, 0, 0xee, 0xec,          /* Writes cannot create a latch. */
-        0x3c, 0xff, 0x75, 0x0a,       /* Fail sentinel if not open bus. */
-        0x42, 0xe2, 0xf5,
-        0xe4, 0x87, 0x88, 0xc3,       /* Existing page is unaffected. */
-        0xb8, 0x34, 0x12, 0xf4
+        0xb0, 0x12, 0xe6, 0x88,       /* Wider PCS 86 board latches. */
+        0xb0, 0x44, 0xe6, 0x89,
+        0xb0, 0x87, 0xe6, 0x96,
+        0xe4, 0x88, 0x88, 0xc3,       /* BL=12h. */
+        0xe4, 0x89, 0x88, 0xc7,       /* BH=44h. */
+        0xe4, 0x96, 0x88, 0xc1,       /* CL=87h. */
+        0xe4, 0x87, 0x88, 0xc5,       /* CH=05h; channel latch unchanged. */
+        0xf4
     };
     bm_session_t *session = NULL;
     bm_machine_config_t machine;
@@ -289,8 +291,8 @@ test_absent_coprocessor_and_dma(const bm_host_services_t *host,
     assert(bm_session_start(session) == BM_STATUS_OK);
     assert(bm_session_run_for(session, 250U) == BM_STATUS_OK);
     assert(inspect_cpu(session, "halted") == 1U);
-    assert(inspect_cpu(session, "ax") == 0x1234U);
-    assert(inspect_cpu(session, "bx") == 5U);
+    assert(inspect_cpu(session, "bx") == 0x4412U);
+    assert(inspect_cpu(session, "cx") == 0x0587U);
     bm_session_destroy(session);
 }
 
@@ -370,7 +372,7 @@ main(void)
     config.io_trace = NULL;
     config.io_trace_context = NULL;
     test_absent_at_cmos(&host, &config, even, odd);
-    test_absent_coprocessor_and_dma(&host, &config, even, odd);
+    test_absent_coprocessor_and_extended_dma_latches(&host, &config, even, odd);
     test_unmapped_output(&host, &config, even, odd, 0x00afU);
     test_unmapped_output(&host, &config, even, odd, 0x4404U);
     test_unmapped_output(&host, &config, even, odd, 0x3400U);

@@ -1064,7 +1064,14 @@ pcs86_create(bm_engine_t *engine,
     }
     if (status == BM_STATUS_OK) {
         bm_dma_page_registers_config_t page_config = {
-            0x0080U, 0x0fU, machine->dma
+            .io_base = 0x0080U,
+            .page_mask = 0x0fU,
+            .dma = machine->dma,
+            /* The original Spanish board diagnostic passes on an owner's
+             * physical BIOS 1.08 machine after independently writing and
+             * reading through 96h. Only 81h/82h/83h/87h drive DMA channels;
+             * the wider decode is retained board state, not extra channels. */
+            .register_count = 32U
         };
         status = bm_dma_page_registers_create(host, machine->bus, &page_config,
                                               &machine->dma_pages);
@@ -1151,12 +1158,6 @@ pcs86_create(bm_engine_t *engine,
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0070U, 0x0070U,
                             pcs86_memory_control_access, machine);
-    if (status == BM_STATUS_OK)
-        /* machine_common_init installs XT pages at 80h-87h only. The AT
-         * high-channel page bank and following 90h-9Fh board region are
-         * absent, not aliases of the XT bank. */
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0088U, 0x009fU,
-                            pcs86_open_bus_access, machine);
     if (status == BM_STATUS_OK)
         /* No AT CMOS data device: the inherited PCS 86 uses its MM58167
          * windows instead. Keep 70h's independent board latch unchanged. */

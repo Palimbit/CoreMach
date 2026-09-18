@@ -21,6 +21,10 @@ typedef struct bm_dma_page_registers_config {
     uint16_t io_base;
     uint8_t page_mask; /* Wired address bits, not the readable latch width. */
     bm_dma8237_t *dma;
+    /* Number of readable latches decoded from io_base. Zero selects the
+     * conventional eight-register XT bank. Only the first eight offsets can
+     * drive DMA channel page inputs; wider banks remain independent latches. */
+    uint8_t register_count;
 } bm_dma_page_registers_config_t;
 
 bm_status_t bm_dma_page_registers_create(
