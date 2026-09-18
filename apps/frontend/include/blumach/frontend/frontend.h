@@ -61,7 +61,8 @@ typedef struct bm_frontend_diagnostics {
 typedef enum bm_frontend_debug_event_kind {
     BM_FRONTEND_DEBUG_INSTRUCTION = 1,
     BM_FRONTEND_DEBUG_IO = 2,
-    BM_FRONTEND_DEBUG_INTERRUPT = 3
+    BM_FRONTEND_DEBUG_INTERRUPT = 3,
+    BM_FRONTEND_DEBUG_MEMORY = 4
 } bm_frontend_debug_event_kind_t;
 
 /* Optional, host-neutral diagnostic stream. Observers may record an event but
@@ -74,6 +75,18 @@ typedef struct bm_frontend_debug_event {
         struct {
             uint16_t cs;
             uint16_t ip;
+            uint16_t ds;
+            uint16_t es;
+            uint16_t ss;
+            uint16_t sp;
+            uint16_t ax;
+            uint16_t bx;
+            uint16_t cx;
+            uint16_t dx;
+            uint16_t bp;
+            uint16_t si;
+            uint16_t di;
+            uint16_t flags;
             uint32_t physical_address;
             uint8_t opcode;
             uint8_t effective_opcode;
@@ -85,6 +98,12 @@ typedef struct bm_frontend_debug_event {
             uint8_t width;
             uint8_t write;
         } io;
+        struct {
+            uint64_t address;
+            uint64_t value;
+            uint8_t width;
+            uint8_t write;
+        } memory;
         struct {
             uint8_t vector;
         } interrupt;

@@ -11,6 +11,7 @@ typedef struct debug_observation {
     uint64_t instructions;
     uint64_t io;
     uint64_t interrupts;
+    uint64_t memory;
 } debug_observation_t;
 
 static void
@@ -25,6 +26,8 @@ observe_debug(void *context, const bm_frontend_debug_event_t *event)
         ++observation->io;
     else if (event->kind == BM_FRONTEND_DEBUG_INTERRUPT)
         ++observation->interrupts;
+    else if (event->kind == BM_FRONTEND_DEBUG_MEMORY)
+        ++observation->memory;
     else
         assert(0);
 }
@@ -157,6 +160,7 @@ main(void)
     assert(bm_session_run_for(session, 128U) == BM_STATUS_OK);
     assert(observation.calls != 0U);
     assert(observation.instructions != 0U);
+    assert(observation.memory != 0U);
     {
         const uint64_t calls = observation.calls;
         assert(bm_frontend_machine_set_debug_observer(machine, NULL,

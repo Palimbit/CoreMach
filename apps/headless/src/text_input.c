@@ -2,6 +2,65 @@
 #include "text_input.h"
 
 #include <stddef.h>
+#include <string.h>
+
+typedef struct named_key {
+    const char *name;
+    bm_key_code_t key;
+} named_key_t;
+
+int
+headless_key_code_from_name(const char *name, bm_key_code_t *key)
+{
+    static const named_key_t named_keys[] = {
+        { "enter", BM_KEY_ENTER }, { "escape", BM_KEY_ESCAPE },
+        { "backspace", BM_KEY_BACKSPACE }, { "tab", BM_KEY_TAB },
+        { "space", BM_KEY_SPACE }, { "minus", BM_KEY_MINUS },
+        { "equal", BM_KEY_EQUAL }, { "left-bracket", BM_KEY_LEFT_BRACKET },
+        { "right-bracket", BM_KEY_RIGHT_BRACKET },
+        { "backslash", BM_KEY_BACKSLASH },
+        { "semicolon", BM_KEY_SEMICOLON },
+        { "apostrophe", BM_KEY_APOSTROPHE }, { "grave", BM_KEY_GRAVE },
+        { "comma", BM_KEY_COMMA }, { "period", BM_KEY_PERIOD },
+        { "slash", BM_KEY_SLASH }, { "caps-lock", BM_KEY_CAPS_LOCK },
+        { "f1", BM_KEY_F1 }, { "f2", BM_KEY_F2 }, { "f3", BM_KEY_F3 },
+        { "f4", BM_KEY_F4 }, { "f5", BM_KEY_F5 }, { "f6", BM_KEY_F6 },
+        { "f7", BM_KEY_F7 }, { "f8", BM_KEY_F8 }, { "f9", BM_KEY_F9 },
+        { "f10", BM_KEY_F10 }, { "print-screen", BM_KEY_PRINT_SCREEN },
+        { "scroll-lock", BM_KEY_SCROLL_LOCK }, { "pause", BM_KEY_PAUSE },
+        { "insert", BM_KEY_INSERT }, { "home", BM_KEY_HOME },
+        { "page-up", BM_KEY_PAGE_UP }, { "delete", BM_KEY_DELETE },
+        { "end", BM_KEY_END }, { "page-down", BM_KEY_PAGE_DOWN },
+        { "right", BM_KEY_RIGHT }, { "left", BM_KEY_LEFT },
+        { "down", BM_KEY_DOWN }, { "up", BM_KEY_UP },
+        { "non-us-backslash", BM_KEY_NON_US_BACKSLASH },
+        { "left-control", BM_KEY_LEFT_CONTROL },
+        { "left-shift", BM_KEY_LEFT_SHIFT }, { "left-alt", BM_KEY_LEFT_ALT },
+        { "right-control", BM_KEY_RIGHT_CONTROL },
+        { "right-shift", BM_KEY_RIGHT_SHIFT },
+        { "right-alt", BM_KEY_RIGHT_ALT }
+    };
+    size_t index;
+    if ((name == NULL) || (key == NULL) || (name[0] == '\0'))
+        return 0;
+    if ((name[1] == '\0') && (name[0] >= 'a') && (name[0] <= 'z')) {
+        *key = (bm_key_code_t) (BM_KEY_A + name[0] - 'a');
+        return 1;
+    }
+    if ((name[1] == '\0') && (name[0] >= '0') && (name[0] <= '9')) {
+        *key = name[0] == '0' ? BM_KEY_0 :
+               (bm_key_code_t) (BM_KEY_1 + name[0] - '1');
+        return 1;
+    }
+    for (index = 0U; index < sizeof(named_keys) / sizeof(named_keys[0]);
+         ++index) {
+        if (strcmp(name, named_keys[index].name) == 0) {
+            *key = named_keys[index].key;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 static int
 decode_character(unsigned char value, headless_text_key_t *key)
@@ -204,6 +263,108 @@ headless_run_text_schedule(bm_session_t *session,
         if (status == BM_STATUS_OK)
             status = headless_type_text(session, actions[index].text,
                                         key_ticks);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+headless_input_schedule_validate(
+    const headless_text_action_t *text_actions, size_t text_action_count,
+    const headless_key_action_t *key_actions, size_t key_action_count,
+    uint64_t key_ticks, uint64_t total_ticks)
+{
+    size_t text_index = 0U;
+    size_t key_index = 0U;
+    uint64_t previous_end = 0U;
+    if (((text_action_count != 0U) && (text_actions == NULL)) ||
+        ((key_action_count != 0U) && (key_actions == NULL)) ||
+        (key_ticks == 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    while ((text_index < text_action_count) || (key_index < key_action_count)) {
+        const int use_text = (text_index < text_action_count) &&
+            ((key_index >= key_action_count) ||
+             (text_actions[text_index].at <= key_actions[key_index].at));
+        uint64_t at;
+        uint64_t duration;
+        bm_status_t status = BM_STATUS_OK;
+        if (use_text) {
+            at = text_actions[text_index].at;
+            status = headless_text_duration(text_actions[text_index].text,
+                                            key_ticks, &duration);
+            ++text_index;
+        } else {
+            at = key_actions[key_index].at;
+            duration = key_ticks;
+            if ((key_actions[key_index].pressed != 0) &&
+                (key_actions[key_index].pressed != 1))
+                status = BM_STATUS_INVALID_ARGUMENT;
+            ++key_index;
+        }
+        if ((status != BM_STATUS_OK) || (at < previous_end) ||
+            (at >= total_ticks) || (duration > total_ticks - at))
+            return BM_STATUS_INVALID_ARGUMENT;
+        previous_end = at + duration;
+    }
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+headless_run_input_schedule(
+    bm_session_t *session, const headless_text_action_t *text_actions,
+    size_t text_action_count, const headless_key_action_t *key_actions,
+    size_t key_action_count, uint64_t key_ticks)
+{
+    return headless_run_input_schedule_with_action(
+        session, text_actions, text_action_count, key_actions,
+        key_action_count, key_ticks, 0U, NULL, NULL);
+}
+
+bm_status_t
+headless_run_input_schedule_with_action(
+    bm_session_t *session, const headless_text_action_t *text_actions,
+    size_t text_action_count, const headless_key_action_t *key_actions,
+    size_t key_action_count, uint64_t key_ticks, uint64_t action_at,
+    headless_timed_action_fn action, void *action_context)
+{
+    size_t text_index = 0U;
+    size_t key_index = 0U;
+    int action_pending = action != NULL;
+    if ((session == NULL) ||
+        ((text_action_count != 0U) && (text_actions == NULL)) ||
+        ((key_action_count != 0U) && (key_actions == NULL)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    while ((text_index < text_action_count) || (key_index < key_action_count) ||
+           action_pending) {
+        const int use_text = (text_index < text_action_count) &&
+            ((key_index >= key_action_count) ||
+             (text_actions[text_index].at <= key_actions[key_index].at)) &&
+            (!action_pending || (text_actions[text_index].at <= action_at));
+        const int use_key = !use_text && (key_index < key_action_count) &&
+            (!action_pending || (key_actions[key_index].at <= action_at));
+        const uint64_t at = use_text ? text_actions[text_index].at :
+                            use_key ? key_actions[key_index].at : action_at;
+        const uint64_t now = bm_session_time(session);
+        bm_status_t status;
+        if (now > at)
+            return BM_STATUS_INVALID_ARGUMENT;
+        status = now < at ? bm_session_run_for(session, at - now) :
+                            BM_STATUS_OK;
+        if (status != BM_STATUS_OK)
+            return status;
+        if (use_text) {
+            status = headless_type_text(session, text_actions[text_index].text,
+                                        key_ticks);
+            ++text_index;
+        } else if (use_key) {
+            status = send_transition(session, key_actions[key_index].key,
+                                     key_actions[key_index].pressed, key_ticks);
+            ++key_index;
+        } else {
+            status = action(action_context);
+            action_pending = 0;
+        }
         if (status != BM_STATUS_OK)
             return status;
     }

@@ -19,7 +19,7 @@ extern "C" {
 #define BM_PCS86_ROM_BASE 0xf0000U
 #define BM_PCS86_ROM_SIZE 65536U
 #define BM_PCS86_CONFIG_TYPE "blumach.system.olivetti-pcs86.config"
-#define BM_PCS86_CONFIG_VERSION 4U
+#define BM_PCS86_CONFIG_VERSION 5U
 
 typedef struct bm_pcs86_hard_disk_config {
     int present;
@@ -35,6 +35,16 @@ typedef struct bm_pcs86_io_trace {
 
 typedef void (*bm_pcs86_io_trace_fn)(void *context, const bm_pcs86_io_trace_t *trace);
 
+typedef struct bm_pcs86_memory_trace {
+    bm_bus_operation_t operation;
+    uint32_t address;
+    uint64_t value;
+    uint8_t size;
+} bm_pcs86_memory_trace_t;
+
+typedef void (*bm_pcs86_memory_trace_fn)(
+    void *context, const bm_pcs86_memory_trace_t *trace);
+
 typedef void (*bm_pcs86_interrupt_trace_fn)(void *context, uint8_t vector);
 
 typedef struct bm_pcs86_config {
@@ -44,6 +54,8 @@ typedef struct bm_pcs86_config {
     void *trace_context;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
+    bm_pcs86_memory_trace_fn memory_trace;
+    void *memory_trace_context;
     bm_pcs86_interrupt_trace_fn interrupt_trace;
     void *interrupt_trace_context;
     bm_floppy_drive_config_t floppy[2];

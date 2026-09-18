@@ -82,6 +82,8 @@ typedef struct bm_pcs86_machine {
     uint64_t rtc_clock_remainder;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
+    bm_pcs86_memory_trace_fn memory_trace;
+    void *memory_trace_context;
     bm_pcs86_interrupt_trace_fn interrupt_trace;
     void *interrupt_trace_context;
 } bm_pcs86_machine_t;
@@ -762,7 +764,7 @@ pcs86_interrupt_acknowledge(void *context, uint8_t *vector)
 }
 
 static void
-pcs86_io_observer(void *context, const bm_bus_transaction_t *transaction)
+pcs86_bus_observer(void *context, const bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
     if ((machine->io_trace != NULL) && (transaction->space == BM_ADDRESS_IO) &&
@@ -773,6 +775,15 @@ pcs86_io_observer(void *context, const bm_bus_transaction_t *transaction)
             (uint8_t) transaction->value
         };
         machine->io_trace(machine->io_trace_context, &trace);
+    } else if ((machine->memory_trace != NULL) &&
+               (transaction->space == BM_ADDRESS_MEMORY) &&
+               (transaction->operation != BM_BUS_FETCH) &&
+               (transaction->size <= UINT8_MAX)) {
+        const bm_pcs86_memory_trace_t trace = {
+            transaction->operation, (uint32_t) transaction->address,
+            transaction->value, (uint8_t) transaction->size
+        };
+        machine->memory_trace(machine->memory_trace_context, &trace);
     }
 }
 
@@ -1206,6 +1217,8 @@ pcs86_create(bm_engine_t *engine,
         machine->jumpers = (uint8_t) (machine->jumpers & ~0x80U);
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
+    machine->memory_trace = config->memory_trace;
+    machine->memory_trace_context = config->memory_trace_context;
     machine->interrupt_trace = config->interrupt_trace;
     machine->interrupt_trace_context = config->interrupt_trace_context;
     machine->ems_size = (size_t) config->ems_kib * 1024U;
@@ -1213,7 +1226,7 @@ pcs86_create(bm_engine_t *engine,
 
     status = bm_bus_create(host, 40, &machine->bus);
     if (status == BM_STATUS_OK)
-        bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
+        bm_bus_set_observer(machine->bus, pcs86_bus_observer, machine);
     if (status == BM_STATUS_OK) {
         machine->conventional_ram = host->allocate(host->context, BM_PCS86_MEMORY_SIZE);
         if (machine->conventional_ram == NULL)

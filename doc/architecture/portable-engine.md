@@ -530,9 +530,11 @@ Other platforms and end-to-end physical keyboard/display latency are unmeasured.
 ### Bounded headless debug observation
 
 The frontend adapter exposes an optional host-neutral observer for completed
-CPU instructions, accepted interrupt vectors and I/O transactions. It is disabled by default, owns no
-files and cannot alter execution. The headless runner's `--trace-tail N`
-option retains only the most recent `N` interleaved events (maximum 4096) and
+CPU instructions, accepted interrupt vectors, memory accesses and I/O
+transactions. It is disabled by default, owns no files and cannot alter
+execution. Instruction records include the complete architectural register
+set at the instruction boundary. The headless runner's `--trace-tail N`
+option retains only the most recent `N` selected events (maximum 4096) and
 prints them in original sequence order. This provides a bounded diagnostic
 trail around failures without permanent multi-million-instruction logs.
 
@@ -543,10 +545,27 @@ is printed separately, and a failed run reports the complete architectural CPU
 register set. These fixed-size records remain bounded even when a guest loops
 for a long time after the event that caused a failure.
 
-The observer carries architectural addresses, opcodes, accepted interrupt
-vectors and byte-wide PCS 86 I/O values only. Output policy remains in the headless frontend; the engine and
-machine receive no paths, streams or host APIs. A disabled observer has no
-trace buffer and the existing diagnostic counters remain unchanged.
+`--trace-memory` restricts retained memory events to one address or a bounded
+range. `--trace-only memory|writes|io` reduces the retained event classes, and
+the optional memory image reconstructs the bytes written in the selected range;
+it is capped at 1 MiB and is not an unrestricted guest-memory dump. A trace can
+freeze at one CS:IP, physical instruction address or event sequence while the
+machine continues to its requested deterministic stop. Freeze records include
+the CPU state at that boundary. These controls are diagnostics only: they do
+not add a debugger command channel or allow the host to mutate guest memory.
+
+Version 2 headless scenarios can schedule named physical key transitions as
+well as text, and a run can schedule one read-only floppy replacement. This
+makes modifier-sensitive input and multi-disk boot paths reproducible without
+GUI automation. The scenario and media scheduler call the same public input
+and storage contracts used by frontends; neither the machine nor its devices
+receive host paths.
+
+The observer carries architectural state and addresses, opcodes, accepted
+interrupt vectors, memory values and byte-wide PCS 86 I/O values only. Output
+policy remains in the headless frontend; the engine and machine receive no
+paths, streams or host APIs. A disabled observer has no trace buffer and the
+existing diagnostic counters remain unchanged.
 
 The CPU still reports instruction-based ticks. FAST/SLOW port behavior and the
 physical slow clock remain a separate pending implementation/measurement.
