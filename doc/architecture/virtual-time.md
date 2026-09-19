@@ -3,8 +3,11 @@
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
 Status: experimental clocked scheduler and timed-device sources with synthetic
-tests; no real CPU or machine uses them yet. The existing PCS 86 engine still
-advances one scheduler tick per completed V30 instruction boundary. Its
+tests; no real CPU or machine uses them yet. The V30 timing observer can now
+compose a complete native-clock duration for instruction boundaries without
+operand or I/O traffic, while preserving ranges and unresolved boundaries as
+such. It is not yet registered as a clocked CPU. The existing PCS 86 engine
+still advances one scheduler tick per completed V30 instruction boundary. Its
 `scheduler_ticks_per_second` is pacing metadata, not the V30 crystal frequency.
 No current machine becomes cycle accurate because of this change.
 
@@ -116,9 +119,12 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains unchanged and green. V30 migration is a
-  later change, with independently measured instruction-cycle coverage and
-  known unknowns; Z80 integration must not alter the legacy V30 tick meaning.
+- The existing PCS 86 suite remains unchanged and green. V30 observation
+  version 6 composes complete native-clock boundaries only where prefetch,
+  queue-read and EXU placement is proven; operand/I/O contention, realised
+  values inside ranges and interrupt boundaries remain known unknowns. A
+  clocked callback and PCS 86 machine migration are later changes. Z80
+  integration must not alter the legacy V30 tick meaning.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,

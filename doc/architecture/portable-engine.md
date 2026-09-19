@@ -240,10 +240,18 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 5 reports
+their sum the elapsed instruction time. Timing-observation version 6 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
-and the next prefetch phase. These remain resource and timeline observations,
+and the next prefetch phase. It also exposes a separately classified complete
+boundary duration. That duration is currently available only when every bus
+transaction in a native instruction boundary is a demand prefetch: demand-fetch
+clocks (including their waits) and queue-read clocks are added to the documented
+EXU interval, while later prefetch phases remain overlapped. Exact execution
+times therefore produce exact boundary times and documented execution ranges
+remain ranges. Operand-memory and I/O traffic leave the boundary duration
+`UNKNOWN` until their position relative to an already-running prefetch is
+represented. The underlying counters remain resource and timeline observations,
 not a serialized sum: BCU and EXU work overlap. The queue, independent PFP and
 resource accounting
 now live in one private, instance-owned BCU component rather than as scattered
@@ -270,20 +278,22 @@ transfers, accepted interrupts and architectural state replacement discard the
 queue and restart PFP at the new IP. The observer reports PFP and occupancy at
 every boundary, rather than inferring queue state only when a flush occurs.
 
-This establishes the boundary needed for the next CPU work without claiming a
-complete timing model. Contention with operand cycles, pre-decode, exact
-realised clocks inside data-dependent ranges, DMA/bus arbitration and scheduler
-consumption of the observations remain explicit subsequent work. The limited
-uncontended overlap is cycle-phased, but the processor as a whole is not yet
-described as cycle accurate.
+This establishes the first scheduler-ready boundary measurements without
+claiming a complete timing model or exposing a clocked CPU callback prematurely.
+Contention with operand cycles, exact realised clocks inside data-dependent
+ranges, DMA/bus arbitration and scheduler consumption of the observations
+remain explicit subsequent work. The limited uncontended overlap is
+cycle-phased, but the processor as a whole is not yet described as cycle
+accurate.
 `POLL` also requires a semantic
 correction before timing: the current interpreter emits one boundary per pin
 sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits, which is why the contract does not combine them into one misleading
-number.
+bus waits. Version 6 combines those quantities only for the uncontended cases
+where their placement and overlap are known; every other boundary remains
+explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by
 `ADD4S`, `SUB4S`, `CMP4S`, `ROL4`, `ROR4`, `INS` and `EXT`. Packed-BCD strings

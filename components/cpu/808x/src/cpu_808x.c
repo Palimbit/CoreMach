@@ -4618,6 +4618,41 @@ observed_prefetch_phase(const bm_v30_bcu_t *bcu)
 }
 
 static void
+compose_boundary_clocks(const bm_808x_state_t *state, int native_mode,
+                        bm_808x_timing_observation_t *observation)
+{
+    uint64_t fixed_clocks;
+
+    observation->boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    if ((observation->kind != BM_808X_BOUNDARY_INSTRUCTION) || !native_mode ||
+        (observation->execution_clock_kind ==
+         BM_808X_EXECUTION_CLOCKS_UNKNOWN))
+        return;
+
+    /* Operand and I/O transactions are synchronous today, but their position
+     * relative to an already-running prefetch is not. Do not turn their
+     * aggregate into a false elapsed duration until that contention is
+     * represented on the BCU timeline. */
+    if (state->bcu.boundary_bus_transactions !=
+        state->bcu.boundary_prefetch_transactions)
+        return;
+
+    /* Demand prefetch is a real stall and already includes its wait states.
+     * Later prefetch phases run inside the documented EXU interval, while
+     * every consumed queue byte contributes its documented pre-decode clock. */
+    fixed_clocks = state->bcu.boundary_demand_prefetch_bus_clocks +
+                   state->bcu.boundary_instruction_queue_reads;
+    if ((fixed_clocks > UINT64_MAX - observation->execution_clocks_min) ||
+        (fixed_clocks > UINT64_MAX - observation->execution_clocks_max))
+        return;
+    observation->boundary_clocks_min =
+        fixed_clocks + observation->execution_clocks_min;
+    observation->boundary_clocks_max =
+        fixed_clocks + observation->execution_clocks_max;
+    observation->boundary_clock_kind = observation->execution_clock_kind;
+}
+
+static void
 begin_boundary_observation(bm_808x_state_t *state)
 {
     bm_v30_bcu_begin_boundary(&state->bcu);
@@ -4676,6 +4711,7 @@ emit_boundary_observation(bm_808x_state_t *state,
             documented_native_execution_clocks(
                 state, &observation.execution_clocks_min,
                 &observation.execution_clocks_max);
+    compose_boundary_clocks(state, native_mode, &observation);
     if (state->timing != NULL)
         state->timing(state->timing_context, &observation);
 }
