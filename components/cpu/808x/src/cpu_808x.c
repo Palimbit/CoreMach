@@ -8,6 +8,8 @@
  */
 #include <blumach/components/cpu_808x.h>
 
+#include "v30_bcu.h"
+
 #include <string.h>
 
 enum {
@@ -44,10 +46,7 @@ typedef struct bm_808x_state {
     uint16_t registers[8];
     uint16_t segments[4];
     uint16_t ip;
-    uint16_t prefetch_pointer;
-    uint8_t prefetch_queue[BM_808X_V30_PREFETCH_QUEUE_CAPACITY];
-    uint8_t prefetch_head;
-    uint8_t prefetch_count;
+    bm_v30_bcu_t bcu;
     uint16_t flags;
     uint32_t last_fetch;
     uint8_t last_opcode;
@@ -74,12 +73,6 @@ typedef struct bm_808x_state {
     void *coprocessor_context;
     bm_808x_timing_fn timing;
     void *timing_context;
-    uint64_t boundary_bus_transactions;
-    uint64_t boundary_wait_states;
-    uint64_t boundary_bus_active_clocks;
-    uint64_t boundary_demand_prefetch_transactions;
-    uint64_t boundary_demand_prefetch_bus_clocks;
-    int boundary_prefetch_flushed;
     int boundary_rm_valid;
     int boundary_rm_memory;
     uint16_t boundary_rm_offset;
@@ -101,27 +94,14 @@ record_bus_transaction(bm_808x_state_t *state,
                        bm_status_t status,
                        int demand_prefetch)
 {
-    uint64_t clocks;
-
-    if (status != BM_STATUS_OK)
-        return;
-    clocks = 4U + (uint64_t) transaction->wait_states;
-    ++state->boundary_bus_transactions;
-    state->boundary_wait_states += transaction->wait_states;
-    state->boundary_bus_active_clocks += clocks;
-    if (demand_prefetch) {
-        ++state->boundary_demand_prefetch_transactions;
-        state->boundary_demand_prefetch_bus_clocks += clocks;
-    }
+    bm_v30_bcu_record_transaction(&state->bcu, transaction, status,
+                                  demand_prefetch);
 }
 
 static void
 mark_prefetch_flush(bm_808x_state_t *state)
 {
-    state->prefetch_head = 0U;
-    state->prefetch_count = 0U;
-    state->prefetch_pointer = state->ip;
-    state->boundary_prefetch_flushed = 1;
+    bm_v30_bcu_flush(&state->bcu, state->ip);
 }
 
 static uint16_t
@@ -164,22 +144,19 @@ read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
 static bm_status_t
 fill_prefetch_queue(bm_808x_state_t *state)
 {
-    const uint8_t free_bytes = (uint8_t)
-        (BM_808X_V30_PREFETCH_QUEUE_CAPACITY - state->prefetch_count);
-    const uint8_t tail = (uint8_t)
-        ((state->prefetch_head + state->prefetch_count) %
-         BM_808X_V30_PREFETCH_QUEUE_CAPACITY);
+    const uint8_t free_bytes = bm_v30_bcu_free_bytes(&state->bcu);
+    const uint16_t prefetch_pointer =
+        bm_v30_bcu_prefetch_pointer(&state->bcu);
     bm_status_t status;
 
-    if ((state->prefetch_pointer & 1U) == 0U) {
+    if ((prefetch_pointer & 1U) == 0U) {
         bm_bus_transaction_t transaction;
-        uint8_t next_tail;
 
         if (free_bytes < 2U)
             return BM_STATUS_INVALID_STATE;
         transaction = (bm_bus_transaction_t) {
             BM_ADDRESS_MEMORY, BM_BUS_FETCH,
-            physical_address(state->segments[1], state->prefetch_pointer),
+            physical_address(state->segments[1], prefetch_pointer),
             0, 2, 2, 0, BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
@@ -187,14 +164,8 @@ fill_prefetch_queue(bm_808x_state_t *state)
         record_bus_transaction(state, &transaction, status, 1);
         if (status != BM_STATUS_OK)
             return status;
-        state->prefetch_queue[tail] = (uint8_t) transaction.value;
-        next_tail = (uint8_t)
-            ((tail + 1U) % BM_808X_V30_PREFETCH_QUEUE_CAPACITY);
-        state->prefetch_queue[next_tail] =
-            (uint8_t) (transaction.value >> 8U);
-        state->prefetch_count = (uint8_t) (state->prefetch_count + 2U);
-        state->prefetch_pointer = (uint16_t) (state->prefetch_pointer + 2U);
-        return BM_STATUS_OK;
+        return bm_v30_bcu_enqueue_word(&state->bcu,
+                                       (uint16_t) transaction.value);
     }
 
     if (free_bytes == 0U)
@@ -202,7 +173,7 @@ fill_prefetch_queue(bm_808x_state_t *state)
     {
         bm_bus_transaction_t transaction = {
             BM_ADDRESS_MEMORY, BM_BUS_FETCH,
-            physical_address(state->segments[1], state->prefetch_pointer),
+            physical_address(state->segments[1], prefetch_pointer),
             0, 1, 1, 0, BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
@@ -210,11 +181,8 @@ fill_prefetch_queue(bm_808x_state_t *state)
         status = bm_bus_transact(state->bus, &transaction);
         record_bus_transaction(state, &transaction, status, 1);
         if (status == BM_STATUS_OK)
-            state->prefetch_queue[tail] = (uint8_t) transaction.value;
-    }
-    if (status == BM_STATUS_OK) {
-        ++state->prefetch_count;
-        ++state->prefetch_pointer;
+            status = bm_v30_bcu_enqueue_byte(&state->bcu,
+                                             (uint8_t) transaction.value);
     }
     return status;
 }
@@ -224,14 +192,12 @@ fetch_byte(bm_808x_state_t *state, uint8_t *value)
 {
     bm_status_t status = BM_STATUS_OK;
 
-    if (state->prefetch_count == 0U)
+    if (bm_v30_bcu_queue_count(&state->bcu) == 0U)
         status = fill_prefetch_queue(state);
     if (status == BM_STATUS_OK) {
-        *value = state->prefetch_queue[state->prefetch_head];
-        state->prefetch_head = (uint8_t)
-            ((state->prefetch_head + 1U) %
-             BM_808X_V30_PREFETCH_QUEUE_CAPACITY);
-        --state->prefetch_count;
+        status = bm_v30_bcu_dequeue_byte(&state->bcu, value);
+    }
+    if (status == BM_STATUS_OK) {
         if (state->last_instruction_length < 8U)
             state->last_instruction_bytes |=
                 (uint64_t) *value << (state->last_instruction_length * 8U);
@@ -1706,10 +1672,7 @@ cpu_reset(void *context)
     memset(state->segments, 0, sizeof(state->segments));
     state->segments[1] = 0xffffU; /* CS:IP resolves to physical FFFF0h. */
     state->ip = 0;
-    state->prefetch_pointer = 0U;
-    state->prefetch_head = 0U;
-    state->prefetch_count = 0U;
-    memset(state->prefetch_queue, 0, sizeof(state->prefetch_queue));
+    bm_v30_bcu_reset(&state->bcu, state->ip);
     state->flags = 0xf002U;
     state->last_fetch = 0xffff0U;
     state->last_opcode = 0;
@@ -1727,12 +1690,6 @@ cpu_reset(void *context)
     state->interrupt_entered = 0;
     state->bus_lock_active = 0;
     state->md_write_enabled = 0;
-    state->boundary_bus_transactions = 0U;
-    state->boundary_wait_states = 0U;
-    state->boundary_bus_active_clocks = 0U;
-    state->boundary_demand_prefetch_transactions = 0U;
-    state->boundary_demand_prefetch_bus_clocks = 0U;
-    state->boundary_prefetch_flushed = 0;
     state->boundary_rm_valid = 0;
     state->boundary_rm_memory = 0;
     state->boundary_rm_offset = 0U;
@@ -4250,7 +4207,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
     else if ((opcode >= 0x58U) && (opcode <= 0x5fU))
         base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
     else if ((opcode >= 0x70U) && (opcode <= 0x7fU))
-        base = state->boundary_prefetch_flushed ? 14U : 4U;
+        base = state->bcu.boundary_prefetch_flushed ? 14U : 4U;
     else if ((opcode >= 0x91U) && (opcode <= 0x97U))
         base = 3U; /* XCHG AW,reg16. */
     else if ((opcode >= 0xb0U) && (opcode <= 0xbfU))
@@ -4488,7 +4445,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 base = (state->boundary_initial_sp & 1U) ? 50U : 38U;
                 break;
             case 0xce:
-                base = state->boundary_prefetch_flushed ?
+                base = state->bcu.boundary_prefetch_flushed ?
                        ((state->boundary_initial_sp & 1U) ? 52U : 40U) : 3U;
                 break;
             case 0xcf:
@@ -4503,10 +4460,10 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                                             &base);
                 break;
             case 0xe0: case 0xe1: case 0xe2:
-                base = state->boundary_prefetch_flushed ? 13U : 5U;
+                base = state->bcu.boundary_prefetch_flushed ? 13U : 5U;
                 break;
             case 0xe3:
-                base = state->boundary_prefetch_flushed ? 13U : 5U;
+                base = state->bcu.boundary_prefetch_flushed ? 13U : 5U;
                 break;
             case 0xe4: base = 9U; break;
             case 0xe5: {
@@ -4665,12 +4622,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
 static void
 begin_boundary_observation(bm_808x_state_t *state)
 {
-    state->boundary_bus_transactions = 0U;
-    state->boundary_wait_states = 0U;
-    state->boundary_bus_active_clocks = 0U;
-    state->boundary_demand_prefetch_transactions = 0U;
-    state->boundary_demand_prefetch_bus_clocks = 0U;
-    state->boundary_prefetch_flushed = 0;
+    bm_v30_bcu_begin_boundary(&state->bcu);
     state->boundary_rm_valid = 0;
     state->boundary_rm_memory = 0;
     state->boundary_rm_offset = 0U;
@@ -4702,20 +4654,20 @@ emit_boundary_observation(bm_808x_state_t *state,
         .prefix_count = kind == BM_808X_BOUNDARY_INSTRUCTION ?
                         state->last_prefix_count : 0U,
         .prefetch_queue_flushed =
-            (uint8_t) !!state->boundary_prefetch_flushed,
+            (uint8_t) !!state->bcu.boundary_prefetch_flushed,
         .prefetch_pointer_known = 1U,
         .prefetch_queue_capacity = BM_808X_V30_PREFETCH_QUEUE_CAPACITY,
-        .prefetch_queue_count = state->prefetch_count,
-        .prefetch_pointer = state->prefetch_pointer,
-        .logical_bus_transactions = state->boundary_bus_transactions,
-        .reported_wait_states = state->boundary_wait_states,
-        .bus_active_clocks = state->boundary_bus_active_clocks,
+        .prefetch_queue_count = bm_v30_bcu_queue_count(&state->bcu),
+        .prefetch_pointer = bm_v30_bcu_prefetch_pointer(&state->bcu),
+        .logical_bus_transactions = state->bcu.boundary_bus_transactions,
+        .reported_wait_states = state->bcu.boundary_wait_states,
+        .bus_active_clocks = state->bcu.boundary_bus_active_clocks,
         .demand_prefetch_transactions =
-            state->boundary_demand_prefetch_transactions,
+            state->bcu.boundary_demand_prefetch_transactions,
         .demand_prefetch_bus_clocks =
-            state->boundary_demand_prefetch_bus_clocks,
+            state->bcu.boundary_demand_prefetch_bus_clocks,
         .instruction_queue_reads = kind == BM_808X_BOUNDARY_INSTRUCTION ?
-                                   state->last_instruction_length : 0U
+            state->bcu.boundary_instruction_queue_reads : 0U
     };
 
     if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)
@@ -4843,9 +4795,9 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
     else if (strcmp(name, "ip") == 0)
         *value = state->ip;
     else if (strcmp(name, "prefetch_pointer") == 0)
-        *value = state->prefetch_pointer;
+        *value = bm_v30_bcu_prefetch_pointer(&state->bcu);
     else if (strcmp(name, "prefetch_queue_count") == 0)
-        *value = state->prefetch_count;
+        *value = bm_v30_bcu_queue_count(&state->bcu);
     else if (strcmp(name, "flags") == 0)
         *value = psw_image(state->flags);
     else if (strcmp(name, "md_write_enabled") == 0)
@@ -4992,10 +4944,7 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->segments[2] = state_image->ss;
     state->segments[3] = state_image->ds;
     state->ip = state_image->ip;
-    state->prefetch_pointer = state_image->ip;
-    state->prefetch_head = 0U;
-    state->prefetch_count = 0U;
-    memset(state->prefetch_queue, 0, sizeof(state->prefetch_queue));
+    bm_v30_bcu_reset(&state->bcu, state_image->ip);
     state->flags = psw_image(state_image->flags);
     state->halted = state_image->halted;
     state->interrupt_inhibit = state_image->interrupt_inhibit;
@@ -5011,9 +4960,6 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->last_prefix_count = 0U;
     state->interrupt_entered = 0;
     state->bus_lock_active = 0;
-    state->boundary_bus_transactions = 0U;
-    state->boundary_wait_states = 0U;
-    state->boundary_prefetch_flushed = 0;
     state->boundary_rm_valid = 0;
     state->boundary_rm_memory = 0;
     state->boundary_rm_offset = 0U;

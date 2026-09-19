@@ -243,6 +243,12 @@ target_link_libraries(portable-engine-pvga1a
     PRIVATE blumach_video blumach_platform_null
 )
 
+add_executable(portable-engine-v30-bcu v30_bcu_test.c)
+target_include_directories(portable-engine-v30-bcu
+    PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/808x/src"
+)
+target_link_libraries(portable-engine-v30-bcu PRIVATE blumach_cpu_808x)
+
 add_library(portable-engine-808x-test-support STATIC cpu_808x_test_harness.c)
 target_link_libraries(portable-engine-808x-test-support
     PUBLIC
@@ -444,7 +450,7 @@ target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
 )
 
-foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pcs86-ems portable-engine-pc-platform portable-engine-xta portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-mm58167-clock portable-engine-pvga1a portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-base-isa portable-engine-808x-signed-math portable-engine-808x-80186-stack portable-engine-808x-80186-control portable-engine-808x-80186-io-string portable-engine-808x-interrupt-boundaries portable-engine-808x-prefix-control portable-engine-808x-interrupt-priority portable-engine-808x-psw portable-engine-808x-nec-extensions portable-engine-808x-coprocessor portable-engine-808x-emulation-mode portable-engine-808x-native-opcode-map portable-engine-808x-timing-contract portable-engine-808x-vector-runner portable-engine-legacy-io)
+foreach(target portable-runtime-session-contracts portable-runtime-machine-registry-contracts portable-engine-memory portable-engine-bus-contracts portable-engine-scheduler-contracts portable-host-capability-contracts portable-engine-pcs86-reset portable-engine-pcs86-user-io portable-engine-pcs86-ems portable-engine-pc-platform portable-engine-xta portable-engine-dma8237 portable-engine-fdc765 portable-engine-fdc765-contracts portable-engine-storage-contracts portable-engine-dma-pages portable-engine-mm58167-irq portable-engine-mm58167-clock portable-engine-pvga1a portable-engine-v30-bcu portable-engine-808x-post portable-engine-808x-checksum portable-engine-808x-segments portable-engine-808x-compare portable-engine-808x-shifts portable-engine-808x-returns portable-engine-808x-sign-extend portable-engine-808x-string-compare portable-engine-808x-trace portable-engine-808x-indirect-far-call portable-engine-808x-pop-rm portable-engine-808x-exchange portable-engine-808x-negate portable-engine-808x-xlat portable-engine-808x-immediate-carry portable-engine-808x-byte-divide portable-engine-808x-reverse-carry portable-engine-808x-adjust portable-engine-808x-base-isa portable-engine-808x-signed-math portable-engine-808x-80186-stack portable-engine-808x-80186-control portable-engine-808x-80186-io-string portable-engine-808x-interrupt-boundaries portable-engine-808x-prefix-control portable-engine-808x-interrupt-priority portable-engine-808x-psw portable-engine-808x-nec-extensions portable-engine-808x-coprocessor portable-engine-808x-emulation-mode portable-engine-808x-native-opcode-map portable-engine-808x-timing-contract portable-engine-808x-vector-runner portable-engine-legacy-io)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
@@ -490,6 +496,7 @@ add_test(NAME portable-engine.dma-page-registers COMMAND portable-engine-dma-pag
 add_test(NAME portable-engine.mm58167-irq-control COMMAND portable-engine-mm58167-irq)
 add_test(NAME portable-engine.mm58167-clock COMMAND portable-engine-mm58167-clock)
 add_test(NAME portable-engine.pvga1a-registers-memory COMMAND portable-engine-pvga1a)
+add_test(NAME portable-engine.v30-bcu-state COMMAND portable-engine-v30-bcu)
 add_test(NAME portable-engine.808x-post-self-test COMMAND portable-engine-808x-post)
 add_test(NAME portable-engine.808x-rom-checksum COMMAND portable-engine-808x-checksum)
 add_test(NAME portable-engine.808x-segment-overrides COMMAND portable-engine-808x-segments)
@@ -546,6 +553,7 @@ set_tests_properties(
     portable-engine.mm58167-irq-control
     portable-engine.mm58167-clock
     portable-engine.pvga1a-registers-memory
+    portable-engine.v30-bcu-state
     portable-engine.808x-post-self-test
     portable-engine.808x-rom-checksum
     portable-engine.808x-segment-overrides
