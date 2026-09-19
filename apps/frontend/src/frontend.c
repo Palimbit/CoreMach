@@ -151,6 +151,18 @@ bm_frontend_machine_diagnostics(
     return BM_STATUS_OK;
 }
 
+bm_status_t
+bm_frontend_machine_set_debug_observer(
+    bm_frontend_machine_t *machine, bm_frontend_debug_observer_fn observer,
+    void *context)
+{
+    if (machine == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    machine->debug_observer = observer;
+    machine->debug_context = observer != NULL ? context : NULL;
+    return BM_STATUS_OK;
+}
+
 void
 bm_frontend_machine_close(bm_frontend_machine_t *machine)
 {

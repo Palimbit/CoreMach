@@ -74,14 +74,82 @@ capture_instruction(void *context, const bm_808x_trace_t *trace)
     diagnostics->last_effective_opcode = trace->effective_opcode;
     diagnostics->last_prefix_count = trace->prefix_count;
     diagnostics->has_last_instruction = 1;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_INSTRUCTION,
+            .sequence = machine->base.debug_sequence++,
+            .value.instruction = {
+                .cs = trace->cs,
+                .ip = trace->ip,
+                .ds = trace->ds,
+                .es = trace->es,
+                .ss = trace->ss,
+                .sp = trace->sp,
+                .ax = trace->ax,
+                .bx = trace->bx,
+                .cx = trace->cx,
+                .dx = trace->dx,
+                .bp = trace->bp,
+                .si = trace->si,
+                .di = trace->di,
+                .flags = trace->flags,
+                .physical_address = trace->physical_address,
+                .opcode = trace->opcode,
+                .effective_opcode = trace->effective_opcode,
+                .prefix_count = trace->prefix_count
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
 }
 
 static void
 capture_io(void *context, const bm_pcs86_io_trace_t *trace)
 {
     pcs86_frontend_machine_t *machine = context;
-    (void) trace;
     ++machine->base.diagnostics.io_operations;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_IO,
+            .sequence = machine->base.debug_sequence++,
+            .value.io = {
+                trace->port, trace->value, 1U,
+                (uint8_t) (trace->operation == BM_BUS_WRITE)
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
+}
+
+static void
+capture_memory(void *context, const bm_pcs86_memory_trace_t *trace)
+{
+    pcs86_frontend_machine_t *machine = context;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_MEMORY,
+            .sequence = machine->base.debug_sequence++,
+            .value.memory = {
+                trace->address, trace->value, trace->size,
+                (uint8_t) (trace->operation == BM_BUS_WRITE)
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
+}
+
+static void
+capture_interrupt(void *context, uint8_t vector)
+{
+    pcs86_frontend_machine_t *machine = context;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_INTERRUPT,
+            .sequence = machine->base.debug_sequence++,
+            .value.interrupt = { vector }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
 }
 
 static void
@@ -159,6 +227,10 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     machine->pcs86.trace_context = machine;
     machine->pcs86.io_trace = capture_io;
     machine->pcs86.io_trace_context = machine;
+    machine->pcs86.memory_trace = capture_memory;
+    machine->pcs86.memory_trace_context = machine;
+    machine->pcs86.interrupt_trace = capture_interrupt;
+    machine->pcs86.interrupt_trace_context = machine;
     machine->pcs86.ems_kib = BM_PCS86_EMS_1920_KIB;
     machine->pcs86.rtc_initial_state = default_rtc_state;
     machine->pcs86.rtc_initial_state_size = sizeof(default_rtc_state);
