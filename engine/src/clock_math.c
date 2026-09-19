@@ -99,6 +99,79 @@ bm_clock_position_advance(bm_clock_position_t *clock, uint64_t cycles)
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+position_after_cycles(const bm_clock_rate_t *rate, uint64_t cycles,
+                      bm_clock_position_t *position)
+{
+    bm_status_t status = bm_clock_position_init(position, rate);
+
+    if (status != BM_STATUS_OK)
+        return status;
+    return bm_clock_position_advance(position, cycles);
+}
+
+bm_status_t
+bm_clock_position_next_after(const bm_clock_rate_t *rate,
+                             const bm_clock_position_t *target,
+                             bm_clock_position_t *next)
+{
+    bm_clock_position_t candidate;
+    uint64_t lower = 0U;
+    uint64_t upper = 1U;
+    bm_status_t status;
+
+    if ((rate == NULL) || (target == NULL) || (next == NULL) ||
+        (target->phase_denominator == 0U) ||
+        (target->phase >= target->phase_denominator))
+        return BM_STATUS_INVALID_ARGUMENT;
+
+    /* Find an upper source-cycle index whose position is strictly after the
+     * target. An overflowing position is still a valid binary-search upper
+     * bound; the final selected position must itself remain representable. */
+    for (;;) {
+        status = position_after_cycles(rate, upper, &candidate);
+        if ((status == BM_STATUS_CAPACITY_EXCEEDED) ||
+            ((status == BM_STATUS_OK) &&
+             (bm_clock_position_compare(&candidate, target) > 0)))
+            break;
+        if (status != BM_STATUS_OK)
+            return status;
+        lower = upper;
+        if (upper > (UINT64_MAX / 2U)) {
+            upper = UINT64_MAX;
+            status = position_after_cycles(rate, upper, &candidate);
+            if ((status == BM_STATUS_OK) &&
+                (bm_clock_position_compare(&candidate, target) <= 0))
+                return BM_STATUS_CAPACITY_EXCEEDED;
+            if ((status != BM_STATUS_OK) &&
+                (status != BM_STATUS_CAPACITY_EXCEEDED))
+                return status;
+            break;
+        }
+        upper *= 2U;
+    }
+
+    while ((upper - lower) > 1U) {
+        uint64_t middle = lower + ((upper - lower) / 2U);
+
+        status = position_after_cycles(rate, middle, &candidate);
+        if ((status == BM_STATUS_CAPACITY_EXCEEDED) ||
+            ((status == BM_STATUS_OK) &&
+             (bm_clock_position_compare(&candidate, target) > 0)))
+            upper = middle;
+        else if (status == BM_STATUS_OK)
+            lower = middle;
+        else
+            return status;
+    }
+
+    status = position_after_cycles(rate, upper, &candidate);
+    if (status != BM_STATUS_OK)
+        return status;
+    *next = candidate;
+    return BM_STATUS_OK;
+}
+
 int
 bm_clock_position_compare(const bm_clock_position_t *left,
                           const bm_clock_position_t *right)

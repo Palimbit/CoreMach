@@ -42,7 +42,11 @@ struct bm_engine {
     size_t max_timed_sources;
     bm_tick_t now;
     bm_clock_position_t clock_now;
+    bm_clock_position_t dispatch_position;
     uint64_t next_sequence;
+    size_t firing_source;
+    int dispatch_active;
+    int source_callback_active;
     int clocked;
 };
 
@@ -259,7 +263,7 @@ bm_engine_add_timed_source(bm_engine_t *engine,
     bm_status_t status;
 
     if ((engine == NULL) || !engine->clocked || (fire == NULL) ||
-        (rate == NULL) || (first_delay_cycles == 0U) ||
+        (rate == NULL) ||
         (engine->clock_now.nanoseconds != 0U) ||
         (engine->clock_now.phase != 0U))
         return BM_STATUS_INVALID_ARGUMENT;
@@ -268,21 +272,72 @@ bm_engine_add_timed_source(bm_engine_t *engine,
     status = bm_clock_position_init(&candidate.deadline, rate);
     if (status != BM_STATUS_OK)
         return status;
-    status = bm_clock_position_advance(&candidate.deadline,
-                                       first_delay_cycles);
-    if (status != BM_STATUS_OK)
-        return status;
+    if (first_delay_cycles != 0U) {
+        status = bm_clock_position_advance(&candidate.deadline,
+                                           first_delay_cycles);
+        if (status != BM_STATUS_OK)
+            return status;
+        candidate.active = 1;
+    }
 
     index = engine->timed_source_count;
     candidate.rate = *rate;
     candidate.first_delay_cycles = first_delay_cycles;
     candidate.fire = fire;
     candidate.context = context;
-    candidate.active = 1;
     engine->timed_sources[index] = candidate;
     ++engine->timed_source_count;
     if (out_id != NULL)
         *out_id = (bm_timed_source_id_t) index;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_engine_arm_timed_source(bm_engine_t *engine, bm_timed_source_id_t id,
+                           uint64_t delay_cycles)
+{
+    bm_timed_source_slot_t *source;
+    const bm_clock_position_t *effective_time;
+    bm_clock_position_t candidate;
+    bm_status_t status;
+
+    if ((engine == NULL) || !engine->clocked ||
+        ((size_t) id >= engine->timed_source_count) ||
+        (delay_cycles == 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (engine->source_callback_active &&
+        (engine->firing_source == (size_t) id))
+        return BM_STATUS_INVALID_STATE;
+
+    effective_time = engine->dispatch_active ? &engine->dispatch_position :
+                                               &engine->clock_now;
+    if (bm_clock_position_compare(effective_time, &engine->clock_now) < 0)
+        return BM_STATUS_INVALID_STATE;
+
+    source = &engine->timed_sources[id];
+    status = bm_clock_position_next_after(&source->rate, effective_time,
+                                          &candidate);
+    if (status != BM_STATUS_OK)
+        return status;
+    status = bm_clock_position_advance(&candidate, delay_cycles - 1U);
+    if (status != BM_STATUS_OK)
+        return status;
+
+    source->deadline = candidate;
+    source->active = 1;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_engine_disarm_timed_source(bm_engine_t *engine, bm_timed_source_id_t id)
+{
+    if ((engine == NULL) || !engine->clocked ||
+        ((size_t) id >= engine->timed_source_count))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (engine->source_callback_active &&
+        (engine->firing_source == (size_t) id))
+        return BM_STATUS_INVALID_STATE;
+    engine->timed_sources[id].active = 0;
     return BM_STATUS_OK;
 }
 
@@ -306,11 +361,14 @@ bm_engine_reset(bm_engine_t *engine)
         status = bm_clock_position_init(&source->deadline, &source->rate);
         if (status != BM_STATUS_OK)
             return status;
-        status = bm_clock_position_advance(&source->deadline,
-                                           source->first_delay_cycles);
-        if (status != BM_STATUS_OK)
-            return status;
-        source->active = 1;
+        if (source->first_delay_cycles != 0U) {
+            status = bm_clock_position_advance(&source->deadline,
+                                               source->first_delay_cycles);
+            if (status != BM_STATUS_OK)
+                return status;
+            source->active = 1;
+        } else
+            source->active = 0;
     }
     for (index = 0; index < engine->cpu_count; ++index) {
         status = engine->cpus[index].cpu.ops.reset(engine->cpus[index].cpu.context);
@@ -462,8 +520,11 @@ run_clocked_cpus_to(bm_engine_t *engine,
         if (selected == SIZE_MAX)
             return BM_STATUS_OK;
         slot = &engine->cpus[selected];
+        engine->dispatch_position = slot->clock_position;
+        engine->dispatch_active = 1;
         status = slot->step_cycles(slot->cpu.context,
                                    slot->clock_position.nanoseconds, &cycles);
+        engine->dispatch_active = 0;
         if (status == BM_STATUS_IDLE) {
             if (cycles != 0U)
                 return BM_STATUS_DEVICE_ERROR;
@@ -534,8 +595,11 @@ fire_timed_sources_at_clock_position(bm_engine_t *engine)
             (bm_clock_position_compare(&source->deadline,
                                        &engine->clock_now) != 0))
             continue;
+        engine->firing_source = index;
+        engine->source_callback_active = 1;
         status = source->fire(engine, source->context, &when,
                               &cycles_until_next);
+        engine->source_callback_active = 0;
         if (status == BM_STATUS_IDLE) {
             if (cycles_until_next != 0U)
                 return BM_STATUS_DEVICE_ERROR;

@@ -37,7 +37,7 @@ typedef bm_status_t (*bm_clocked_cpu_step_fn)(void *context, bm_tick_t start_ns,
                                               uint64_t *cycles);
 /* A host-independent source of device deadlines. BM_STATUS_OK rearms the
  * source by cycles_until_next native cycles from this exact firing time.
- * BM_STATUS_IDLE with zero cycles disarms it until engine reset. */
+ * BM_STATUS_IDLE with zero cycles disarms it until explicitly armed or reset. */
 typedef bm_status_t (*bm_timed_source_fire_fn)(bm_engine_t *engine,
                                                void *context,
                                                const bm_time_point_t *when,
@@ -64,12 +64,24 @@ bm_status_t bm_engine_add_clocked_cpu(bm_engine_t *engine, const bm_cpu_t *cpu,
                                       bm_clocked_cpu_step_fn step,
                                       const bm_clock_rate_t *rate,
                                       bm_cpu_id_t *out_id);
+/* A zero first delay registers an initially disarmed source; reset restores
+ * that registered state. */
 bm_status_t bm_engine_add_timed_source(bm_engine_t *engine,
                                        bm_timed_source_fire_fn fire,
                                        void *context,
                                        const bm_clock_rate_t *rate,
                                        uint64_t first_delay_cycles,
                                        bm_timed_source_id_t *out_id);
+/* Arm or replace a timed-source deadline. delay_cycles counts source-clock
+ * edges strictly after the effective scheduling boundary. A call made while a
+ * clocked CPU step is executing uses that CPU's exact instruction-start
+ * boundary; other calls use the engine's current exact time. This does not
+ * imply bus-phase timing within an instruction. */
+bm_status_t bm_engine_arm_timed_source(bm_engine_t *engine,
+                                       bm_timed_source_id_t id,
+                                       uint64_t delay_cycles);
+bm_status_t bm_engine_disarm_timed_source(bm_engine_t *engine,
+                                          bm_timed_source_id_t id);
 bm_status_t bm_engine_reset(bm_engine_t *engine);
 bm_status_t bm_engine_run_for(bm_engine_t *engine, bm_tick_t duration);
 bm_status_t bm_engine_schedule_at(bm_engine_t *engine,

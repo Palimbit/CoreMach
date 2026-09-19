@@ -62,20 +62,37 @@ intermediate product; overflow is reported without changing the position.
    A later bus-phase/micro-operation contract is required where exact ordering
    within an instruction materially affects a machine.
 7. `bm_engine_add_timed_source()` represents a device deadline generator, not
-   the device itself. Its rational rate and first delay are machine wiring.
+   the device itself. Its rational rate and first delay are machine wiring. A
+   zero first delay registers it initially disarmed, which is required for
+   counters and transfer engines that do not run until guest software programs
+   them. Reset restores the registered initial state rather than retaining a
+   runtime arm or disarm decision.
    At each exact deadline the callback returns the positive native-cycle delay
    to its next activation, or `BM_STATUS_IDLE` with zero cycles to disarm until
-   engine reset. The engine does not own or reset the callback context.
+   explicitly armed or reset. The engine does not own or reset the callback
+   context.
    Registration is limited to the construction/reset boundary at virtual time
    zero in this initial contract, and `max_timed_sources` is an explicit engine
    capacity independent from queued one-shot events.
-8. Timed-source deadlines retain their exact sub-nanosecond phase.
+8. `bm_engine_arm_timed_source()` atomically installs or replaces a deadline;
+   `bm_engine_disarm_timed_source()` cancels one. The positive delay counts
+   source-clock edges strictly after the effective boundary, on the source's
+   phase grid anchored at machine time zero. Calls outside CPU execution use
+   the current exact engine boundary. Calls made from a clocked CPU step use
+   that CPU's exact instruction-start position, including its fractional
+   phase, even though the callback's legacy `start_ns` argument exposes only
+   the integer floor. This makes guest programming deterministic but still
+   does not locate the I/O write within the instruction. A source cannot arm
+   or disarm itself from its firing callback; it uses the callback result for
+   self-scheduling. Failed reprogramming, including arithmetic overflow,
+   leaves the prior deadline unchanged.
+9. Timed-source deadlines retain their exact sub-nanosecond phase.
    `bm_engine_now()` remains the floor in virtual nanoseconds for compatibility;
    `bm_engine_now_exact()` exposes the normalized fractional part. At a shared
    exact boundary, queued one-shot events run in insertion order, timed sources
    run in registration order, and one-shot events added by those sources are
    drained before CPU execution resumes.
-9. A fractional deadline waking a halted CPU is rounded forward to the next
+10. A fractional deadline waking a halted CPU is rounded forward to the next
    integer nanosecond because the current CPU boundary API does not represent
    a cross-domain rebase. This is deterministic and prevents time travel, but
    is another explicit instruction-boundary approximation rather than a claim
@@ -104,6 +121,7 @@ intermediate product; overflow is reported without changing the position.
   known unknowns; Z80 integration must not alter the legacy V30 tick meaning.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
+  dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,
   invalid progress and waking a halted CPU from a fractional deadline. A real
   PIT, video scanline or storage-transfer source must still be integrated and
   measured before this contract is called production-ready.

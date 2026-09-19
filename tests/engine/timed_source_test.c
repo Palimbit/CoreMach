@@ -35,6 +35,21 @@ typedef struct wake_source {
     bm_cpu_id_t cpu_id;
 } wake_source_t;
 
+typedef struct controlled_source {
+    bm_timed_source_id_t id;
+    bm_status_t control_status;
+    bm_time_point_t fired_at;
+    size_t fire_count;
+    uint64_t delay_cycles;
+} controlled_source_t;
+
+typedef struct arming_cpu {
+    bm_engine_t *engine;
+    bm_timed_source_id_t source_id;
+    size_t step_count;
+    bm_status_t arm_status;
+} arming_cpu_t;
+
 static void
 must_not_run(bm_engine_t *engine, void *context)
 {
@@ -88,6 +103,113 @@ fire_periodic(bm_engine_t *engine, void *context,
     }
     *cycles_until_next = 1U;
     return BM_STATUS_OK;
+}
+
+static bm_status_t
+fire_once(bm_engine_t *engine, void *context,
+          const bm_time_point_t *when, uint64_t *cycles_until_next)
+{
+    controlled_source_t *source = context;
+
+    (void) engine;
+    source->fired_at = *when;
+    ++source->fire_count;
+    *cycles_until_next = 0U;
+    return BM_STATUS_IDLE;
+}
+
+static void
+arm_source_after_event(bm_engine_t *engine, void *context)
+{
+    controlled_source_t *source = context;
+
+    source->control_status = bm_engine_arm_timed_source(
+        engine, source->id, source->delay_cycles);
+}
+
+static void
+disarm_source_after_event(bm_engine_t *engine, void *context)
+{
+    controlled_source_t *source = context;
+
+    source->control_status = bm_engine_disarm_timed_source(engine,
+                                                           source->id);
+}
+
+static void
+test_initially_disarmed_source_can_be_armed_exactly(void)
+{
+    bm_engine_t *engine = make_clocked_engine(1U);
+    controlled_source_t source = { 0 };
+
+    source.delay_cycles = 1U;
+    assert(bm_engine_add_timed_source(engine, fire_once, &source,
+                                      &rate_3_hz, 0U, &source.id) ==
+           BM_STATUS_OK);
+    assert(bm_engine_schedule_at(engine, UINT64_C(500000000),
+                                 arm_source_after_event, &source) ==
+           BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(666666666)) == BM_STATUS_OK);
+    assert(source.control_status == BM_STATUS_OK);
+    assert(source.fire_count == 0U);
+    assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+    assert(source.fire_count == 1U);
+    assert(source.fired_at.nanoseconds == UINT64_C(666666666));
+    assert(source.fired_at.subnanosecond_numerator == 2U);
+    assert(source.fired_at.subnanosecond_denominator == 3U);
+    bm_engine_destroy(engine);
+}
+
+static void
+test_reprogram_disarm_and_reset_restore_registration(void)
+{
+    bm_engine_t *engine = make_clocked_engine(1U);
+    controlled_source_t source = { 0 };
+
+    source.delay_cycles = 2U;
+    assert(bm_engine_add_timed_source(engine, fire_once, &source,
+                                      &rate_2_hz, 1U, &source.id) ==
+           BM_STATUS_OK);
+    assert(bm_engine_schedule_at(engine, UINT64_C(250000000),
+                                 arm_source_after_event, &source) ==
+           BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(500000000)) == BM_STATUS_OK);
+    assert(source.fire_count == 0U);
+    assert(bm_engine_run_for(engine, UINT64_C(500000000)) == BM_STATUS_OK);
+    assert(source.fire_count == 1U);
+    assert(source.fired_at.nanoseconds == UINT64_C(1000000000));
+
+    source.fire_count = 0U;
+    assert(bm_engine_reset(engine) == BM_STATUS_OK);
+    assert(bm_engine_schedule_at(engine, UINT64_C(250000000),
+                                 disarm_source_after_event, &source) ==
+           BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(1000000000)) == BM_STATUS_OK);
+    assert(source.control_status == BM_STATUS_OK);
+    assert(source.fire_count == 0U);
+
+    assert(bm_engine_reset(engine) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(500000000)) == BM_STATUS_OK);
+    assert(source.fire_count == 1U);
+    bm_engine_destroy(engine);
+}
+
+static void
+test_same_boundary_event_can_cancel_source(void)
+{
+    bm_engine_t *engine = make_clocked_engine(1U);
+    controlled_source_t source = { 0 };
+
+    assert(bm_engine_add_timed_source(engine, fire_once, &source,
+                                      &rate_2_hz, 1U, &source.id) ==
+           BM_STATUS_OK);
+    assert(bm_engine_schedule_at(engine, UINT64_C(500000000),
+                                 disarm_source_after_event, &source) ==
+           BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(500000000)) == BM_STATUS_OK);
+    assert(source.control_status == BM_STATUS_OK);
+    assert(source.fire_count == 0U);
+    bm_engine_destroy(engine);
 }
 
 static void
@@ -234,6 +356,70 @@ sleeping_cpu_signal(void *context, uint32_t line, int asserted)
 }
 
 static bm_status_t
+arming_cpu_reset(void *context)
+{
+    arming_cpu_t *cpu = context;
+
+    cpu->step_count = 0U;
+    cpu->arm_status = BM_STATUS_INVALID_STATE;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+arming_cpu_step(void *context, bm_tick_t start_ns, uint64_t *cycles)
+{
+    arming_cpu_t *cpu = context;
+
+    ++cpu->step_count;
+    if (cpu->step_count == 2U) {
+        /* The public callback only exposes the integer floor, but the engine
+         * must arm from this CPU domain's exact fractional boundary. */
+        assert(start_ns == UINT64_C(333333333));
+        cpu->arm_status = bm_engine_arm_timed_source(cpu->engine,
+                                                     cpu->source_id, 1U);
+    }
+    *cycles = 1U;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+arming_cpu_signal(void *context, uint32_t line, int asserted)
+{
+    (void) context;
+    (void) line;
+    (void) asserted;
+    return BM_STATUS_OK;
+}
+
+static void
+test_cpu_control_uses_exact_instruction_start_boundary(void)
+{
+    bm_engine_t *engine = make_clocked_engine(1U);
+    controlled_source_t source = { 0 };
+    arming_cpu_t cpu_context = { engine, UINT32_MAX, 0U,
+                                 BM_STATUS_INVALID_STATE };
+    bm_cpu_t cpu = { 0 };
+
+    assert(bm_engine_add_timed_source(engine, fire_once, &source,
+                                      &rate_3_hz, 0U, &source.id) ==
+           BM_STATUS_OK);
+    cpu_context.source_id = source.id;
+    cpu.name = "arming-synthetic";
+    cpu.context = &cpu_context;
+    cpu.ops.reset = arming_cpu_reset;
+    cpu.ops.signal = arming_cpu_signal;
+    assert(bm_engine_add_clocked_cpu(engine, &cpu, arming_cpu_step,
+                                     &rate_3_hz, NULL) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(666666667)) == BM_STATUS_OK);
+    assert(cpu_context.arm_status == BM_STATUS_OK);
+    assert(source.fire_count == 1U);
+    assert(source.fired_at.nanoseconds == UINT64_C(666666666));
+    assert(source.fired_at.subnanosecond_numerator == 2U);
+    assert(source.fired_at.subnanosecond_denominator == 3U);
+    bm_engine_destroy(engine);
+}
+
+static bm_status_t
 fire_wake(bm_engine_t *engine, void *context,
           const bm_time_point_t *when, uint64_t *cycles_until_next)
 {
@@ -292,6 +478,64 @@ fire_invalid_idle(bm_engine_t *engine, void *context,
     return BM_STATUS_IDLE;
 }
 
+static bm_status_t
+fire_reject_self_control(bm_engine_t *engine, void *context,
+                         const bm_time_point_t *when,
+                         uint64_t *cycles_until_next)
+{
+    controlled_source_t *source = context;
+
+    (void) when;
+    assert(bm_engine_disarm_timed_source(engine, source->id) ==
+           BM_STATUS_INVALID_STATE);
+    assert(bm_engine_arm_timed_source(engine, source->id, 1U) ==
+           BM_STATUS_INVALID_STATE);
+    ++source->fire_count;
+    *cycles_until_next = 0U;
+    return BM_STATUS_IDLE;
+}
+
+static void
+test_control_validation_and_overflow_are_atomic(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    bm_engine_config_t legacy_config = { 1U, 1U, 1U };
+    bm_engine_t *legacy = NULL;
+    bm_engine_t *engine = make_clocked_engine(1U);
+    controlled_source_t source = { 0 };
+
+    assert(bm_engine_create(&host, &legacy_config, &legacy) == BM_STATUS_OK);
+    assert(bm_engine_arm_timed_source(legacy, 0U, 1U) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_engine_disarm_timed_source(legacy, 0U) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    bm_engine_destroy(legacy);
+
+    assert(bm_engine_add_timed_source(engine, fire_once, &source,
+                                      &rate_1_hz, 1U, &source.id) ==
+           BM_STATUS_OK);
+    assert(bm_engine_arm_timed_source(engine, source.id, 0U) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_engine_arm_timed_source(engine, source.id + 1U, 1U) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_engine_disarm_timed_source(engine, source.id + 1U) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_engine_arm_timed_source(engine, source.id, UINT64_MAX) ==
+           BM_STATUS_CAPACITY_EXCEEDED);
+    assert(bm_engine_run_for(engine, UINT64_C(1000000000)) == BM_STATUS_OK);
+    assert(source.fire_count == 1U);
+    bm_engine_destroy(engine);
+
+    engine = make_clocked_engine(1U);
+    memset(&source, 0, sizeof(source));
+    assert(bm_engine_add_timed_source(engine, fire_reject_self_control,
+                                      &source, &rate_1_hz, 1U, &source.id) ==
+           BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(1000000000)) == BM_STATUS_OK);
+    assert(source.fire_count == 1U);
+    bm_engine_destroy(engine);
+}
+
 static void
 test_validation_and_invalid_progress(void)
 {
@@ -300,6 +544,7 @@ test_validation_and_invalid_progress(void)
     bm_engine_t *legacy = NULL;
     bm_engine_t *engine = make_clocked_engine(1U);
     bm_time_point_t now;
+    bm_timed_source_id_t id = UINT32_MAX;
 
     assert(bm_engine_create(&host, &legacy_config, &legacy) == BM_STATUS_OK);
     assert(bm_engine_add_timed_source(legacy, fire_zero_progress, NULL,
@@ -322,13 +567,11 @@ test_validation_and_invalid_progress(void)
                                       &rate_zero, 1U, NULL) ==
            BM_STATUS_INVALID_ARGUMENT);
     assert(bm_engine_add_timed_source(engine, fire_zero_progress, NULL,
-                                      &rate_1_hz, 0U, NULL) ==
-           BM_STATUS_INVALID_ARGUMENT);
-    assert(bm_engine_add_timed_source(engine, fire_zero_progress, NULL,
-                                      &rate_1_hz, 1U, NULL) == BM_STATUS_OK);
+                                      &rate_1_hz, 0U, &id) == BM_STATUS_OK);
     assert(bm_engine_add_timed_source(engine, fire_zero_progress, NULL,
                                       &rate_1_hz, 1U, NULL) ==
            BM_STATUS_CAPACITY_EXCEEDED);
+    assert(bm_engine_arm_timed_source(engine, id, 1U) == BM_STATUS_OK);
     assert(bm_engine_run_for(engine, UINT64_C(1000000000)) ==
            BM_STATUS_DEVICE_ERROR);
     bm_engine_destroy(engine);
@@ -366,8 +609,13 @@ int
 main(void)
 {
     test_exact_fractional_periods_and_reset();
+    test_initially_disarmed_source_can_be_armed_exactly();
+    test_reprogram_disarm_and_reset_restore_registration();
+    test_same_boundary_event_can_cancel_source();
     test_same_time_order_is_stable();
     test_fractional_source_wakes_idle_cpu_without_time_travel();
+    test_cpu_control_uses_exact_instruction_start_boundary();
+    test_control_validation_and_overflow_are_atomic();
     test_validation_and_invalid_progress();
     test_partial_creation_releases_timed_source_storage();
     return 0;
