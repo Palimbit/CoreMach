@@ -21,7 +21,7 @@ typedef struct io_event {
     bm_bus_operation_t operation;
     uint16_t port;
     uint16_t value;
-    uint8_t size;
+    uint32_t size;
 } io_event_t;
 
 typedef struct io_fixture {
