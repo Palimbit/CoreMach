@@ -342,6 +342,23 @@ bm_engine_disarm_timed_source(bm_engine_t *engine, bm_timed_source_id_t id)
 }
 
 bm_status_t
+bm_engine_timed_source_cycle_count(const bm_engine_t *engine,
+                                   bm_timed_source_id_t id,
+                                   uint64_t *out_cycles)
+{
+    const bm_clock_position_t *effective_time;
+
+    if ((engine == NULL) || !engine->clocked ||
+        ((size_t) id >= engine->timed_source_count) ||
+        (out_cycles == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    effective_time = engine->dispatch_active ? &engine->dispatch_position :
+                                               &engine->clock_now;
+    return bm_clock_cycles_at_or_before(&engine->timed_sources[id].rate,
+                                        effective_time, out_cycles);
+}
+
+bm_status_t
 bm_engine_reset(bm_engine_t *engine)
 {
     size_t index;

@@ -38,8 +38,10 @@ typedef struct wake_source {
 typedef struct controlled_source {
     bm_timed_source_id_t id;
     bm_status_t control_status;
+    bm_status_t cursor_status;
     bm_time_point_t fired_at;
     size_t fire_count;
+    uint64_t fired_cycle_count;
     uint64_t delay_cycles;
 } controlled_source_t;
 
@@ -48,6 +50,8 @@ typedef struct arming_cpu {
     bm_timed_source_id_t source_id;
     size_t step_count;
     bm_status_t arm_status;
+    bm_status_t cursor_status;
+    uint64_t observed_source_cycles;
 } arming_cpu_t;
 
 static void
@@ -111,7 +115,8 @@ fire_once(bm_engine_t *engine, void *context,
 {
     controlled_source_t *source = context;
 
-    (void) engine;
+    source->cursor_status = bm_engine_timed_source_cycle_count(
+        engine, source->id, &source->fired_cycle_count);
     source->fired_at = *when;
     ++source->fire_count;
     *cycles_until_next = 0U;
@@ -157,6 +162,8 @@ test_initially_disarmed_source_can_be_armed_exactly(void)
     assert(source.fired_at.nanoseconds == UINT64_C(666666666));
     assert(source.fired_at.subnanosecond_numerator == 2U);
     assert(source.fired_at.subnanosecond_denominator == 3U);
+    assert(source.cursor_status == BM_STATUS_OK);
+    assert(source.fired_cycle_count == 2U);
     bm_engine_destroy(engine);
 }
 
@@ -362,6 +369,8 @@ arming_cpu_reset(void *context)
 
     cpu->step_count = 0U;
     cpu->arm_status = BM_STATUS_INVALID_STATE;
+    cpu->cursor_status = BM_STATUS_INVALID_STATE;
+    cpu->observed_source_cycles = UINT64_MAX;
     return BM_STATUS_OK;
 }
 
@@ -375,6 +384,8 @@ arming_cpu_step(void *context, bm_tick_t start_ns, uint64_t *cycles)
         /* The public callback only exposes the integer floor, but the engine
          * must arm from this CPU domain's exact fractional boundary. */
         assert(start_ns == UINT64_C(333333333));
+        cpu->cursor_status = bm_engine_timed_source_cycle_count(
+            cpu->engine, cpu->source_id, &cpu->observed_source_cycles);
         cpu->arm_status = bm_engine_arm_timed_source(cpu->engine,
                                                      cpu->source_id, 1U);
     }
@@ -397,7 +408,8 @@ test_cpu_control_uses_exact_instruction_start_boundary(void)
     bm_engine_t *engine = make_clocked_engine(1U);
     controlled_source_t source = { 0 };
     arming_cpu_t cpu_context = { engine, UINT32_MAX, 0U,
-                                 BM_STATUS_INVALID_STATE };
+                                 BM_STATUS_INVALID_STATE,
+                                 BM_STATUS_INVALID_STATE, UINT64_MAX };
     bm_cpu_t cpu = { 0 };
 
     assert(bm_engine_add_timed_source(engine, fire_once, &source,
@@ -412,10 +424,59 @@ test_cpu_control_uses_exact_instruction_start_boundary(void)
                                      &rate_3_hz, NULL) == BM_STATUS_OK);
     assert(bm_engine_run_for(engine, UINT64_C(666666667)) == BM_STATUS_OK);
     assert(cpu_context.arm_status == BM_STATUS_OK);
+    assert(cpu_context.cursor_status == BM_STATUS_OK);
+    assert(cpu_context.observed_source_cycles == 1U);
     assert(source.fire_count == 1U);
     assert(source.fired_at.nanoseconds == UINT64_C(666666666));
     assert(source.fired_at.subnanosecond_numerator == 2U);
     assert(source.fired_at.subnanosecond_denominator == 3U);
+    bm_engine_destroy(engine);
+}
+
+static void
+test_source_cycle_cursor_tracks_domain_while_disarmed(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    bm_engine_config_t legacy_config = { 1U, 1U, 1U };
+    bm_engine_t *legacy = NULL;
+    bm_engine_t *engine = make_clocked_engine(1U);
+    controlled_source_t source = { 0 };
+    uint64_t cycles = UINT64_MAX;
+
+    assert(bm_engine_create(&host, &legacy_config, &legacy) == BM_STATUS_OK);
+    assert(bm_engine_timed_source_cycle_count(legacy, 0U, &cycles) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    bm_engine_destroy(legacy);
+
+    assert(bm_engine_add_timed_source(engine, fire_once, &source,
+                                      &rate_3_hz, 0U, &source.id) ==
+           BM_STATUS_OK);
+    assert(bm_engine_timed_source_cycle_count(engine, source.id, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 0U);
+    assert(bm_engine_run_for(engine, UINT64_C(333333333)) == BM_STATUS_OK);
+    assert(bm_engine_timed_source_cycle_count(engine, source.id, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 0U);
+    assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+    assert(bm_engine_timed_source_cycle_count(engine, source.id, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 1U);
+    assert(bm_engine_run_for(engine, UINT64_C(333333333)) == BM_STATUS_OK);
+    assert(bm_engine_timed_source_cycle_count(engine, source.id, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 2U);
+    assert(bm_engine_reset(engine) == BM_STATUS_OK);
+    assert(bm_engine_timed_source_cycle_count(engine, source.id, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 0U);
+    assert(bm_engine_timed_source_cycle_count(engine, source.id, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_engine_timed_source_cycle_count(engine, source.id + 1U,
+                                               &cycles) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_engine_timed_source_cycle_count(NULL, source.id, &cycles) ==
+           BM_STATUS_INVALID_ARGUMENT);
     bm_engine_destroy(engine);
 }
 
@@ -615,6 +676,7 @@ main(void)
     test_same_time_order_is_stable();
     test_fractional_source_wakes_idle_cpu_without_time_travel();
     test_cpu_control_uses_exact_instruction_start_boundary();
+    test_source_cycle_cursor_tracks_domain_while_disarmed();
     test_control_validation_and_overflow_are_atomic();
     test_validation_and_invalid_progress();
     test_partial_creation_releases_timed_source_storage();

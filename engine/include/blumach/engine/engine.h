@@ -82,6 +82,14 @@ bm_status_t bm_engine_arm_timed_source(bm_engine_t *engine,
                                        uint64_t delay_cycles);
 bm_status_t bm_engine_disarm_timed_source(bm_engine_t *engine,
                                           bm_timed_source_id_t id);
+/* Return the number of source-domain clock edges at or before the effective
+ * scheduling boundary since engine time zero. During a clocked CPU step this
+ * is that CPU's exact instruction-start boundary; otherwise it is the current
+ * exact engine time. The source need not be armed and the query has no side
+ * effects. */
+bm_status_t bm_engine_timed_source_cycle_count(const bm_engine_t *engine,
+                                                bm_timed_source_id_t id,
+                                                uint64_t *out_cycles);
 bm_status_t bm_engine_reset(bm_engine_t *engine);
 bm_status_t bm_engine_run_for(bm_engine_t *engine, bm_tick_t duration);
 bm_status_t bm_engine_schedule_at(bm_engine_t *engine,
