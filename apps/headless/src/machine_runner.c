@@ -6,6 +6,7 @@
 #include <blumach/frontend/file_inputs.h>
 #include <blumach/runtime/runtime.h>
 
+#include <errno.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
