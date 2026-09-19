@@ -980,6 +980,12 @@ pcs86_validate(const bm_configuration_view_t *configuration)
             (config->hard_disk.media.block_count < required_blocks))
             status = BM_STATUS_INVALID_ARGUMENT;
     }
+    if ((status == BM_STATUS_OK) &&
+        (((config->rtc_initial_state == NULL) &&
+          (config->rtc_initial_state_size != 0U)) ||
+         ((config->rtc_initial_state != NULL) &&
+          (config->rtc_initial_state_size != BM_PCS86_RTC_STATE_SIZE))))
+        status = BM_STATUS_INVALID_ARGUMENT;
     return status;
 }
 
@@ -1320,7 +1326,8 @@ pcs86_create(bm_engine_t *engine,
     }
     if (status == BM_STATUS_OK) {
         bm_mm58167_config_t rtc_config = {
-            0x00b0U, 0x00e0U, NULL, NULL, NULL, 0U
+            0x00b0U, 0x00e0U, NULL, NULL,
+            config->rtc_initial_state, config->rtc_initial_state_size
         };
         status = bm_mm58167_create(host, machine->bus, &rtc_config, &machine->rtc);
     }
@@ -1559,6 +1566,42 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
             *value = (uint64_t) state.enabled;
         else
             *value = (uint64_t) state.interrupt_asserted;
+    } else if ((strcmp(name, "rtc_seconds") == 0) ||
+               (strcmp(name, "rtc_minutes") == 0) ||
+               (strcmp(name, "rtc_hours") == 0) ||
+               (strcmp(name, "rtc_day_of_week") == 0) ||
+               (strcmp(name, "rtc_day_of_month") == 0) ||
+               (strcmp(name, "rtc_month") == 0) ||
+               (strcmp(name, "rtc_alarm_milliseconds") == 0) ||
+               (strcmp(name, "rtc_alarm_day_of_week") == 0) ||
+               (strcmp(name, "rtc_alarm_day_of_month") == 0) ||
+               (strcmp(name, "rtc_alarm_month") == 0)) {
+        uint8_t state[BM_MM58167_STATE_SIZE];
+        size_t index;
+        if (strcmp(name, "rtc_seconds") == 0)
+            index = 2U;
+        else if (strcmp(name, "rtc_minutes") == 0)
+            index = 3U;
+        else if (strcmp(name, "rtc_hours") == 0)
+            index = 4U;
+        else if (strcmp(name, "rtc_day_of_week") == 0)
+            index = 5U;
+        else if (strcmp(name, "rtc_day_of_month") == 0)
+            index = 6U;
+        else if (strcmp(name, "rtc_month") == 0)
+            index = 7U;
+        else if (strcmp(name, "rtc_alarm_milliseconds") == 0)
+            index = 8U;
+        else if (strcmp(name, "rtc_alarm_day_of_week") == 0)
+            index = 13U;
+        else if (strcmp(name, "rtc_alarm_day_of_month") == 0)
+            index = 14U;
+        else
+            index = 15U;
+        if (bm_mm58167_save_state(machine->rtc, state, sizeof(state)) !=
+            BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = state[index];
     } else if ((strcmp(name, "video_crtc_cursor_start") == 0) ||
                (strcmp(name, "video_crtc_cursor_end") == 0) ||
                (strcmp(name, "video_crtc_cursor_high") == 0) ||
