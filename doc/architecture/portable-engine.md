@@ -221,7 +221,7 @@ control-transfer, flag and I/O forms whenever Table 2-8 provides a value that
 the current instruction boundary can determine exactly. Memory forms use the
 decoded effective-address parity for the V30's documented odd-word penalty;
 stack forms retain the entry SP so caller cleanup cannot corrupt that decision,
-and counted shifts use the actual count. Version 2 classifies each result as
+and counted shifts use the actual count. Version 3 classifies each result as
 `UNKNOWN`, `EXACT` or `RANGE` and reports inclusive minimum and maximum clocks.
 The documented V30 intervals for signed and unsigned multiply, immediate
 signed multiply, signed divide, `CWD`, interrupting `CHKIND`, and `INS`/`EXT`
@@ -243,20 +243,30 @@ separately, including wait states reported by mapped devices, without calling
 all logical transactions physical V30 bus cycles. Aligned V30 word memory
 operands and stack/vector transfers now use one little-endian 16-bit bus
 transaction; an odd word still uses the two byte cycles required by the
-hardware. Instruction prefetch and word I/O remain separate later work, so the
-observer still labels the aggregate as logical rather than claiming a complete
-external-bus trace. Finally, taken control
-transfers and accepted interrupts report a six-byte V30 prefetch-queue
-invalidation and the new prefetch pointer. The observer is host-neutral and
-cannot alter execution.
+hardware. Execution-overlapped prefetch and word I/O remain separate later
+work, so the observer still labels the aggregate as logical rather than claiming
+a complete external-bus trace. Instruction demand fetch now uses a real
+six-byte queue and
+per-instance PFP. An even PFP fetches one little-endian word in a single bus
+transaction; an odd PFP fetches one byte before the pointer returns to an even
+boundary. Consumed bytes remain queued across instruction boundaries, so later
+memory writes do not rewrite already-prefetched instructions. Taken control
+transfers, accepted interrupts and architectural state replacement discard the
+queue and restart PFP at the new IP. The observer reports PFP and occupancy at
+every boundary, rather than inferring queue state only when a flush occurs.
 
 This establishes the boundary needed for the next CPU work without claiming a
-complete timing model. Queue fill, fetch/execution overlap, pre-decode, exact
-realised clocks inside data-dependent ranges, physical bus-cycle shape and
-scheduler consumption of the observations remain explicit subsequent work.
+complete timing model. Opportunistic queue fill during execution,
+fetch/execution overlap, pre-decode, exact realised clocks inside data-dependent
+ranges, full physical bus-cycle timing and scheduler consumption of the
+observations remain explicit subsequent work. Until overlap exists, the BCU
+fills only when the executor demands a byte; this is intentionally not called a
+cycle-accurate queue-fill schedule.
 `POLL` also requires a semantic
 correction before timing: the current interpreter emits one boundary per pin
 sample instead of keeping the documented polling loop inside one instruction.
+That provisional retry discards the queue because it restores architectural IP;
+it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
 bus waits, which is why the contract does not combine them into one misleading
 number.

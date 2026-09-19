@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 2U
+#define BM_808X_TIMING_OBSERVATION_VERSION 3U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -92,8 +92,10 @@ typedef enum bm_808x_execution_clock_kind {
  * preserves a documented data-dependent interval without pretending that the
  * realised value is known. UNKNOWN is an explicit unimplemented timing
  * classification, never a zero-cycle claim.
+ * prefetch_pointer and prefetch_queue_count expose the real per-CPU instruction
+ * queue after the boundary. The pointer is always known in version 3.
  * logical_bus_transactions describe the current portable bus API and are not
- * yet a claim about physical V30 bus cycles. */
+ * yet a complete claim about physical V30 bus-cycle timing. */
 typedef struct bm_808x_timing_observation {
     uint32_t size;
     uint32_t version;
@@ -104,7 +106,8 @@ typedef struct bm_808x_timing_observation {
     uint8_t prefetch_queue_flushed;
     uint8_t prefetch_pointer_known;
     uint8_t prefetch_queue_capacity;
-    uint8_t reserved[2];
+    uint8_t prefetch_queue_count;
+    uint8_t reserved[1];
     uint16_t prefetch_pointer;
     bm_808x_execution_clock_kind_t execution_clock_kind;
     uint32_t execution_clocks_min;
