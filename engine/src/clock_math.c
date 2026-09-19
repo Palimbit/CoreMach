@@ -108,3 +108,22 @@ bm_clock_position_compare(const bm_clock_position_t *left,
     return compare_fractions(left->phase, left->phase_denominator,
                              right->phase, right->phase_denominator);
 }
+
+void
+bm_clock_position_export(const bm_clock_position_t *clock,
+                         bm_time_point_t *time_point)
+{
+    uint64_t divisor;
+
+    time_point->nanoseconds = clock->nanoseconds;
+    if (clock->phase == 0U) {
+        time_point->subnanosecond_numerator = 0U;
+        time_point->subnanosecond_denominator = 1U;
+        return;
+    }
+    divisor = greatest_common_divisor(clock->phase,
+                                      clock->phase_denominator);
+    time_point->subnanosecond_numerator = clock->phase / divisor;
+    time_point->subnanosecond_denominator =
+        clock->phase_denominator / divisor;
+}

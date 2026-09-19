@@ -36,7 +36,7 @@ make_definition(const char *id)
         .ops = { NULL, test_create, test_destroy,
                  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                  NULL },
-        .engine = { 1U, 1U }
+        .engine = { 1U, 1U, 0U }
     };
     return definition;
 }

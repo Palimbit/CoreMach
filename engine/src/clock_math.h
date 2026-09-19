@@ -22,5 +22,7 @@ bm_status_t bm_clock_position_init(bm_clock_position_t *clock,
 bm_status_t bm_clock_position_advance(bm_clock_position_t *clock, uint64_t cycles);
 int bm_clock_position_compare(const bm_clock_position_t *left,
                               const bm_clock_position_t *right);
+void bm_clock_position_export(const bm_clock_position_t *clock,
+                              bm_time_point_t *time_point);
 
 #endif

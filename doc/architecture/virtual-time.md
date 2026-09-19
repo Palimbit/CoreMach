@@ -2,9 +2,9 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: experimental clocked scheduler with synthetic tests; no real CPU or
-machine uses it yet. The existing PCS 86 engine still advances one scheduler
-tick per completed V30 instruction boundary. Its
+Status: experimental clocked scheduler and timed-device sources with synthetic
+tests; no real CPU or machine uses them yet. The existing PCS 86 engine still
+advances one scheduler tick per completed V30 instruction boundary. Its
 `scheduler_ticks_per_second` is pacing metadata, not the V30 crystal frequency.
 No current machine becomes cycle accurate because of this change.
 
@@ -38,7 +38,9 @@ intermediate product; overflow is reported without changing the position.
    rational clock rate belongs to machine wiring, not an opcode implementation
    or frontend setting. The callback receives the integer virtual time at the
    start of that boundary, not a timestamp for each bus access. The old
-   `bm_cpu_ops_t` layout is unchanged.
+   `bm_cpu_ops_t` layout is unchanged. Like timed sources, clocked CPUs are
+   registered while the engine is at virtual time zero; hot-plugging a running
+   clock domain is deliberately outside this first contract.
 3. The engine selects the participant at the earliest virtual position. Equal-time
    participants have a stable registration order; same-time events have their
    existing insertion order. A halted participant is suspended until a signal
@@ -59,6 +61,25 @@ intermediate product; overflow is reported without changing the position.
    frontend or machine may describe this level as bus-cycle accuracy.
    A later bus-phase/micro-operation contract is required where exact ordering
    within an instruction materially affects a machine.
+7. `bm_engine_add_timed_source()` represents a device deadline generator, not
+   the device itself. Its rational rate and first delay are machine wiring.
+   At each exact deadline the callback returns the positive native-cycle delay
+   to its next activation, or `BM_STATUS_IDLE` with zero cycles to disarm until
+   engine reset. The engine does not own or reset the callback context.
+   Registration is limited to the construction/reset boundary at virtual time
+   zero in this initial contract, and `max_timed_sources` is an explicit engine
+   capacity independent from queued one-shot events.
+8. Timed-source deadlines retain their exact sub-nanosecond phase.
+   `bm_engine_now()` remains the floor in virtual nanoseconds for compatibility;
+   `bm_engine_now_exact()` exposes the normalized fractional part. At a shared
+   exact boundary, queued one-shot events run in insertion order, timed sources
+   run in registration order, and one-shot events added by those sources are
+   drained before CPU execution resumes.
+9. A fractional deadline waking a halted CPU is rounded forward to the next
+   integer nanosecond because the current CPU boundary API does not represent
+   a cross-domain rebase. This is deterministic and prevents time travel, but
+   is another explicit instruction-boundary approximation rather than a claim
+   of edge-accurate interrupt sampling.
 
 ## Required proof before a real CPU migrates
 
@@ -81,6 +102,11 @@ intermediate product; overflow is reported without changing the position.
 - The existing PCS 86 suite remains unchanged and green. V30 migration is a
   later change, with independently measured instruction-cycle coverage and
   known unknowns; Z80 integration must not alter the legacy V30 tick meaning.
+- Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
+  split execution, reset rearming, stable same-time ordering, explicit idle,
+  invalid progress and waking a halted CPU from a fractional deadline. A real
+  PIT, video scanline or storage-transfer source must still be integrated and
+  measured before this contract is called production-ready.
 
 This path provides CPU-type independence without prematurely promising that
 all guest CPU models or their buses have the same timing fidelity.

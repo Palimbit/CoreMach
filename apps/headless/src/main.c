@@ -424,12 +424,14 @@ main(int argc, char **argv)
         } else {
             printf("id=%s scheduler_hz=%" PRIu64
                    " config_type=%s config_version=%" PRIu32
-                   " config_size=%zu max_cpus=%zu max_events=%zu\n",
+                   " config_size=%zu max_cpus=%zu max_events=%zu"
+                   " max_timed_sources=%zu\n",
                    definition->id, definition->scheduler_ticks_per_second,
                    definition->configuration.type,
                    definition->configuration.version,
                    definition->configuration.size, definition->engine.max_cpus,
-                   definition->engine.max_events);
+                   definition->engine.max_events,
+                   definition->engine.max_timed_sources);
         }
     } else if (parse_run_options(argc, argv, &options)) {
         if (bm_machine_registry_find(registry, options.machine_id,

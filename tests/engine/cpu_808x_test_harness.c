@@ -14,7 +14,7 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
                              const uint8_t *program,
                              size_t program_size)
 {
-    bm_engine_config_t engine_config = { 1U, 1U };
+    bm_engine_config_t engine_config = { 1U, 1U, 0U };
     bm_linear_memory_config_t memory_config;
     bm_808x_config_t cpu_config;
     size_t bus_capacity = 1U;

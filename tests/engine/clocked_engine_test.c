@@ -151,7 +151,7 @@ static bm_engine_t *
 make_engine(void)
 {
     bm_host_services_t host = bm_null_host_services();
-    bm_engine_config_t config = { 2U, 4U };
+    bm_engine_config_t config = { 2U, 4U, 4U };
     bm_engine_t *engine = NULL;
 
     assert(bm_engine_create_clocked(&host, &config, &engine) == BM_STATUS_OK);

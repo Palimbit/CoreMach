@@ -46,7 +46,7 @@ static void
 test_partial_initialization_cleanup(void)
 {
     size_t failure;
-    bm_engine_config_t configuration = { 1, 1 };
+    bm_engine_config_t configuration = { 1, 1, 0 };
 
     for (failure = 0; failure < 3; ++failure) {
         failure_injection_host_t tracker;
@@ -318,7 +318,7 @@ machine_config(const synthetic_config_t *configuration)
         .ops = { synthetic_validate, synthetic_create, synthetic_destroy,
                  NULL, NULL, NULL, NULL, synthetic_input, NULL, NULL, NULL,
                  NULL, NULL, NULL },
-        .engine = { 1U, 4U }
+        .engine = { 1U, 4U, 0U }
     };
     bm_machine_config_t result = {
         .definition = &definition,
