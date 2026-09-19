@@ -230,8 +230,14 @@ a range is evidence, not a scheduler-ready exact time. Exact formulas now
 cover non-interrupting `CHKIND`, `PREPARE`, packed-BCD strings, NEC bit
 operations, nibble rotations and `BRKEM`. For an odd BCD digit count, the clock
 formula uses the actual even-sized packed-byte operation documented by NEC and
-implemented by the core. Standard and I/O string formulas and `POLL` remain
-unclassified. All 8080-mode timings remain unclassified.
+implemented by the core. Native memory and I/O strings use the actual completed
+iteration count plus their entry SI, DI and I/O-port alignment. NEC's primitive
+formula already includes one repeat prefix, so only additional prefixes add the
+documented two-clock prefix cost. Zero-count repeats and conditionally shortened
+`CMPS`/`SCAS` runs are therefore exact, while a fragment that accepts an
+interrupt remains explicitly unclassified rather than folding interrupt entry
+into the instruction formula. `POLL` and all 8080-mode timings remain
+unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
 those logical transactions physical V30 bus cycles. Finally, taken control
@@ -241,9 +247,9 @@ cannot alter execution.
 
 This establishes the boundary needed for the next CPU work without claiming a
 complete timing model. Queue fill, fetch/execution overlap, pre-decode, exact
-realised clocks inside data-dependent ranges, standard and I/O repeat-formula
-clock reporting, physical bus-cycle shape and scheduler consumption of the
-observations remain explicit subsequent work. `POLL` also requires a semantic
+realised clocks inside data-dependent ranges, physical bus-cycle shape and
+scheduler consumption of the observations remain explicit subsequent work.
+`POLL` also requires a semantic
 correction before timing: the current interpreter emits one boundary per pin
 sample instead of keeping the documented polling loop inside one instruction.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and

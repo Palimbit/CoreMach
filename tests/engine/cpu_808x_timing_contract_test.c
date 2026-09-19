@@ -6,6 +6,8 @@
  */
 #include "cpu_808x_test_harness.h"
 
+#include <blumach/components/bus.h>
+
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -19,6 +21,33 @@ typedef struct timing_capture {
     bm_808x_timing_observation_t last;
     unsigned int count;
 } timing_capture_t;
+
+typedef struct timing_io_fixture {
+    cpu_808x_test_machine_t *machine;
+    unsigned int event_count;
+    unsigned int signal_after;
+    uint8_t next_value;
+} timing_io_fixture_t;
+
+static bm_status_t
+timing_io_access(void *context, bm_bus_transaction_t *transaction)
+{
+    timing_io_fixture_t *fixture = context;
+
+    assert(fixture != NULL);
+    assert(transaction->size == 1U);
+    ++fixture->event_count;
+    if (transaction->operation == BM_BUS_READ) {
+        transaction->value = fixture->next_value++;
+    } else {
+        assert(transaction->operation == BM_BUS_WRITE);
+    }
+    if ((fixture->signal_after != 0U) &&
+        (fixture->event_count == fixture->signal_after))
+        assert(bm_engine_signal_cpu(fixture->machine->engine, 0U,
+                                    BM_808X_SIGNAL_INT, 1) == BM_STATUS_OK);
+    return BM_STATUS_OK;
+}
 
 static void
 capture_timing(void *context,
@@ -611,12 +640,190 @@ test_nec_extension_timing(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_standard_string_formula_timing(void)
+{
+    static const uint8_t movsb[] = { 0xa4U };
+    static const uint8_t rep_movsb[] = { 0xf3U, 0xa4U };
+    static const uint8_t rep_zero_movsb[] = { 0xf3U, 0xa4U };
+    static const uint8_t rep_movsw[] = { 0xf3U, 0xa5U };
+    static const uint8_t repe_cmpsb[] = { 0xf3U, 0xa6U };
+    static const uint8_t stosw[] = { 0xabU };
+    static const uint8_t rep_lodsw[] = { 0xf3U, 0xadU };
+    static const uint8_t overridden_rep_movsb[] = { 0x2eU, 0xf3U, 0xa4U };
+    const struct {
+        const uint8_t *program;
+        size_t size;
+        uint16_t cx;
+        uint16_t si;
+        uint16_t di;
+        uint32_t clocks;
+    } cases[] = {
+        { movsb, sizeof(movsb), 7U, 0x0040U, 0x0060U, 11U },
+        { rep_movsb, sizeof(rep_movsb), 3U, 0x0040U, 0x0060U, 35U },
+        { rep_zero_movsb, sizeof(rep_zero_movsb), 0U,
+          0x0040U, 0x0060U, 11U },
+        { rep_movsw, sizeof(rep_movsw), 2U, 0x0041U, 0x0060U, 35U },
+        { stosw, sizeof(stosw), 9U, 0x0040U, 0x0061U, 11U },
+        { rep_lodsw, sizeof(rep_lodsw), 2U, 0x0041U, 0x0060U, 33U },
+        { overridden_rep_movsb, sizeof(overridden_rep_movsb), 2U,
+          0x0040U, 0x0060U, 29U }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ds = 0x1000U;
+        state.es = 0x2000U;
+        state.cx = cases[index].cx;
+        state.si = cases[index].si;
+        state.di = cases[index].di;
+        cpu_808x_test_set_state(&machine, &state);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, cases[index].clocks);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config, repe_cmpsb,
+                                     sizeof(repe_cmpsb));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ds = 0x1000U;
+        state.es = 0x2000U;
+        state.cx = 3U;
+        state.si = 0x0040U;
+        state.di = 0x0060U;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, 0x10040U, 0x12U);
+        cpu_808x_test_poke(&machine, 0x20060U, 0x34U);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, 21U);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.cx == 2U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
+test_io_string_formula_timing(void)
+{
+    static const uint8_t insb[] = { 0x6cU };
+    static const uint8_t rep_insw[] = { 0xf3U, 0x6dU };
+    static const uint8_t rep_outsw[] = { 0xf3U, 0x6fU };
+    const struct {
+        const uint8_t *program;
+        size_t size;
+        uint16_t cx;
+        uint16_t dx;
+        uint16_t index;
+        uint32_t clocks;
+    } cases[] = {
+        { insb, sizeof(insb), 5U, 0x0080U, 0x0040U, 10U },
+        { rep_insw, sizeof(rep_insw), 2U, 0x0081U, 0x0041U, 41U },
+        { rep_outsw, sizeof(rep_outsw), 2U, 0x0081U, 0x0040U, 33U }
+    };
+    size_t case_index;
+
+    for (case_index = 0U;
+         case_index < sizeof(cases) / sizeof(cases[0]); ++case_index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .bus_capacity = 2U,
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        timing_io_fixture_t io = { .next_value = 0x40U };
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[case_index].program,
+                                     cases[case_index].size);
+        io.machine = &machine;
+        assert(bm_bus_map(machine.bus, BM_ADDRESS_IO, 0U, 0xffffU,
+                          timing_io_access, &io) == BM_STATUS_OK);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ds = 0x1000U;
+        state.es = 0x2000U;
+        state.cx = cases[case_index].cx;
+        state.dx = cases[case_index].dx;
+        state.si = cases[case_index].index;
+        state.di = cases[case_index].index;
+        cpu_808x_test_set_state(&machine, &state);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, cases[case_index].clocks);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
 static bm_status_t
 acknowledge_interrupt(void *context, uint8_t *vector)
 {
     (void) context;
     *vector = 0x20U;
     return BM_STATUS_OK;
+}
+
+static void
+test_interrupted_string_timing_remains_unknown(void)
+{
+    static const uint8_t rep_outsb[] = { 0xf3U, 0x6eU };
+    timing_capture_t capture = { 0 };
+    timing_io_fixture_t io = {
+        .signal_after = 1U,
+        .next_value = 0x40U
+    };
+    cpu_808x_test_config_t config = {
+        .bus_capacity = 2U,
+        .interrupt_ack = acknowledge_interrupt,
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+
+    cpu_808x_test_machine_create(&machine, &config, rep_outsb,
+                                 sizeof(rep_outsb));
+    io.machine = &machine;
+    assert(bm_bus_map(machine.bus, BM_ADDRESS_IO, 0U, 0xffffU,
+                      timing_io_access, &io) == BM_STATUS_OK);
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ds = 0x1000U;
+    state.ss = 0U;
+    state.sp = 0x0400U;
+    state.flags = (uint16_t) (state.flags | TEST_FLAG_IF);
+    state.cx = 3U;
+    state.dx = 0x0080U;
+    state.si = 0x0040U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert_unknown_execution_clocks(&capture);
+    state = cpu_808x_test_get_state(&machine);
+    assert(state.cx == 2U);
+    cpu_808x_test_machine_destroy(&machine);
 }
 
 static void
@@ -669,6 +876,9 @@ main(void)
     test_divide_error_does_not_claim_normal_execution_clocks();
     test_scalar_formula_and_condition_timing();
     test_nec_extension_timing();
+    test_standard_string_formula_timing();
+    test_io_string_formula_timing();
+    test_interrupted_string_timing_remains_unknown();
     test_interrupt_boundary_reports_queue_flush();
     return 0;
 }

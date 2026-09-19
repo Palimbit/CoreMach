@@ -78,6 +78,12 @@ typedef struct bm_808x_state {
     uint16_t boundary_rm_offset;
     uint16_t boundary_initial_sp;
     uint16_t boundary_initial_bp;
+    uint16_t boundary_initial_si;
+    uint16_t boundary_initial_di;
+    uint16_t boundary_initial_dx;
+    uint32_t boundary_string_iterations;
+    uint8_t boundary_repeat_mode;
+    int boundary_string_valid;
     uint8_t boundary_shift_count;
     int boundary_shift_count_valid;
 } bm_808x_state_t;
@@ -1309,6 +1315,8 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
         if ((opcode < 0xaaU) || (opcode > 0xafU))
             return BM_STATUS_UNSUPPORTED;
     }
+    state->boundary_string_valid = 1;
+    state->boundary_repeat_mode = (uint8_t) repeat_mode;
     while ((repeat_mode == 0) || (state->registers[REG_CX] != 0)) {
         uint16_t value = 0;
         if ((opcode == 0xa4U) || (opcode == 0xa5U)) { /* MOVS */
@@ -1383,6 +1391,7 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
         }
         if (status != BM_STATUS_OK)
             return status;
+        ++state->boundary_string_iterations;
         if (((opcode >= 0xa4U) && (opcode <= 0xa7U)) ||
             (opcode == 0xacU) || (opcode == 0xadU))
             state->registers[REG_SI] = (uint16_t) (state->registers[REG_SI] +
@@ -1494,6 +1503,8 @@ execute_io_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
     unsigned int source_segment = (segment_override >= 0) ?
                                   (unsigned int) segment_override : 3U;
 
+    state->boundary_string_valid = 1;
+    state->boundary_repeat_mode = (uint8_t) repeat_mode;
     while ((repeat_mode == 0) || (state->registers[REG_CX] != 0U)) {
         bm_status_t status;
         uint16_t value = 0U;
@@ -1527,6 +1538,7 @@ execute_io_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
         }
         if (status != BM_STATUS_OK)
             return status;
+        ++state->boundary_string_iterations;
         if ((opcode == 0x6cU) || (opcode == 0x6dU))
             state->registers[REG_DI] = (uint16_t) (state->registers[REG_DI] +
                 (((state->flags & FLAG_DF) != 0U) ? -(int) width : (int) width));
@@ -1577,6 +1589,12 @@ cpu_reset(void *context)
     state->boundary_rm_offset = 0U;
     state->boundary_initial_sp = 0U;
     state->boundary_initial_bp = 0U;
+    state->boundary_initial_si = 0U;
+    state->boundary_initial_di = 0U;
+    state->boundary_initial_dx = 0U;
+    state->boundary_string_iterations = 0U;
+    state->boundary_repeat_mode = 0U;
+    state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
     return BM_STATUS_OK;
@@ -3975,6 +3993,99 @@ documented_nec_extension_execution_clocks(const bm_808x_state_t *state,
 }
 
 static bm_808x_execution_clock_kind_t
+documented_string_execution_clocks(const bm_808x_state_t *state,
+                                   uint8_t opcode,
+                                   uint32_t *minimum,
+                                   uint32_t *maximum)
+{
+    uint32_t base = 0U;
+    uint32_t per_iteration = 0U;
+    uint32_t single = 0U;
+    uint32_t prefix_clocks;
+    unsigned int prefix_count = state->last_prefix_count;
+    int repeated;
+    int word = (opcode & 1U) != 0U;
+    int source_odd = (state->boundary_initial_si & 1U) != 0U;
+    int destination_odd = (state->boundary_initial_di & 1U) != 0U;
+    int port_odd = (state->boundary_initial_dx & 1U) != 0U;
+
+    if (!state->boundary_string_valid || state->interrupt_entered)
+        return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    repeated = state->boundary_repeat_mode != 0U;
+    if (repeated) {
+        if (prefix_count == 0U)
+            return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+        /* NEC's primitive string formulas already include one repeat prefix. */
+        --prefix_count;
+    }
+    prefix_clocks = (uint32_t) prefix_count * 2U;
+
+    switch (opcode) {
+        case 0xa4: case 0xa5: /* MOVS/MOVBK. */
+            base = 11U;
+            if (!word) {
+                per_iteration = 8U;
+                single = 11U;
+            } else {
+                unsigned int odd_addresses =
+                    (unsigned int) source_odd + (unsigned int) destination_odd;
+                per_iteration = 8U + 4U * odd_addresses;
+                single = 11U + 4U * odd_addresses;
+            }
+            break;
+        case 0xa6: case 0xa7: /* CMPS/CMPBK. */
+            base = 7U;
+            if (!word) {
+                per_iteration = 14U;
+                single = 13U;
+            } else {
+                unsigned int odd_addresses =
+                    (unsigned int) source_odd + (unsigned int) destination_odd;
+                per_iteration = 14U + 4U * odd_addresses;
+                single = 13U + 4U * odd_addresses;
+            }
+            break;
+        case 0xaa: case 0xab: /* STOS/STM. */
+            base = 7U;
+            per_iteration = (!word || !destination_odd) ? 4U : 8U;
+            single = (!word || !destination_odd) ? 7U : 11U;
+            break;
+        case 0xac: case 0xad: /* LODS/LDM. */
+            base = 7U;
+            per_iteration = (!word || !source_odd) ? 9U : 13U;
+            single = (!word || !source_odd) ? 7U : 11U;
+            break;
+        case 0xae: case 0xaf: /* SCAS/CMPM. */
+            base = 7U;
+            per_iteration = (!word || !destination_odd) ? 10U : 14U;
+            single = (!word || !destination_odd) ? 7U : 11U;
+            break;
+        case 0x6c: case 0x6d: { /* INS/INM. */
+            unsigned int odd_addresses = word ?
+                (unsigned int) destination_odd + (unsigned int) port_odd : 0U;
+            base = 9U;
+            per_iteration = 8U + 4U * odd_addresses;
+            single = 10U + 4U * odd_addresses;
+            break;
+        }
+        case 0x6e: case 0x6f: { /* OUTS/OUTM. */
+            unsigned int odd_addresses = word ?
+                (unsigned int) source_odd + (unsigned int) port_odd : 0U;
+            base = 9U;
+            per_iteration = 8U + 4U * odd_addresses;
+            single = 10U + 4U * odd_addresses;
+            break;
+        }
+        default:
+            return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    }
+    *minimum = prefix_clocks + (repeated ?
+        base + per_iteration * state->boundary_string_iterations : single);
+    *maximum = *minimum;
+    return BM_808X_EXECUTION_CLOCKS_EXACT;
+}
+
+static bm_808x_execution_clock_kind_t
 documented_native_execution_clocks(const bm_808x_state_t *state,
                                    uint32_t *minimum, uint32_t *maximum)
 {
@@ -4044,6 +4155,12 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0x61:
                 base = (state->boundary_initial_sp & 1U) ? 75U : 43U;
                 break;
+            case 0x6c: case 0x6d: case 0x6e: case 0x6f:
+            case 0xa4: case 0xa5: case 0xa6: case 0xa7:
+            case 0xaa: case 0xab: case 0xac: case 0xad:
+            case 0xae: case 0xaf:
+                return documented_string_execution_clocks(
+                    state, opcode, minimum, maximum);
             case 0x62:
                 if (!state->boundary_rm_valid || !state->boundary_rm_memory) {
                     known = 0;
@@ -4407,6 +4524,12 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_rm_offset = 0U;
     state->boundary_initial_sp = state->registers[REG_SP];
     state->boundary_initial_bp = state->registers[REG_BP];
+    state->boundary_initial_si = state->registers[REG_SI];
+    state->boundary_initial_di = state->registers[REG_DI];
+    state->boundary_initial_dx = state->registers[REG_DX];
+    state->boundary_string_iterations = 0U;
+    state->boundary_repeat_mode = 0U;
+    state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
 }
@@ -4729,6 +4852,12 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->boundary_rm_offset = 0U;
     state->boundary_initial_sp = 0U;
     state->boundary_initial_bp = 0U;
+    state->boundary_initial_si = 0U;
+    state->boundary_initial_di = 0U;
+    state->boundary_initial_dx = 0U;
+    state->boundary_string_iterations = 0U;
+    state->boundary_repeat_mode = 0U;
+    state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
     return BM_STATUS_OK;
