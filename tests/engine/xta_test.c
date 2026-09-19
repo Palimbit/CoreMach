@@ -86,7 +86,8 @@ main(void)
     test_media_t media = { { { 0 } }, 0 };
     bm_dma8237_config_t dma_config = { 0x0000U };
     bm_linear_memory_config_t ram_config = {
-        BM_ADDRESS_MEMORY, 0x1000U, 512U, 0, NULL, 0U
+        BM_ADDRESS_MEMORY, 0x1000U, 512U,
+        BM_LINEAR_MEMORY_WRITABLE, NULL, 0U
     };
     bm_xta_config_t config;
     bm_xta_state_t state;

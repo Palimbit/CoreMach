@@ -9,7 +9,7 @@ struct bm_linear_memory {
     uint8_t *bytes;
     uint64_t base;
     size_t size;
-    int read_only;
+    bm_linear_memory_write_policy_t write_policy;
 };
 
 static bm_status_t
@@ -26,8 +26,10 @@ linear_access(void *context, bm_bus_transaction_t *transaction)
     if ((offset >= memory->size) || (transaction->size > memory->size - (size_t) offset))
         return BM_STATUS_UNMAPPED;
     if (transaction->operation == BM_BUS_WRITE) {
-        if (memory->read_only)
+        if (memory->write_policy == BM_LINEAR_MEMORY_WRITE_REJECT)
             return BM_STATUS_READ_ONLY;
+        if (memory->write_policy == BM_LINEAR_MEMORY_WRITE_IGNORE)
+            return BM_STATUS_OK;
         for (index = 0; index < transaction->size; ++index) {
             uint32_t shift = (transaction->endianness == BM_ENDIAN_LITTLE)
                                  ? index * 8U
@@ -60,6 +62,8 @@ bm_linear_memory_create(const bm_host_services_t *host,
     if ((bm_host_services_validate(host) != BM_STATUS_OK) || (bus == NULL) ||
         (config == NULL) || (out_memory == NULL) || (config->size == 0) ||
         (config->initial_data_size > config->size) ||
+        (config->write_policy < BM_LINEAR_MEMORY_WRITABLE) ||
+        (config->write_policy > BM_LINEAR_MEMORY_WRITE_IGNORE) ||
         ((config->initial_data_size != 0) && (config->initial_data == NULL)) ||
         (config->base > UINT64_MAX - (config->size - 1U)))
         return BM_STATUS_INVALID_ARGUMENT;
@@ -71,7 +75,7 @@ bm_linear_memory_create(const bm_host_services_t *host,
     memory->host = *host;
     memory->base = config->base;
     memory->size = config->size;
-    memory->read_only = config->read_only;
+    memory->write_policy = config->write_policy;
     memory->bytes = host->allocate(host->context, config->size);
     if (memory->bytes == NULL) {
         bm_linear_memory_destroy(memory);

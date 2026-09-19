@@ -9,6 +9,8 @@ typedef struct bm_bus_mapping {
     uint64_t last;
     bm_bus_access_fn access;
     void *context;
+    bm_bus_static_response_t response;
+    int is_static;
 } bm_bus_mapping_t;
 
 struct bm_bus {
@@ -18,6 +20,8 @@ struct bm_bus {
     size_t capacity;
     bm_bus_observer_fn observer;
     void *observer_context;
+    bm_bus_static_response_t default_response[BM_ADDRESS_DATA + 1];
+    int has_default_response[BM_ADDRESS_DATA + 1];
 };
 
 static int
@@ -36,6 +40,83 @@ static int
 valid_endianness(bm_endianness_t endianness)
 {
     return (endianness >= BM_ENDIAN_LITTLE) && (endianness <= BM_ENDIAN_BIG);
+}
+
+static int
+valid_response_status(bm_status_t status)
+{
+    return (status == BM_STATUS_OK) || (status == BM_STATUS_UNMAPPED) ||
+           (status == BM_STATUS_DEVICE_ERROR) ||
+           (status == BM_STATUS_READ_ONLY) ||
+           (status == BM_STATUS_UNSUPPORTED);
+}
+
+static int
+valid_static_response(const bm_bus_static_response_t *response)
+{
+    return (response != NULL) && valid_response_status(response->read_status) &&
+           valid_response_status(response->write_status) &&
+           valid_response_status(response->fetch_status);
+}
+
+static bm_status_t
+static_response_access(const bm_bus_static_response_t *response,
+                       bm_bus_transaction_t *transaction)
+{
+    bm_status_t status;
+    uint32_t index;
+
+    if (transaction->operation == BM_BUS_READ)
+        status = response->read_status;
+    else if (transaction->operation == BM_BUS_WRITE)
+        status = response->write_status;
+    else
+        status = response->fetch_status;
+    if ((status != BM_STATUS_OK) ||
+        (transaction->operation == BM_BUS_WRITE))
+        return status;
+    transaction->value = 0U;
+    for (index = 0U; index < transaction->size; ++index)
+        transaction->value |=
+            (uint64_t) response->fill_value << (index * 8U);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+add_mapping(bm_bus_t *bus,
+            bm_address_space_t space,
+            uint64_t first,
+            uint64_t last,
+            bm_bus_access_fn access,
+            void *context,
+            const bm_bus_static_response_t *response)
+{
+    size_t index;
+
+    if ((bus == NULL) || !valid_address_space(space) || (first > last) ||
+        ((access == NULL) == (response == NULL)) ||
+        ((response != NULL) && !valid_static_response(response)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (bus->count >= bus->capacity)
+        return BM_STATUS_CAPACITY_EXCEEDED;
+    for (index = 0; index < bus->count; ++index) {
+        const bm_bus_mapping_t *mapping = &bus->mappings[index];
+        if ((mapping->space == space) && (first <= mapping->last) &&
+            (last >= mapping->first))
+            return BM_STATUS_INVALID_ARGUMENT;
+    }
+    bus->mappings[bus->count] = (bm_bus_mapping_t) {
+        .space = space,
+        .first = first,
+        .last = last,
+        .access = access,
+        .context = context,
+        .is_static = response != NULL
+    };
+    if (response != NULL)
+        bus->mappings[bus->count].response = *response;
+    ++bus->count;
+    return BM_STATUS_OK;
 }
 
 bm_status_t
@@ -80,19 +161,36 @@ bm_bus_map(bm_bus_t *bus,
            bm_bus_access_fn access,
            void *context)
 {
-    size_t index;
+    return add_mapping(bus, space, first, last, access, context, NULL);
+}
 
-    if ((bus == NULL) || !valid_address_space(space) || (access == NULL) ||
-        (first > last))
+bm_status_t
+bm_bus_map_static_response(bm_bus_t *bus,
+                           bm_address_space_t space,
+                           uint64_t first,
+                           uint64_t last,
+                           const bm_bus_static_response_t *response)
+{
+    return add_mapping(bus, space, first, last, NULL, NULL, response);
+}
+
+bm_status_t
+bm_bus_set_default_response(bm_bus_t *bus,
+                            bm_address_space_t space,
+                            const bm_bus_static_response_t *response)
+{
+    if ((bus == NULL) || !valid_address_space(space))
         return BM_STATUS_INVALID_ARGUMENT;
-    if (bus->count >= bus->capacity)
-        return BM_STATUS_CAPACITY_EXCEEDED;
-    for (index = 0; index < bus->count; ++index) {
-        const bm_bus_mapping_t *mapping = &bus->mappings[index];
-        if ((mapping->space == space) && (first <= mapping->last) && (last >= mapping->first))
-            return BM_STATUS_INVALID_ARGUMENT;
+    if (response == NULL) {
+        bus->has_default_response[space] = 0;
+        memset(&bus->default_response[space], 0,
+               sizeof(bus->default_response[space]));
+        return BM_STATUS_OK;
     }
-    bus->mappings[bus->count++] = (bm_bus_mapping_t) { space, first, last, access, context };
+    if (!valid_static_response(response))
+        return BM_STATUS_INVALID_ARGUMENT;
+    bus->default_response[space] = *response;
+    bus->has_default_response[space] = 1;
     return BM_STATUS_OK;
 }
 
@@ -118,11 +216,32 @@ bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction)
         bm_bus_mapping_t *mapping = &bus->mappings[index];
         if ((mapping->space == transaction->space) && (transaction->address >= mapping->first) &&
             (last <= mapping->last)) {
-            bm_status_t status = mapping->access(mapping->context, transaction);
-            if ((status == BM_STATUS_OK) && (bus->observer != NULL))
-                bus->observer(bus->observer_context, transaction);
-            return status;
+            bm_status_t status;
+
+            if (mapping->is_static) {
+                status = static_response_access(&mapping->response,
+                                                transaction);
+            } else {
+                const bm_bus_transaction_t original = *transaction;
+
+                status = mapping->access(mapping->context, transaction);
+                if (status == BM_STATUS_UNMAPPED)
+                    *transaction = original;
+            }
+            if (status != BM_STATUS_UNMAPPED) {
+                if ((status == BM_STATUS_OK) && (bus->observer != NULL))
+                    bus->observer(bus->observer_context, transaction);
+                return status;
+            }
+            break;
         }
+    }
+    if (bus->has_default_response[transaction->space]) {
+        bm_status_t status = static_response_access(
+            &bus->default_response[transaction->space], transaction);
+        if ((status == BM_STATUS_OK) && (bus->observer != NULL))
+            bus->observer(bus->observer_context, transaction);
+        return status;
     }
     return BM_STATUS_UNMAPPED;
 }

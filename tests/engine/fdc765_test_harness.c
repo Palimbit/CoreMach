@@ -11,7 +11,8 @@ fdc765_test_machine_create(fdc765_test_machine_t *machine,
                            const fdc765_test_config_t *config)
 {
     bm_linear_memory_config_t ram_config = {
-        BM_ADDRESS_MEMORY, 0U, 0x10000U, 0, NULL, 0U
+        BM_ADDRESS_MEMORY, 0U, 0x10000U,
+        BM_LINEAR_MEMORY_WRITABLE, NULL, 0U
     };
     bm_dma8237_config_t dma_config = { 0U };
     bm_fdc765_config_t fdc_config;

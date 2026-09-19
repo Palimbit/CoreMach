@@ -102,7 +102,9 @@ dma_access(void *context, bm_bus_transaction_t *transaction)
             transaction->value = dma->temporary;
             return BM_STATUS_OK;
         }
-        return BM_STATUS_UNSUPPORTED;
+        /* These registers are write-only; the surrounding bus determines the
+         * electrical response when the controller does not drive a read. */
+        return BM_STATUS_UNMAPPED;
     }
 
     value = (uint8_t) transaction->value;

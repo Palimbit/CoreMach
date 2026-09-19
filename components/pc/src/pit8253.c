@@ -52,7 +52,7 @@ pit_access(void *context, bm_bus_transaction_t *transaction)
         return BM_STATUS_UNSUPPORTED;
     if (transaction->operation == BM_BUS_READ) {
         if (port >= 3U)
-            return BM_STATUS_UNSUPPORTED;
+            return BM_STATUS_UNMAPPED;
         transaction->value = bm_pit_exact_data_read(&pit->exact, port);
         return BM_STATUS_OK;
     }
