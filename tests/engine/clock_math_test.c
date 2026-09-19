@@ -143,6 +143,54 @@ test_next_domain_edge_is_strict_and_exact(void)
 }
 
 static void
+test_cycle_cursor_is_exact_across_fractional_and_large_ranges(void)
+{
+    const bm_clock_rate_t three_hz = { 3U, 1U };
+    const bm_clock_rate_t twenty_ghz = { UINT64_C(20000000000), 1U };
+    bm_clock_position_t target = {
+        UINT64_C(666666666), 2U, 3U, 1U
+    };
+    bm_clock_position_t clock;
+    uint64_t cycles = UINT64_MAX;
+
+    assert(bm_clock_cycles_at_or_before(&three_hz, &target, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 2U);
+    target.phase = 1U;
+    assert(bm_clock_cycles_at_or_before(&three_hz, &target, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 1U);
+
+    target.nanoseconds = 0U;
+    target.phase = 1U;
+    target.phase_denominator = 2U;
+    assert(bm_clock_cycles_at_or_before(&twenty_ghz, &target, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 10U);
+    target.phase = 499U;
+    target.phase_denominator = 1000U;
+    assert(bm_clock_cycles_at_or_before(&twenty_ghz, &target, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 9U);
+
+    target.nanoseconds = UINT64_MAX;
+    target.phase = 0U;
+    target.phase_denominator = 1U;
+    assert(bm_clock_cycles_at_or_before(&three_hz, &target, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == UINT64_C(55340232221));
+
+    assert(bm_clock_position_init(&clock, &three_hz) == BM_STATUS_OK);
+    assert(bm_clock_position_advance(&clock, cycles) == BM_STATUS_OK);
+    assert(clock.nanoseconds == UINT64_C(18446744073666666666));
+    assert(clock.phase == 2U);
+    assert(bm_clock_position_advance(&clock, 1U) ==
+           BM_STATUS_CAPACITY_EXCEEDED);
+    assert(clock.nanoseconds == UINT64_C(18446744073666666666));
+    assert(clock.phase == 2U);
+}
+
+static void
 test_invalid_and_overflow_are_atomic(void)
 {
     bm_clock_position_t clock;
@@ -160,6 +208,8 @@ test_invalid_and_overflow_are_atomic(void)
     assert(bm_clock_position_init(&clock, &unrepresentable) ==
            BM_STATUS_CAPACITY_EXCEEDED);
     assert(bm_clock_position_init(&clock, &two_hz) == BM_STATUS_OK);
+    assert(bm_clock_cycles_at_or_before(&two_hz, &clock, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
     clock.nanoseconds = UINT64_MAX;
     assert(bm_clock_position_advance(&clock, 1U) == BM_STATUS_CAPACITY_EXCEEDED);
     assert(clock.nanoseconds == UINT64_MAX);
@@ -178,6 +228,7 @@ main(void)
     test_fraction_comparison_without_overflow();
     test_export_normalizes_public_fraction();
     test_next_domain_edge_is_strict_and_exact();
+    test_cycle_cursor_is_exact_across_fractional_and_large_ranges();
     test_invalid_and_overflow_are_atomic();
     return 0;
 }
