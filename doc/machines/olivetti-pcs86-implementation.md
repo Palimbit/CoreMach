@@ -63,6 +63,9 @@ The PCS 86 machine follows the same rule. It does not retain the inherited
 global `pcs86_active` pointer or instantiate legacy devices. Firmware arrives
 as immutable caller-owned blobs. The machine interleaves the two EPROM views
 into host-allocated ROM and gives the CPU only a bus, not host files or paths.
+CPU writes to the EPROM window are acknowledged by the bus and discarded, as
+on the physical read-only device; they neither alter firmware bytes nor abort
+the emulated processor.
 
 ## First-cut component ledger
 
@@ -70,7 +73,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 |---|---|---|
 | NEC V30 | Functional instruction-boundary core derived from the inherited interpreter | Complete documented native and 8080 opcode-map classification, snapshot v4 with MD write gate, segmented 20-bit addresses, ModR/M, native and emulated stacks, hardware-vector-validated primary ALU forms, 80186-compatible and NEC extensions, FPO/POLL CPU contract, BRKEM/CALLN/RETEM, interrupt and NMI round trips, prefix shadows, interruptible REP and BUSLOCK transaction attributes; a versioned observer separates exact documented native execution clocks (including effective-address alignment, entry-stack alignment and counted shifts), logical bus transactions and reported waits, and queue-invalidating boundaries; data-dependent/formula timings, queue fill/overlap, physical bus timing and embedded floating-point execution remain explicit |
 | Conventional RAM | Board-owned portable memory region | 640 KiB, zero-initialized and byte-addressable; the 64 KiB below the EMS frame remains visible whenever its corresponding window is disabled or selects an unavailable page |
-| System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
+| System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external and CPU writes have no effect |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; the scheduler does not yet consume CPU timing observations, so rational PIT/RTC clock accumulators still use a measured functional instruction rate |
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, fixed-priority nesting, output callback, CPU acknowledge, and non-specific or specific EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven from scheduler time without claiming cycle accuracy |
