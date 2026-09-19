@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -37,15 +38,23 @@ public:
     };
     using SnapshotHandler = std::function<void(Snapshot)>;
 
+    struct PersistentState {
+        std::string role;
+        std::vector<uint8_t> data;
+        bm_status_t status = BM_STATUS_INVALID_STATE;
+    };
+
     SessionWorker(const bm_host_services_t &host,
                   const bm_machine_config_t *configuration,
-                  SnapshotHandler handler);
+                  SnapshotHandler handler,
+                  std::vector<PersistentState> persistentStates = {});
     ~SessionWorker();
 
     SessionWorker(const SessionWorker &) = delete;
     SessionWorker &operator=(const SessionWorker &) = delete;
 
     bm_status_t start();
+    void shutdown();
     void pause();
     void resume();
     void reset();
@@ -56,6 +65,7 @@ public:
                              std::shared_ptr<void> owner);
     bm_session_state_t state() const;
     uint64_t ticks() const;
+    const std::vector<PersistentState> &persistentStates() const;
 
 private:
     enum class CommandKind {
@@ -85,6 +95,7 @@ private:
     static bm_status_t collectStorage(
         bm_session_t *session,
         std::vector<bm_storage_device_status_t> &storage);
+    void capturePersistentStates(bm_session_t *session);
     void publish(bm_session_t *session, bm_status_t status,
                  QImage frame = QImage(), bool lifecycleResult = false,
                  const bm_video_geometry_t *geometry = nullptr,
@@ -105,6 +116,7 @@ private:
     bool ready_ = false;
     uint64_t traceInput_ = 0U;
     bm_status_t startStatus_ = BM_STATUS_INVALID_STATE;
+    std::vector<PersistentState> persistentStates_;
 };
 
 #endif

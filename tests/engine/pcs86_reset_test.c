@@ -199,6 +199,22 @@ main(void)
         assert(bm_session_inspect_machine(session, "rtc_month", &value) ==
                BM_STATUS_OK && value == 0x09U);
     }
+    {
+        uint8_t saved_rtc[BM_PCS86_RTC_STATE_SIZE];
+        size_t saved_size = 0U;
+        assert(bm_session_persistent_state_size(session, "rtc", &saved_size) ==
+               BM_STATUS_OK);
+        assert(saved_size == sizeof(saved_rtc));
+        assert(bm_session_persistent_state_size(
+                   session, "unknown", &saved_size) == BM_STATUS_UNSUPPORTED);
+        assert(bm_session_save_persistent_state(
+                   session, "rtc", saved_rtc, sizeof(saved_rtc) - 1U) ==
+               BM_STATUS_INVALID_ARGUMENT);
+        assert(bm_session_save_persistent_state(
+                   session, "rtc", saved_rtc, sizeof(saved_rtc)) ==
+               BM_STATUS_OK);
+        assert(memcmp(saved_rtc, rtc_state, 8U) == 0);
+    }
     assert(inspect(session, "cs") == 0xffff);
     assert(inspect(session, "ip") == 0);
     assert(inspect(session, "frequency_hz") == 10000000U);

@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static uint32_t
 crc32_pixels(const uint32_t *pixels, size_t count)
@@ -74,15 +75,54 @@ write_ppm(const char *path, const bm_video_framebuffer_t *framebuffer)
     return fclose(file) == 0;
 }
 
+static int
+write_bytes(const char *path, const uint8_t *data, size_t size)
+{
+    FILE *file = open_output(path);
+    if (file == NULL)
+        return 0;
+    if (fwrite(data, 1U, size, file) != size) {
+        fclose(file);
+        return 0;
+    }
+    return fclose(file) == 0;
+}
+
+static int
+input_file_exists(const char *path, int *exists)
+{
+    FILE *file = NULL;
+    if ((path == NULL) || (exists == NULL))
+        return 0;
+#ifdef _MSC_VER
+    if (fopen_s(&file, path, "rb") != 0)
+        file = NULL;
+#else
+    file = fopen(path, "rb");
+#endif
+    if (file != NULL) {
+        *exists = 1;
+        return fclose(file) == 0;
+    }
+    if (errno == ENOENT) {
+        *exists = 0;
+        return 1;
+    }
+    return 0;
+}
+
 int
 headless_run_machine(const bm_frontend_adapter_t *adapter,
                      const headless_run_options_t *options)
 {
     bm_frontend_asset_binding_t bindings[4];
+    bm_frontend_persistent_state_binding_t state_binding;
     size_t binding_count = 2U;
+    size_t state_binding_count = 0U;
     bm_host_services_t host = bm_null_host_services();
     bm_frontend_blob_t even = { NULL, 0U };
     bm_frontend_blob_t odd = { NULL, 0U };
+    bm_frontend_blob_t persistent_state_blob = { NULL, 0U };
     bm_frontend_readonly_media_t floppy = { 0 };
     bm_frontend_readonly_media_t hard_disk = { 0 };
     bm_frontend_machine_t *machine = NULL;
@@ -96,8 +136,10 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
     size_t nonblack = 0U;
     size_t storage_count = 0U;
     uint32_t frame_crc = 0U;
+    uint8_t *depleted_state = NULL;
     int frame_matches = !options->expect_frame_crc32;
     int frame_written = options->frame_path == NULL;
+    int persistent_state_saved = 1;
     int result = 3;
 
     status = headless_text_schedule_validate(
@@ -115,6 +157,58 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
         fputs("firmware halves must each be exactly 32768 bytes\n", stderr);
         result = 2;
         goto cleanup;
+    }
+    if ((options->persistent_state_path != NULL) ||
+        (options->depleted_state_role[0] != '\0')) {
+        const char *role = options->persistent_state_path != NULL ?
+            options->persistent_state_role : options->depleted_state_role;
+        const bm_frontend_persistent_state_requirement_t *requirements;
+        const bm_frontend_persistent_state_requirement_t *requirement = NULL;
+        size_t requirement_count = 0U;
+        size_t index;
+        requirements = bm_frontend_adapter_persistent_states(
+            adapter, &requirement_count);
+        for (index = 0U; index < requirement_count; ++index) {
+            if (strcmp(requirements[index].role, role) == 0)
+                requirement = &requirements[index];
+        }
+        if (requirement == NULL) {
+            fprintf(stderr, "unknown persistent-state role: %s\n", role);
+            result = 2;
+            goto cleanup;
+        }
+        if (options->persistent_state_path != NULL) {
+            int exists = 0;
+            if (!input_file_exists(options->persistent_state_path, &exists)) {
+                fputs("persistent-state file is not readable\n", stderr);
+                result = 2;
+                goto cleanup;
+            }
+            if (exists) {
+                if (!bm_frontend_blob_read_exact(
+                        options->persistent_state_path, requirement->size,
+                        &persistent_state_blob)) {
+                    fputs("persistent-state file has the wrong size\n", stderr);
+                    result = 2;
+                    goto cleanup;
+                }
+                state_binding = (bm_frontend_persistent_state_binding_t) {
+                    requirement->role, persistent_state_blob.data,
+                    persistent_state_blob.size
+                };
+                state_binding_count = 1U;
+            }
+        } else {
+            depleted_state = calloc(requirement->size, 1U);
+            if (depleted_state == NULL) {
+                result = 2;
+                goto cleanup;
+            }
+            state_binding = (bm_frontend_persistent_state_binding_t) {
+                requirement->role, depleted_state, requirement->size
+            };
+            state_binding_count = 1U;
+        }
     }
     bindings[0] = (bm_frontend_asset_binding_t) {
         "firmware-even", BM_FRONTEND_ASSET_BLOB,
@@ -159,7 +253,10 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             { .media = hard_disk.media }
         };
     }
-    status = bm_frontend_machine_open(adapter, bindings, binding_count, &machine);
+    status = bm_frontend_machine_open_with_persistent_state(
+        adapter, bindings, binding_count,
+        state_binding_count != 0U ? &state_binding : NULL,
+        state_binding_count, &machine);
     if (status != BM_STATUS_OK) {
         fputs("machine assets are missing, unreadable, or invalid\n", stderr);
         result = 2;
@@ -288,8 +385,26 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
                options->expected_frame_crc32, frame_matches);
     if (!frame_written)
         fputs("could not write framebuffer capture\n", stderr);
+    if ((options->persistent_state_path != NULL) && (session != NULL)) {
+        size_t state_size = 0U;
+        uint8_t *saved_state = NULL;
+        bm_status_t state_status = bm_session_persistent_state_size(
+            session, options->persistent_state_role, &state_size);
+        if (state_status == BM_STATUS_OK)
+            saved_state = malloc(state_size);
+        if ((saved_state == NULL) ||
+            (bm_session_save_persistent_state(
+                 session, options->persistent_state_role,
+                 saved_state, state_size) != BM_STATUS_OK) ||
+            !write_bytes(options->persistent_state_path,
+                         saved_state, state_size)) {
+            fputs("could not save persistent state\n", stderr);
+            persistent_state_saved = 0;
+        }
+        free(saved_state);
+    }
     if ((status == BM_STATUS_OK) && (video_status == BM_STATUS_OK) &&
-        frame_written && frame_matches)
+        frame_written && frame_matches && persistent_state_saved)
         result = 0;
 
 cleanup:
@@ -300,5 +415,7 @@ cleanup:
     bm_frontend_readonly_media_close(&hard_disk);
     bm_frontend_blob_release(&even);
     bm_frontend_blob_release(&odd);
+    bm_frontend_blob_release(&persistent_state_blob);
+    free(depleted_state);
     return result;
 }

@@ -29,5 +29,10 @@ used for validation remain outside Git; the canonical disk was opened read-only
 and reported zero writes.
 
 This change establishes valid deterministic startup state, not wall-clock
-synchronization or persistence across application runs. Those remain frontend
-work. It also does not claim that the complete Customer diagnostic now passes.
+synchronization. A following frontend cut uses the runtime's opaque named-state
+contract to retain the 32 bytes between runs. Qt stores them in its own host
+settings; headless reads and writes only an explicitly supplied path. Both can
+instead supply a zero image and discard it at shutdown to reproduce a depleted
+battery and the firmware's `Calendar/Time Fail` path. Warm reset still retains
+the live component state. This does not claim that the complete Customer
+diagnostic now passes.

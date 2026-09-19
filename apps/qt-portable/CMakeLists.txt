@@ -175,6 +175,40 @@ if(BUILD_TESTING)
         COMMAND blumach_portable_snapshot_mailbox_test
     )
 
+    add_executable(blumach_portable_session_state_test
+        src/session_worker.cpp
+        src/tick_pacer.cpp
+        src/worker_wakeup.cpp
+        tests/session_worker_persistent_state_test.cpp
+    )
+    target_include_directories(blumach_portable_session_state_test PRIVATE src)
+    target_link_libraries(blumach_portable_session_state_test PRIVATE
+        blumach_frontend
+        blumach_platform_null
+        blumach_runtime
+        Qt6::Core
+        Qt6::Gui
+        Threads::Threads
+    )
+    target_compile_features(blumach_portable_session_state_test PRIVATE
+        cxx_std_17
+    )
+    set_target_properties(blumach_portable_session_state_test PROPERTIES
+        CXX_EXTENSIONS OFF
+    )
+    if(MSVC)
+        target_compile_options(blumach_portable_session_state_test PRIVATE
+            /W4 /WX /UNDEBUG
+        )
+    else()
+        target_compile_options(blumach_portable_session_state_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+        )
+    endif()
+    add_test(NAME portable-qt.session-persistent-state
+        COMMAND blumach_portable_session_state_test
+    )
+
     add_executable(blumach_portable_catalog_test
         src/portable_catalog.cpp
         tests/portable_catalog_test.cpp

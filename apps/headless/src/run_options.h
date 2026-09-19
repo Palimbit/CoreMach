@@ -9,6 +9,7 @@
 
 #define HEADLESS_MAX_TEXT_ACTIONS 16U
 #define HEADLESS_MAX_ACTION_TEXT 256U
+#define HEADLESS_MAX_STATE_ROLE 64U
 
 typedef struct headless_run_options {
     const char *machine_id;
@@ -19,6 +20,9 @@ typedef struct headless_run_options {
     int hard_disk_writable;
     const char *frame_path;
     const char *scenario_path;
+    char persistent_state_role[HEADLESS_MAX_STATE_ROLE];
+    const char *persistent_state_path;
+    char depleted_state_role[HEADLESS_MAX_STATE_ROLE];
     uint64_t ticks;
     uint64_t key_ticks;
     headless_text_action_t text_actions[HEADLESS_MAX_TEXT_ACTIONS];

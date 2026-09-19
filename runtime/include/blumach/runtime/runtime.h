@@ -61,6 +61,13 @@ typedef bm_status_t (*bm_machine_storage_status_fn)(
 typedef bm_status_t (*bm_machine_storage_media_fn)(
     void *machine, bm_storage_device_kind_t kind, uint32_t unit,
     const bm_storage_media_change_t *change);
+/* Named persistent state is an opaque machine-owned byte sequence. Runtime
+ * callers may copy it while the session is running or paused; paths and
+ * storage policy remain entirely frontend-owned. */
+typedef bm_status_t (*bm_machine_persistent_state_size_fn)(
+    const void *machine, const char *name, size_t *size);
+typedef bm_status_t (*bm_machine_save_persistent_state_fn)(
+    const void *machine, const char *name, uint8_t *data, size_t size);
 
 typedef struct bm_machine_ops {
     bm_machine_validate_fn validate;
@@ -75,6 +82,8 @@ typedef struct bm_machine_ops {
     bm_machine_storage_status_fn storage_status;
     bm_machine_storage_media_fn storage_media;
     bm_machine_keyboard_leds_fn keyboard_leds;
+    bm_machine_persistent_state_size_fn persistent_state_size;
+    bm_machine_save_persistent_state_fn save_persistent_state;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_definition {
@@ -147,6 +156,13 @@ bm_status_t bm_session_storage_device_status(
 bm_status_t bm_session_replace_storage_media(
     bm_session_t *session, bm_storage_device_kind_t kind, uint32_t unit,
     const bm_storage_media_change_t *change);
+bm_status_t bm_session_persistent_state_size(const bm_session_t *session,
+                                             const char *name,
+                                             size_t *size);
+bm_status_t bm_session_save_persistent_state(const bm_session_t *session,
+                                             const char *name,
+                                             uint8_t *data,
+                                             size_t size);
 
 #ifdef __cplusplus
 }
