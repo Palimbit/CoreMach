@@ -64,6 +64,14 @@ test_definition_and_configuration_validation(void)
     invalid.scheduler_ticks_per_second = 0U;
     assert(bm_machine_definition_validate(&invalid) == BM_STATUS_INVALID_ARGUMENT);
     invalid = definition;
+    invalid.engine_mode = (bm_machine_engine_mode_t) 99;
+    assert(bm_machine_definition_validate(&invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid = definition;
+    invalid.engine_mode = BM_MACHINE_ENGINE_CLOCKED;
+    assert(bm_machine_definition_validate(&invalid) == BM_STATUS_INVALID_ARGUMENT);
+    invalid.scheduler_ticks_per_second = BM_MACHINE_CLOCKED_TICKS_PER_SECOND;
+    assert(bm_machine_definition_validate(&invalid) == BM_STATUS_OK);
+    invalid = definition;
     invalid.configuration.type = "";
     assert(bm_machine_definition_validate(&invalid) == BM_STATUS_INVALID_ARGUMENT);
     invalid = definition;

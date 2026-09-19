@@ -21,6 +21,18 @@ typedef enum bm_session_state {
     BM_SESSION_STOPPED
 } bm_session_state_t;
 
+/* Selects the engine time contract used by a machine definition. The zero
+ * value preserves the original instruction-tick runtime behavior for existing
+ * definitions. */
+typedef enum bm_machine_engine_mode {
+    BM_MACHINE_ENGINE_INSTRUCTION_TICKS = 0,
+    BM_MACHINE_ENGINE_CLOCKED
+} bm_machine_engine_mode_t;
+
+/* Clocked engines expose integer nanoseconds through run_for() and now();
+ * subnanosecond phase remains exact inside the engine. */
+#define BM_MACHINE_CLOCKED_TICKS_PER_SECOND UINT64_C(1000000000)
+
 typedef struct bm_configuration_view {
     const char *type;
     uint32_t version;
@@ -88,10 +100,15 @@ typedef struct bm_machine_ops {
 
 typedef struct bm_machine_definition {
     const char *id;
-    /* Rate of the machine's current scheduler tick domain. Frontends use this
-     * for wall-clock pacing; it is distinct from a CPU crystal frequency and
-     * may change when a machine adopts cycle-accounted scheduling. */
+    /* Rate of the run_for() tick domain used for wall-clock pacing. It is
+     * distinct from every CPU or device crystal. Instruction-tick machines
+     * define this rate; clocked machines use the fixed rate documented below. */
     uint64_t scheduler_ticks_per_second;
+    /* Instruction-tick machines register CPUs with bm_engine_add_cpu().
+     * Clocked machines register cycle-reporting CPUs and/or timed sources with
+     * the clocked engine APIs and must use
+     * BM_MACHINE_CLOCKED_TICKS_PER_SECOND above. */
+    bm_machine_engine_mode_t engine_mode;
     bm_configuration_contract_t configuration;
     bm_machine_ops_t ops;
     bm_engine_config_t engine;

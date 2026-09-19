@@ -422,11 +422,16 @@ main(int argc, char **argv)
             fprintf(stderr, "unknown machine: %s\n", argv[2]);
             result = 3;
         } else {
-            printf("id=%s scheduler_hz=%" PRIu64
+            const char *engine_mode =
+                definition->engine_mode == BM_MACHINE_ENGINE_CLOCKED ?
+                    "clocked" : "instruction-ticks";
+
+            printf("id=%s scheduler_hz=%" PRIu64 " engine_mode=%s"
                    " config_type=%s config_version=%" PRIu32
                    " config_size=%zu max_cpus=%zu max_events=%zu"
                    " max_timed_sources=%zu\n",
                    definition->id, definition->scheduler_ticks_per_second,
+                   engine_mode,
                    definition->configuration.type,
                    definition->configuration.version,
                    definition->configuration.size, definition->engine.max_cpus,

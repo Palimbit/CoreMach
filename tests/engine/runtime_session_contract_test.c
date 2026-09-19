@@ -28,11 +28,31 @@ typedef struct test_machine {
     unsigned int render_calls;
     unsigned int storage_status_calls;
     unsigned int storage_media_calls;
+    int install_timed_source;
+    unsigned int timed_source_fire_calls;
+    bm_time_point_t timed_source_when;
     bm_storage_media_change_t last_media_change;
     bm_tick_t last_render_time;
     bm_input_event_t last_input;
     bm_keyboard_led_state_t keyboard_leds;
 } test_machine_t;
+
+static bm_status_t
+test_timed_source_fire(bm_engine_t *engine, void *context,
+                       const bm_time_point_t *when,
+                       uint64_t *cycles_until_next)
+{
+    test_machine_t *machine = context;
+
+    assert(engine != NULL);
+    assert(machine != NULL);
+    assert(when != NULL);
+    assert(cycles_until_next != NULL);
+    ++machine->timed_source_fire_calls;
+    machine->timed_source_when = *when;
+    *cycles_until_next = 0U;
+    return BM_STATUS_IDLE;
+}
 
 static size_t
 test_storage_count(const void *context)
@@ -140,7 +160,11 @@ test_create(bm_engine_t *engine,
             const bm_configuration_view_t *configuration,
             void **out_machine)
 {
+    static const bm_clock_rate_t one_ghz = {
+        UINT64_C(1000000000), 1U
+    };
     test_machine_t *machine;
+    bm_status_t status;
 
     assert(engine != NULL);
     assert(host != NULL);
@@ -149,6 +173,12 @@ test_create(bm_engine_t *engine,
     assert(out_machine != NULL);
     machine = (test_machine_t *) configuration->data;
     ++machine->create_calls;
+    if (machine->install_timed_source) {
+        status = bm_engine_add_timed_source(
+            engine, test_timed_source_fire, machine, &one_ghz, 2U, NULL);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
     machine->engine = engine;
     *out_machine = machine->return_machine ? machine : NULL;
     return machine->create_status;
@@ -664,6 +694,55 @@ test_start_failure_cleanup_and_retry(void)
     bm_session_destroy(session);
 }
 
+static void
+test_machine_engine_mode_selection(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    bm_session_t *session = NULL;
+    test_machine_t machine;
+    bm_machine_config_t configuration;
+    bm_machine_definition_t clocked_definition;
+
+    initialize_machine(&machine);
+    machine.install_timed_source = 1;
+    configuration = make_configuration(&machine, 1);
+
+    /* The zero/default mode deliberately remains the instruction-tick engine,
+     * which rejects a clock-domain source. */
+    assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &configuration) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_state(session) == BM_SESSION_CONFIGURED);
+    assert(machine.create_calls == 1U);
+    assert(machine.engine == NULL);
+    bm_session_destroy(session);
+
+    initialize_machine(&machine);
+    machine.install_timed_source = 1;
+    configuration = make_configuration(&machine, 1);
+    clocked_definition = *configuration.definition;
+    clocked_definition.engine_mode = BM_MACHINE_ENGINE_CLOCKED;
+    clocked_definition.scheduler_ticks_per_second =
+        BM_MACHINE_CLOCKED_TICKS_PER_SECOND;
+    clocked_definition.engine.max_timed_sources = 1U;
+    configuration.definition = &clocked_definition;
+
+    session = NULL;
+    assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &configuration) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(machine.engine != NULL);
+    assert(bm_session_run_for(session, 1U) == BM_STATUS_OK);
+    assert(machine.timed_source_fire_calls == 0U);
+    assert(bm_session_run_for(session, 1U) == BM_STATUS_OK);
+    assert(machine.timed_source_fire_calls == 1U);
+    assert(machine.timed_source_when.nanoseconds == 2U);
+    assert(machine.timed_source_when.subnanosecond_numerator == 0U);
+    assert(machine.timed_source_when.subnanosecond_denominator == 1U);
+    assert(bm_session_stop(session) == BM_STATUS_OK);
+    bm_session_destroy(session);
+}
+
 int
 main(void)
 {
@@ -672,5 +751,6 @@ main(void)
     test_session_state_machine();
     test_optional_operations();
     test_start_failure_cleanup_and_retry();
+    test_machine_engine_mode_selection();
     return 0;
 }
