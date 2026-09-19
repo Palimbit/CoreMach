@@ -135,13 +135,32 @@ bm_pit8253_advance(bm_pit8253_t *pit, uint32_t input_ticks)
 {
     if (pit == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
-    while (input_ticks-- != 0U) {
+    while (input_ticks != 0U) {
         bool previous[3];
+        uint32_t consumed;
+
         remember_outputs(pit, previous);
-        bm_pit_exact_tick(&pit->exact);
+        consumed = bm_pit_exact_advance_until_output_change(&pit->exact,
+                                                             input_ticks);
+        if ((consumed == 0U) || (consumed > input_ticks))
+            return BM_STATUS_DEVICE_ERROR;
         notify_changed_outputs(pit, previous);
+        input_ticks -= consumed;
     }
     return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_pit8253_cycles_until_output_change(const bm_pit8253_t *pit,
+                                      uint32_t *cycles)
+{
+    uint32_t result;
+
+    if ((pit == NULL) || (cycles == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    result = bm_pit_exact_cycles_until_output_change(&pit->exact);
+    *cycles = result;
+    return result == 0U ? BM_STATUS_IDLE : BM_STATUS_OK;
 }
 
 bm_status_t
