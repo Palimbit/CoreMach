@@ -6,7 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SCENARIO_HEADER "blumach-headless-scenario-v1"
+#define SCENARIO_HEADER_V1 "blumach-headless-scenario-v1"
+#define SCENARIO_HEADER_V2 "blumach-headless-scenario-v2"
 #define SCENARIO_LINE_CAPACITY 512U
 
 static int
@@ -58,6 +59,51 @@ store_action(headless_run_options_t *options, char *value)
     return 1;
 }
 
+static int
+store_key_action(headless_run_options_t *options, char *value, int tap)
+{
+    char *name_separator = strchr(value, ':');
+    char *state_separator = NULL;
+    uint64_t at;
+    bm_key_code_t key;
+    size_t index = options->key_action_count;
+    if ((name_separator == NULL) || (name_separator == value) ||
+        (name_separator[1] == '\0'))
+        return 0;
+    *name_separator = '\0';
+    if (!parse_unsigned(value, 10, UINT64_MAX, 1, &at))
+        return 0;
+    if (!tap) {
+        state_separator = strchr(name_separator + 1, ':');
+        if ((state_separator == NULL) || (state_separator == name_separator + 1) ||
+            (state_separator[1] == '\0'))
+            return 0;
+        *state_separator = '\0';
+    }
+    if (!headless_key_code_from_name(name_separator + 1, &key))
+        return 0;
+    if (tap) {
+        if ((index + 2U > HEADLESS_MAX_KEY_ACTIONS) ||
+            (at > UINT64_MAX - options->key_ticks))
+            return 0;
+        options->key_actions[index] = (headless_key_action_t) { key, at, 1 };
+        options->key_actions[index + 1U] = (headless_key_action_t) {
+            key, at + options->key_ticks, 0
+        };
+        options->key_action_count += 2U;
+        return 1;
+    }
+    if ((index >= HEADLESS_MAX_KEY_ACTIONS) ||
+        ((strcmp(state_separator + 1, "down") != 0) &&
+         (strcmp(state_separator + 1, "up") != 0)))
+        return 0;
+    options->key_actions[index] = (headless_key_action_t) {
+        key, at, strcmp(state_separator + 1, "down") == 0
+    };
+    ++options->key_action_count;
+    return 1;
+}
+
 int
 headless_scenario_parse(FILE *file, headless_run_options_t *options)
 {
@@ -66,9 +112,11 @@ headless_scenario_parse(FILE *file, headless_run_options_t *options)
     int ticks_seen = 0;
     int key_ticks_seen = 0;
     int crc_seen = 0;
+    int scenario_version = 0;
     if ((file == NULL) || (options == NULL))
         return 0;
     options->text_action_count = 0U;
+    options->key_action_count = 0U;
     options->expect_frame_crc32 = 0;
     while (fgets(line, sizeof(line), file) != NULL) {
         size_t length = strlen(line);
@@ -82,7 +130,11 @@ headless_scenario_parse(FILE *file, headless_run_options_t *options)
         if ((length == 0U) || (line[0] == '#'))
             continue;
         if (!header_seen) {
-            if (strcmp(line, SCENARIO_HEADER) != 0)
+            if (strcmp(line, SCENARIO_HEADER_V1) == 0)
+                scenario_version = 1;
+            else if (strcmp(line, SCENARIO_HEADER_V2) == 0)
+                scenario_version = 2;
+            else
                 return 0;
             header_seen = 1;
         } else if (strncmp(line, "ticks=", 6U) == 0) {
@@ -100,6 +152,14 @@ headless_scenario_parse(FILE *file, headless_run_options_t *options)
         } else if (strncmp(line, "type=", 5U) == 0) {
             if (!store_action(options, line + 5))
                 return 0;
+        } else if ((scenario_version >= 2) &&
+                   (strncmp(line, "key=", 4U) == 0)) {
+            if (!store_key_action(options, line + 4, 0))
+                return 0;
+        } else if ((scenario_version >= 2) &&
+                   (strncmp(line, "tap=", 4U) == 0)) {
+            if (!store_key_action(options, line + 4, 1))
+                return 0;
         } else if (strncmp(line, "expect_frame_crc32=", 19U) == 0) {
             if (crc_seen ||
                 !parse_unsigned(line + 19, 16, UINT32_MAX, 0, &parsed))
@@ -112,8 +172,9 @@ headless_scenario_parse(FILE *file, headless_run_options_t *options)
         }
     }
     return !ferror(file) && header_seen && ticks_seen &&
-           (headless_text_schedule_validate(
+           (headless_input_schedule_validate(
                 options->text_actions, options->text_action_count,
+                options->key_actions, options->key_action_count,
                 options->key_ticks, options->ticks) == BM_STATUS_OK);
 }
 

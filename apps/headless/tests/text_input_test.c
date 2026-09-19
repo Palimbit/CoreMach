@@ -28,6 +28,10 @@ main(void)
         { "ab", UINT64_C(100) },
         { "c", UINT64_C(130) }
     };
+    const headless_key_action_t key_actions[] = {
+        { BM_KEY_LEFT_SHIFT, UINT64_C(160), 1 },
+        { BM_KEY_LEFT_SHIFT, UINT64_C(180), 0 }
+    };
 
     key = decode_one("a");
     assert(key.key == BM_KEY_A && !key.shifted);
@@ -41,6 +45,15 @@ main(void)
     assert(key.key == BM_KEY_ENTER && !key.shifted);
 
     assert(headless_text_decode_next(&invalid, &key) == -1);
+    assert(headless_key_code_from_name("f2", &key.key));
+    assert(key.key == BM_KEY_F2);
+    assert(headless_key_code_from_name("left-shift", &key.key));
+    assert(key.key == BM_KEY_LEFT_SHIFT);
+    assert(headless_key_code_from_name("z", &key.key));
+    assert(key.key == BM_KEY_Z);
+    assert(headless_key_code_from_name("0", &key.key));
+    assert(key.key == BM_KEY_0);
+    assert(!headless_key_code_from_name("not-a-key", &key.key));
     assert(headless_text_duration("ab\\n", UINT64_C(10), &duration) ==
            BM_STATUS_OK);
     assert(duration == UINT64_C(60));
@@ -65,6 +78,16 @@ main(void)
            BM_STATUS_INVALID_ARGUMENT);
     assert(headless_text_schedule_validate(NULL, 1U, UINT64_C(10),
                                            UINT64_C(300)) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(headless_input_schedule_validate(valid_actions, 1U, key_actions,
+                                             2U, UINT64_C(10),
+                                             UINT64_C(300)) == BM_STATUS_OK);
+    assert(headless_input_schedule_validate(valid_actions, 2U, key_actions,
+                                             2U, UINT64_C(10),
+                                             UINT64_C(300)) == BM_STATUS_OK);
+    assert(headless_input_schedule_validate(overlapping_actions, 2U,
+                                             key_actions, 2U,
+                                             UINT64_C(10), UINT64_C(300)) ==
            BM_STATUS_INVALID_ARGUMENT);
     return 0;
 }

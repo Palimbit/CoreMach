@@ -6,6 +6,32 @@
 #include <stdint.h>
 #include <string.h>
 
+typedef struct debug_observation {
+    uint64_t calls;
+    uint64_t instructions;
+    uint64_t io;
+    uint64_t interrupts;
+    uint64_t memory;
+} debug_observation_t;
+
+static void
+observe_debug(void *context, const bm_frontend_debug_event_t *event)
+{
+    debug_observation_t *observation = context;
+    assert(event->sequence == observation->calls);
+    ++observation->calls;
+    if (event->kind == BM_FRONTEND_DEBUG_INSTRUCTION)
+        ++observation->instructions;
+    else if (event->kind == BM_FRONTEND_DEBUG_IO)
+        ++observation->io;
+    else if (event->kind == BM_FRONTEND_DEBUG_INTERRUPT)
+        ++observation->interrupts;
+    else if (event->kind == BM_FRONTEND_DEBUG_MEMORY)
+        ++observation->memory;
+    else
+        assert(0);
+}
+
 static bm_status_t
 read_zero_blocks(void *context, uint64_t first_block, uint32_t block_count,
                  uint8_t *destination)
@@ -69,6 +95,7 @@ main(void)
     };
     size_t asset_count = 0U;
     size_t persistent_state_count = 0U;
+    debug_observation_t observation = { 0 };
 
     assert(bm_frontend_adapter_count() == 1U);
     assert(bm_frontend_adapter_at(1U) == NULL);
@@ -124,6 +151,12 @@ main(void)
                adapter, bindings, sizeof(bindings) / sizeof(bindings[0]),
                &machine) == BM_STATUS_OK);
     assert(machine != NULL);
+    assert(bm_frontend_machine_set_debug_observer(NULL, observe_debug,
+                                                  &observation) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_frontend_machine_set_debug_observer(machine, observe_debug,
+                                                  &observation) ==
+           BM_STATUS_OK);
     assert(bm_frontend_machine_config(machine) != NULL);
     assert(bm_frontend_machine_config(machine)->definition == definition);
     assert(bm_frontend_machine_diagnostics(machine, &diagnostics) ==
@@ -134,6 +167,18 @@ main(void)
     assert(bm_session_configure(session, bm_frontend_machine_config(machine)) ==
            BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 128U) == BM_STATUS_OK);
+    assert(observation.calls != 0U);
+    assert(observation.instructions != 0U);
+    assert(observation.memory != 0U);
+    {
+        const uint64_t calls = observation.calls;
+        assert(bm_frontend_machine_set_debug_observer(machine, NULL,
+                                                      &observation) ==
+               BM_STATUS_OK);
+        assert(bm_session_run_for(session, 128U) == BM_STATUS_OK);
+        assert(observation.calls == calls);
+    }
     {
         uint64_t value = UINT64_MAX;
         assert(bm_session_inspect_machine(session, "rtc_hours", &value) ==

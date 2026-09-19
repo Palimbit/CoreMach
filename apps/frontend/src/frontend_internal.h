@@ -20,6 +20,9 @@ struct bm_frontend_adapter {
 struct bm_frontend_machine {
     bm_machine_config_t configuration;
     bm_frontend_diagnostics_t diagnostics;
+    bm_frontend_debug_observer_fn debug_observer;
+    void *debug_context;
+    uint64_t debug_sequence;
     void (*destroy)(bm_frontend_machine_t *machine);
 };
 
