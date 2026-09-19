@@ -91,16 +91,17 @@ test_buslock_marks_following_instruction(void)
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     assert(consumed == 1U);
     assert(cpu_808x_test_peek(&machine, 0x0100U) == 0x2bU);
-    assert(capture.count == 3U);
-    assert(capture.events[0].operation == BM_BUS_FETCH &&
-           capture.events[0].address == 0xf0004U);
+    /* The bytes were prefetched while the preceding MOV executed, before
+     * BUSLOCK became active. Only this instruction's operand cycles belong to
+     * the lock window. */
+    assert(capture.count == 2U);
     for (index = 0U; index < capture.count; ++index)
         assert((capture.events[index].attributes &
                 BM_BUS_TRANSACTION_LOCKED) != 0U);
-    assert(capture.events[1].operation == BM_BUS_READ &&
+    assert(capture.events[0].operation == BM_BUS_READ &&
+           capture.events[0].address == 0x0100U);
+    assert(capture.events[1].operation == BM_BUS_WRITE &&
            capture.events[1].address == 0x0100U);
-    assert(capture.events[2].operation == BM_BUS_WRITE &&
-           capture.events[2].address == 0x0100U);
 
     memset(&capture, 0, sizeof(capture));
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_IDLE);

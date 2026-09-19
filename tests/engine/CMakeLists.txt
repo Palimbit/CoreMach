@@ -247,7 +247,9 @@ add_executable(portable-engine-v30-bcu v30_bcu_test.c)
 target_include_directories(portable-engine-v30-bcu
     PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/808x/src"
 )
-target_link_libraries(portable-engine-v30-bcu PRIVATE blumach_cpu_808x)
+target_link_libraries(portable-engine-v30-bcu
+    PRIVATE blumach_cpu_808x blumach_platform_null
+)
 
 add_library(portable-engine-808x-test-support STATIC cpu_808x_test_harness.c)
 target_link_libraries(portable-engine-808x-test-support

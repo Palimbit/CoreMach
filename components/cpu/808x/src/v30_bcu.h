@@ -15,10 +15,10 @@
 
 /*
  * Instance-owned state for the V30 bus control unit (BCU). This component
- * deliberately owns only state that is already modelled: the six-byte
- * instruction queue, its independent prefetch pointer, and bus-resource
- * observations. It does not yet claim to place transactions on an EXU/BCU
- * timeline; synchronous completion remains an explicit limitation.
+ * owns the six-byte instruction queue, its independent prefetch pointer,
+ * T1/T2/T3/Tw/T4 instruction-fetch phases and bus-resource observations.
+ * Operand transactions remain synchronous until their micro-operation
+ * positions are represented by the executor.
  */
 typedef struct bm_v30_bcu {
     uint16_t prefetch_pointer;
@@ -30,8 +30,24 @@ typedef struct bm_v30_bcu {
     uint64_t boundary_bus_active_clocks;
     uint64_t boundary_demand_prefetch_transactions;
     uint64_t boundary_demand_prefetch_bus_clocks;
+    uint64_t boundary_prefetch_transactions;
+    uint64_t boundary_prefetch_phase_clocks;
     uint32_t boundary_instruction_queue_reads;
     int boundary_prefetch_flushed;
+    /* Phase to execute on the next BCU clock. */
+    enum {
+        BM_V30_BCU_PHASE_IDLE = 0,
+        BM_V30_BCU_PHASE_T1,
+        BM_V30_BCU_PHASE_T2,
+        BM_V30_BCU_PHASE_T3,
+        BM_V30_BCU_PHASE_TW,
+        BM_V30_BCU_PHASE_T4
+    } prefetch_phase;
+    bm_bus_transaction_t pending_prefetch;
+    uint32_t pending_wait_clocks;
+    uint64_t total_phase_clocks;
+    int pending_prefetch_valid;
+    int pending_prefetch_demand;
 } bm_v30_bcu_t;
 
 void bm_v30_bcu_reset(bm_v30_bcu_t *bcu, uint16_t instruction_pointer);
@@ -46,10 +62,34 @@ bm_status_t bm_v30_bcu_enqueue_byte(bm_v30_bcu_t *bcu, uint8_t value);
 bm_status_t bm_v30_bcu_enqueue_word(bm_v30_bcu_t *bcu, uint16_t value);
 bm_status_t bm_v30_bcu_dequeue_byte(bm_v30_bcu_t *bcu, uint8_t *value);
 
+/* Advance the prefetch state machine by one V30 clock. IDLE is returned only
+ * when the queue has insufficient room to begin the fetch selected by PFP. */
+bm_status_t bm_v30_bcu_step_prefetch(
+    bm_v30_bcu_t *bcu,
+    bm_bus_t *bus,
+    uint16_t code_segment,
+    uint32_t transaction_attributes,
+    int demand_prefetch);
+
+/* Run whole T1/T2/T3/Tw/T4 phases until at least one byte is queued. */
+bm_status_t bm_v30_bcu_fill_on_demand(
+    bm_v30_bcu_t *bcu,
+    bm_bus_t *bus,
+    uint16_t code_segment,
+    uint32_t transaction_attributes);
+
+/* Let an in-flight or newly eligible prefetch consume at most clock_budget
+ * BCU clocks. A full queue is a successful no-op. */
+bm_status_t bm_v30_bcu_advance_prefetch(
+    bm_v30_bcu_t *bcu,
+    bm_bus_t *bus,
+    uint16_t code_segment,
+    uint32_t transaction_attributes,
+    uint32_t clock_budget);
+
 void bm_v30_bcu_record_transaction(
     bm_v30_bcu_t *bcu,
     const bm_bus_transaction_t *transaction,
-    bm_status_t status,
-    int demand_prefetch);
+    bm_status_t status);
 
 #endif
