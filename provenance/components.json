@@ -69,7 +69,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Sarah Walker", "Andrew Jenner", "Miran Grca", "BluMach contributors"],
-      "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core with synchronous device-facing memory transfers, external XT page latches with full-byte readback, separately masked physical address outputs, explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement"
+      "local_changes": "Replaced global devices and direct CPU coupling with opaque single-instance components: an 8237 programming and request-state core with synchronous device-facing memory transfers, external XT page latches with full-byte readback, separately masked physical address outputs, explicit channel mapping and effective addresses, and a single edge-triggered 8259A whose request inputs must remain asserted until acknowledgement; scheduler-facing adapters build as a separate optional target"
     },
     {
       "id": "portable-upd765-fdc",
@@ -139,6 +139,17 @@
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Miran Grca", "Daniel Balsom", "Clara", "BluMach contributors"],
       "local_changes": "Ported the measured 8253 edge-state core behind an opaque bus component, removing legacy globals, host timers and platform callbacks while retaining modes 0-5, BCD, gates, latches and output transitions"
+    },
+    {
+      "id": "portable-intel-8253-clock-adapter",
+      "destination": [
+        "components/pc/include/blumach/components/pit8253_clock.h",
+        "components/pc/src/pit8253_clock.c"
+      ],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Optional composition adapter that advances the independent 8253 model on exact rational engine clock edges without embedding scheduler ownership in the chip core"
     },
     {
       "id": "portable-mm58167",

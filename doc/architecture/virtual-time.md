@@ -122,9 +122,13 @@ intermediate product; overflow is reported without changing the position.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,
-  invalid progress and waking a halted CPU from a fractional deadline. A real
-  PIT, video scanline or storage-transfer source must still be integrated and
-  measured before this contract is called production-ready.
+  invalid progress and waking a halted CPU from a fractional deadline. A
+  separate optional adapter now drives the real 8253 component from the exact
+  `14.31818 MHz / 12` PC clock and verifies mode-2 output edges without making
+  the chip own the scheduler. It deliberately fires once per input edge as a
+  correctness baseline; transition batching and lazy counter synchronization
+  must be measured before wiring it into the PCS 86 or calling the contract
+  production-ready. Video and storage sources remain unintegrated.
 
 This path provides CPU-type independence without prematurely promising that
 all guest CPU models or their buses have the same timing fidelity.
