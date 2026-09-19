@@ -20,11 +20,12 @@ enum {
 typedef struct io_event {
     bm_bus_operation_t operation;
     uint16_t port;
-    uint8_t value;
+    uint16_t value;
+    uint32_t size;
 } io_event_t;
 
 typedef struct io_fixture {
-    uint8_t read_values[MAX_IO_EVENTS];
+    uint16_t read_values[MAX_IO_EVENTS];
     size_t read_count;
     size_t read_index;
     size_t fail_event;
@@ -38,22 +39,23 @@ io_access(void *context, bm_bus_transaction_t *transaction)
     io_fixture_t *fixture = context;
     io_event_t *event;
 
-    assert(transaction->size == 1U);
+    assert((transaction->size == 1U) || (transaction->size == 2U));
     assert(fixture->event_count < MAX_IO_EVENTS);
     event = &fixture->events[fixture->event_count++];
     event->operation = transaction->operation;
     event->port = (uint16_t) transaction->address;
+    event->size = transaction->size;
     if ((fixture->fail_event != 0U) &&
         (fixture->event_count == fixture->fail_event))
         return BM_STATUS_DEVICE_ERROR;
     if (transaction->operation == BM_BUS_READ) {
         assert(fixture->read_index < fixture->read_count);
         transaction->value = fixture->read_values[fixture->read_index++];
-        event->value = (uint8_t) transaction->value;
+        event->value = (uint16_t) transaction->value;
         return BM_STATUS_OK;
     }
     assert(transaction->operation == BM_BUS_WRITE);
-    event->value = (uint8_t) transaction->value;
+    event->value = (uint16_t) transaction->value;
     return BM_STATUS_OK;
 }
 
@@ -104,6 +106,7 @@ test_insb_ignores_segment_override(void)
     assert(cpu_808x_test_peek(&machine, 0x10010U) == 0U);
     assert(io.event_count == 1U);
     assert(io.events[0].operation == BM_BUS_READ);
+    assert(io.events[0].size == 1U);
     assert(io.events[0].port == 0x1234U && io.events[0].value == 0x5aU);
     cpu_808x_test_machine_destroy(&machine);
 }
@@ -129,12 +132,40 @@ test_rep_insw_uses_fixed_wrapping_port(void)
     state = cpu_808x_test_get_state(&machine);
     assert(state.di == 0x0024U && state.cx == 0U);
     assert(state.flags == 0xf002U && io.event_count == 4U);
+    assert(io.events[0].size == 1U && io.events[1].size == 1U);
+    assert(io.events[2].size == 1U && io.events[3].size == 1U);
     assert(io.events[0].port == 0xffffU && io.events[1].port == 0U);
     assert(io.events[2].port == 0xffffU && io.events[3].port == 0U);
     assert(cpu_808x_test_peek(&machine, 0x20020U) == 0x11U);
     assert(cpu_808x_test_peek(&machine, 0x20021U) == 0x22U);
     assert(cpu_808x_test_peek(&machine, 0x20022U) == 0x33U);
     assert(cpu_808x_test_peek(&machine, 0x20023U) == 0x44U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
+static void
+test_insw_even_port_uses_one_wide_transfer(void)
+{
+    static const uint8_t program[] = { 0x6dU };
+    cpu_808x_test_machine_t machine;
+    io_fixture_t io = { { 0x2211U }, 1U, 0U, 0U, { { 0 } }, 0U };
+    bm_808x_arch_state_t state;
+    bm_tick_t consumed = 0U;
+
+    create_machine(&machine, &io, program, sizeof(program));
+    state = execution_state(&machine);
+    state.dx = 0x0200U;
+    state.di = 0x0020U;
+    cpu_808x_test_set_state(&machine, &state);
+    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
+    state = cpu_808x_test_get_state(&machine);
+    assert(state.di == 0x0022U);
+    assert(io.event_count == 1U);
+    assert(io.events[0].operation == BM_BUS_READ);
+    assert(io.events[0].port == 0x0200U && io.events[0].size == 2U &&
+           io.events[0].value == 0x2211U);
+    assert(cpu_808x_test_peek(&machine, 0x20020U) == 0x11U);
+    assert(cpu_808x_test_peek(&machine, 0x20021U) == 0x22U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -210,11 +241,11 @@ test_rep_outsw_decrements_and_orders_bytes(void)
     state = cpu_808x_test_get_state(&machine);
     assert(state.si == 0x00feU && state.cx == 0U);
     assert(state.flags == (uint16_t) (0xf002U | FLAG_DF));
-    assert(io.event_count == 4U);
-    assert(io.events[0].port == 0x0200U && io.events[0].value == 0xcdU);
-    assert(io.events[1].port == 0x0201U && io.events[1].value == 0xabU);
-    assert(io.events[2].port == 0x0200U && io.events[2].value == 0x34U);
-    assert(io.events[3].port == 0x0201U && io.events[3].value == 0x12U);
+    assert(io.event_count == 2U);
+    assert(io.events[0].port == 0x0200U && io.events[0].size == 2U &&
+           io.events[0].value == 0xabcdU);
+    assert(io.events[1].port == 0x0200U && io.events[1].size == 2U &&
+           io.events[1].value == 0x1234U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -250,6 +281,7 @@ main(void)
 {
     test_insb_ignores_segment_override();
     test_rep_insw_uses_fixed_wrapping_port();
+    test_insw_even_port_uses_one_wide_transfer();
     test_zero_count_rep_has_no_side_effect();
     test_rep_outsb_uses_source_override();
     test_rep_outsw_decrements_and_orders_bytes();
