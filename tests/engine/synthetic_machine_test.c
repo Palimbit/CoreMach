@@ -46,7 +46,7 @@ static void
 test_partial_initialization_cleanup(void)
 {
     size_t failure;
-    bm_engine_config_t configuration = { 1, 1 };
+    bm_engine_config_t configuration = { 1, 1, 0 };
 
     for (failure = 0; failure < 3; ++failure) {
         failure_injection_host_t tracker;

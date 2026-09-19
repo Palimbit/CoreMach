@@ -141,7 +141,7 @@ static bm_engine_t *
 make_engine(size_t max_cpus, size_t max_events)
 {
     bm_host_services_t host = bm_null_host_services();
-    bm_engine_config_t config = { max_cpus, max_events };
+    bm_engine_config_t config = { max_cpus, max_events, 0U };
     bm_engine_t *engine = NULL;
 
     assert(bm_engine_create(&host, &config, &engine) == BM_STATUS_OK);
@@ -166,8 +166,8 @@ test_engine_validation_and_cpu_ownership(void)
 {
     bm_host_services_t host = bm_null_host_services();
     bm_host_services_t invalid_host = host;
-    bm_engine_config_t config = { 1U, 1U };
-    bm_engine_config_t invalid_config = { 0U, 1U };
+    bm_engine_config_t config = { 1U, 1U, 0U };
+    bm_engine_config_t invalid_config = { 0U, 1U, 0U };
     bm_engine_t *engine = NULL;
     test_cpu_t first_context = { 0 };
     test_cpu_t rejected_context = { 0 };

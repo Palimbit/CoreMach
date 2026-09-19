@@ -14,12 +14,20 @@ extern "C" {
 
 typedef struct bm_engine bm_engine_t;
 typedef uint32_t bm_cpu_id_t;
+typedef uint32_t bm_timed_source_id_t;
 /* Exact native clock rate in cycles per second. Keeping the divider explicit
  * avoids rounding clocks derived from a shared crystal to an integer hertz. */
 typedef struct bm_clock_rate {
     uint64_t cycles_per_second_numerator;
     uint64_t cycles_per_second_denominator;
 } bm_clock_rate_t;
+/* Exact virtual time. nanoseconds is the whole part; the remaining fields are
+ * a normalized proper fraction of one nanosecond. */
+typedef struct bm_time_point {
+    uint64_t nanoseconds;
+    uint64_t subnanosecond_numerator;
+    uint64_t subnanosecond_denominator;
+} bm_time_point_t;
 typedef void (*bm_engine_event_fn)(bm_engine_t *engine, void *context);
 /* One completed architectural boundary, reporting cycles in this CPU's own
  * clock domain. start_ns is its integer virtual boundary-start time, not the
@@ -27,10 +35,18 @@ typedef void (*bm_engine_event_fn)(bm_engine_t *engine, void *context);
  * applicable bus wait states. */
 typedef bm_status_t (*bm_clocked_cpu_step_fn)(void *context, bm_tick_t start_ns,
                                               uint64_t *cycles);
+/* A host-independent source of device deadlines. BM_STATUS_OK rearms the
+ * source by cycles_until_next native cycles from this exact firing time.
+ * BM_STATUS_IDLE with zero cycles disarms it until engine reset. */
+typedef bm_status_t (*bm_timed_source_fire_fn)(bm_engine_t *engine,
+                                               void *context,
+                                               const bm_time_point_t *when,
+                                               uint64_t *cycles_until_next);
 
 typedef struct bm_engine_config {
     size_t max_cpus;
     size_t max_events;
+    size_t max_timed_sources;
 } bm_engine_config_t;
 
 bm_status_t bm_engine_create(const bm_host_services_t *host,
@@ -48,6 +64,12 @@ bm_status_t bm_engine_add_clocked_cpu(bm_engine_t *engine, const bm_cpu_t *cpu,
                                       bm_clocked_cpu_step_fn step,
                                       const bm_clock_rate_t *rate,
                                       bm_cpu_id_t *out_id);
+bm_status_t bm_engine_add_timed_source(bm_engine_t *engine,
+                                       bm_timed_source_fire_fn fire,
+                                       void *context,
+                                       const bm_clock_rate_t *rate,
+                                       uint64_t first_delay_cycles,
+                                       bm_timed_source_id_t *out_id);
 bm_status_t bm_engine_reset(bm_engine_t *engine);
 bm_status_t bm_engine_run_for(bm_engine_t *engine, bm_tick_t duration);
 bm_status_t bm_engine_schedule_at(bm_engine_t *engine,
@@ -60,6 +82,8 @@ bm_status_t bm_engine_inspect_cpu(const bm_engine_t *engine,
                                   const char *name,
                                   uint64_t *value);
 bm_tick_t bm_engine_now(const bm_engine_t *engine);
+bm_status_t bm_engine_now_exact(const bm_engine_t *engine,
+                                bm_time_point_t *out_time);
 
 #ifdef __cplusplus
 }

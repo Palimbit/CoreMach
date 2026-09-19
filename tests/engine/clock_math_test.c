@@ -89,6 +89,22 @@ test_fraction_comparison_without_overflow(void)
 }
 
 static void
+test_export_normalizes_public_fraction(void)
+{
+    bm_clock_position_t clock = { 7U, 3U, 9U, 1U };
+    bm_time_point_t time_point;
+
+    bm_clock_position_export(&clock, &time_point);
+    assert(time_point.nanoseconds == 7U);
+    assert(time_point.subnanosecond_numerator == 1U);
+    assert(time_point.subnanosecond_denominator == 3U);
+    clock.phase = 0U;
+    bm_clock_position_export(&clock, &time_point);
+    assert(time_point.subnanosecond_numerator == 0U);
+    assert(time_point.subnanosecond_denominator == 1U);
+}
+
+static void
 test_invalid_and_overflow_are_atomic(void)
 {
     bm_clock_position_t clock;
@@ -122,6 +138,7 @@ main(void)
     test_no_accumulated_rounding();
     test_rational_crystal_divider_has_no_drift();
     test_fraction_comparison_without_overflow();
+    test_export_normalizes_public_fraction();
     test_invalid_and_overflow_are_atomic();
     return 0;
 }
