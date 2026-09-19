@@ -76,6 +76,9 @@ typedef struct bm_808x_state {
     void *timing_context;
     uint64_t boundary_bus_transactions;
     uint64_t boundary_wait_states;
+    uint64_t boundary_bus_active_clocks;
+    uint64_t boundary_demand_prefetch_transactions;
+    uint64_t boundary_demand_prefetch_bus_clocks;
     int boundary_prefetch_flushed;
     int boundary_rm_valid;
     int boundary_rm_memory;
@@ -95,12 +98,21 @@ typedef struct bm_808x_state {
 static void
 record_bus_transaction(bm_808x_state_t *state,
                        const bm_bus_transaction_t *transaction,
-                       bm_status_t status)
+                       bm_status_t status,
+                       int demand_prefetch)
 {
+    uint64_t clocks;
+
     if (status != BM_STATUS_OK)
         return;
+    clocks = 4U + (uint64_t) transaction->wait_states;
     ++state->boundary_bus_transactions;
     state->boundary_wait_states += transaction->wait_states;
+    state->boundary_bus_active_clocks += clocks;
+    if (demand_prefetch) {
+        ++state->boundary_demand_prefetch_transactions;
+        state->boundary_demand_prefetch_bus_clocks += clocks;
+    }
 }
 
 static void
@@ -143,7 +155,7 @@ read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    record_bus_transaction(state, &transaction, status, 0);
     if (status == BM_STATUS_OK)
         *value = (uint8_t) transaction.value;
     return status;
@@ -172,7 +184,7 @@ fill_prefetch_queue(bm_808x_state_t *state)
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
         status = bm_bus_transact(state->bus, &transaction);
-        record_bus_transaction(state, &transaction, status);
+        record_bus_transaction(state, &transaction, status, 1);
         if (status != BM_STATUS_OK)
             return status;
         state->prefetch_queue[tail] = (uint8_t) transaction.value;
@@ -187,8 +199,19 @@ fill_prefetch_queue(bm_808x_state_t *state)
 
     if (free_bytes == 0U)
         return BM_STATUS_INVALID_STATE;
-    status = read_byte(state, state->segments[1], state->prefetch_pointer,
-                       BM_BUS_FETCH, &state->prefetch_queue[tail]);
+    {
+        bm_bus_transaction_t transaction = {
+            BM_ADDRESS_MEMORY, BM_BUS_FETCH,
+            physical_address(state->segments[1], state->prefetch_pointer),
+            0, 1, 1, 0, BM_ENDIAN_LITTLE,
+            state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
+        };
+
+        status = bm_bus_transact(state->bus, &transaction);
+        record_bus_transaction(state, &transaction, status, 1);
+        if (status == BM_STATUS_OK)
+            state->prefetch_queue[tail] = (uint8_t) transaction.value;
+    }
     if (status == BM_STATUS_OK) {
         ++state->prefetch_count;
         ++state->prefetch_pointer;
@@ -241,7 +264,7 @@ write_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint8_t va
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    record_bus_transaction(state, &transaction, status, 0);
     return status;
 }
 
@@ -256,7 +279,7 @@ read_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t *v
         };
         bm_status_t status = bm_bus_transact(state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
+        record_bus_transaction(state, &transaction, status, 0);
         if (status == BM_STATUS_OK)
             *value = (uint16_t) transaction.value;
         return status;
@@ -283,7 +306,7 @@ write_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t v
         };
         bm_status_t status = bm_bus_transact(state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
+        record_bus_transaction(state, &transaction, status, 0);
         return status;
     }
 
@@ -1548,7 +1571,7 @@ io_read_byte(bm_808x_state_t *state, uint16_t port, uint8_t *value)
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    record_bus_transaction(state, &transaction, status, 0);
     if (status == BM_STATUS_OK)
         *value = (uint8_t) transaction.value;
     return status;
@@ -1562,7 +1585,7 @@ io_write_byte(bm_808x_state_t *state, uint16_t port, uint8_t value)
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
     bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    record_bus_transaction(state, &transaction, status, 0);
     return status;
 }
 
@@ -1577,7 +1600,7 @@ io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
         };
         bm_status_t status = bm_bus_transact(state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
+        record_bus_transaction(state, &transaction, status, 0);
         if (status == BM_STATUS_OK)
             *value = (uint16_t) transaction.value;
         return status;
@@ -1604,7 +1627,7 @@ io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
         };
         bm_status_t status = bm_bus_transact(state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
+        record_bus_transaction(state, &transaction, status, 0);
         return status;
     }
 
@@ -1706,6 +1729,9 @@ cpu_reset(void *context)
     state->md_write_enabled = 0;
     state->boundary_bus_transactions = 0U;
     state->boundary_wait_states = 0U;
+    state->boundary_bus_active_clocks = 0U;
+    state->boundary_demand_prefetch_transactions = 0U;
+    state->boundary_demand_prefetch_bus_clocks = 0U;
     state->boundary_prefetch_flushed = 0;
     state->boundary_rm_valid = 0;
     state->boundary_rm_memory = 0;
@@ -4641,6 +4667,9 @@ begin_boundary_observation(bm_808x_state_t *state)
 {
     state->boundary_bus_transactions = 0U;
     state->boundary_wait_states = 0U;
+    state->boundary_bus_active_clocks = 0U;
+    state->boundary_demand_prefetch_transactions = 0U;
+    state->boundary_demand_prefetch_bus_clocks = 0U;
     state->boundary_prefetch_flushed = 0;
     state->boundary_rm_valid = 0;
     state->boundary_rm_memory = 0;
@@ -4679,7 +4708,14 @@ emit_boundary_observation(bm_808x_state_t *state,
         .prefetch_queue_count = state->prefetch_count,
         .prefetch_pointer = state->prefetch_pointer,
         .logical_bus_transactions = state->boundary_bus_transactions,
-        .reported_wait_states = state->boundary_wait_states
+        .reported_wait_states = state->boundary_wait_states,
+        .bus_active_clocks = state->boundary_bus_active_clocks,
+        .demand_prefetch_transactions =
+            state->boundary_demand_prefetch_transactions,
+        .demand_prefetch_bus_clocks =
+            state->boundary_demand_prefetch_bus_clocks,
+        .instruction_queue_reads = kind == BM_808X_BOUNDARY_INSTRUCTION ?
+                                   state->last_instruction_length : 0U
     };
 
     if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)

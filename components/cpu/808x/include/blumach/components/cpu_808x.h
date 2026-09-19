@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 3U
+#define BM_808X_TIMING_OBSERVATION_VERSION 4U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -93,9 +93,15 @@ typedef enum bm_808x_execution_clock_kind {
  * realised value is known. UNKNOWN is an explicit unimplemented timing
  * classification, never a zero-cycle claim.
  * prefetch_pointer and prefetch_queue_count expose the real per-CPU instruction
- * queue after the boundary. The pointer is always known in version 3.
- * logical_bus_transactions describe the current portable bus API and are not
- * yet a complete claim about physical V30 bus-cycle timing. */
+ * queue after the boundary. The pointer is always known from version 3.
+ * logical_bus_transactions describe successful portable-bus transfers.
+ * bus_active_clocks is their four base V30 clocks plus reported wait states;
+ * it measures bus occupancy, not boundary duration, because BCU work can
+ * overlap EXU work. demand_prefetch_* is the subset issued only because an
+ * empty instruction queue blocked byte consumption. instruction_queue_reads
+ * counts consumed instruction bytes, each of which has a documented one-clock
+ * queue-read cost. These counters deliberately do not invent the still-missing
+ * temporal placement or opportunistic execution-overlapped prefetch. */
 typedef struct bm_808x_timing_observation {
     uint32_t size;
     uint32_t version;
@@ -114,6 +120,11 @@ typedef struct bm_808x_timing_observation {
     uint32_t execution_clocks_max;
     uint64_t logical_bus_transactions;
     uint64_t reported_wait_states;
+    uint64_t bus_active_clocks;
+    uint64_t demand_prefetch_transactions;
+    uint64_t demand_prefetch_bus_clocks;
+    uint32_t instruction_queue_reads;
+    uint32_t reserved_timing;
 } bm_808x_timing_observation_t;
 
 typedef void (*bm_808x_timing_fn)(
