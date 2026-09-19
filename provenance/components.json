@@ -130,7 +130,8 @@
         "components/pc/include/blumach/components/pit8253.h",
         "components/pc/src/pit8253.c",
         "components/pc/src/pit8253_exact.c",
-        "components/pc/src/pit8253_exact.h"
+        "components/pc/src/pit8253_exact.h",
+        "components/pc/src/pit8253_private.h"
       ],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "fbedd9ba7d4bad5e506fe45367b63ffcd2af864e",
@@ -149,7 +150,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Optional composition adapter that advances the independent 8253 model on exact rational engine clock edges without embedding scheduler ownership in the chip core"
+      "local_changes": "Optional composition adapter that advances the independent 8253 model lazily between exact output-transition deadlines, synchronizes state before I/O and keeps scheduler ownership outside the chip core"
     },
     {
       "id": "portable-mm58167",
