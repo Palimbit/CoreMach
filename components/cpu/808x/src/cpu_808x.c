@@ -1569,6 +1569,20 @@ io_write_byte(bm_808x_state_t *state, uint16_t port, uint8_t value)
 static bm_status_t
 io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
 {
+    if ((port & 1U) == 0U) {
+        bm_bus_transaction_t transaction = {
+            BM_ADDRESS_IO, BM_BUS_READ, port, 0, 2, 2, 0,
+            BM_ENDIAN_LITTLE,
+            state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
+        };
+        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+
+        record_bus_transaction(state, &transaction, status);
+        if (status == BM_STATUS_OK)
+            *value = (uint16_t) transaction.value;
+        return status;
+    }
+
     uint8_t low = 0;
     uint8_t high = 0;
     bm_status_t status = io_read_byte(state, port, &low);
@@ -1582,6 +1596,18 @@ io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
 static bm_status_t
 io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
 {
+    if ((port & 1U) == 0U) {
+        bm_bus_transaction_t transaction = {
+            BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 2, 2, 0,
+            BM_ENDIAN_LITTLE,
+            state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
+        };
+        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+
+        record_bus_transaction(state, &transaction, status);
+        return status;
+    }
+
     bm_status_t status = io_write_byte(state, port, (uint8_t) value);
     if (status == BM_STATUS_OK)
         status = io_write_byte(state, (uint16_t) (port + 1U), (uint8_t) (value >> 8U));

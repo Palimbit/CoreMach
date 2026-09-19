@@ -241,11 +241,12 @@ unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
 all logical transactions physical V30 bus cycles. Aligned V30 word memory
-operands and stack/vector transfers now use one little-endian 16-bit bus
-transaction; an odd word still uses the two byte cycles required by the
-hardware. Execution-overlapped prefetch and word I/O remain separate later
-work, so the observer still labels the aggregate as logical rather than claiming
-a complete external-bus trace. Instruction demand fetch now uses a real
+operands, stack/vector transfers and word I/O at an even port now use one
+little-endian 16-bit bus transaction; an odd memory word or I/O port still uses
+the two byte cycles required by the hardware. Execution-overlapped prefetch
+remains separate later work, so the observer still labels the aggregate as
+logical rather than claiming a complete external-bus trace. Instruction demand
+fetch now uses a real
 six-byte queue and
 per-instance PFP. An even PFP fetches one little-endian word in a single bus
 transaction; an odd PFP fetches one byte before the pointer returns to an even
