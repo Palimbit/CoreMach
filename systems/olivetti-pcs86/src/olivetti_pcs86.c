@@ -13,7 +13,6 @@
 #include <blumach/components/dma_page_registers.h>
 #include <blumach/components/fdc765.h>
 #include <blumach/components/floppy_drive.h>
-#include <blumach/components/linear_memory.h>
 #include <blumach/components/lpt_spp.h>
 #include <blumach/components/pic8259.h>
 #include <blumach/components/pit8253.h>
@@ -32,7 +31,7 @@ typedef struct bm_pcs86_machine {
     uint8_t *ems_ram;
     size_t ems_size;
     uint16_t ems_pages;
-    bm_linear_memory_t *rom;
+    uint8_t *rom;
     bm_dma8237_t *dma;
     bm_dma_page_registers_t *dma_pages;
     bm_floppy_drive_t *floppy[2];
@@ -167,6 +166,38 @@ pcs86_open_bus_access(void *context, bm_bus_transaction_t *transaction)
     transaction->value = 0;
     for (index = 0; index < transaction->size; ++index)
         transaction->value |= UINT64_C(0xff) << (index * 8U);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_rom_access(void *context, bm_bus_transaction_t *transaction)
+{
+    bm_pcs86_machine_t *machine = context;
+    uint64_t offset;
+    uint32_t index;
+    if ((transaction == NULL) || (machine->rom == NULL) ||
+        (transaction->address < BM_PCS86_ROM_BASE) ||
+        (transaction->size == 0U) ||
+        (transaction->size > sizeof(transaction->value)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    offset = transaction->address - BM_PCS86_ROM_BASE;
+    if ((offset >= BM_PCS86_ROM_SIZE) ||
+        (transaction->size > BM_PCS86_ROM_SIZE - (size_t) offset))
+        return BM_STATUS_UNMAPPED;
+    /* The EPROM does not accept CPU writes. On the physical bus they have no
+     * effect and do not stop instruction execution. */
+    if (transaction->operation == BM_BUS_WRITE)
+        return BM_STATUS_OK;
+    if ((transaction->operation != BM_BUS_READ) &&
+        (transaction->operation != BM_BUS_FETCH))
+        return BM_STATUS_INVALID_ARGUMENT;
+    transaction->value = 0U;
+    for (index = 0U; index < transaction->size; ++index) {
+        uint32_t shift = (transaction->endianness == BM_ENDIAN_LITTLE) ?
+            index * 8U : (transaction->size - index - 1U) * 8U;
+        transaction->value |=
+            (uint64_t) machine->rom[offset + index] << shift;
+    }
     return BM_STATUS_OK;
 }
 
@@ -1042,7 +1073,8 @@ pcs86_destroy(void *context)
     bm_pvga1a_destroy(machine->video);
     bm_pit8253_destroy(machine->pit);
     bm_pic8259_destroy(machine->pic);
-    bm_linear_memory_destroy(machine->rom);
+    if (machine->rom != NULL)
+        machine->host.release(machine->host.context, machine->rom);
     if (machine->ems_ram != NULL)
         machine->host.release(machine->host.context, machine->ems_ram);
     if (machine->conventional_ram != NULL)
@@ -1196,7 +1228,6 @@ pcs86_create(bm_engine_t *engine,
 {
     const bm_pcs86_config_t *config;
     bm_pcs86_machine_t *machine;
-    uint8_t *combined_rom = NULL;
     bm_cpu_t cpu;
     bm_status_t status;
     size_t index;
@@ -1252,24 +1283,20 @@ pcs86_create(bm_engine_t *engine,
                             BM_PCS86_MEMORY_SIZE - 1U,
                             pcs86_memory_access, machine);
     if (status == BM_STATUS_OK) {
-        combined_rom = host->allocate(host->context, BM_PCS86_ROM_SIZE);
-        if (combined_rom == NULL)
+        machine->rom = host->allocate(host->context, BM_PCS86_ROM_SIZE);
+        if (machine->rom == NULL)
             status = BM_STATUS_OUT_OF_MEMORY;
     }
     if (status == BM_STATUS_OK) {
-        bm_linear_memory_config_t rom_config;
         for (index = 0; index < BM_PCS86_FIRMWARE_HALF_SIZE; ++index) {
-            combined_rom[index * 2U] = config->firmware_even.data[index];
-            combined_rom[index * 2U + 1U] = config->firmware_odd.data[index];
+            machine->rom[index * 2U] = config->firmware_even.data[index];
+            machine->rom[index * 2U + 1U] = config->firmware_odd.data[index];
         }
-        rom_config = (bm_linear_memory_config_t) {
-            BM_ADDRESS_MEMORY, BM_PCS86_ROM_BASE, BM_PCS86_ROM_SIZE, 1,
-            combined_rom, BM_PCS86_ROM_SIZE
-        };
-        status = bm_linear_memory_create(host, machine->bus, &rom_config, &machine->rom);
+        status = bm_bus_map(machine->bus, BM_ADDRESS_MEMORY,
+                            BM_PCS86_ROM_BASE,
+                            BM_PCS86_ROM_BASE + BM_PCS86_ROM_SIZE - 1U,
+                            pcs86_rom_access, machine);
     }
-    if (combined_rom != NULL)
-        host->release(host->context, combined_rom);
     if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_MEMORY,
                             0x000c0000U, 0x000effffU,
