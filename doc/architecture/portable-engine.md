@@ -245,7 +245,11 @@ reports four base clocks plus waits for every successful transfer, the subset
 spent on demand prefetch, and one queue-read clock per consumed instruction
 byte. These are exact BCU resource counters, not a serialized total: BCU and
 EXU work overlap and the current interpreter does not yet place every transfer
-on that shared timeline. Aligned V30 word memory
+on that shared timeline. The queue, independent PFP and resource accounting
+now live in one private, instance-owned BCU component rather than as scattered
+interpreter fields. Its direct tests cover queue wrap, flush and boundary
+accounting; this is an ownership boundary for the later phase model, not a
+claim that the synchronous bus calls already form one. Aligned V30 word memory
 operands, stack/vector transfers and word I/O at an even port now use one
 little-endian 16-bit bus transaction; an odd memory word or I/O port still uses
 the two byte cycles required by the hardware. Execution-overlapped prefetch
