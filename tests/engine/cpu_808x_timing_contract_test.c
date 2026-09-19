@@ -392,6 +392,225 @@ test_divide_error_does_not_claim_normal_execution_clocks(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_scalar_formula_and_condition_timing(void)
+{
+    static const uint8_t cwd[] = { 0x99U };
+    static const uint8_t prepare_zero[] = { 0xc8U, 0x00U, 0x00U, 0x00U };
+    static const uint8_t prepare_three[] = { 0xc8U, 0x00U, 0x00U, 0x03U };
+    static const uint8_t chkind[] = { 0x62U, 0x06U, 0x40U, 0x00U };
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    unsigned int odd;
+
+    cpu_808x_test_machine_create(&machine, &config, cwd, sizeof(cwd));
+    start_program(&machine);
+    step_once(&machine, &capture);
+    assert_execution_clock_range(&capture, 4U, 5U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    for (odd = 0U; odd <= 1U; ++odd) {
+        memset(&capture, 0, sizeof(capture));
+        cpu_808x_test_machine_create(&machine, &config, prepare_zero,
+                                     sizeof(prepare_zero));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ss = 0x1000U;
+        state.sp = (uint16_t) (0x0100U + odd);
+        state.bp = 0x0200U;
+        cpu_808x_test_set_state(&machine, &state);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, odd ? 16U : 12U);
+        cpu_808x_test_machine_destroy(&machine);
+
+        memset(&capture, 0, sizeof(capture));
+        cpu_808x_test_machine_create(&machine, &config, prepare_three,
+                                     sizeof(prepare_three));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ss = 0x1000U;
+        state.sp = (uint16_t) (0x0100U + odd);
+        state.bp = 0x0200U;
+        cpu_808x_test_set_state(&machine, &state);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, odd ? 53U : 33U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, chkind, sizeof(chkind));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ds = 0x1000U;
+    state.ax = 5U;
+    cpu_808x_test_set_state(&machine, &state);
+    cpu_808x_test_poke(&machine, 0x10040U, 1U);
+    cpu_808x_test_poke(&machine, 0x10041U, 0U);
+    cpu_808x_test_poke(&machine, 0x10042U, 10U);
+    cpu_808x_test_poke(&machine, 0x10043U, 0U);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 18U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, chkind, sizeof(chkind));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ds = 0x1000U;
+    state.ss = 0x2000U;
+    state.sp = 0x0100U;
+    state.ax = 20U;
+    cpu_808x_test_set_state(&machine, &state);
+    cpu_808x_test_poke(&machine, 0x10040U, 1U);
+    cpu_808x_test_poke(&machine, 0x10041U, 0U);
+    cpu_808x_test_poke(&machine, 0x10042U, 10U);
+    cpu_808x_test_poke(&machine, 0x10043U, 0U);
+    cpu_808x_test_poke(&machine, 0x0014U, 0x34U);
+    cpu_808x_test_poke(&machine, 0x0015U, 0x12U);
+    cpu_808x_test_poke(&machine, 0x0016U, 0x00U);
+    cpu_808x_test_poke(&machine, 0x0017U, 0x30U);
+    step_once(&machine, &capture);
+    assert_execution_clock_range(&capture, 53U, 56U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
+static void
+test_nec_extension_timing(void)
+{
+    static const uint8_t test1_register[] = { 0x0fU, 0x10U, 0xc0U };
+    static const uint8_t clr1_word_odd[] = {
+        0x0fU, 0x13U, 0x06U, 0x41U, 0x00U
+    };
+    static const uint8_t set1_immediate_memory[] = {
+        0x0fU, 0x1cU, 0x06U, 0x40U, 0x00U, 0x03U
+    };
+    static const uint8_t bcd_add[] = { 0x0fU, 0x20U };
+    static const uint8_t rol4_register[] = { 0x0fU, 0x28U, 0xc3U };
+    static const uint8_t ror4_memory[] = {
+        0x0fU, 0x2aU, 0x06U, 0x40U, 0x00U
+    };
+    static const uint8_t ext_even[] = { 0x0fU, 0x33U, 0xd1U };
+    static const uint8_t ext_odd[] = { 0x0fU, 0x33U, 0xd1U };
+    static const uint8_t brkem[] = { 0x0fU, 0xffU, 0x20U };
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+
+    cpu_808x_test_machine_create(&machine, &config, test1_register,
+                                 sizeof(test1_register));
+    start_program(&machine);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 3U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, clr1_word_odd,
+                                 sizeof(clr1_word_odd));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ds = 0x1000U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 22U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, set1_immediate_memory,
+                                 sizeof(set1_immediate_memory));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ds = 0x1000U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 14U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, bcd_add,
+                                 sizeof(bcd_add));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.cx = 3U;
+    state.ds = 0x1000U;
+    state.es = 0x2000U;
+    state.si = state.di = 0x0040U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 45U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, rol4_register,
+                                 sizeof(rol4_register));
+    start_program(&machine);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 13U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, ror4_memory,
+                                 sizeof(ror4_memory));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ds = 0x1000U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 32U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, ext_even,
+                                 sizeof(ext_even));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.cx = 6U;
+    state.dx = 3U;
+    state.ds = 0x1000U;
+    state.si = 0x0040U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert_execution_clock_range(&capture, 31U, 117U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, ext_odd,
+                                 sizeof(ext_odd));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.cx = 6U;
+    state.dx = 3U;
+    state.ds = 0x1000U;
+    state.si = 0x0041U;
+    cpu_808x_test_set_state(&machine, &state);
+    step_once(&machine, &capture);
+    assert_execution_clock_range(&capture, 35U, 133U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, brkem, sizeof(brkem));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ss = 0x2000U;
+    state.sp = 0x0100U;
+    cpu_808x_test_set_state(&machine, &state);
+    cpu_808x_test_poke(&machine, 0x0080U, 0x34U);
+    cpu_808x_test_poke(&machine, 0x0081U, 0x12U);
+    cpu_808x_test_poke(&machine, 0x0082U, 0x00U);
+    cpu_808x_test_poke(&machine, 0x0083U, 0x30U);
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 38U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
 static bm_status_t
 acknowledge_interrupt(void *context, uint8_t *vector)
 {
@@ -448,6 +667,8 @@ main(void)
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();
     test_divide_error_does_not_claim_normal_execution_clocks();
+    test_scalar_formula_and_condition_timing();
+    test_nec_extension_timing();
     test_interrupt_boundary_reports_queue_flush();
     return 0;
 }

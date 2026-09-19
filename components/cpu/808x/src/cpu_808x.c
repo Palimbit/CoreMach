@@ -3886,6 +3886,95 @@ direct_address(const bm_808x_state_t *state, uint16_t *offset)
 }
 
 static bm_808x_execution_clock_kind_t
+documented_nec_extension_execution_clocks(const bm_808x_state_t *state,
+                                          uint32_t *minimum,
+                                          uint32_t *maximum)
+{
+    uint8_t extension = 0U;
+    unsigned int extension_index = state->last_prefix_count + 1U;
+    uint32_t clocks = 0U;
+
+    if (!instruction_byte(state, extension_index, &extension))
+        return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    if ((extension >= 0x10U) && (extension <= 0x1fU)) {
+        unsigned int operation = (extension >> 1U) & 3U;
+        int immediate = (extension & 8U) != 0U;
+        int word = (extension & 1U) != 0U;
+        uint32_t register_clocks;
+        uint32_t byte_memory_clocks;
+        uint32_t even_word_memory_clocks;
+        uint32_t odd_word_memory_clocks;
+
+        if (operation == 0U) { /* TEST1. */
+            register_clocks = immediate ? 4U : 3U;
+            byte_memory_clocks = immediate ? 9U : 8U;
+            even_word_memory_clocks = immediate ? 9U : 8U;
+            odd_word_memory_clocks = immediate ? 13U : 12U;
+        } else if (operation == 1U) { /* CLR1. */
+            register_clocks = immediate ? 6U : 5U;
+            byte_memory_clocks = immediate ? 15U : 14U;
+            even_word_memory_clocks = immediate ? 15U : 14U;
+            odd_word_memory_clocks = immediate ? 23U : 22U;
+        } else { /* SET1 and NOT1. */
+            register_clocks = immediate ? 5U : 4U;
+            byte_memory_clocks = immediate ? 14U : 13U;
+            even_word_memory_clocks = immediate ? 14U : 13U;
+            odd_word_memory_clocks = immediate ? 22U : 21U;
+        }
+        if (!rm_execution_clocks(state, word, register_clocks,
+                                 byte_memory_clocks,
+                                 even_word_memory_clocks,
+                                 odd_word_memory_clocks, &clocks))
+            return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+        *minimum = clocks;
+        *maximum = clocks;
+        return BM_808X_EXECUTION_CLOCKS_EXACT;
+    }
+    if ((extension == 0x20U) || (extension == 0x22U) ||
+        (extension == 0x26U)) {
+        unsigned int digits = get_register_byte(state, 1U);
+        unsigned int packed_bytes;
+
+        if ((digits == 0U) || (digits == 255U))
+            return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+        packed_bytes = (digits + 1U) / 2U;
+        *minimum = 19U * packed_bytes + 7U;
+        *maximum = *minimum;
+        return BM_808X_EXECUTION_CLOCKS_EXACT;
+    }
+    if ((extension == 0x28U) || (extension == 0x2aU)) {
+        if (!rm_execution_clocks(state, 0,
+                                 extension == 0x28U ? 13U : 17U,
+                                 extension == 0x28U ? 28U : 32U,
+                                 0U, 0U, &clocks))
+            return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+        *minimum = clocks;
+        *maximum = clocks;
+        return BM_808X_EXECUTION_CLOCKS_EXACT;
+    }
+    if ((extension == 0x31U) || (extension == 0x33U) ||
+        (extension == 0x39U) || (extension == 0x3bU)) {
+        unsigned int index_register =
+            ((extension == 0x31U) || (extension == 0x39U)) ? REG_DI : REG_SI;
+
+        if ((state->registers[index_register] & 1U) != 0U) {
+            *minimum = 35U;
+            *maximum = 133U;
+        } else {
+            *minimum = 31U;
+            *maximum = 117U;
+        }
+        return BM_808X_EXECUTION_CLOCKS_RANGE;
+    }
+    if (extension == 0xffU) {
+        *minimum = (state->boundary_initial_sp & 1U) ? 50U : 38U;
+        *maximum = *minimum;
+        return BM_808X_EXECUTION_CLOCKS_EXACT;
+    }
+    return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+}
+
+static bm_808x_execution_clock_kind_t
 documented_native_execution_clocks(const bm_808x_state_t *state,
                                    uint32_t *minimum, uint32_t *maximum)
 {
@@ -3919,6 +4008,19 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                                         &base);
     } else {
         switch (opcode) {
+            case 0x0f: {
+                kind = documented_nec_extension_execution_clocks(
+                    state, minimum, maximum);
+                if (kind != BM_808X_EXECUTION_CLOCKS_UNKNOWN) {
+                    uint32_t prefix_clocks =
+                        (uint32_t) state->last_prefix_count * 2U;
+                    *minimum += prefix_clocks;
+                    *maximum += prefix_clocks;
+                    return kind;
+                }
+                known = 0;
+                break;
+            }
             case 0x06: case 0x0e: case 0x16: case 0x1e:
             case 0x07: case 0x17: case 0x1f:
             case 0x9c: case 0x9d:
@@ -3941,6 +4043,24 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 break;
             case 0x61:
                 base = (state->boundary_initial_sp & 1U) ? 75U : 43U;
+                break;
+            case 0x62:
+                if (!state->boundary_rm_valid || !state->boundary_rm_memory) {
+                    known = 0;
+                } else if (state->interrupt_entered) {
+                    if ((state->boundary_rm_offset & 1U) != 0U) {
+                        *minimum = 73U;
+                        *maximum = 76U;
+                    } else {
+                        *minimum = 53U;
+                        *maximum = 56U;
+                    }
+                    *minimum += (uint32_t) state->last_prefix_count * 2U;
+                    *maximum += (uint32_t) state->last_prefix_count * 2U;
+                    return BM_808X_EXECUTION_CLOCKS_RANGE;
+                } else {
+                    base = (state->boundary_rm_offset & 1U) ? 26U : 18U;
+                }
                 break;
             case 0x66: case 0x67:
                 known = rm_execution_clocks(state, 1, 2U, 0U, 11U, 15U,
@@ -4023,6 +4143,10 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             }
             case 0x90: base = 3U; break; /* NOP. */
             case 0x98: base = 2U; break; /* CVTBW/CBW. */
+            case 0x99:
+                *minimum = 4U + (uint32_t) state->last_prefix_count * 2U;
+                *maximum = 5U + (uint32_t) state->last_prefix_count * 2U;
+                return BM_808X_EXECUTION_CLOCKS_RANGE;
             case 0x9a:
                 base = (state->boundary_initial_sp & 1U) ? 29U : 21U;
                 break;
@@ -4075,6 +4199,20 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 known = rm_execution_clocks(state, opcode == 0xc7U, 4U, 11U,
                                             11U, 15U, &base);
                 break;
+            case 0xc8: {
+                uint8_t nesting = 0U;
+                unsigned int index = state->last_prefix_count + 3U;
+                if (!instruction_byte(state, index, &nesting)) {
+                    known = 0;
+                } else if (nesting == 0U) {
+                    base = (state->boundary_initial_sp & 1U) ? 16U : 12U;
+                } else if ((state->boundary_initial_sp & 1U) != 0U) {
+                    base = 21U + 16U * (uint32_t) (nesting - 1U);
+                } else {
+                    base = 17U + 8U * (uint32_t) (nesting - 1U);
+                }
+                break;
+            }
             case 0xc9:
                 base = (state->boundary_initial_bp & 1U) ? 10U : 6U;
                 break;
