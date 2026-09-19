@@ -1700,7 +1700,7 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_persistent_state_size,
         pcs86_save_persistent_state
     },
-    .engine = { 1U, 10U }
+    .engine = { 1U, 10U, 0U }
 };
 
 const bm_machine_definition_t *

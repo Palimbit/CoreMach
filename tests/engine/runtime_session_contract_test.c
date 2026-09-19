@@ -260,7 +260,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
             test_persistent_state_size,
             test_save_persistent_state
         },
-        .engine = { 1U, 2U }
+        .engine = { 1U, 2U, 0U }
     };
     static const bm_machine_definition_t required_definition = {
         .id = "test.runtime-session.required-only",
@@ -270,7 +270,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
         .ops = { test_validate, test_create, test_destroy,
                  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                  NULL },
-        .engine = { 1U, 2U }
+        .engine = { 1U, 2U, 0U }
     };
     bm_machine_config_t configuration = {
         .definition = optional_operations ? &full_definition : &required_definition,
