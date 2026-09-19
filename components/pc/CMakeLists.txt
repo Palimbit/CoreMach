@@ -28,7 +28,10 @@ else()
 endif()
 
 # Optional scheduler wiring remains separate from the reusable chip model.
-add_library(blumach_pc_engine_adapters STATIC src/pit8253_clock.c)
+add_library(blumach_pc_engine_adapters STATIC
+    src/pit8253_clock.c
+    src/rtc_mm58167_clock.c
+)
 target_include_directories(blumach_pc_engine_adapters
     PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"

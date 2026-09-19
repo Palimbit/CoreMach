@@ -156,7 +156,8 @@
       "id": "portable-mm58167",
       "destination": [
         "components/pc/include/blumach/components/rtc_mm58167.h",
-        "components/pc/src/rtc_mm58167.c"
+        "components/pc/src/rtc_mm58167.c",
+        "components/pc/src/rtc_mm58167_private.h"
       ],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "fbedd9ba7d4bad5e506fe45367b63ffcd2af864e",
@@ -164,7 +165,18 @@
       "method": "selective-port",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Fred N. van Kempen", "BluMach contributors"],
-      "local_changes": "Ported the PCS 86 B0h-B7h control window and E0h-EFh counter/alarm RAM to an opaque, deterministic component with BCD calendar progression, IRQ generation, checksum repair and caller-owned persistence"
+      "local_changes": "Ported the PCS 86 B0h-B7h control window and E0h-EFh counter/alarm RAM to an opaque, deterministic component with BCD calendar progression, IRQ generation, checksum repair, caller-owned persistence and optional synchronization hooks that keep scheduler ownership outside the chip model"
+    },
+    {
+      "id": "mm58167-clock-adapter",
+      "destination": [
+        "components/pc/include/blumach/components/rtc_mm58167_clock.h",
+        "components/pc/src/rtc_mm58167_clock.c"
+      ],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Optional composition adapter that advances the MM58167 on an exact one-megahertz microsecond domain, synchronizes before I/O and persistent-state operations, and schedules only millisecond and rollover-window transitions"
     },
     {
       "id": "paradise-pvga1a-portable-video-core",

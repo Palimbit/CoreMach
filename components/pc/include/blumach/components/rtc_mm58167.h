@@ -37,7 +37,7 @@ void bm_mm58167_reset(bm_mm58167_t *rtc);
 void bm_mm58167_cold_reset(bm_mm58167_t *rtc);
 bm_status_t bm_mm58167_advance_microseconds(bm_mm58167_t *rtc,
                                             uint64_t microseconds);
-bm_status_t bm_mm58167_save_state(const bm_mm58167_t *rtc,
+bm_status_t bm_mm58167_save_state(bm_mm58167_t *rtc,
                                   uint8_t *state,
                                   size_t state_size);
 bm_status_t bm_mm58167_load_state(bm_mm58167_t *rtc,
