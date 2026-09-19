@@ -465,11 +465,37 @@ payload to 4096 bytes; read and write commands for an otherwise valid 8192-byte
 generic drive are rejected before DMA or media callbacks. Original firmware
 and media remain local-only manual inputs. With BIOS 1.09 and the preserved
 720 KiB system diskette, all visible resident diagnostics report `Pass`, and
-the BIOS detects one floppy and enters primary bootstrap. The boot sector and
-system files execute far enough to display the Microsoft MS-DOS 3.30a banner.
-The run then stops explicitly with `BM_STATUS_UNMAPPED` at `OUT 02F2h,AL` after
-6,935,257 retired instructions and 14,031 I/O accesses. This is observed DOS
-initialization, not a completed boot to a command prompt.
+the BIOS detects one floppy and enters primary bootstrap. At that historical
+cut, the boot sector and system files displayed the Microsoft MS-DOS 3.30a
+banner before an unclaimed `OUT 02F2h,AL` stopped the engine. The later bus-
+response contract described below supersedes that diagnostic boundary; it does
+not turn the absent device into an implemented one.
+
+### Explicit passive-bus and memory-write responses
+
+The generic bus can now map a stateless response over a range and can define a
+default response independently for each address space. Read, write and fetch
+each have an explicit status, while successful reads and fetches repeat a
+configured fill byte across the transaction. A mapped device may return
+`BM_STATUS_UNMAPPED` for an operation it does not decode; the bus then applies
+the address-space default. Observers receive the one final successful
+transaction, so diagnostics do not invent a second hidden access.
+
+The PCS 86 composition uses that contract for its board-level passive I/O
+response: unclaimed ports read `FFh` and ignore writes. This one rule covers
+absent expansion cards, conventional but unpopulated XTA bases, and reads from
+write-only DMA, PIT and board registers. Device callbacks still own documented
+register behavior, and unsupported command semantics still fail explicitly;
+there are no BIOS- or Customer-specific port exceptions. The unpopulated
+`C0000h-EFFFFh` option-ROM range is a static memory response returning ones and
+discarding writes.
+
+Linear memory likewise distinguishes writable storage, protected storage whose
+writes return `BM_STATUS_READ_ONLY`, and immutable storage whose physical write
+cycles are acknowledged but ignored. This lets strict tools request a failure
+without making real EPROM behavior fatal to an emulated CPU. Synthetic tests
+cover all policies, callback precedence and delegation, observer behavior,
+unclaimed PCS 86 ports, read-only/write-only registers and absent XTA slots.
 
 A CPU architecture cut adds tested, general 808x semantics for
 sign extension, string comparison and repeat conditions, direct and indirect

@@ -49,8 +49,23 @@ typedef struct bm_bus_transaction {
     uint32_t attributes;
 } bm_bus_transaction_t;
 
+/* A passive bus response has no device-owned state or side effects.  An OK
+ * read/fetch repeats fill_value across the transaction; an OK write is
+ * acknowledged and discarded.  A non-OK status is returned to the initiator.
+ * This keeps electrical bus behaviour separate from strict diagnostic errors. */
+typedef struct bm_bus_static_response {
+    bm_status_t read_status;
+    bm_status_t write_status;
+    bm_status_t fetch_status;
+    uint8_t fill_value;
+} bm_bus_static_response_t;
+
 typedef bm_status_t (*bm_bus_access_fn)(void *context, bm_bus_transaction_t *transaction);
 typedef void (*bm_bus_observer_fn)(void *context, const bm_bus_transaction_t *transaction);
+
+/* A mapped callback may return BM_STATUS_UNMAPPED when its device does not
+ * respond to that operation. The bus then applies the address-space default,
+ * when configured; otherwise BM_STATUS_UNMAPPED reaches the initiator. */
 
 bm_status_t bm_bus_create(const bm_host_services_t *host, size_t max_mappings, bm_bus_t **out_bus);
 void bm_bus_destroy(bm_bus_t *bus);
@@ -60,6 +75,16 @@ bm_status_t bm_bus_map(bm_bus_t *bus,
                        uint64_t last,
                        bm_bus_access_fn access,
                        void *context);
+bm_status_t bm_bus_map_static_response(
+    bm_bus_t *bus,
+    bm_address_space_t space,
+    uint64_t first,
+    uint64_t last,
+    const bm_bus_static_response_t *response);
+bm_status_t bm_bus_set_default_response(
+    bm_bus_t *bus,
+    bm_address_space_t space,
+    const bm_bus_static_response_t *response);
 bm_status_t bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction);
 void bm_bus_set_observer(bm_bus_t *bus, bm_bus_observer_fn observer, void *context);
 

@@ -59,17 +59,19 @@ inspect_machine(bm_session_t *session, const char *name)
 }
 
 static void
-test_unmapped_output(const bm_host_services_t *host,
-                     bm_pcs86_config_t *config,
-                     uint8_t *even,
-                     uint8_t *odd,
-                     uint16_t port)
+test_unclaimed_io(const bm_host_services_t *host,
+                  bm_pcs86_config_t *config,
+                  uint8_t *even,
+                  uint8_t *odd,
+                  uint16_t port)
 {
     static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
     uint8_t program[] = {
         0xba, (uint8_t) port, (uint8_t) (port >> 8U),
         0xb0, 0xff,
-        0xee
+        0xee, /* Unclaimed write is acknowledged and discarded. */
+        0xec, /* Unclaimed read sees the open bus. */
+        0xf4
     };
     bm_machine_config_t machine;
     bm_session_t *session = NULL;
@@ -86,8 +88,10 @@ test_unmapped_output(const bm_host_services_t *host,
     assert(bm_session_create(host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 4U) == BM_STATUS_UNMAPPED);
+    assert(bm_session_run_for(session, 8U) == BM_STATUS_OK);
     assert(inspect_cpu(session, "dx") == port);
+    assert((inspect_cpu(session, "ax") & 0xffU) == 0xffU);
+    assert(inspect_cpu(session, "halted") == 1U);
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
 }
@@ -125,6 +129,47 @@ test_absent_xta_slots(const bm_host_services_t *host,
     assert(inspect_cpu(session, "bx") == 0xffffU);
     assert((inspect_cpu(session, "cx") & 0xffU) == 0xffU);
     assert(bm_session_stop(session) == BM_STATUS_OK);
+    bm_session_destroy(session);
+}
+
+static void
+test_passive_register_directions(const bm_host_services_t *host,
+                                 bm_pcs86_config_t *config,
+                                 uint8_t *even,
+                                 uint8_t *odd)
+{
+    static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
+    static const uint8_t program[] = {
+        0xba, 0x00, 0x01,       /* DX=100h, read-only jumpers. */
+        0xb0, 0x00, 0xee, 0xec, /* Write ignored; read remains FFh. */
+        0x88, 0xc3,             /* BL=jumpers. */
+        0xe4, 0x70, 0x88, 0xc7, /* BH=read from write-only board latch. */
+        0xba, 0x02, 0x01, 0xec, 0x88, 0xc1, /* CL=video-select read. */
+        0xba, 0xe8, 0x46, 0xec, 0x88, 0xc5, /* CH=video-setup read. */
+        0xe4, 0x43, 0x88, 0xc2, /* DL=PIT write-only control read. */
+        0xe4, 0x09, 0x88, 0xc6, /* DH=DMA write-only request read. */
+        0xf4
+    };
+    bm_machine_config_t machine;
+    bm_session_t *session = NULL;
+    size_t index;
+
+    memset(even, 0, BM_PCS86_FIRMWARE_HALF_SIZE);
+    memset(odd, 0, BM_PCS86_FIRMWARE_HALF_SIZE);
+    for (index = 0; index < sizeof(reset_jump); ++index)
+        put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
+    for (index = 0; index < sizeof(program); ++index)
+        put_combined_byte(even, odd, 0x0100U + index, program[index]);
+
+    machine = bm_pcs86_machine_config(config);
+    assert(bm_session_create(host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
+    assert(inspect_cpu(session, "halted") == 1U);
+    assert(inspect_cpu(session, "bx") == 0xffffU);
+    assert(inspect_cpu(session, "cx") == 0xffffU);
+    assert(inspect_cpu(session, "dx") == 0xffffU);
     bm_session_destroy(session);
 }
 
@@ -493,13 +538,14 @@ main(void)
     config.io_trace_context = NULL;
     test_absent_at_cmos(&host, &config, even, odd);
     test_absent_coprocessor_and_extended_dma_latches(&host, &config, even, odd);
-    test_unmapped_output(&host, &config, even, odd, 0x00afU);
-    test_unmapped_output(&host, &config, even, odd, 0x4404U);
-    test_unmapped_output(&host, &config, even, odd, 0x3400U);
-    test_unmapped_output(&host, &config, even, odd, 0x0072U);
+    test_unclaimed_io(&host, &config, even, odd, 0x00afU);
+    test_unclaimed_io(&host, &config, even, odd, 0x4404U);
+    test_unclaimed_io(&host, &config, even, odd, 0x3400U);
+    test_unclaimed_io(&host, &config, even, odd, 0x0072U);
     test_absent_xta_slots(&host, &config, even, odd);
-    test_unmapped_output(&host, &config, even, odd, 0x02f1U);
-    test_unmapped_output(&host, &config, even, odd, 0x06f2U);
+    test_passive_register_directions(&host, &config, even, odd);
+    test_unclaimed_io(&host, &config, even, odd, 0x02f1U);
+    test_unclaimed_io(&host, &config, even, odd, 0x06f2U);
     test_keyboard_scan_stream(&host);
     test_interrupt_trace(&host);
     test_keyboard_led_protocol(&host);

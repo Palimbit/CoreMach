@@ -251,6 +251,82 @@ test_routing_metadata_and_observer(void)
     bm_bus_destroy(bus);
 }
 
+static void
+test_static_and_default_responses(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    bm_bus_t *bus = NULL;
+    access_sink_t io = { 0 };
+    observer_sink_t observer = { 0 };
+    bm_bus_transaction_t transaction;
+    const bm_bus_static_response_t open_bus = {
+        BM_STATUS_OK, BM_STATUS_OK, BM_STATUS_UNSUPPORTED, 0xffU
+    };
+    const bm_bus_static_response_t empty_rom = {
+        BM_STATUS_OK, BM_STATUS_OK, BM_STATUS_OK, 0xffU
+    };
+    bm_bus_static_response_t invalid = open_bus;
+
+    assert(bm_bus_create(&host, 2U, &bus) == BM_STATUS_OK);
+    assert(bm_bus_map_static_response(
+               NULL, BM_ADDRESS_MEMORY, 0U, 0U, &empty_rom) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    invalid.read_status = BM_STATUS_IDLE;
+    assert(bm_bus_map_static_response(
+               bus, BM_ADDRESS_MEMORY, 0U, 0U, &invalid) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_bus_set_default_response(
+               bus, BM_ADDRESS_IO, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_bus_map_static_response(
+               bus, BM_ADDRESS_MEMORY, 0x200U, 0x2ffU, &empty_rom) ==
+           BM_STATUS_OK);
+    assert(bm_bus_map_static_response(
+               bus, BM_ADDRESS_MEMORY, 0x280U, 0x300U, &empty_rom) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_bus_set_default_response(bus, BM_ADDRESS_IO, &open_bus) ==
+           BM_STATUS_OK);
+    io.read_value = 0x5aU;
+    assert(bm_bus_map(bus, BM_ADDRESS_IO, 0x100U, 0x100U,
+                      capture_access, &io) == BM_STATUS_OK);
+    bm_bus_set_observer(bus, capture_observer, &observer);
+
+    transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ,
+                                   0x200U, 4U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    assert(transaction.value == UINT64_C(0xffffffff));
+    transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_WRITE,
+                                   0x200U, 1U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_FETCH,
+                                   0x200U, 2U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    assert(transaction.value == UINT64_C(0xffff));
+
+    transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_READ, 0x100U, 1U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    assert(transaction.value == 0x5aU && io.calls == 1U);
+    io.status = BM_STATUS_UNMAPPED;
+    transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_READ, 0x100U, 1U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    assert(transaction.value == 0xffU && io.calls == 2U);
+
+    transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_READ, 0x1234U, 2U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    assert(transaction.value == UINT64_C(0xffff));
+    transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_WRITE, 0x1234U, 1U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_FETCH, 0x1234U, 1U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_UNSUPPORTED);
+    assert(observer.calls == 7U);
+
+    assert(bm_bus_set_default_response(bus, BM_ADDRESS_IO, NULL) ==
+           BM_STATUS_OK);
+    transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_READ, 0x1234U, 1U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_UNMAPPED);
+    assert(observer.calls == 7U);
+    bm_bus_destroy(bus);
+}
+
 int
 main(void)
 {
@@ -258,5 +334,6 @@ main(void)
     test_mapping_contracts();
     test_transaction_validation();
     test_routing_metadata_and_observer();
+    test_static_and_default_responses();
     return 0;
 }

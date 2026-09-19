@@ -39,7 +39,8 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
     assert(bm_bus_create(&machine->host, bus_capacity, &machine->bus) ==
            BM_STATUS_OK);
     memory_config = (bm_linear_memory_config_t) {
-        BM_ADDRESS_MEMORY, 0U, CPU_808X_TEST_IMAGE_SIZE, 0,
+        BM_ADDRESS_MEMORY, 0U, CPU_808X_TEST_IMAGE_SIZE,
+        BM_LINEAR_MEMORY_WRITABLE,
         machine->image, CPU_808X_TEST_IMAGE_SIZE
     };
     assert(bm_linear_memory_create(&machine->host, machine->bus,

@@ -11,11 +11,11 @@ Before correction, execution stops at tick 63,603,264, CS:IP 33D8:0016,
 on `IN AL,71h`, with 621 disk reads and zero writes.
 
 The inherited `src/machine/m_xt_olivetti_pcs86.c` installs the PCS86 MM58167
-and no AT CMOS data device at 71h. The portable composition now explicitly
-maps that one absent port to its existing open-bus handler: FFh reads and
-ignored writes. Port 70h's existing opaque write latch and the actual RTC
-remain unchanged; 72h remains unmapped. This follows inherited composition,
-not a physical measurement or a BIOS/program-specific exception.
+and no AT CMOS data device at 71h. At this historical cut, the portable
+composition explicitly mapped that one absent port to its existing open-bus
+handler: FFh reads and ignored writes. Port 70h's existing opaque write latch
+and the actual RTC remained unchanged; 72h was deliberately left unmapped.
+This followed inherited composition, not a physical measurement.
 
 Synthetic tests cover reads before and after a write and the adjacent unmapped
 port; they contain no firmware. Headless error reporting now includes captured
@@ -33,3 +33,9 @@ zero errors and its three unit tests pass. The original floppy hash remains
 C1A3BBD618E86719425B0EFED650BC9FE831A0989DC67B4726886268C9DB1D78.
 No media, firmware, screenshots or build artifacts belong in this change.
 The already-running GUI is not replaced by the headless reproduction.
+
+The later portable bus-response cut supersedes the one-port implementation:
+the PCS 86 board now supplies one general passive-I/O response for every
+unclaimed or decoded-but-non-readable cycle. Consequently 71h and 72h both
+read `FFh` and discard writes without either port becoming an implemented CMOS
+device. The original measurements above remain the record of this dated cut.
