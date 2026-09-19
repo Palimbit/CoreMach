@@ -87,6 +87,13 @@ main(void)
         0x8e, 0xd8,       /* MOV DS,AX */
         0xb0, 0x5a,       /* MOV AL,5Ah */
         0xa2, 0x00, 0x02, /* MOV [0200h],AL */
+        0xb8, 0x00, 0xf0, /* MOV AX,F000h */
+        0x8e, 0xd8,       /* MOV DS,AX */
+        0xb0, 0x00,       /* MOV AL,0 */
+        0xa2, 0x00, 0x01, /* MOV [0100h],AL; EPROM ignores the write. */
+        0xa0, 0x00, 0x01, /* MOV AL,[0100h] -> original B8h. */
+        0x30, 0xe4,       /* XOR AH,AH */
+        0x89, 0xc6,       /* MOV SI,AX */
         0xb8, 0x00, 0xc0, /* MOV AX,C000h */
         0x8e, 0xd8,       /* MOV DS,AX */
         0x8b, 0x06, 0x00, 0x00, /* MOV AX,[0000h] -> open bus FFFFh. */
@@ -217,23 +224,24 @@ main(void)
         assert(value == 2U);
     }
 
-    assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 59) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xf000);
-    assert(inspect(session, "ip") == 0x015e);
+    assert(inspect(session, "ip") == 0x016f);
     assert(inspect(session, "ax") == 0xff08U);
     assert(inspect(session, "ds") == 0);
     assert(inspect(session, "halted") == 1);
     assert(inspect(session, "dx") == 0x0100);
     assert(inspect(session, "cx") == 0xffffU);
+    assert(inspect(session, "si") == 0x00b8U);
     {
         uint64_t value = UINT64_MAX;
         assert(bm_session_inspect_machine(session, "xta_enabled", &value) ==
                BM_STATUS_OK);
         assert(value == 1U);
     }
-    assert(trace.count == 46);
-    assert(trace.entries[7].physical_address == 0xf010fU);
-    assert(trace.entries[7].opcode == 0x8bU);
+    assert(trace.count == 53);
+    assert(trace.entries[14].physical_address == 0xf0120U);
+    assert(trace.entries[14].opcode == 0x8bU);
     assert(trace.entries[0].physical_address == 0xffff0U);
     assert(trace.entries[0].opcode == 0xea);
     assert(trace.entries[1].physical_address == 0xf0100U);
@@ -291,9 +299,9 @@ main(void)
         assert(bm_session_inspect_machine(session, "unknown", &value) ==
                BM_STATUS_INVALID_ARGUMENT);
     }
-    assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 59) == BM_STATUS_OK);
     assert(inspect(session, "halted") == 1U);
-    assert(trace.count == 46U);
+    assert(trace.count == 53U);
     assert(io_trace.count == 16U);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
