@@ -90,13 +90,14 @@ main(void)
     assert(channel.masked);
     assert(channel.requested);
 
-    assert(read_port(bus, 0x09U, &value) == BM_STATUS_UNSUPPORTED);
+    assert(read_port(bus, 0x09U, &value) == BM_STATUS_UNMAPPED);
     assert(bm_dma8237_set_dreq(dma, 4, 1) == BM_STATUS_INVALID_ARGUMENT);
 
     {
         bm_linear_memory_t *memory = NULL;
         bm_linear_memory_config_t memory_config = {
-            BM_ADDRESS_MEMORY, 0U, 0x10000U, 0, NULL, 0U
+            BM_ADDRESS_MEMORY, 0U, 0x10000U,
+            BM_LINEAR_MEMORY_WRITABLE, NULL, 0U
         };
         bm_bus_transaction_t transaction;
         int terminal = 0;

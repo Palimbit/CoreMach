@@ -44,6 +44,20 @@ main(void)
     assert(options.expect_frame_crc32);
     assert(options.expected_frame_crc32 == UINT32_C(0x7f7c3f7f));
 
+    assert(parse_text("blumach-headless-scenario-v2\n"
+                      "ticks=10000\nkey_ticks=100\n"
+                      "key=1000:left-shift:down\n"
+                      "tap=1200:f2\n"
+                      "key=1500:left-shift:up\n", &options));
+    assert(options.key_action_count == 4U);
+    assert(options.key_actions[0].key == BM_KEY_LEFT_SHIFT);
+    assert(options.key_actions[0].pressed);
+    assert(options.key_actions[1].key == BM_KEY_F2);
+    assert(options.key_actions[1].pressed);
+    assert(options.key_actions[2].key == BM_KEY_F2);
+    assert(!options.key_actions[2].pressed);
+    assert(!options.key_actions[3].pressed);
+
     assert(!parse_text("blumach-headless-scenario-v1\n", &options));
     assert(!parse_text("wrong-header\nticks=10\n", &options));
     assert(!parse_text("blumach-headless-scenario-v1\n"
@@ -53,5 +67,12 @@ main(void)
                        &options));
     assert(!parse_text("blumach-headless-scenario-v1\n"
                        "ticks=300\nunknown=value\n", &options));
+    assert(!parse_text("blumach-headless-scenario-v1\n"
+                       "ticks=300\ntap=100:f2\n", &options));
+    assert(!parse_text("blumach-headless-scenario-v2\n"
+                       "ticks=300\nkey=100:no-such-key:down\n", &options));
+    assert(!parse_text("blumach-headless-scenario-v2\n"
+                       "ticks=300\nkey_ticks=100\n"
+                       "tap=100:f2\ntap=250:escape\n", &options));
     return 0;
 }

@@ -409,6 +409,25 @@ the inherited `src/device/isartc.c`, retaining Fred N. van Kempen's notice. A
 yearless calendar and instruction-domain scheduling are explicit fidelity
 limits; this is not a crystal- or battery-level simulation.
 
+The PCS 86 configuration may provide that complete 32-byte state explicitly.
+The engine never reads the host clock or a host file. A generic named-state
+runtime contract lets a frontend copy opaque machine state while a session is
+running or paused; it does not know how or whether those bytes are stored. The
+PCS 86 publishes its RTC as the `rtc` state. Frontend adapters declare the
+state's size, deterministic fallback and battery-backed policy independently
+of Qt or a path.
+
+Qt stores retained bytes in its host settings and exposes **Retain
+battery-backed state**. Disabling it removes the saved image, supplies zeroed
+bytes on the next cold start and discards the new state at power-off, modelling
+a depleted battery without changing reset semantics. Headless offers the same
+boundary explicitly with `--persistent-state rtc=<path>` and
+`--depleted-state rtc`. The deterministic first-use fallback includes both
+nonzero calendar counters and the BIOS weekday/checksum encoding in alarm RAM;
+counters alone are insufficient because BIOS 1.08 rewrites those fields after
+its first successful `INT 1Ah` read. None of these paths synchronizes the RTC
+to host wall time.
+
 The 8253 is a selective port of the measured edge-state core, retaining Daniel
 Balsom and Clara's attribution. It covers modes 0-5, binary and BCD counts,
 gates, stable latches and output edges. Rational accumulators drive the PIT and
@@ -449,11 +468,37 @@ payload to 4096 bytes; read and write commands for an otherwise valid 8192-byte
 generic drive are rejected before DMA or media callbacks. Original firmware
 and media remain local-only manual inputs. With BIOS 1.09 and the preserved
 720 KiB system diskette, all visible resident diagnostics report `Pass`, and
-the BIOS detects one floppy and enters primary bootstrap. The boot sector and
-system files execute far enough to display the Microsoft MS-DOS 3.30a banner.
-The run then stops explicitly with `BM_STATUS_UNMAPPED` at `OUT 02F2h,AL` after
-6,935,257 retired instructions and 14,031 I/O accesses. This is observed DOS
-initialization, not a completed boot to a command prompt.
+the BIOS detects one floppy and enters primary bootstrap. At that historical
+cut, the boot sector and system files displayed the Microsoft MS-DOS 3.30a
+banner before an unclaimed `OUT 02F2h,AL` stopped the engine. The later bus-
+response contract described below supersedes that diagnostic boundary; it does
+not turn the absent device into an implemented one.
+
+### Explicit passive-bus and memory-write responses
+
+The generic bus can now map a stateless response over a range and can define a
+default response independently for each address space. Read, write and fetch
+each have an explicit status, while successful reads and fetches repeat a
+configured fill byte across the transaction. A mapped device may return
+`BM_STATUS_UNMAPPED` for an operation it does not decode; the bus then applies
+the address-space default. Observers receive the one final successful
+transaction, so diagnostics do not invent a second hidden access.
+
+The PCS 86 composition uses that contract for its board-level passive I/O
+response: unclaimed ports read `FFh` and ignore writes. This one rule covers
+absent expansion cards, conventional but unpopulated XTA bases, and reads from
+write-only DMA, PIT and board registers. Device callbacks still own documented
+register behavior, and unsupported command semantics still fail explicitly;
+there are no BIOS- or Customer-specific port exceptions. The unpopulated
+`C0000h-EFFFFh` option-ROM range is a static memory response returning ones and
+discarding writes.
+
+Linear memory likewise distinguishes writable storage, protected storage whose
+writes return `BM_STATUS_READ_ONLY`, and immutable storage whose physical write
+cycles are acknowledged but ignored. This lets strict tools request a failure
+without making real EPROM behavior fatal to an emulated CPU. Synthetic tests
+cover all policies, callback precedence and delegation, observer behavior,
+unclaimed PCS 86 ports, read-only/write-only registers and absent XTA slots.
 
 A CPU architecture cut adds tested, general 808x semantics for
 sign extension, string comparison and repeat conditions, direct and indirect
@@ -529,6 +574,46 @@ the worker in 0.8–3.4 ms; six reached paint submission in 13–18 ms. Two earl
 transitions encountered a 1.4-second post-UI-delivery paint gap during native
 UI automation. Its cause is unconfirmed; it is not excluded from the report.
 Other platforms and end-to-end physical keyboard/display latency are unmeasured.
+
+### Bounded headless debug observation
+
+The frontend adapter exposes an optional host-neutral observer for completed
+CPU instructions, accepted interrupt vectors, memory accesses and I/O
+transactions. It is disabled by default, owns no files and cannot alter
+execution. Instruction records include the complete architectural register
+set at the instruction boundary. The headless runner's `--trace-tail N`
+option retains only the most recent `N` selected events (maximum 4096) and
+prints them in original sequence order. This provides a bounded diagnostic
+trail around failures without permanent multi-million-instruction logs.
+
+When tracing is enabled, headless also retains the most recent 32 accepted
+interrupt boundaries. Each entry records the last completed instruction, the
+PIC vector and the first instruction at the target. The most recent boundary
+is printed separately, and a failed run reports the complete architectural CPU
+register set. These fixed-size records remain bounded even when a guest loops
+for a long time after the event that caused a failure.
+
+`--trace-memory` restricts retained memory events to one address or a bounded
+range. `--trace-only memory|writes|io` reduces the retained event classes, and
+the optional memory image reconstructs the bytes written in the selected range;
+it is capped at 1 MiB and is not an unrestricted guest-memory dump. A trace can
+freeze at one CS:IP, physical instruction address or event sequence while the
+machine continues to its requested deterministic stop. Freeze records include
+the CPU state at that boundary. These controls are diagnostics only: they do
+not add a debugger command channel or allow the host to mutate guest memory.
+
+Version 2 headless scenarios can schedule named physical key transitions as
+well as text, and a run can schedule one read-only floppy replacement. This
+makes modifier-sensitive input and multi-disk boot paths reproducible without
+GUI automation. The scenario and media scheduler call the same public input
+and storage contracts used by frontends; neither the machine nor its devices
+receive host paths.
+
+The observer carries architectural state and addresses, opcodes, accepted
+interrupt vectors, memory values and byte-wide PCS 86 I/O values only. Output
+policy remains in the headless frontend; the engine and machine receive no
+paths, streams or host APIs. A disabled observer has no trace buffer and the
+existing diagnostic counters remain unchanged.
 
 The CPU still reports instruction-based ticks. FAST/SLOW port behavior and the
 physical slow clock remain a separate pending implementation/measurement.

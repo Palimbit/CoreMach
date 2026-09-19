@@ -13,7 +13,6 @@
 #include <blumach/components/dma_page_registers.h>
 #include <blumach/components/fdc765.h>
 #include <blumach/components/floppy_drive.h>
-#include <blumach/components/linear_memory.h>
 #include <blumach/components/lpt_spp.h>
 #include <blumach/components/pic8259.h>
 #include <blumach/components/pit8253.h>
@@ -32,7 +31,7 @@ typedef struct bm_pcs86_machine {
     uint8_t *ems_ram;
     size_t ems_size;
     uint16_t ems_pages;
-    bm_linear_memory_t *rom;
+    uint8_t *rom;
     bm_dma8237_t *dma;
     bm_dma_page_registers_t *dma_pages;
     bm_floppy_drive_t *floppy[2];
@@ -82,6 +81,10 @@ typedef struct bm_pcs86_machine {
     uint64_t rtc_clock_remainder;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
+    bm_pcs86_memory_trace_fn memory_trace;
+    void *memory_trace_context;
+    bm_pcs86_interrupt_trace_fn interrupt_trace;
+    void *interrupt_trace_context;
 } bm_pcs86_machine_t;
 
 /* The current interpreter reports retired instructions, not V30 clock cycles.
@@ -149,20 +152,34 @@ pcs86_memory_access(void *context, bm_bus_transaction_t *transaction)
 }
 
 static bm_status_t
-pcs86_open_bus_access(void *context, bm_bus_transaction_t *transaction)
+pcs86_rom_access(void *context, bm_bus_transaction_t *transaction)
 {
+    bm_pcs86_machine_t *machine = context;
+    uint64_t offset;
     uint32_t index;
-    (void) context;
-    if ((transaction == NULL) || (transaction->size == 0U) ||
+    if ((transaction == NULL) || (machine->rom == NULL) ||
+        (transaction->address < BM_PCS86_ROM_BASE) ||
+        (transaction->size == 0U) ||
         (transaction->size > sizeof(transaction->value)))
         return BM_STATUS_INVALID_ARGUMENT;
+    offset = transaction->address - BM_PCS86_ROM_BASE;
+    if ((offset >= BM_PCS86_ROM_SIZE) ||
+        (transaction->size > BM_PCS86_ROM_SIZE - (size_t) offset))
+        return BM_STATUS_UNMAPPED;
+    /* The EPROM does not accept CPU writes. On the physical bus they have no
+     * effect and do not stop instruction execution. */
     if (transaction->operation == BM_BUS_WRITE)
         return BM_STATUS_OK;
-    if (transaction->operation == BM_BUS_FETCH)
-        return BM_STATUS_UNSUPPORTED;
-    transaction->value = 0;
-    for (index = 0; index < transaction->size; ++index)
-        transaction->value |= UINT64_C(0xff) << (index * 8U);
+    if ((transaction->operation != BM_BUS_READ) &&
+        (transaction->operation != BM_BUS_FETCH))
+        return BM_STATUS_INVALID_ARGUMENT;
+    transaction->value = 0U;
+    for (index = 0U; index < transaction->size; ++index) {
+        uint32_t shift = (transaction->endianness == BM_ENDIAN_LITTLE) ?
+            index * 8U : (transaction->size - index - 1U) * 8U;
+        transaction->value |=
+            (uint64_t) machine->rom[offset + index] << shift;
+    }
     return BM_STATUS_OK;
 }
 
@@ -220,9 +237,7 @@ pcs86_lpt_access(void *context, bm_bus_transaction_t *transaction)
     if ((transaction->operation == BM_BUS_WRITE) && (register_index == 0U))
         machine->diagnostic_port = value;
     if ((machine->control & 0x02U) == 0) {
-        if (transaction->operation == BM_BUS_READ)
-            transaction->value = 0xffU;
-        return BM_STATUS_OK;
+        return BM_STATUS_UNMAPPED;
     }
     if (transaction->operation == BM_BUS_READ) {
         bm_status_t status = bm_lpt_spp_read(machine->lpt, register_index, &value);
@@ -242,9 +257,7 @@ pcs86_uart_access(void *context, bm_bus_transaction_t *transaction)
     if ((transaction->size != 1U) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
     if ((machine->control & 0x10U) == 0) {
-        if (transaction->operation == BM_BUS_READ)
-            transaction->value = 0xffU;
-        return BM_STATUS_OK;
+        return BM_STATUS_UNMAPPED;
     }
     register_index = (unsigned int) (transaction->address - 0x03f8U);
     if (transaction->operation == BM_BUS_READ) {
@@ -639,27 +652,6 @@ pcs86_input(void *context, const bm_input_event_t *event)
 }
 
 static bm_status_t
-pcs86_unpopulated_option_rom_access(void *context, bm_bus_transaction_t *transaction)
-{
-    uint32_t index;
-
-    (void) context;
-    if ((transaction == NULL) || (transaction->size == 0) ||
-        (transaction->size > sizeof(transaction->value)))
-        return BM_STATUS_INVALID_ARGUMENT;
-    if (transaction->operation == BM_BUS_WRITE)
-        return BM_STATUS_OK;
-    if ((transaction->operation != BM_BUS_READ) &&
-        (transaction->operation != BM_BUS_FETCH))
-        return BM_STATUS_INVALID_ARGUMENT;
-
-    transaction->value = 0;
-    for (index = 0; index < transaction->size; ++index)
-        transaction->value |= UINT64_C(0xff) << (index * 8U);
-    return BM_STATUS_OK;
-}
-
-static bm_status_t
 pcs86_diagnostic_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
@@ -668,7 +660,7 @@ pcs86_diagnostic_access(void *context, bm_bus_transaction_t *transaction)
     if (transaction->operation == BM_BUS_READ) {
         /* The inherited PCS 86 maps A0h-AEh as a write-only NMI-mask
          * aperture. Reads therefore see the PC open-bus value. */
-        transaction->value = 0xffU;
+        return BM_STATUS_UNMAPPED;
     } else {
         uint8_t value = (uint8_t) transaction->value;
         machine->nmi_mask = value & 0x80U;
@@ -683,8 +675,12 @@ pcs86_memory_control_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
 
-    if ((transaction->size != 1) || (transaction->operation != BM_BUS_WRITE))
+    if ((transaction->size != 1) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
+
+    if (transaction->operation == BM_BUS_READ) {
+        return BM_STATUS_UNMAPPED;
+    }
 
     /*
      * BIOS 1.09 writes 40h here while enabling the upper conventional-memory
@@ -702,8 +698,12 @@ pcs86_video_arbitration_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
 
-    if ((transaction->size != 1) || (transaction->operation != BM_BUS_WRITE))
+    if ((transaction->size != 1) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
+
+    if (transaction->operation == BM_BUS_READ) {
+        return BM_STATUS_UNMAPPED;
+    }
 
     /*
      * BIOS 1.09 brackets writes to 102h with writes to 46E8h while choosing
@@ -753,11 +753,14 @@ static bm_status_t
 pcs86_interrupt_acknowledge(void *context, uint8_t *vector)
 {
     bm_pcs86_machine_t *machine = context;
-    return bm_pic8259_acknowledge(machine->pic, vector);
+    bm_status_t status = bm_pic8259_acknowledge(machine->pic, vector);
+    if ((status == BM_STATUS_OK) && (machine->interrupt_trace != NULL))
+        machine->interrupt_trace(machine->interrupt_trace_context, *vector);
+    return status;
 }
 
 static void
-pcs86_io_observer(void *context, const bm_bus_transaction_t *transaction)
+pcs86_bus_observer(void *context, const bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
     if ((machine->io_trace != NULL) && (transaction->space == BM_ADDRESS_IO) &&
@@ -768,6 +771,15 @@ pcs86_io_observer(void *context, const bm_bus_transaction_t *transaction)
             (uint8_t) transaction->value
         };
         machine->io_trace(machine->io_trace_context, &trace);
+    } else if ((machine->memory_trace != NULL) &&
+               (transaction->space == BM_ADDRESS_MEMORY) &&
+               (transaction->operation != BM_BUS_FETCH) &&
+               (transaction->size <= UINT8_MAX)) {
+        const bm_pcs86_memory_trace_t trace = {
+            transaction->operation, (uint32_t) transaction->address,
+            transaction->value, (uint8_t) transaction->size
+        };
+        machine->memory_trace(machine->memory_trace_context, &trace);
     }
 }
 
@@ -897,9 +909,12 @@ static bm_status_t
 pcs86_jumpers_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pcs86_machine_t *machine = context;
-    if ((transaction->size != 1) || (transaction->operation != BM_BUS_READ))
+    if ((transaction->size != 1) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
-    transaction->value = machine->jumpers;
+    if (transaction->operation == BM_BUS_READ)
+        transaction->value = machine->jumpers;
+    else
+        return BM_STATUS_UNMAPPED;
     return BM_STATUS_OK;
 }
 
@@ -980,6 +995,12 @@ pcs86_validate(const bm_configuration_view_t *configuration)
             (config->hard_disk.media.block_count < required_blocks))
             status = BM_STATUS_INVALID_ARGUMENT;
     }
+    if ((status == BM_STATUS_OK) &&
+        (((config->rtc_initial_state == NULL) &&
+          (config->rtc_initial_state_size != 0U)) ||
+         ((config->rtc_initial_state != NULL) &&
+          (config->rtc_initial_state_size != BM_PCS86_RTC_STATE_SIZE))))
+        status = BM_STATUS_INVALID_ARGUMENT;
     return status;
 }
 
@@ -1020,7 +1041,8 @@ pcs86_destroy(void *context)
     bm_pvga1a_destroy(machine->video);
     bm_pit8253_destroy(machine->pit);
     bm_pic8259_destroy(machine->pic);
-    bm_linear_memory_destroy(machine->rom);
+    if (machine->rom != NULL)
+        machine->host.release(machine->host.context, machine->rom);
     if (machine->ems_ram != NULL)
         machine->host.release(machine->host.context, machine->ems_ram);
     if (machine->conventional_ram != NULL)
@@ -1172,9 +1194,18 @@ pcs86_create(bm_engine_t *engine,
              const bm_configuration_view_t *configuration,
              void **out_machine)
 {
+    /* Unclaimed legacy I/O cycles and decoded-but-non-readable registers use
+     * the board's passive pull-up response.  Devices decline such operations
+     * with BM_STATUS_UNMAPPED; this is one board rule, not a firmware-port
+     * exception. */
+    static const bm_bus_static_response_t open_io_bus = {
+        BM_STATUS_OK, BM_STATUS_OK, BM_STATUS_UNSUPPORTED, 0xffU
+    };
+    static const bm_bus_static_response_t unpopulated_option_rom = {
+        BM_STATUS_OK, BM_STATUS_OK, BM_STATUS_OK, 0xffU
+    };
     const bm_pcs86_config_t *config;
     bm_pcs86_machine_t *machine;
-    uint8_t *combined_rom = NULL;
     bm_cpu_t cpu;
     bm_status_t status;
     size_t index;
@@ -1201,12 +1232,19 @@ pcs86_create(bm_engine_t *engine,
         machine->jumpers = (uint8_t) (machine->jumpers & ~0x80U);
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
+    machine->memory_trace = config->memory_trace;
+    machine->memory_trace_context = config->memory_trace_context;
+    machine->interrupt_trace = config->interrupt_trace;
+    machine->interrupt_trace_context = config->interrupt_trace_context;
     machine->ems_size = (size_t) config->ems_kib * 1024U;
     machine->ems_pages = (uint16_t) (machine->ems_size / PCS86_EMS_WINDOW_SIZE);
 
     status = bm_bus_create(host, 40, &machine->bus);
     if (status == BM_STATUS_OK)
-        bm_bus_set_observer(machine->bus, pcs86_io_observer, machine);
+        bm_bus_set_observer(machine->bus, pcs86_bus_observer, machine);
+    if (status == BM_STATUS_OK)
+        status = bm_bus_set_default_response(machine->bus, BM_ADDRESS_IO,
+                                             &open_io_bus);
     if (status == BM_STATUS_OK) {
         machine->conventional_ram = host->allocate(host->context, BM_PCS86_MEMORY_SIZE);
         if (machine->conventional_ram == NULL)
@@ -1226,28 +1264,24 @@ pcs86_create(bm_engine_t *engine,
                             BM_PCS86_MEMORY_SIZE - 1U,
                             pcs86_memory_access, machine);
     if (status == BM_STATUS_OK) {
-        combined_rom = host->allocate(host->context, BM_PCS86_ROM_SIZE);
-        if (combined_rom == NULL)
+        machine->rom = host->allocate(host->context, BM_PCS86_ROM_SIZE);
+        if (machine->rom == NULL)
             status = BM_STATUS_OUT_OF_MEMORY;
     }
     if (status == BM_STATUS_OK) {
-        bm_linear_memory_config_t rom_config;
         for (index = 0; index < BM_PCS86_FIRMWARE_HALF_SIZE; ++index) {
-            combined_rom[index * 2U] = config->firmware_even.data[index];
-            combined_rom[index * 2U + 1U] = config->firmware_odd.data[index];
+            machine->rom[index * 2U] = config->firmware_even.data[index];
+            machine->rom[index * 2U + 1U] = config->firmware_odd.data[index];
         }
-        rom_config = (bm_linear_memory_config_t) {
-            BM_ADDRESS_MEMORY, BM_PCS86_ROM_BASE, BM_PCS86_ROM_SIZE, 1,
-            combined_rom, BM_PCS86_ROM_SIZE
-        };
-        status = bm_linear_memory_create(host, machine->bus, &rom_config, &machine->rom);
-    }
-    if (combined_rom != NULL)
-        host->release(host->context, combined_rom);
-    if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_MEMORY,
-                            0x000c0000U, 0x000effffU,
-                            pcs86_unpopulated_option_rom_access, machine);
+                            BM_PCS86_ROM_BASE,
+                            BM_PCS86_ROM_BASE + BM_PCS86_ROM_SIZE - 1U,
+                            pcs86_rom_access, machine);
+    }
+    if (status == BM_STATUS_OK)
+        status = bm_bus_map_static_response(machine->bus, BM_ADDRESS_MEMORY,
+                                            0x000c0000U, 0x000effffU,
+                                            &unpopulated_option_rom);
     if (status == BM_STATUS_OK) {
         bm_dma8237_config_t dma_config = { 0x0000U };
         status = bm_dma8237_create(host, machine->bus, &dma_config, &machine->dma);
@@ -1280,15 +1314,6 @@ pcs86_create(bm_engine_t *engine,
         };
         status = bm_xta_create(host, machine->bus, &xta_config, &machine->xta);
     }
-    if (status == BM_STATUS_OK)
-        /* The inherited PCS 86 used the legacy I/O fabric's default open-bus
-         * behaviour for unclaimed ports.  Its firmware resets four
-         * conventional XTA base slots at 321h, 325h, 329h and 32Dh, while the
-         * onboard controller claims only 320h-323h.  Preserve that board/bus
-         * contract explicitly: the three absent slots ignore writes and read
-         * as open bus. */
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0324U, 0x032fU,
-                            pcs86_open_bus_access, machine);
     if (status == BM_STATUS_OK) {
         bm_pic8259_config_t pic_config = {
             0x0020U, pcs86_pic_output, machine
@@ -1320,7 +1345,8 @@ pcs86_create(bm_engine_t *engine,
     }
     if (status == BM_STATUS_OK) {
         bm_mm58167_config_t rtc_config = {
-            0x00b0U, 0x00e0U, NULL, NULL, NULL, 0U
+            0x00b0U, 0x00e0U, NULL, NULL,
+            config->rtc_initial_state, config->rtc_initial_state_size
         };
         status = bm_mm58167_create(host, machine->bus, &rtc_config, &machine->rtc);
     }
@@ -1349,29 +1375,11 @@ pcs86_create(bm_engine_t *engine,
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0070U, 0x0070U,
                             pcs86_memory_control_access, machine);
     if (status == BM_STATUS_OK)
-        /* No AT CMOS data device: the inherited PCS 86 uses its MM58167
-         * windows instead. Keep 70h's independent board latch unchanged. */
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0071U, 0x0071U,
-                            pcs86_open_bus_access, machine);
-    if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0378U, 0x037aU,
                             pcs86_lpt_access, machine);
     if (status == BM_STATUS_OK)
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x0278U, 0x027aU,
-                            pcs86_open_bus_access, machine);
-    if (status == BM_STATUS_OK)
-        /* IBM DOS rearms the AT shared IRQ chain through 2F2h-2F7h while
-         * initializing its standard character devices. The PCS 86 is not an
-         * AT and has no such latch, so these addresses are an explicitly
-         * absent device: writes have no effect and reads see the open bus. */
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x02f2U, 0x02f7U,
-                            pcs86_open_bus_access, machine);
-    if (status == BM_STATUS_OK)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x03f8U, 0x03ffU,
                             pcs86_uart_access, machine);
-    if (status == BM_STATUS_OK)
-        status = bm_bus_map(machine->bus, BM_ADDRESS_IO, 0x02f8U, 0x02ffU,
-                            pcs86_open_bus_access, machine);
     for (index = 4U; (status == BM_STATUS_OK) && (index <= 9U); ++index)
         status = bm_bus_map(machine->bus, BM_ADDRESS_IO,
                             (index << 12U) + 0x400U, (index << 12U) + 0x403U,
@@ -1559,6 +1567,42 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
             *value = (uint64_t) state.enabled;
         else
             *value = (uint64_t) state.interrupt_asserted;
+    } else if ((strcmp(name, "rtc_seconds") == 0) ||
+               (strcmp(name, "rtc_minutes") == 0) ||
+               (strcmp(name, "rtc_hours") == 0) ||
+               (strcmp(name, "rtc_day_of_week") == 0) ||
+               (strcmp(name, "rtc_day_of_month") == 0) ||
+               (strcmp(name, "rtc_month") == 0) ||
+               (strcmp(name, "rtc_alarm_milliseconds") == 0) ||
+               (strcmp(name, "rtc_alarm_day_of_week") == 0) ||
+               (strcmp(name, "rtc_alarm_day_of_month") == 0) ||
+               (strcmp(name, "rtc_alarm_month") == 0)) {
+        uint8_t state[BM_MM58167_STATE_SIZE];
+        size_t index;
+        if (strcmp(name, "rtc_seconds") == 0)
+            index = 2U;
+        else if (strcmp(name, "rtc_minutes") == 0)
+            index = 3U;
+        else if (strcmp(name, "rtc_hours") == 0)
+            index = 4U;
+        else if (strcmp(name, "rtc_day_of_week") == 0)
+            index = 5U;
+        else if (strcmp(name, "rtc_day_of_month") == 0)
+            index = 6U;
+        else if (strcmp(name, "rtc_month") == 0)
+            index = 7U;
+        else if (strcmp(name, "rtc_alarm_milliseconds") == 0)
+            index = 8U;
+        else if (strcmp(name, "rtc_alarm_day_of_week") == 0)
+            index = 13U;
+        else if (strcmp(name, "rtc_alarm_day_of_month") == 0)
+            index = 14U;
+        else
+            index = 15U;
+        if (bm_mm58167_save_state(machine->rtc, state, sizeof(state)) !=
+            BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = state[index];
     } else if ((strcmp(name, "video_crtc_cursor_start") == 0) ||
                (strcmp(name, "video_crtc_cursor_end") == 0) ||
                (strcmp(name, "video_crtc_cursor_high") == 0) ||
@@ -1601,6 +1645,29 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+pcs86_persistent_state_size(const void *context, const char *name, size_t *size)
+{
+    if ((context == NULL) || (name == NULL) || (size == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (strcmp(name, "rtc") != 0)
+        return BM_STATUS_UNSUPPORTED;
+    *size = BM_PCS86_RTC_STATE_SIZE;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_save_persistent_state(const void *context, const char *name,
+                            uint8_t *data, size_t size)
+{
+    const bm_pcs86_machine_t *machine = context;
+    if ((machine == NULL) || (name == NULL) || (data == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (strcmp(name, "rtc") != 0)
+        return BM_STATUS_UNSUPPORTED;
+    return bm_mm58167_save_state(machine->rtc, data, size);
+}
+
 const bm_pcs86_firmware_identity_t *
 bm_pcs86_expected_firmware(size_t *count)
 {
@@ -1629,7 +1696,9 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_storage_count,
         pcs86_storage_status,
         pcs86_storage_media,
-        pcs86_keyboard_leds
+        pcs86_keyboard_leds,
+        pcs86_persistent_state_size,
+        pcs86_save_persistent_state
     },
     .engine = { 1U, 10U }
 };

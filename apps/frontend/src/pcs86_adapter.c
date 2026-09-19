@@ -9,11 +9,28 @@
 typedef struct pcs86_frontend_machine {
     bm_frontend_machine_t base;
     bm_pcs86_config_t pcs86;
+    uint8_t rtc_state[BM_PCS86_RTC_STATE_SIZE];
 } pcs86_frontend_machine_t;
 
 static const uint64_t firmware_sizes[] = { BM_PCS86_FIRMWARE_HALF_SIZE };
 static const uint64_t floppy_sizes[] = { 737280U, 1474560U };
 static const uint64_t hard_disk_sizes[] = { 21411840U };
+
+/* The portable engine has no wall-clock dependency. Frontends provide the
+ * battery-backed RTC image explicitly; this deterministic fallback uses the
+ * calendar fields observed during physical validation. (The MM58167 has no
+ * year counter.) A future persistence layer may replace it without changing
+ * the machine contract. */
+static const uint8_t default_rtc_state[BM_PCS86_RTC_STATE_SIZE] = {
+    0x00U, 0x00U, 0x00U, 0x00U, 0x22U, 0x05U, 0x18U, 0x09U,
+    /* Alarm RAM holds the BIOS weekday/checksum encoding as well as alarms. */
+    0xe0U, 0x00U, 0x00U, 0x00U, 0x00U, 0xcdU, 0xfcU, 0xceU
+};
+
+static const bm_frontend_persistent_state_requirement_t persistent_states[] = {
+    { "rtc", "RTC and calendar", BM_PCS86_RTC_STATE_SIZE,
+      default_rtc_state, 1 }
+};
 
 static const bm_frontend_asset_requirement_t assets[] = {
     { .role = "firmware-even", .label = "Even firmware EPROM",
@@ -63,14 +80,82 @@ capture_instruction(void *context, const bm_808x_trace_t *trace)
     diagnostics->last_effective_opcode = trace->effective_opcode;
     diagnostics->last_prefix_count = trace->prefix_count;
     diagnostics->has_last_instruction = 1;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_INSTRUCTION,
+            .sequence = machine->base.debug_sequence++,
+            .value.instruction = {
+                .cs = trace->cs,
+                .ip = trace->ip,
+                .ds = trace->ds,
+                .es = trace->es,
+                .ss = trace->ss,
+                .sp = trace->sp,
+                .ax = trace->ax,
+                .bx = trace->bx,
+                .cx = trace->cx,
+                .dx = trace->dx,
+                .bp = trace->bp,
+                .si = trace->si,
+                .di = trace->di,
+                .flags = trace->flags,
+                .physical_address = trace->physical_address,
+                .opcode = trace->opcode,
+                .effective_opcode = trace->effective_opcode,
+                .prefix_count = trace->prefix_count
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
 }
 
 static void
 capture_io(void *context, const bm_pcs86_io_trace_t *trace)
 {
     pcs86_frontend_machine_t *machine = context;
-    (void) trace;
     ++machine->base.diagnostics.io_operations;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_IO,
+            .sequence = machine->base.debug_sequence++,
+            .value.io = {
+                trace->port, trace->value, 1U,
+                (uint8_t) (trace->operation == BM_BUS_WRITE)
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
+}
+
+static void
+capture_memory(void *context, const bm_pcs86_memory_trace_t *trace)
+{
+    pcs86_frontend_machine_t *machine = context;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_MEMORY,
+            .sequence = machine->base.debug_sequence++,
+            .value.memory = {
+                trace->address, trace->value, trace->size,
+                (uint8_t) (trace->operation == BM_BUS_WRITE)
+            }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
+}
+
+static void
+capture_interrupt(void *context, uint8_t vector)
+{
+    pcs86_frontend_machine_t *machine = context;
+    if (machine->base.debug_observer != NULL) {
+        const bm_frontend_debug_event_t event = {
+            .kind = BM_FRONTEND_DEBUG_INTERRUPT,
+            .sequence = machine->base.debug_sequence++,
+            .value.interrupt = { vector }
+        };
+        machine->base.debug_observer(machine->base.debug_context, &event);
+    }
 }
 
 static void
@@ -81,6 +166,8 @@ destroy_machine(bm_frontend_machine_t *base)
 
 static bm_status_t
 open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+             const bm_frontend_persistent_state_binding_t *state_bindings,
+             size_t state_binding_count,
              bm_frontend_machine_t **out_machine)
 {
     const bm_frontend_asset_binding_t *even = bm_frontend_binding_find(
@@ -91,6 +178,9 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
         bindings, binding_count, "floppy-0");
     const bm_frontend_asset_binding_t *hard_disk = bm_frontend_binding_find(
         bindings, binding_count, "hard-disk-0");
+    const bm_frontend_persistent_state_binding_t *rtc_state =
+        bm_frontend_persistent_state_binding_find(
+            state_bindings, state_binding_count, "rtc");
     const bm_pcs86_firmware_identity_t *identities;
     const bm_pcs86_firmware_identity_t *even_identity;
     const bm_pcs86_firmware_identity_t *odd_identity;
@@ -148,7 +238,16 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     machine->pcs86.trace_context = machine;
     machine->pcs86.io_trace = capture_io;
     machine->pcs86.io_trace_context = machine;
+    machine->pcs86.memory_trace = capture_memory;
+    machine->pcs86.memory_trace_context = machine;
+    machine->pcs86.interrupt_trace = capture_interrupt;
+    machine->pcs86.interrupt_trace_context = machine;
     machine->pcs86.ems_kib = BM_PCS86_EMS_1920_KIB;
+    memcpy(machine->rtc_state,
+           rtc_state != NULL ? rtc_state->data : default_rtc_state,
+           sizeof(machine->rtc_state));
+    machine->pcs86.rtc_initial_state = machine->rtc_state;
+    machine->pcs86.rtc_initial_state_size = sizeof(machine->rtc_state);
     if (floppy != NULL) {
         machine->base.diagnostics.read_only_media_bytes =
             floppy->value.media.block_count * floppy->value.media.block_size;
@@ -177,5 +276,7 @@ const bm_frontend_adapter_t bm_frontend_pcs86_adapter = {
     bm_pcs86_machine_definition,
     assets,
     sizeof(assets) / sizeof(assets[0]),
+    persistent_states,
+    sizeof(persistent_states) / sizeof(persistent_states[0]),
     open_machine
 };

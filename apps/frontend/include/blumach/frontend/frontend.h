@@ -41,6 +41,20 @@ typedef struct bm_frontend_asset_binding {
     } value;
 } bm_frontend_asset_binding_t;
 
+typedef struct bm_frontend_persistent_state_requirement {
+    const char *role;
+    const char *label;
+    size_t size;
+    const uint8_t *default_data;
+    int battery_backed;
+} bm_frontend_persistent_state_requirement_t;
+
+typedef struct bm_frontend_persistent_state_binding {
+    const char *role;
+    const uint8_t *data;
+    size_t size;
+} bm_frontend_persistent_state_binding_t;
+
 /* Bindings and their backing bytes/callback contexts remain caller-owned and
  * must outlive both the prepared machine and every session configured from it.
  * The adapter contract has no dependency on paths, file APIs, Qt or a host UI. */
@@ -58,6 +72,61 @@ typedef struct bm_frontend_diagnostics {
     int has_last_instruction;
 } bm_frontend_diagnostics_t;
 
+typedef enum bm_frontend_debug_event_kind {
+    BM_FRONTEND_DEBUG_INSTRUCTION = 1,
+    BM_FRONTEND_DEBUG_IO = 2,
+    BM_FRONTEND_DEBUG_INTERRUPT = 3,
+    BM_FRONTEND_DEBUG_MEMORY = 4
+} bm_frontend_debug_event_kind_t;
+
+/* Optional, host-neutral diagnostic stream. Observers may record an event but
+ * cannot alter execution. No path, file handle or frontend-specific type
+ * crosses this boundary. */
+typedef struct bm_frontend_debug_event {
+    bm_frontend_debug_event_kind_t kind;
+    uint64_t sequence;
+    union {
+        struct {
+            uint16_t cs;
+            uint16_t ip;
+            uint16_t ds;
+            uint16_t es;
+            uint16_t ss;
+            uint16_t sp;
+            uint16_t ax;
+            uint16_t bx;
+            uint16_t cx;
+            uint16_t dx;
+            uint16_t bp;
+            uint16_t si;
+            uint16_t di;
+            uint16_t flags;
+            uint32_t physical_address;
+            uint8_t opcode;
+            uint8_t effective_opcode;
+            uint8_t prefix_count;
+        } instruction;
+        struct {
+            uint64_t address;
+            uint64_t value;
+            uint8_t width;
+            uint8_t write;
+        } io;
+        struct {
+            uint64_t address;
+            uint64_t value;
+            uint8_t width;
+            uint8_t write;
+        } memory;
+        struct {
+            uint8_t vector;
+        } interrupt;
+    } value;
+} bm_frontend_debug_event_t;
+
+typedef void (*bm_frontend_debug_observer_fn)(
+    void *context, const bm_frontend_debug_event_t *event);
+
 typedef struct bm_frontend_adapter bm_frontend_adapter_t;
 typedef struct bm_frontend_machine bm_frontend_machine_t;
 
@@ -68,17 +137,29 @@ const bm_machine_definition_t *bm_frontend_adapter_definition(
     const bm_frontend_adapter_t *adapter);
 const bm_frontend_asset_requirement_t *bm_frontend_adapter_assets(
     const bm_frontend_adapter_t *adapter, size_t *count);
+const bm_frontend_persistent_state_requirement_t *
+bm_frontend_adapter_persistent_states(const bm_frontend_adapter_t *adapter,
+                                      size_t *count);
 bm_status_t bm_frontend_register_machines(bm_machine_registry_t *registry);
 
 bm_status_t bm_frontend_machine_open(
     const bm_frontend_adapter_t *adapter,
     const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     bm_frontend_machine_t **out_machine);
+bm_status_t bm_frontend_machine_open_with_persistent_state(
+    const bm_frontend_adapter_t *adapter,
+    const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+    const bm_frontend_persistent_state_binding_t *state_bindings,
+    size_t state_binding_count,
+    bm_frontend_machine_t **out_machine);
 const bm_machine_config_t *bm_frontend_machine_config(
     const bm_frontend_machine_t *machine);
 bm_status_t bm_frontend_machine_diagnostics(
     const bm_frontend_machine_t *machine,
     bm_frontend_diagnostics_t *out_diagnostics);
+bm_status_t bm_frontend_machine_set_debug_observer(
+    bm_frontend_machine_t *machine, bm_frontend_debug_observer_fn observer,
+    void *context);
 /* Close only after destroying every session configured from this machine. */
 void bm_frontend_machine_close(bm_frontend_machine_t *machine);
 

@@ -38,19 +38,27 @@ saturatingPointerDelta(int32_t current, int32_t added)
 
 SessionWorker::SessionWorker(const bm_host_services_t &host,
                              const bm_machine_config_t *configuration,
-                             SnapshotHandler handler)
+                             SnapshotHandler handler,
+                             std::vector<PersistentState> persistentStates)
     : host_(host), configuration_(configuration),
       ticksPerSecond_(configuration->definition->scheduler_ticks_per_second),
-      handler_(std::move(handler))
+      handler_(std::move(handler)),
+      persistentStates_(std::move(persistentStates))
 {
 }
 
 SessionWorker::~SessionWorker()
 {
-    if (thread_.joinable()) {
-        enqueue(Command(CommandKind::Shutdown));
-        thread_.join();
-    }
+    shutdown();
+}
+
+void
+SessionWorker::shutdown()
+{
+    if (!thread_.joinable())
+        return;
+    enqueue(Command(CommandKind::Shutdown));
+    thread_.join();
 }
 
 bm_status_t
@@ -115,6 +123,12 @@ SessionWorker::replaceStorageMedia(bm_storage_device_kind_t kind,
 bm_session_state_t SessionWorker::state() const { return state_.load(); }
 uint64_t SessionWorker::ticks() const { return ticks_.load(); }
 
+const std::vector<SessionWorker::PersistentState> &
+SessionWorker::persistentStates() const
+{
+    return persistentStates_;
+}
+
 void
 SessionWorker::enqueue(Command command)
 {
@@ -140,7 +154,10 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
             case CommandKind::Pause: status = bm_session_pause(session); break;
             case CommandKind::Resume: status = bm_session_resume(session); break;
             case CommandKind::Reset: status = bm_session_reset(session); break;
-            case CommandKind::Stop: status = bm_session_stop(session); break;
+            case CommandKind::Stop:
+                capturePersistentStates(session);
+                status = bm_session_stop(session);
+                break;
             case CommandKind::Input:
                 traceInput_ = command.traceInput;
                 LatencyTrace::event("input-dispatch", traceInput_);
@@ -181,6 +198,29 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
         publish(session, status, QImage(), lifecycleResult);
     }
     return true;
+}
+
+void
+SessionWorker::capturePersistentStates(bm_session_t *session)
+{
+    if ((session == nullptr) ||
+        ((bm_session_state(session) != BM_SESSION_RUNNING) &&
+         (bm_session_state(session) != BM_SESSION_PAUSED)))
+        return;
+    for (PersistentState &state : persistentStates_) {
+        size_t requiredSize = 0U;
+        state.status = bm_session_persistent_state_size(
+            session, state.role.c_str(), &requiredSize);
+        if (state.status != BM_STATUS_OK) {
+            state.data.clear();
+            continue;
+        }
+        state.data.resize(requiredSize);
+        state.status = bm_session_save_persistent_state(
+            session, state.role.c_str(), state.data.data(), state.data.size());
+        if (state.status != BM_STATUS_OK)
+            state.data.clear();
+    }
 }
 
 bm_status_t
@@ -329,6 +369,7 @@ SessionWorker::run()
                 nextFrame = now + framePeriod;
             }
             if (status != BM_STATUS_OK) {
+                capturePersistentStates(session);
                 (void) bm_session_stop(session);
                 publish(session, status);
             }
@@ -340,5 +381,6 @@ SessionWorker::run()
         wakeup_.wait(lock, bm_session_state(session) == BM_SESSION_RUNNING,
                      [this] { return !commands_.empty(); });
     }
+    capturePersistentStates(session);
     bm_session_destroy(session);
 }

@@ -29,20 +29,29 @@ main(void)
     bm_bus_t *bus = NULL;
     bm_linear_memory_t *ram = NULL;
     bm_linear_memory_t *rom = NULL;
+    bm_linear_memory_t *eprom = NULL;
     const uint8_t initial_rom[] = { 0x12, 0x34, 0x56, 0x78 };
     bm_linear_memory_config_t ram_config = {
-        BM_ADDRESS_MEMORY, 0x1000, 16, 0, NULL, 0
+        BM_ADDRESS_MEMORY, 0x1000, 16, BM_LINEAR_MEMORY_WRITABLE, NULL, 0
     };
     bm_linear_memory_config_t rom_config = {
-        BM_ADDRESS_MEMORY, 0x2000, sizeof(initial_rom), 1,
+        BM_ADDRESS_MEMORY, 0x2000, sizeof(initial_rom),
+        BM_LINEAR_MEMORY_WRITE_REJECT,
+        initial_rom, sizeof(initial_rom)
+    };
+    bm_linear_memory_config_t eprom_config = {
+        BM_ADDRESS_MEMORY, 0x3000, sizeof(initial_rom),
+        BM_LINEAR_MEMORY_WRITE_IGNORE,
         initial_rom, sizeof(initial_rom)
     };
     uint64_t value = 0xa1b2;
     uint8_t byte = 0;
 
-    assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
+    assert(bm_bus_create(&host, 3, &bus) == BM_STATUS_OK);
     assert(bm_linear_memory_create(&host, bus, &ram_config, &ram) == BM_STATUS_OK);
     assert(bm_linear_memory_create(&host, bus, &rom_config, &rom) == BM_STATUS_OK);
+    assert(bm_linear_memory_create(&host, bus, &eprom_config, &eprom) ==
+           BM_STATUS_OK);
 
     assert(transact(bus, BM_BUS_WRITE, 0x1002, 2, BM_ENDIAN_LITTLE, &value) == BM_STATUS_OK);
     value = 0;
@@ -55,9 +64,17 @@ main(void)
     assert(value == 0x12345678);
     value = 0xff;
     assert(transact(bus, BM_BUS_WRITE, 0x2000, 1, BM_ENDIAN_LITTLE, &value) == BM_STATUS_READ_ONLY);
+    assert(transact(bus, BM_BUS_WRITE, 0x3000, 1, BM_ENDIAN_LITTLE, &value) ==
+           BM_STATUS_OK);
+    value = 0U;
+    assert(transact(bus, BM_BUS_READ, 0x3000, 1, BM_ENDIAN_LITTLE, &value) ==
+           BM_STATUS_OK);
+    assert(value == initial_rom[0]);
     value = 0;
-    assert(transact(bus, BM_BUS_READ, 0x3000, 1, BM_ENDIAN_LITTLE, &value) == BM_STATUS_UNMAPPED);
+    assert(transact(bus, BM_BUS_READ, 0x4000, 1, BM_ENDIAN_LITTLE, &value) ==
+           BM_STATUS_UNMAPPED);
 
+    bm_linear_memory_destroy(eprom);
     bm_linear_memory_destroy(rom);
     bm_linear_memory_destroy(ram);
     bm_bus_destroy(bus);

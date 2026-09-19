@@ -79,6 +79,29 @@ test_keyboard_leds(const void *context, bm_keyboard_led_state_t *state)
 }
 
 static bm_status_t
+test_persistent_state_size(const void *context, const char *name, size_t *size)
+{
+    if ((context == NULL) || (name == NULL) || (size == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (strcmp(name, "nv") != 0)
+        return BM_STATUS_UNSUPPORTED;
+    *size = 4U;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+test_save_persistent_state(const void *context, const char *name,
+                           uint8_t *data, size_t size)
+{
+    static const uint8_t expected[] = { 1U, 2U, 3U, 4U };
+    if ((context == NULL) || (name == NULL) || (data == NULL) ||
+        (strcmp(name, "nv") != 0) || (size != sizeof(expected)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    memcpy(data, expected, sizeof(expected));
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
 test_media_read(void *context, uint64_t first_block, uint32_t block_count,
                 uint8_t *destination)
 {
@@ -233,7 +256,9 @@ make_configuration(test_machine_t *machine, int optional_operations)
             test_storage_count,
             test_storage_status,
             test_storage_media,
-            test_keyboard_leds
+            test_keyboard_leds,
+            test_persistent_state_size,
+            test_save_persistent_state
         },
         .engine = { 1U, 2U }
     };
@@ -243,7 +268,8 @@ make_configuration(test_machine_t *machine, int optional_operations)
         .configuration = { "test.runtime-session.config", 1U,
                            sizeof(test_machine_t) },
         .ops = { test_validate, test_create, test_destroy,
-                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL },
+                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                 NULL },
         .engine = { 1U, 2U }
     };
     bm_machine_config_t configuration = {
@@ -396,6 +422,8 @@ test_session_state_machine(void)
     };
     bm_keyboard_led_state_t keyboard_leds = { 0U };
     size_t storage_count = 0U;
+    size_t persistent_state_size = 0U;
+    uint8_t persistent_state[4] = { 0U };
     uint64_t value = 0U;
 
     initialize_machine(&machine);
@@ -425,6 +453,9 @@ test_session_state_machine(void)
            BM_STATUS_INVALID_STATE);
     assert(bm_session_replace_storage_media(
                session, BM_STORAGE_DEVICE_FLOPPY, 0U, &media_change) ==
+           BM_STATUS_INVALID_STATE);
+    assert(bm_session_persistent_state_size(
+               session, "nv", &persistent_state_size) ==
            BM_STATUS_INVALID_STATE);
 
     assert(bm_session_configure(session, &configuration) == BM_STATUS_OK);
@@ -471,6 +502,19 @@ test_session_state_machine(void)
     assert(machine.last_media_change.media_present);
     assert(bm_session_storage_device_status(session, 1U, &storage) ==
            BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_persistent_state_size(
+               session, "nv", &persistent_state_size) == BM_STATUS_OK);
+    assert(persistent_state_size == sizeof(persistent_state));
+    assert(bm_session_persistent_state_size(
+               session, "unknown", &persistent_state_size) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(bm_session_save_persistent_state(
+               session, "nv", persistent_state,
+               sizeof(persistent_state) - 1U) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_session_save_persistent_state(
+               session, "nv", persistent_state,
+               sizeof(persistent_state)) == BM_STATUS_OK);
+    assert(persistent_state[0] == 1U && persistent_state[3] == 4U);
 
     assert(bm_session_pause(session) == BM_STATUS_OK);
     assert(bm_session_state(session) == BM_SESSION_PAUSED);

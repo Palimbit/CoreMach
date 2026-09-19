@@ -63,6 +63,9 @@ The PCS 86 machine follows the same rule. It does not retain the inherited
 global `pcs86_active` pointer or instantiate legacy devices. Firmware arrives
 as immutable caller-owned blobs. The machine interleaves the two EPROM views
 into host-allocated ROM and gives the CPU only a bus, not host files or paths.
+CPU writes to the EPROM window are acknowledged by the bus and discarded, as
+on the physical read-only device; they neither alter firmware bytes nor abort
+the emulated processor.
 
 ## First-cut component ledger
 
@@ -70,14 +73,14 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 |---|---|---|
 | NEC V30 | Functional instruction-boundary core derived from the inherited interpreter | Complete documented native and 8080 opcode-map classification, snapshot v4 with MD write gate, segmented 20-bit addresses, ModR/M, native and emulated stacks, hardware-vector-validated primary ALU forms, 80186-compatible and NEC extensions, FPO/POLL CPU contract, BRKEM/CALLN/RETEM, interrupt and NMI round trips, prefix shadows, interruptible REP and BUSLOCK transaction attributes; a versioned observer separates exact documented native execution clocks (including effective-address alignment, entry-stack alignment and counted shifts), logical bus transactions and reported waits, and queue-invalidating boundaries; data-dependent/formula timings, queue fill/overlap, physical bus timing and embedded floating-point execution remain explicit |
 | Conventional RAM | Board-owned portable memory region | 640 KiB, zero-initialized and byte-addressable; the 64 KiB below the EMS frame remains visible whenever its corresponding window is disabled or selects an unavailable page |
-| System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external |
+| System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external and CPU writes have no effect |
 | Scheduler timing | Functional approximation | One retired instruction per engine tick; the scheduler does not yet consume CPU timing observations, so rational PIT/RTC clock accumulators still use a measured functional instruction rate |
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, fixed-priority nesting, output callback, CPU acknowledge, and non-specific or specific EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven from scheduler time without claiming cycle accuracy |
-| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture/open-bus reads at `A0h-AEh`, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues, IRQ1 scan queue and the keyboard `EDh` LED parameter |
+| PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues, IRQ1 scan queue and the keyboard `EDh` LED parameter. One board-level passive-I/O policy returns `FFh` for every unclaimed or non-readable port and ignores writes, including absent expansion slots; this is not a firmware-specific port list |
 | Onboard EMS | Functional board implementation derived from the inherited model and original software | Selectable 0/384/1920 KiB backing store (0/24/120 pages), four readable selectors at each `N400h-N403h`, for N=4 through 9, bits 6:0 as page number and bit 7 as window enable. Each 64 KiB frame at `N0000h` is gated by port `6Bh` bit N-3; this relocation is inferred from original Customer and BIOS code, not physically verified. Port `64h` exposes the fitted-SIMM code; the frontend defaults to 1920 KiB |
 | 8237 DMA | Functional synchronous subset derived from the inherited core and physical Customer observation | Address/count flip-flop, base/current registers, command, mode, request, masks, status, master clear and device-facing byte transfers; a configurable board latch block decodes `80h-9Fh` on PCS 86, with only `81h/82h/83h/87h` supplying four-bit pages and 20-bit current addresses. The wider independent readback is observed through the passing Spanish Customer test on a physical BIOS 1.08 machine; no asynchronous arbitration or cycle stealing |
-| MM58167 RTC | Functional portable component | PCS 86 `B0h-B7h` controls and `E0h-EFh` counter/alarm RAM, BCD millisecond calendar, alarm and periodic IRQs, reset/GO/standby commands, checksum repair and 32-byte caller-owned persistence; yearless calendar and physical crystal/battery behaviour remain approximate |
+| MM58167 RTC | Functional portable component | PCS 86 `B0h-B7h` controls and `E0h-EFh` counter/alarm RAM, BCD millisecond calendar, alarm and periodic IRQs, reset/GO/standby commands, checksum repair and 32-byte caller-owned initial/persistent state. The frontend supplies a deterministic valid calendar plus the BIOS weekday/checksum encoding, while a named-state channel lets Qt retain the bytes or select a depleted-battery cold start; headless can do the same with an explicit state path. The engine remains independent of wall-clock and file APIs. The yearless calendar and physical crystal/battery decay remain approximate. |
 | SPP parallel port | Derived portable register core | Data, status and control at gated `378h-37Ah`, disconnected-printer status, output callback and ACK-driven IRQ7; no EPP/ECP, printer backend, DMA or host threads |
 | NS16450 UART | Derived portable register core | Divisor latch, IER/IIR, LCR/MCR, LSR/MSR, scratch, modem/data loopback and IRQ4 at gated `3F8h-3FFh`; no 16550 FIFO, host serial backend or baud scheduling |
 | Keyboard input | New runtime contract plus PCS 86 translation | Stable physical-key events, supported IBM Set 1 make/break bytes and IRQ1; an optional guest-owned Scroll/Num/Caps state query reflects the keyboard `EDh` command without host lock-state inference; no host scan codes in the engine, mouse input, electrical timing or complete command set |
@@ -85,7 +88,7 @@ into host-allocated ROM and gives the CPU only a bus, not host files or paths.
 | Paradise PVGA1A | Derived portable register/VRAM core | Isolated VGA and Paradise registers, DAC state and 256 KiB planar VRAM; deterministic text rasterizer with CRTC cursor plus standard four-plane 16-colour and chain-4 256-colour XRGB8888 output. Geometry, display start, offset, double-scan and palette selection are register-derived rather than keyed to BIOS mode numbers. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent. |
 | Complete PPI behaviour | Partial board glue | Sufficient for the validated resident diagnostics and bootstrap path; electrical/timing fidelity and undocumented bits remain unclaimed |
 | Floppy controller and storage | Functional boot subset | Caller-owned raw block media, independent 360 KiB/1.2 MiB/720 KiB/1.44 MiB drive geometry, validated 720 KiB/1.44 MiB runtime insertion and ejection, PCS 86 jumpers, active-low disk change, reset/sense/specify/seek/recalibrate/read-ID and DMA read/write-data paths; no rotational timing, flux/track formats, formatting or weak-sector behaviour |
-| Integrated XTA | Portable derived rewrite of the inherited generic XTA controller | Onboard `320h-323h` interface; the legacy machine already supplied open-bus semantics implicitly for the three unclaimed conventional base slots through `32Fh`, which the explicit portable bus now models at board level. Includes the port-`65h` gate, active-low presence jumper, IRQ5, DMA3 and PIO, caller-owned 512-byte block media, CP3026 615/4/17 geometry, read/write/verify/seek/recalibrate/sense/parameters/buffer/format/diagnostic commands; unknown commands complete with an explicit illegal-command sense code, and there is no option ROM, host path or private disk API |
+| Integrated XTA | Portable derived rewrite of the inherited generic XTA controller | Onboard `320h-323h` interface; the three unpopulated conventional base slots through `32Fh` naturally receive the board's general passive-I/O response rather than individual mappings. Includes the port-`65h` gate, active-low presence jumper, IRQ5, DMA3 and PIO, caller-owned 512-byte block media, CP3026 615/4/17 geometry, read/write/verify/seek/recalibrate/sense/parameters/buffer/format/diagnostic commands; unknown commands complete with an explicit illegal-command sense code, and there is no option ROM, host path or private disk API |
 
 ## Text cursor timing and observed CRTC state
 
@@ -270,9 +273,10 @@ delivery. The next local validation adds a read-only 720 KiB raw image and
 reaches the primary bootstrap. All visible resident diagnostics report `Pass`;
 the BIOS detects one floppy, reads its boot sector through DMA2 and transfers
 execution to it. DMA terminal count completes each requested sector even when
-the command EOT exceeds the mounted track, and the system files display the
-MS-DOS 3.30a banner before the unmapped `02F2h` boundary. The PVGA1A status
-phase, scheduler rate, FDC
+the command EOT exceeds the mounted track. An earlier cut stopped at the first
+unclaimed DOS access, `02F2h`; the general passive-I/O policy now models the
+board response for all such cycles without claiming that an absent device is
+implemented. The PVGA1A status phase, scheduler rate, FDC
 timing and PS/2 response timing remain deterministic bring-up approximations;
 no printer/serial backend or mouse input is connected.
 

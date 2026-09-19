@@ -353,3 +353,44 @@ bm_session_replace_storage_media(bm_session_t *session,
     return session->configuration.definition->ops.storage_media(
         session->machine, kind, unit, change);
 }
+
+bm_status_t
+bm_session_persistent_state_size(const bm_session_t *session,
+                                 const char *name,
+                                 size_t *size)
+{
+    if ((session == NULL) || (name == NULL) || (name[0] == '\0') ||
+        (size == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.persistent_state_size == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.definition->ops.persistent_state_size(
+        session->machine, name, size);
+}
+
+bm_status_t
+bm_session_save_persistent_state(const bm_session_t *session,
+                                 const char *name,
+                                 uint8_t *data,
+                                 size_t size)
+{
+    size_t required_size = 0U;
+    bm_status_t status;
+
+    if ((session == NULL) || (name == NULL) || (name[0] == '\0') ||
+        (data == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    status = bm_session_persistent_state_size(session, name, &required_size);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (size != required_size)
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (session->configuration.definition->ops.save_persistent_state == NULL)
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.definition->ops.save_persistent_state(
+        session->machine, name, data, size);
+}

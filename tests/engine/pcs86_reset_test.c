@@ -87,6 +87,13 @@ main(void)
         0x8e, 0xd8,       /* MOV DS,AX */
         0xb0, 0x5a,       /* MOV AL,5Ah */
         0xa2, 0x00, 0x02, /* MOV [0200h],AL */
+        0xb8, 0x00, 0xf0, /* MOV AX,F000h */
+        0x8e, 0xd8,       /* MOV DS,AX */
+        0xb0, 0x00,       /* MOV AL,0 */
+        0xa2, 0x00, 0x01, /* MOV [0100h],AL; EPROM ignores the write. */
+        0xa0, 0x00, 0x01, /* MOV AL,[0100h] -> original B8h. */
+        0x30, 0xe4,       /* XOR AH,AH */
+        0x89, 0xc6,       /* MOV SI,AX */
         0xb8, 0x00, 0xc0, /* MOV AX,C000h */
         0x8e, 0xd8,       /* MOV DS,AX */
         0x8b, 0x06, 0x00, 0x00, /* MOV AX,[0000h] -> open bus FFFFh. */
@@ -134,6 +141,9 @@ main(void)
         pixels, sizeof(pixels) / sizeof(pixels[0]), 9U,
         { 0, 0, BM_PIXEL_XRGB8888, 0U, 0U }
     };
+    static const uint8_t rtc_state[BM_PCS86_RTC_STATE_SIZE] = {
+        0x00U, 0x00U, 0x45U, 0x34U, 0x12U, 0x05U, 0x18U, 0x09U
+    };
     const bm_input_event_t key_down = {
         .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
     };
@@ -153,7 +163,9 @@ main(void)
         .trace_context = &trace,
         .io_trace = capture_io_trace,
         .io_trace_context = &io_trace,
-        .ems_kib = BM_PCS86_EMS_1920_KIB
+        .ems_kib = BM_PCS86_EMS_1920_KIB,
+        .rtc_initial_state = rtc_state,
+        .rtc_initial_state_size = sizeof(rtc_state)
     };
     config.floppy[0] = (bm_floppy_drive_config_t) {
         .installed = 1,
@@ -179,6 +191,37 @@ main(void)
     assert(bm_session_create(&host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
+    {
+        uint64_t value = UINT64_MAX;
+        assert(bm_session_inspect_machine(session, "rtc_seconds", &value) ==
+               BM_STATUS_OK && value == 0x45U);
+        assert(bm_session_inspect_machine(session, "rtc_minutes", &value) ==
+               BM_STATUS_OK && value == 0x34U);
+        assert(bm_session_inspect_machine(session, "rtc_hours", &value) ==
+               BM_STATUS_OK && value == 0x12U);
+        assert(bm_session_inspect_machine(session, "rtc_day_of_week", &value) ==
+               BM_STATUS_OK && value == 0x05U);
+        assert(bm_session_inspect_machine(session, "rtc_day_of_month", &value) ==
+               BM_STATUS_OK && value == 0x18U);
+        assert(bm_session_inspect_machine(session, "rtc_month", &value) ==
+               BM_STATUS_OK && value == 0x09U);
+    }
+    {
+        uint8_t saved_rtc[BM_PCS86_RTC_STATE_SIZE];
+        size_t saved_size = 0U;
+        assert(bm_session_persistent_state_size(session, "rtc", &saved_size) ==
+               BM_STATUS_OK);
+        assert(saved_size == sizeof(saved_rtc));
+        assert(bm_session_persistent_state_size(
+                   session, "unknown", &saved_size) == BM_STATUS_UNSUPPORTED);
+        assert(bm_session_save_persistent_state(
+                   session, "rtc", saved_rtc, sizeof(saved_rtc) - 1U) ==
+               BM_STATUS_INVALID_ARGUMENT);
+        assert(bm_session_save_persistent_state(
+                   session, "rtc", saved_rtc, sizeof(saved_rtc)) ==
+               BM_STATUS_OK);
+        assert(memcmp(saved_rtc, rtc_state, 8U) == 0);
+    }
     assert(inspect(session, "cs") == 0xffff);
     assert(inspect(session, "ip") == 0);
     assert(inspect(session, "frequency_hz") == 10000000U);
@@ -197,23 +240,24 @@ main(void)
         assert(value == 2U);
     }
 
-    assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 59) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xf000);
-    assert(inspect(session, "ip") == 0x015e);
+    assert(inspect(session, "ip") == 0x016f);
     assert(inspect(session, "ax") == 0xff08U);
     assert(inspect(session, "ds") == 0);
     assert(inspect(session, "halted") == 1);
     assert(inspect(session, "dx") == 0x0100);
     assert(inspect(session, "cx") == 0xffffU);
+    assert(inspect(session, "si") == 0x00b8U);
     {
         uint64_t value = UINT64_MAX;
         assert(bm_session_inspect_machine(session, "xta_enabled", &value) ==
                BM_STATUS_OK);
         assert(value == 1U);
     }
-    assert(trace.count == 46);
-    assert(trace.entries[7].physical_address == 0xf010fU);
-    assert(trace.entries[7].opcode == 0x8bU);
+    assert(trace.count == 53);
+    assert(trace.entries[14].physical_address == 0xf0120U);
+    assert(trace.entries[14].opcode == 0x8bU);
     assert(trace.entries[0].physical_address == 0xffff0U);
     assert(trace.entries[0].opcode == 0xea);
     assert(trace.entries[1].physical_address == 0xf0100U);
@@ -271,13 +315,20 @@ main(void)
         assert(bm_session_inspect_machine(session, "unknown", &value) ==
                BM_STATUS_INVALID_ARGUMENT);
     }
-    assert(bm_session_run_for(session, 52) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 59) == BM_STATUS_OK);
     assert(inspect(session, "halted") == 1U);
-    assert(trace.count == 46U);
+    assert(trace.count == 53U);
     assert(io_trace.count == 16U);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
+
+    config.rtc_initial_state_size = sizeof(rtc_state) - 1U;
+    machine = bm_pcs86_machine_config(&config);
+    assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_INVALID_ARGUMENT);
+    bm_session_destroy(session);
+    config.rtc_initial_state_size = sizeof(rtc_state);
 
     config.firmware_even.sha256 = "invalid";
     machine = bm_pcs86_machine_config(&config);

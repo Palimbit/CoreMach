@@ -12,11 +12,17 @@ extern "C" {
 
 typedef struct bm_linear_memory bm_linear_memory_t;
 
+typedef enum bm_linear_memory_write_policy {
+    BM_LINEAR_MEMORY_WRITABLE = 0,
+    BM_LINEAR_MEMORY_WRITE_REJECT = 1,
+    BM_LINEAR_MEMORY_WRITE_IGNORE = 2
+} bm_linear_memory_write_policy_t;
+
 typedef struct bm_linear_memory_config {
     bm_address_space_t space;
     uint64_t base;
     size_t size;
-    int read_only;
+    bm_linear_memory_write_policy_t write_policy;
     const uint8_t *initial_data;
     size_t initial_data_size;
 } bm_linear_memory_config_t;

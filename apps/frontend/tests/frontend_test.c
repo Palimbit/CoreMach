@@ -6,6 +6,32 @@
 #include <stdint.h>
 #include <string.h>
 
+typedef struct debug_observation {
+    uint64_t calls;
+    uint64_t instructions;
+    uint64_t io;
+    uint64_t interrupts;
+    uint64_t memory;
+} debug_observation_t;
+
+static void
+observe_debug(void *context, const bm_frontend_debug_event_t *event)
+{
+    debug_observation_t *observation = context;
+    assert(event->sequence == observation->calls);
+    ++observation->calls;
+    if (event->kind == BM_FRONTEND_DEBUG_INSTRUCTION)
+        ++observation->instructions;
+    else if (event->kind == BM_FRONTEND_DEBUG_IO)
+        ++observation->io;
+    else if (event->kind == BM_FRONTEND_DEBUG_INTERRUPT)
+        ++observation->interrupts;
+    else if (event->kind == BM_FRONTEND_DEBUG_MEMORY)
+        ++observation->memory;
+    else
+        assert(0);
+}
+
 static bm_status_t
 read_zero_blocks(void *context, uint64_t first_block, uint32_t block_count,
                  uint8_t *destination)
@@ -34,6 +60,7 @@ main(void)
     bm_machine_registry_t *registry = NULL;
     const bm_frontend_adapter_t *adapter;
     const bm_frontend_asset_requirement_t *assets;
+    const bm_frontend_persistent_state_requirement_t *persistent_states;
     const bm_machine_definition_t *definition;
     bm_frontend_machine_t *machine = NULL;
     bm_session_t *session = NULL;
@@ -67,6 +94,8 @@ main(void)
         { .blob = { "unknown", even_bytes, sizeof(even_bytes), NULL } }
     };
     size_t asset_count = 0U;
+    size_t persistent_state_count = 0U;
+    debug_observation_t observation = { 0 };
 
     assert(bm_frontend_adapter_count() == 1U);
     assert(bm_frontend_adapter_at(1U) == NULL);
@@ -98,6 +127,14 @@ main(void)
     assert(assets[3].accepted_size_count == 1U);
     assert(assets[3].accepted_sizes[0] == 21411840U);
     assert(!assets[3].replaceable);
+    persistent_states = bm_frontend_adapter_persistent_states(
+        adapter, &persistent_state_count);
+    assert(persistent_states != NULL);
+    assert(persistent_state_count == 1U);
+    assert(strcmp(persistent_states[0].role, "rtc") == 0);
+    assert(persistent_states[0].size == 32U);
+    assert(persistent_states[0].default_data != NULL);
+    assert(persistent_states[0].battery_backed);
 
     assert(bm_machine_registry_create(&host, bm_frontend_adapter_count(),
                                       &registry) == BM_STATUS_OK);
@@ -114,6 +151,12 @@ main(void)
                adapter, bindings, sizeof(bindings) / sizeof(bindings[0]),
                &machine) == BM_STATUS_OK);
     assert(machine != NULL);
+    assert(bm_frontend_machine_set_debug_observer(NULL, observe_debug,
+                                                  &observation) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_frontend_machine_set_debug_observer(machine, observe_debug,
+                                                  &observation) ==
+           BM_STATUS_OK);
     assert(bm_frontend_machine_config(machine) != NULL);
     assert(bm_frontend_machine_config(machine)->definition == definition);
     assert(bm_frontend_machine_diagnostics(machine, &diagnostics) ==
@@ -124,6 +167,42 @@ main(void)
     assert(bm_session_configure(session, bm_frontend_machine_config(machine)) ==
            BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 128U) == BM_STATUS_OK);
+    assert(observation.calls != 0U);
+    assert(observation.instructions != 0U);
+    assert(observation.memory != 0U);
+    {
+        const uint64_t calls = observation.calls;
+        assert(bm_frontend_machine_set_debug_observer(machine, NULL,
+                                                      &observation) ==
+               BM_STATUS_OK);
+        assert(bm_session_run_for(session, 128U) == BM_STATUS_OK);
+        assert(observation.calls == calls);
+    }
+    {
+        uint64_t value = UINT64_MAX;
+        assert(bm_session_inspect_machine(session, "rtc_hours", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x22U);
+        assert(bm_session_inspect_machine(session, "rtc_day_of_month", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x18U);
+        assert(bm_session_inspect_machine(session, "rtc_month", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x09U);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_milliseconds", &value) == BM_STATUS_OK);
+        assert(value == 0xe0U);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_day_of_week", &value) == BM_STATUS_OK);
+        assert(value == 0xcdU);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_day_of_month", &value) == BM_STATUS_OK);
+        assert(value == 0xfcU);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_month", &value) == BM_STATUS_OK);
+        assert(value == 0xceU);
+    }
     assert(bm_session_storage_device_count(session, &storage_count) ==
            BM_STATUS_OK);
     assert(storage_count == 3U);
@@ -152,6 +231,35 @@ main(void)
            BM_STATUS_UNSUPPORTED);
     bm_session_destroy(session);
     bm_frontend_machine_close(machine);
+
+    {
+        static const uint8_t restored_rtc[32] = {
+            0x00U, 0x00U, 0x45U, 0x34U, 0x11U, 0x03U, 0x19U, 0x09U
+        };
+        bm_frontend_persistent_state_binding_t state_binding = {
+            "rtc", restored_rtc, sizeof(restored_rtc)
+        };
+        uint64_t value = UINT64_MAX;
+        machine = NULL;
+        state_binding.size = sizeof(restored_rtc) - 1U;
+        assert(bm_frontend_machine_open_with_persistent_state(
+                   adapter, bindings, 2U, &state_binding, 1U, &machine) ==
+               BM_STATUS_INVALID_ARGUMENT);
+        assert(machine == NULL);
+        state_binding.size = sizeof(restored_rtc);
+        assert(bm_frontend_machine_open_with_persistent_state(
+                   adapter, bindings, 2U, &state_binding, 1U, &machine) ==
+               BM_STATUS_OK);
+        assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+        assert(bm_session_configure(
+                   session, bm_frontend_machine_config(machine)) == BM_STATUS_OK);
+        assert(bm_session_start(session) == BM_STATUS_OK);
+        assert(bm_session_inspect_machine(session, "rtc_hours", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x11U);
+        bm_session_destroy(session);
+        bm_frontend_machine_close(machine);
+    }
 
     machine = NULL;
     assert(bm_frontend_machine_open(

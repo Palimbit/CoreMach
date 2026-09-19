@@ -36,6 +36,8 @@ main(void)
 
     assert(capture.count == 2U); /* Reset jump, then rejected instruction. */
     assert(capture.last.cs == 0xf000U && capture.last.ip == 0U);
+    assert(capture.last.ds == 0U && capture.last.es == 0U);
+    assert(capture.last.ss == 0U && capture.last.sp == 0U);
     assert(capture.last.opcode == 0x2eU);
     assert(capture.last.effective_opcode == 0xffU);
     assert(capture.last.prefix_count == 1U);

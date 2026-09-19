@@ -171,7 +171,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, normalized physical-key input events and guest-owned keyboard-indicator queries independent of host lock state and guest scan-code sets, and generic caller-owned storage-media replacement"
+      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, normalized physical-key input events and guest-owned keyboard-indicator queries independent of host lock state and guest scan-code sets, generic caller-owned storage-media replacement, and opaque named-state export while a machine is live"
     },
     {
       "id": "null-host-platform",
@@ -187,7 +187,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Frontend-neutral machine adapter registry, declarative asset and replaceable-storage requirements, and typed configuration preparation over caller-owned blobs and block media; optional file helpers remain separate from the adapter contract"
+      "local_changes": "Frontend-neutral machine adapter registry, declarative asset, replaceable-storage and persistent-state requirements, typed configuration preparation over caller-owned blobs and block media, and deterministic, restored or depleted PCS 86 RTC initial state supplied outside the engine; optional file helpers remain separate from the adapter contract. An opt-in read-only debug observer reports ordered instruction, I/O and accepted-interrupt events without exposing paths, host APIs or frontend types to the machine"
     },
     {
       "id": "portable-qt-frontend",
@@ -195,7 +195,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated definition-rate-paced session worker, queued lifecycle, normalized keyboard and read-only removable-media commands, guest-controlled Caps/Num/Scroll presentation, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling, selectable Qt OpenGL and software surfaces, a non-destructive scanline/vignette CRT profile, clean source-frame capture and persistent user display preferences; Windows host-only high-resolution worker waits with command wakeup and a portable fallback, plus opt-in input/render/paint-submission diagnostics without key contents"
+      "local_changes": "Qt6 application shell whose available products are mapped declaratively from the historical catalogue to frontend adapters, with a dedicated definition-rate-paced session worker, queued lifecycle, normalized keyboard and read-only removable-media commands, guest-controlled Caps/Num/Scroll presentation, generation-safe XRGB8888 frame publication, explicit session lifecycle controls, host-side presentation scaling, selectable Qt OpenGL and software surfaces, a non-destructive scanline/vignette CRT profile, clean source-frame capture, persistent user display preferences and frontend-owned battery-backed named state with an explicit depleted-battery policy; Windows host-only high-resolution worker waits with command wakeup and a portable fallback, plus opt-in input/render/paint-submission diagnostics without key contents"
     },
     {
       "id": "headless-frontend",
@@ -203,7 +203,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, deterministic execution reporting and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies"
+      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, explicit generic persistent-state load/save or depleted-state selection, deterministic execution reporting including available RTC calendar state, and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies. Optional bounded failure diagnostics retain a configurable interleaved event tail plus a fixed interrupt-boundary history and full CPU register state"
     },
     {
       "id": "portable-xta-controller",
@@ -225,7 +225,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Sarah Walker", "Miran Grca", "Fred N. van Kempen", "rtzor", "BluMach contributors"],
-      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with software-derived relocatable frames at 40000h-9FFFFh, independent selector banks gated by port 6Bh and conventional-memory fallback, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and keyboard EDh indicator state, baseline three-button PS/2 stream/remote packets and command state over neutral relative-pointer events, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Cycle-accurate timing remains absent; explicitly model the absent AT CMOS data port 71h as open bus, matching inherited device composition without adding a CMOS or changing the MM58167; model the inherited unclaimed 88h-9Fh region as open bus, and explicitly supply absent-coprocessor POLL ready without implementing an 8087"
+      "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, scheduler-driven PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, rational clock accumulation, caller-owned MM58167 initial state and opaque RTC state export, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with software-derived relocatable frames at 40000h-9FFFFh, independent selector banks gated by port 6Bh and conventional-memory fallback, immutable system-EPROM reads with hardware-like ignored CPU writes, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and keyboard EDh indicator state, baseline three-button PS/2 stream/remote packets and command state over neutral relative-pointer events, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Accepted PIC vectors can be observed through an optional read-only callback used by frontend diagnostics. Cycle-accurate timing remains absent; explicitly model the absent AT CMOS data port 71h as open bus, matching inherited device composition without adding a CMOS or changing the MM58167; model the inherited unclaimed 88h-9Fh region as open bus, and explicitly supply absent-coprocessor POLL ready without implementing an 8087"
     }
   ],
   "external_dependencies": []
