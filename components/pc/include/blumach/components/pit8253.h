@@ -34,11 +34,11 @@ bm_status_t bm_pit8253_advance(bm_pit8253_t *pit, uint32_t input_ticks);
  * BM_STATUS_IDLE with zero cycles means clocks alone cannot currently change
  * an output; a later gate or programming operation may make one observable. */
 bm_status_t bm_pit8253_cycles_until_output_change(
-    const bm_pit8253_t *pit, uint32_t *cycles);
-bm_status_t bm_pit8253_count(const bm_pit8253_t *pit,
+    bm_pit8253_t *pit, uint32_t *cycles);
+bm_status_t bm_pit8253_count(bm_pit8253_t *pit,
                              unsigned int channel,
                              uint16_t *count);
-bm_status_t bm_pit8253_output(const bm_pit8253_t *pit,
+bm_status_t bm_pit8253_output(bm_pit8253_t *pit,
                               unsigned int channel,
                               int *output);
 
