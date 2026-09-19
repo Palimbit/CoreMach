@@ -134,6 +134,9 @@ main(void)
         pixels, sizeof(pixels) / sizeof(pixels[0]), 9U,
         { 0, 0, BM_PIXEL_XRGB8888, 0U, 0U }
     };
+    static const uint8_t rtc_state[BM_PCS86_RTC_STATE_SIZE] = {
+        0x00U, 0x00U, 0x45U, 0x34U, 0x12U, 0x05U, 0x18U, 0x09U
+    };
     const bm_input_event_t key_down = {
         .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
     };
@@ -153,7 +156,9 @@ main(void)
         .trace_context = &trace,
         .io_trace = capture_io_trace,
         .io_trace_context = &io_trace,
-        .ems_kib = BM_PCS86_EMS_1920_KIB
+        .ems_kib = BM_PCS86_EMS_1920_KIB,
+        .rtc_initial_state = rtc_state,
+        .rtc_initial_state_size = sizeof(rtc_state)
     };
     config.floppy[0] = (bm_floppy_drive_config_t) {
         .installed = 1,
@@ -179,6 +184,21 @@ main(void)
     assert(bm_session_create(&host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
+    {
+        uint64_t value = UINT64_MAX;
+        assert(bm_session_inspect_machine(session, "rtc_seconds", &value) ==
+               BM_STATUS_OK && value == 0x45U);
+        assert(bm_session_inspect_machine(session, "rtc_minutes", &value) ==
+               BM_STATUS_OK && value == 0x34U);
+        assert(bm_session_inspect_machine(session, "rtc_hours", &value) ==
+               BM_STATUS_OK && value == 0x12U);
+        assert(bm_session_inspect_machine(session, "rtc_day_of_week", &value) ==
+               BM_STATUS_OK && value == 0x05U);
+        assert(bm_session_inspect_machine(session, "rtc_day_of_month", &value) ==
+               BM_STATUS_OK && value == 0x18U);
+        assert(bm_session_inspect_machine(session, "rtc_month", &value) ==
+               BM_STATUS_OK && value == 0x09U);
+    }
     assert(inspect(session, "cs") == 0xffff);
     assert(inspect(session, "ip") == 0);
     assert(inspect(session, "frequency_hz") == 10000000U);
@@ -278,6 +298,13 @@ main(void)
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
+
+    config.rtc_initial_state_size = sizeof(rtc_state) - 1U;
+    machine = bm_pcs86_machine_config(&config);
+    assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_INVALID_ARGUMENT);
+    bm_session_destroy(session);
+    config.rtc_initial_state_size = sizeof(rtc_state);
 
     config.firmware_even.sha256 = "invalid";
     machine = bm_pcs86_machine_config(&config);

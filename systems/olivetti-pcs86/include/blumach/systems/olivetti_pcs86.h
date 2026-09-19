@@ -20,6 +20,7 @@ extern "C" {
 #define BM_PCS86_ROM_SIZE 65536U
 #define BM_PCS86_CONFIG_TYPE "blumach.system.olivetti-pcs86.config"
 #define BM_PCS86_CONFIG_VERSION 5U
+#define BM_PCS86_RTC_STATE_SIZE 32U
 
 typedef struct bm_pcs86_hard_disk_config {
     int present;
@@ -61,6 +62,8 @@ typedef struct bm_pcs86_config {
     bm_floppy_drive_config_t floppy[2];
     uint32_t ems_kib;
     bm_pcs86_hard_disk_config_t hard_disk;
+    const uint8_t *rtc_initial_state;
+    size_t rtc_initial_state_size;
 } bm_pcs86_config_t;
 
 typedef struct bm_pcs86_firmware_identity {
