@@ -245,6 +245,25 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
            " media_read_only=%d\n",
            diagnostics.read_only_media_bytes,
            diagnostics.read_only_media_bytes != 0U ? 1 : 0);
+    if (session != NULL) {
+        uint64_t seconds = 0U, minutes = 0U, hours = 0U;
+        uint64_t day_of_week = 0U, day_of_month = 0U, month = 0U;
+        if ((bm_session_inspect_machine(session, "rtc_seconds", &seconds) ==
+             BM_STATUS_OK) &&
+            (bm_session_inspect_machine(session, "rtc_minutes", &minutes) ==
+             BM_STATUS_OK) &&
+            (bm_session_inspect_machine(session, "rtc_hours", &hours) ==
+             BM_STATUS_OK) &&
+            (bm_session_inspect_machine(session, "rtc_day_of_week", &day_of_week) ==
+             BM_STATUS_OK) &&
+            (bm_session_inspect_machine(session, "rtc_day_of_month", &day_of_month) ==
+             BM_STATUS_OK) &&
+            (bm_session_inspect_machine(session, "rtc_month", &month) ==
+             BM_STATUS_OK))
+            printf("rtc_bcd=%02" PRIx64 ":%02" PRIx64 ":%02" PRIx64
+                   " dow=%02" PRIx64 " date=%02" PRIx64 "-%02" PRIx64 "\n",
+                   hours, minutes, seconds, day_of_week, month, day_of_month);
+    }
     {
         size_t index;
         for (index = 0U; index < storage_count; ++index) {

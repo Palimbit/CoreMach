@@ -15,6 +15,17 @@ static const uint64_t firmware_sizes[] = { BM_PCS86_FIRMWARE_HALF_SIZE };
 static const uint64_t floppy_sizes[] = { 737280U, 1474560U };
 static const uint64_t hard_disk_sizes[] = { 21411840U };
 
+/* The portable engine has no wall-clock dependency. Frontends provide the
+ * battery-backed RTC image explicitly; this deterministic fallback uses the
+ * calendar fields observed during physical validation. (The MM58167 has no
+ * year counter.) A future persistence layer may replace it without changing
+ * the machine contract. */
+static const uint8_t default_rtc_state[BM_PCS86_RTC_STATE_SIZE] = {
+    0x00U, 0x00U, 0x00U, 0x00U, 0x22U, 0x05U, 0x18U, 0x09U,
+    /* Alarm RAM holds the BIOS weekday/checksum encoding as well as alarms. */
+    0xe0U, 0x00U, 0x00U, 0x00U, 0x00U, 0xcdU, 0xfcU, 0xceU
+};
+
 static const bm_frontend_asset_requirement_t assets[] = {
     { .role = "firmware-even", .label = "Even firmware EPROM",
       .kind = BM_FRONTEND_ASSET_BLOB, .required = 1,
@@ -149,6 +160,8 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     machine->pcs86.io_trace = capture_io;
     machine->pcs86.io_trace_context = machine;
     machine->pcs86.ems_kib = BM_PCS86_EMS_1920_KIB;
+    machine->pcs86.rtc_initial_state = default_rtc_state;
+    machine->pcs86.rtc_initial_state_size = sizeof(default_rtc_state);
     if (floppy != NULL) {
         machine->base.diagnostics.read_only_media_bytes =
             floppy->value.media.block_count * floppy->value.media.block_size;

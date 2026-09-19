@@ -124,6 +124,30 @@ main(void)
     assert(bm_session_configure(session, bm_frontend_machine_config(machine)) ==
            BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
+    {
+        uint64_t value = UINT64_MAX;
+        assert(bm_session_inspect_machine(session, "rtc_hours", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x22U);
+        assert(bm_session_inspect_machine(session, "rtc_day_of_month", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x18U);
+        assert(bm_session_inspect_machine(session, "rtc_month", &value) ==
+               BM_STATUS_OK);
+        assert(value == 0x09U);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_milliseconds", &value) == BM_STATUS_OK);
+        assert(value == 0xe0U);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_day_of_week", &value) == BM_STATUS_OK);
+        assert(value == 0xcdU);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_day_of_month", &value) == BM_STATUS_OK);
+        assert(value == 0xfcU);
+        assert(bm_session_inspect_machine(
+                   session, "rtc_alarm_month", &value) == BM_STATUS_OK);
+        assert(value == 0xceU);
+    }
     assert(bm_session_storage_device_count(session, &storage_count) ==
            BM_STATUS_OK);
     assert(storage_count == 3U);
