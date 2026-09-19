@@ -138,7 +138,7 @@
       "method": "selective-port",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Miran Grca", "Daniel Balsom", "Clara", "BluMach contributors"],
-      "local_changes": "Ported the measured 8253 edge-state core behind an opaque bus component, removing legacy globals, host timers and platform callbacks while retaining modes 0-5, BCD, gates, latches and output transitions"
+      "local_changes": "Ported the measured 8253 edge-state core behind an opaque bus component, removing legacy globals, host timers and platform callbacks while retaining modes 0-5, BCD, gates, latches and output transitions; added exact next-output transition queries and binary-counter batch advancement with an exact BCD fallback"
     },
     {
       "id": "portable-intel-8253-clock-adapter",

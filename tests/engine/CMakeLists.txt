@@ -124,6 +124,27 @@ else()
     )
 endif()
 
+add_executable(portable-engine-pit8253-batching pit8253_batch_test.c)
+target_include_directories(portable-engine-pit8253-batching
+    PRIVATE "${PROJECT_SOURCE_DIR}/components/pc/src"
+)
+target_link_libraries(portable-engine-pit8253-batching
+    PRIVATE blumach_pc_components
+)
+target_compile_features(portable-engine-pit8253-batching PRIVATE c_std_11)
+set_target_properties(portable-engine-pit8253-batching
+    PROPERTIES C_EXTENSIONS OFF
+)
+if(MSVC)
+    target_compile_options(portable-engine-pit8253-batching
+        PRIVATE /W4 /WX /UNDEBUG
+    )
+else()
+    target_compile_options(portable-engine-pit8253-batching
+        PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+    )
+endif()
+
 add_executable(portable-host-capability-contracts host_capability_contract_test.c)
 target_link_libraries(portable-host-capability-contracts
     PRIVATE blumach_engine blumach_platform_null
@@ -444,6 +465,9 @@ add_test(NAME portable-engine.clock-math COMMAND portable-engine-clock-math)
 add_test(NAME portable-engine.clocked-scheduler COMMAND portable-engine-clocked-scheduler)
 add_test(NAME portable-engine.timed-sources COMMAND portable-engine-timed-sources)
 add_test(NAME portable-engine.pit8253-clock COMMAND portable-engine-pit8253-clock)
+add_test(NAME portable-engine.pit8253-batching
+    COMMAND portable-engine-pit8253-batching
+)
 add_test(NAME portable-host.capability-contracts COMMAND portable-host-capability-contracts)
 add_test(NAME portable-engine.pcs86-reset-vector COMMAND portable-engine-pcs86-reset)
 add_test(NAME portable-engine.pcs86-user-io COMMAND portable-engine-pcs86-user-io)
@@ -493,6 +517,7 @@ add_test(NAME portable-engine.legacy-io COMMAND portable-engine-legacy-io)
 set_tests_properties(
     portable-engine.timed-sources
     portable-engine.pit8253-clock
+    portable-engine.pit8253-batching
     portable-engine.linear-memory
     portable-engine.bus-contracts
     portable-runtime.session-contracts

@@ -67,11 +67,15 @@ main(void)
     bm_pit8253_config_t pit_config = { 0x40U, capture_output, &output };
     uint8_t vector = 0;
     uint16_t count = 0;
+    uint32_t cycles = 0;
     int level = 0;
 
     assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_pic8259_create(&host, bus, &pic_config, &pic) == BM_STATUS_OK);
     assert(bm_pit8253_create(&host, bus, &pit_config, &pit) == BM_STATUS_OK);
+    assert(bm_pit8253_cycles_until_output_change(pit, &cycles) ==
+           BM_STATUS_IDLE);
+    assert(cycles == 0U);
 
     assert(write_port(bus, 0x20U, 0x11U) == BM_STATUS_OK);
     assert(write_port(bus, 0x21U, 0x08U) == BM_STATUS_OK);
@@ -143,6 +147,9 @@ main(void)
     assert(write_port(bus, 0x43U, 0x30U) == BM_STATUS_OK); /* Channel 0, mode 0, lobyte/hibyte. */
     assert(write_port(bus, 0x40U, 0x04U) == BM_STATUS_OK);
     assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_cycles_until_output_change(pit, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 5U);
     assert(bm_pit8253_advance(pit, 4) == BM_STATUS_OK);
     assert(output.changes == 0U);
     assert(bm_pit8253_advance(pit, 1) == BM_STATUS_OK);
@@ -161,10 +168,19 @@ main(void)
     assert(write_port(bus, 0x43U, 0x34U) == BM_STATUS_OK); /* Mode 2. */
     assert(write_port(bus, 0x40U, 0x04U) == BM_STATUS_OK);
     assert(write_port(bus, 0x40U, 0x00U) == BM_STATUS_OK);
+    assert(bm_pit8253_cycles_until_output_change(pit, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 4U);
     assert(bm_pit8253_advance(pit, 4U) == BM_STATUS_OK);
     assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 0);
+    assert(bm_pit8253_cycles_until_output_change(pit, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 1U);
     assert(bm_pit8253_advance(pit, 1U) == BM_STATUS_OK);
     assert(bm_pit8253_output(pit, 0U, &level) == BM_STATUS_OK && level == 1);
+    assert(bm_pit8253_cycles_until_output_change(pit, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 3U);
     assert(output.changes == 3U);
 
     assert(write_port(bus, 0x43U, 0x36U) == BM_STATUS_OK); /* Mode 3. */
@@ -226,6 +242,10 @@ main(void)
     assert(bm_pit8253_count(pit, 1U, &count) == BM_STATUS_OK);
     assert(bm_pit8253_count(pit, 3U, &count) == BM_STATUS_INVALID_ARGUMENT);
     assert(bm_pit8253_output(NULL, 0U, &level) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_pit8253_cycles_until_output_change(NULL, &cycles) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_pit8253_cycles_until_output_change(pit, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
 
     bm_pit8253_destroy(pit);
     bm_pic8259_destroy(pic);

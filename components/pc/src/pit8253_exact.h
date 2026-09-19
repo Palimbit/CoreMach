@@ -56,6 +56,10 @@ void bm_pit_exact_data_write(bm_pit_exact_device_t *pit, unsigned int channel, u
 uint8_t bm_pit_exact_data_read(bm_pit_exact_device_t *pit, unsigned int channel);
 void bm_pit_exact_set_gate(bm_pit_exact_device_t *pit, unsigned int channel, bool gate);
 void bm_pit_exact_tick(bm_pit_exact_device_t *pit);
+uint32_t bm_pit_exact_cycles_until_output_change(
+    const bm_pit_exact_device_t *pit);
+uint32_t bm_pit_exact_advance_until_output_change(
+    bm_pit_exact_device_t *pit, uint32_t maximum_ticks);
 uint16_t bm_pit_exact_get_count(const bm_pit_exact_device_t *pit, unsigned int channel);
 bool bm_pit_exact_get_output(const bm_pit_exact_device_t *pit, unsigned int channel);
 

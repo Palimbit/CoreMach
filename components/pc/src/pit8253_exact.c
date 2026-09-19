@@ -414,6 +414,271 @@ tick_channel(bm_pit_exact_device_t *pit, unsigned int selected)
     }
 }
 
+static uint32_t
+binary_countdown(uint32_t value)
+{
+    value &= 0xffffU;
+    return value == 0U ? 0x10000U : value;
+}
+
+static bool
+valid_bcd(uint32_t value)
+{
+    return (value == 0x10000U) ||
+        (((value & 0x000fU) <= 9U) &&
+         (((value >> 4U) & 0x000fU) <= 9U) &&
+         (((value >> 8U) & 0x000fU) <= 9U) &&
+         (((value >> 12U) & 0x000fU) <= 9U));
+}
+
+static uint32_t
+bcd_to_decimal(uint32_t value)
+{
+    if ((value == 0U) || (value == 0x10000U))
+        return 0U;
+    return (value & 0x000fU) +
+        (((value >> 4U) & 0x000fU) * 10U) +
+        (((value >> 8U) & 0x000fU) * 100U) +
+        (((value >> 12U) & 0x000fU) * 1000U);
+}
+
+static uint32_t
+decimal_to_bcd(uint32_t value)
+{
+    value %= 10000U;
+    return (value % 10U) |
+        (((value / 10U) % 10U) << 4U) |
+        (((value / 100U) % 10U) << 8U) |
+        (((value / 1000U) % 10U) << 12U);
+}
+
+static void
+decrement_many(bm_pit_exact_channel_t *channel, uint64_t count)
+{
+    if (channel->bcd && valid_bcd(channel->counting_element)) {
+        uint32_t decimal = bcd_to_decimal(channel->counting_element);
+        uint32_t amount = (uint32_t) (count % 10000U);
+
+        decimal = (decimal + 10000U - amount) % 10000U;
+        channel->counting_element = decimal_to_bcd(decimal);
+    } else if (!channel->bcd) {
+        uint32_t value = channel->counting_element & 0xffffU;
+
+        value = (value - (uint32_t) (count & 0xffffU)) & 0xffffU;
+        channel->counting_element = value;
+    } else {
+        while (count-- != 0U)
+            decrement(channel);
+        return;
+    }
+    update_live_latch(channel);
+}
+
+static uint32_t
+binary_counting_cycles_until_change(const bm_pit_exact_channel_t *channel)
+{
+    uint32_t count = binary_countdown(channel->counting_element);
+
+    switch (channel->mode) {
+        case 0:
+            return (channel->gate && !channel->output) ? count : 0U;
+        case 1:
+            return (channel->armed && !channel->output) ? count : 0U;
+        case 2:
+            if (!channel->gate || !channel->output)
+                return 0U;
+            if (count == 1U)
+                return 0x10000U;
+            return count - 1U;
+        case 3:
+            if (!channel->gate)
+                return 0U;
+            if ((count & 1U) == 0U)
+                return count / 2U;
+            if (channel->output)
+                return (count + 1U) / 2U;
+            return count == 1U ? 0x8000U : (count - 1U) / 2U;
+        case 4:
+            return (channel->gate && channel->output) ? count : 0U;
+        case 5:
+            return channel->output ? count : 0U;
+        default:
+            return 0U;
+    }
+}
+
+static bool
+counting_can_change_output(const bm_pit_exact_channel_t *channel)
+{
+    switch (channel->mode) {
+        case 0:
+            return channel->gate && !channel->output;
+        case 1:
+            return channel->armed && !channel->output;
+        case 2:
+        case 3:
+            return channel->gate;
+        case 4:
+            return channel->gate && channel->output;
+        case 5:
+            return channel->output;
+        default:
+            return false;
+    }
+}
+
+static uint32_t
+channel_cycles_until_output_change(const bm_pit_exact_channel_t *source)
+{
+    bm_pit_exact_device_t simulated;
+    bm_pit_exact_channel_t *channel;
+    uint32_t offset = 0U;
+
+    memset(&simulated, 0, sizeof(simulated));
+    simulated.channel[0] = *source;
+    channel = &simulated.channel[0];
+
+    while ((channel->state == BM_PIT_LOAD_NEXT) ||
+           (channel->state == BM_PIT_RELOAD_NEXT) ||
+           (channel->state == BM_PIT_STROBE_RECOVER)) {
+        bool previous = channel->output;
+
+        tick_channel(&simulated, 0U);
+        ++offset;
+        if (channel->output != previous)
+            return offset;
+    }
+    if (channel->state != BM_PIT_COUNTING)
+        return 0U;
+    if (!counting_can_change_output(channel))
+        return 0U;
+    if (!channel->bcd) {
+        uint32_t result = binary_counting_cycles_until_change(channel);
+
+        return result == 0U ? 0U : offset + result;
+    }
+
+    /* BCD and deliberately invalid BCD reloads are uncommon. Retain exact
+     * edge semantics with a bounded reference walk while binary counters use
+     * the constant-time path above. */
+    {
+        uint32_t index;
+
+        for (index = 1U; index <= 0x10001U; ++index) {
+            bool previous = channel->output;
+
+            tick_channel(&simulated, 0U);
+            if (channel->output != previous)
+                return offset + index;
+            if ((channel->state != BM_PIT_COUNTING) &&
+                (channel->state != BM_PIT_RELOAD_NEXT) &&
+                (channel->state != BM_PIT_STROBE_RECOVER))
+                return 0U;
+        }
+    }
+    return 0U;
+}
+
+uint32_t
+bm_pit_exact_cycles_until_output_change(const bm_pit_exact_device_t *pit)
+{
+    uint32_t earliest = 0U;
+    unsigned int channel;
+
+    if (pit == NULL)
+        return 0U;
+    for (channel = 0U; channel < 3U; ++channel) {
+        uint32_t candidate =
+            channel_cycles_until_output_change(&pit->channel[channel]);
+
+        if ((candidate != 0U) &&
+            ((earliest == 0U) || (candidate < earliest)))
+            earliest = candidate;
+    }
+    return earliest;
+}
+
+static void
+skip_channel_without_output_change(bm_pit_exact_device_t *pit,
+                                   unsigned int selected,
+                                   uint32_t ticks)
+{
+    bm_pit_exact_channel_t *channel = &pit->channel[selected];
+
+    while ((ticks != 0U) &&
+           ((channel->state == BM_PIT_LOAD_NEXT) ||
+            (channel->state == BM_PIT_RELOAD_NEXT) ||
+            (channel->state == BM_PIT_STROBE_RECOVER))) {
+        tick_channel(pit, selected);
+        --ticks;
+    }
+    if (ticks == 0U)
+        return;
+    if (channel->state != BM_PIT_COUNTING) {
+        channel->clocks += ticks;
+        return;
+    }
+
+    channel->clocks += ticks;
+    switch (channel->mode) {
+        case 0:
+        case 4:
+            if (channel->gate)
+                decrement_many(channel, ticks);
+            break;
+        case 1:
+        case 5:
+            decrement_many(channel, ticks);
+            break;
+        case 2:
+            if (channel->gate)
+                decrement_many(channel, ticks);
+            break;
+        case 3:
+            if (channel->gate) {
+                uint64_t decrements = (uint64_t) ticks * 2U;
+
+                if (((channel->count_register & 1U) != 0U) &&
+                    ((channel->counting_element & 1U) != 0U)) {
+                    decrements -= 2U;
+                    decrements += channel->output ? 1U : 3U;
+                }
+                decrement_many(channel, decrements);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+uint32_t
+bm_pit_exact_advance_until_output_change(bm_pit_exact_device_t *pit,
+                                         uint32_t maximum_ticks)
+{
+    uint32_t transition;
+    uint32_t consumed;
+    unsigned int channel;
+
+    if ((pit == NULL) || (maximum_ticks == 0U))
+        return 0U;
+    transition = bm_pit_exact_cycles_until_output_change(pit);
+    consumed = ((transition != 0U) && (transition <= maximum_ticks)) ?
+        transition : maximum_ticks;
+
+    if ((transition != 0U) && (transition <= maximum_ticks)) {
+        if (consumed > 1U) {
+            for (channel = 0U; channel < 3U; ++channel)
+                skip_channel_without_output_change(pit, channel,
+                                                   consumed - 1U);
+        }
+        bm_pit_exact_tick(pit);
+    } else {
+        for (channel = 0U; channel < 3U; ++channel)
+            skip_channel_without_output_change(pit, channel, consumed);
+    }
+    return consumed;
+}
+
 void
 bm_pit_exact_tick(bm_pit_exact_device_t *pit)
 {

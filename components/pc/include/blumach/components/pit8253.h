@@ -30,6 +30,11 @@ void bm_pit8253_destroy(bm_pit8253_t *pit);
 void bm_pit8253_reset(bm_pit8253_t *pit);
 bm_status_t bm_pit8253_set_gate(bm_pit8253_t *pit, unsigned int channel, int asserted);
 bm_status_t bm_pit8253_advance(bm_pit8253_t *pit, uint32_t input_ticks);
+/* Return the exact number of input-clock edges until any OUT pin changes.
+ * BM_STATUS_IDLE with zero cycles means clocks alone cannot currently change
+ * an output; a later gate or programming operation may make one observable. */
+bm_status_t bm_pit8253_cycles_until_output_change(
+    const bm_pit8253_t *pit, uint32_t *cycles);
 bm_status_t bm_pit8253_count(const bm_pit8253_t *pit,
                              unsigned int channel,
                              uint16_t *count);
