@@ -240,22 +240,27 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 4 also
-reports four base clocks plus waits for every successful transfer, the subset
-spent on demand prefetch, and one queue-read clock per consumed instruction
-byte. These are exact BCU resource counters, not a serialized total: BCU and
-EXU work overlap and the current interpreter does not yet place every transfer
-on that shared timeline. The queue, independent PFP and resource accounting
+their sum the elapsed instruction time. Timing-observation version 5 reports
+bus occupancy, the subset spent on demand prefetch, one queue-read clock per
+consumed instruction byte, successful prefetch transactions, BCU phase clocks
+and the next prefetch phase. These remain resource and timeline observations,
+not a serialized sum: BCU and EXU work overlap. The queue, independent PFP and
+resource accounting
 now live in one private, instance-owned BCU component rather than as scattered
 interpreter fields. Its direct tests cover queue wrap, flush and boundary
-accounting; this is an ownership boundary for the later phase model, not a
-claim that the synchronous bus calls already form one. Aligned V30 word memory
-operands, stack/vector transfers and word I/O at an even port now use one
+accounting. Demand fills now execute explicit T1/T2/T3/Tw/T4 phases, perform
+the portable bus access in T3 and publish fetched bytes to the queue in T4.
+For native instructions whose NEC execution time is exact, which do not flush
+the queue and which perform no operand or I/O transfer, those phases progress
+concurrently for the documented EXU clocks and persist across instruction
+boundaries. Aligned V30 word memory
+operands, stack/vector transfers and word I/O at an even port use one
 little-endian 16-bit bus transaction; an odd memory word or I/O port still uses
-the two byte cycles required by the hardware. Execution-overlapped prefetch
-remains separate later work, so the observer still labels the aggregate as
-logical rather than claiming a complete external-bus trace. Instruction demand
-fetch now uses a real
+the two byte cycles required by the hardware. Instructions with operand bus
+traffic, documented timing ranges or unknown timing deliberately suspend this
+first overlap model until their individual accesses can be placed. The
+observer therefore still labels the transaction aggregate as logical rather
+than claiming a complete external-bus trace. Instruction demand fetch uses a real
 six-byte queue and
 per-instance PFP. An even PFP fetches one little-endian word in a single bus
 transaction; an odd PFP fetches one byte before the pointer returns to an even
@@ -266,12 +271,11 @@ queue and restart PFP at the new IP. The observer reports PFP and occupancy at
 every boundary, rather than inferring queue state only when a flush occurs.
 
 This establishes the boundary needed for the next CPU work without claiming a
-complete timing model. Opportunistic queue fill during execution,
-fetch/execution overlap, pre-decode, exact realised clocks inside data-dependent
-ranges, full physical bus-cycle timing and scheduler consumption of the
-observations remain explicit subsequent work. Until overlap exists, the BCU
-fills only when the executor demands a byte; this is intentionally not called a
-cycle-accurate queue-fill schedule.
+complete timing model. Contention with operand cycles, pre-decode, exact
+realised clocks inside data-dependent ranges, DMA/bus arbitration and scheduler
+consumption of the observations remain explicit subsequent work. The limited
+uncontended overlap is cycle-phased, but the processor as a whole is not yet
+described as cycle accurate.
 `POLL` also requires a semantic
 correction before timing: the current interpreter emits one boundary per pin
 sample instead of keeping the documented polling loop inside one instruction.
