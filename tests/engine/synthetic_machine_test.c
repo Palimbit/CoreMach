@@ -317,7 +317,7 @@ machine_config(const synthetic_config_t *configuration)
                            sizeof(synthetic_config_t) },
         .ops = { synthetic_validate, synthetic_create, synthetic_destroy,
                  NULL, NULL, NULL, NULL, synthetic_input, NULL, NULL, NULL,
-                 NULL },
+                 NULL, NULL, NULL },
         .engine = { 1U, 4U }
     };
     bm_machine_config_t result = {
