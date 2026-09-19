@@ -186,7 +186,8 @@ bm_engine_add_cpu(bm_engine_t *engine, const bm_cpu_t *cpu, bm_cpu_id_t *out_id)
 
 bm_status_t
 bm_engine_add_clocked_cpu(bm_engine_t *engine, const bm_cpu_t *cpu,
-                          bm_clocked_cpu_step_fn step, uint64_t frequency_hz,
+                          bm_clocked_cpu_step_fn step,
+                          const bm_clock_rate_t *rate,
                           bm_cpu_id_t *out_id)
 {
     size_t index;
@@ -194,14 +195,19 @@ bm_engine_add_clocked_cpu(bm_engine_t *engine, const bm_cpu_t *cpu,
 
     if ((engine == NULL) || !engine->clocked || (cpu == NULL) ||
         (cpu->ops.reset == NULL) || (step == NULL) ||
-        (cpu->ops.signal == NULL) || (frequency_hz == 0U))
+        (cpu->ops.signal == NULL) || (rate == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     if (engine->cpu_count >= engine->max_cpus)
         return BM_STATUS_CAPACITY_EXCEEDED;
     index = engine->cpu_count;
     slot = &engine->cpus[index];
-    if (bm_clock_position_init(&slot->clock_position, frequency_hz) != BM_STATUS_OK)
-        return BM_STATUS_INVALID_ARGUMENT;
+    {
+        bm_status_t status = bm_clock_position_init(&slot->clock_position,
+                                                    rate);
+
+        if (status != BM_STATUS_OK)
+            return status;
+    }
     slot->clock_position.nanoseconds = engine->now;
     slot->cpu = *cpu;
     slot->step_cycles = step;
@@ -318,7 +324,7 @@ run_clocked_cpus_to(bm_engine_t *engine, bm_tick_t *limit)
     for (;;) {
         size_t index;
         size_t selected = SIZE_MAX;
-        bm_clock_position_t deadline = { *limit, 0U, 1U };
+        bm_clock_position_t deadline = { *limit, 0U, 1U, 1U };
         bm_cpu_slot_t *slot;
         uint64_t cycles = 0U;
         bm_status_t status;

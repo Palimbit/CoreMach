@@ -35,6 +35,16 @@ typedef struct event_observation {
     unsigned int second_steps;
 } event_observation_t;
 
+static const bm_clock_rate_t rate_zero = { 0U, 1U };
+static const bm_clock_rate_t rate_1_hz = { 1U, 1U };
+static const bm_clock_rate_t rate_2_hz = { 2U, 1U };
+static const bm_clock_rate_t rate_3_hz = { 3U, 1U };
+static const bm_clock_rate_t rate_5_hz = { 5U, 1U };
+static const bm_clock_rate_t rate_10_hz = { 10U, 1U };
+static const bm_clock_rate_t rate_1000_hz = { 1000U, 1U };
+static const bm_clock_rate_t rate_1_ghz = { UINT64_C(1000000000), 1U };
+static const bm_clock_rate_t rate_four_thirds_hz = { 4U, 3U };
+
 static void observe_quarter_second(bm_engine_t *engine, void *context);
 
 static void
@@ -181,7 +191,9 @@ test_event_scheduled_during_cpu_step(void)
     context.engine = engine;
     context.schedule_event = 1;
     cpu = make_cpu(&context);
-    assert(bm_engine_add_clocked_cpu(engine, &cpu, cpu_step, 2U, NULL) == BM_STATUS_OK);
+    assert(bm_engine_add_clocked_cpu(
+               engine, &cpu, cpu_step, &rate_2_hz, NULL) ==
+           BM_STATUS_OK);
     assert(bm_engine_run_for(engine, UINT64_C(500000000)) == BM_STATUS_OK);
     assert(trace.count == 2U);
     assert(trace.values[0] == 1U);
@@ -210,13 +222,21 @@ run_two_domains(int split, trace_t *result)
     observation.second = &second;
 
     assert(bm_engine_add_cpu(engine, &first_handle, NULL) == BM_STATUS_INVALID_ARGUMENT);
-    assert(bm_engine_add_clocked_cpu(engine, &first_handle, NULL, 2U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &first_handle, NULL,
+               &rate_2_hz, NULL) ==
            BM_STATUS_INVALID_ARGUMENT);
-    assert(bm_engine_add_clocked_cpu(engine, &first_handle, cpu_step, 0U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &first_handle, cpu_step,
+               &rate_zero, NULL) ==
            BM_STATUS_INVALID_ARGUMENT);
-    assert(bm_engine_add_clocked_cpu(engine, &first_handle, cpu_step, 2U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &first_handle, cpu_step,
+               &rate_2_hz, NULL) ==
            BM_STATUS_OK);
-    assert(bm_engine_add_clocked_cpu(engine, &second_handle, cpu_step, 3U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &second_handle, cpu_step,
+               &rate_3_hz, NULL) ==
            BM_STATUS_OK);
     assert(bm_engine_schedule_at(engine, UINT64_C(500000000),
                                  observe_half_second, &observation) == BM_STATUS_OK);
@@ -260,8 +280,10 @@ test_idle_wake_and_reset(void)
     context.id = 1U;
     context.idle = 1;
     cpu = make_cpu(&context);
-    assert(bm_engine_add_clocked_cpu(engine, &cpu, cpu_step, UINT64_C(1000000000),
-                                     &id) == BM_STATUS_OK);
+    assert(bm_engine_add_clocked_cpu(
+               engine, &cpu, cpu_step,
+               &rate_1_ghz, &id) ==
+           BM_STATUS_OK);
     assert(bm_engine_schedule_at(engine, 10U, wake_cpu, &id) == BM_STATUS_OK);
     assert(bm_engine_run_for(engine, 12U) == BM_STATUS_OK);
     assert(context.steps == 2U);
@@ -283,7 +305,9 @@ test_invalid_progress(void)
     context.trace = &trace;
     context.invalid_cycles = 1;
     cpu = make_cpu(&context);
-    assert(bm_engine_add_clocked_cpu(engine, &cpu, cpu_step, 1U, NULL) == BM_STATUS_OK);
+    assert(bm_engine_add_clocked_cpu(
+               engine, &cpu, cpu_step, &rate_1_hz, NULL) ==
+           BM_STATUS_OK);
     assert(bm_engine_run_for(engine, 1U) == BM_STATUS_DEVICE_ERROR);
     assert(bm_engine_now(engine) == 0U);
     bm_engine_destroy(engine);
@@ -298,9 +322,13 @@ test_mixed_load_has_no_starvation(void)
     bm_cpu_t slow_handle = make_cpu(&slow);
     bm_cpu_t fast_handle = make_cpu(&fast);
 
-    assert(bm_engine_add_clocked_cpu(engine, &slow_handle, cpu_step, 1U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &slow_handle, cpu_step,
+               &rate_1_hz, NULL) ==
            BM_STATUS_OK);
-    assert(bm_engine_add_clocked_cpu(engine, &fast_handle, cpu_step, 1000U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &fast_handle, cpu_step,
+               &rate_1000_hz, NULL) ==
            BM_STATUS_OK);
     assert(bm_engine_run_for(engine, UINT64_C(1000000000)) == BM_STATUS_OK);
     assert(slow.steps == 1U);
@@ -318,13 +346,32 @@ test_multi_cycle_boundaries(void)
     bm_cpu_t second_handle = make_cpu(&second);
 
     first.cycles_per_step = 3U;
-    assert(bm_engine_add_clocked_cpu(engine, &first_handle, cpu_step, 10U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &first_handle, cpu_step,
+               &rate_10_hz, NULL) ==
            BM_STATUS_OK);
-    assert(bm_engine_add_clocked_cpu(engine, &second_handle, cpu_step, 5U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &second_handle, cpu_step,
+               &rate_5_hz, NULL) ==
            BM_STATUS_OK);
     assert(bm_engine_run_for(engine, UINT64_C(600000000)) == BM_STATUS_OK);
     assert(first.steps == 2U);
     assert(second.steps == 3U);
+    bm_engine_destroy(engine);
+}
+
+static void
+test_rational_cpu_rate(void)
+{
+    bm_engine_t *engine = make_engine();
+    synthetic_cpu_t context = { 0 };
+    bm_cpu_t cpu = make_cpu(&context);
+
+    assert(bm_engine_add_clocked_cpu(
+               engine, &cpu, cpu_step,
+               &rate_four_thirds_hz, NULL) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, UINT64_C(3000000000)) == BM_STATUS_OK);
+    assert(context.steps == 4U);
     bm_engine_destroy(engine);
 }
 
@@ -346,7 +393,9 @@ test_bus_waits_affect_clocked_time(void)
     context.id = 1U;
     context.bus = bus;
     cpu = make_cpu(&context);
-    assert(bm_engine_add_clocked_cpu(engine, &cpu, cpu_step, 10U, NULL) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &cpu, cpu_step,
+               &rate_10_hz, NULL) ==
            BM_STATUS_OK);
     assert(bm_engine_schedule_at(engine, UINT64_C(250000000),
                                  observe_quarter_second, &trace) == BM_STATUS_OK);
@@ -381,7 +430,9 @@ test_interrupt_reaches_next_boundary(void)
     context.trace = &trace;
     context.id = 1U;
     cpu = make_cpu(&context);
-    assert(bm_engine_add_clocked_cpu(engine, &cpu, cpu_step, 2U, &id) ==
+    assert(bm_engine_add_clocked_cpu(
+               engine, &cpu, cpu_step,
+               &rate_2_hz, &id) ==
            BM_STATUS_OK);
     assert(bm_engine_schedule_at(engine, UINT64_C(250000000),
                                  signal_interrupt_at_quarter_second, &id) == BM_STATUS_OK);
@@ -411,6 +462,7 @@ main(void)
     test_invalid_progress();
     test_mixed_load_has_no_starvation();
     test_multi_cycle_boundaries();
+    test_rational_cpu_rate();
     test_bus_waits_affect_clocked_time();
     test_interrupt_reaches_next_boundary();
     return 0;

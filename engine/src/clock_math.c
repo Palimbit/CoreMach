@@ -3,6 +3,18 @@
 
 #include <limits.h>
 
+static uint64_t
+greatest_common_divisor(uint64_t left, uint64_t right)
+{
+    while (right != 0U) {
+        uint64_t remainder = left % right;
+
+        left = right;
+        right = remainder;
+    }
+    return left;
+}
+
 /* Compare non-negative fractions without cross-multiplication overflow. Each
  * reciprocal reverses the ordering, hence the alternating sign. */
 static int
@@ -36,13 +48,32 @@ compare_fractions(uint64_t left_numerator, uint64_t left_denominator,
 }
 
 bm_status_t
-bm_clock_position_init(bm_clock_position_t *clock, uint64_t frequency_hz)
+bm_clock_position_init(bm_clock_position_t *clock, const bm_clock_rate_t *rate)
 {
-    if ((clock == NULL) || (frequency_hz == 0U))
+    uint64_t cycles_numerator;
+    uint64_t cycles_denominator;
+    uint64_t divisor;
+    uint64_t nanoseconds_numerator;
+
+    if ((clock == NULL) || (rate == NULL) ||
+        (rate->cycles_per_second_numerator == 0U) ||
+        (rate->cycles_per_second_denominator == 0U))
         return BM_STATUS_INVALID_ARGUMENT;
+    divisor = greatest_common_divisor(rate->cycles_per_second_numerator,
+                                      rate->cycles_per_second_denominator);
+    cycles_numerator = rate->cycles_per_second_numerator / divisor;
+    cycles_denominator = rate->cycles_per_second_denominator / divisor;
+    divisor = greatest_common_divisor(cycles_numerator,
+                                      UINT64_C(1000000000));
+    cycles_numerator /= divisor;
+    nanoseconds_numerator = UINT64_C(1000000000) / divisor;
+    if (cycles_denominator > (UINT64_MAX / nanoseconds_numerator))
+        return BM_STATUS_CAPACITY_EXCEEDED;
     clock->nanoseconds = 0U;
     clock->phase = 0U;
-    clock->frequency_hz = frequency_hz;
+    clock->phase_denominator = cycles_numerator;
+    clock->nanoseconds_per_cycle_numerator =
+        nanoseconds_numerator * cycles_denominator;
     return BM_STATUS_OK;
 }
 
@@ -52,17 +83,19 @@ bm_clock_position_advance(bm_clock_position_t *clock, uint64_t cycles)
     uint64_t numerator;
     uint64_t whole;
 
-    if ((clock == NULL) || (clock->frequency_hz == 0U) ||
-        (clock->phase >= clock->frequency_hz))
+    if ((clock == NULL) || (clock->phase_denominator == 0U) ||
+        (clock->nanoseconds_per_cycle_numerator == 0U) ||
+        (clock->phase >= clock->phase_denominator))
         return BM_STATUS_INVALID_ARGUMENT;
-    if (cycles > ((UINT64_MAX - clock->phase) / UINT64_C(1000000000)))
+    if (cycles > ((UINT64_MAX - clock->phase) /
+                  clock->nanoseconds_per_cycle_numerator))
         return BM_STATUS_CAPACITY_EXCEEDED;
-    numerator = cycles * UINT64_C(1000000000) + clock->phase;
-    whole = numerator / clock->frequency_hz;
+    numerator = cycles * clock->nanoseconds_per_cycle_numerator + clock->phase;
+    whole = numerator / clock->phase_denominator;
     if (clock->nanoseconds > (UINT64_MAX - whole))
         return BM_STATUS_CAPACITY_EXCEEDED;
     clock->nanoseconds += whole;
-    clock->phase = numerator % clock->frequency_hz;
+    clock->phase = numerator % clock->phase_denominator;
     return BM_STATUS_OK;
 }
 
@@ -72,6 +105,6 @@ bm_clock_position_compare(const bm_clock_position_t *left,
 {
     if (left->nanoseconds != right->nanoseconds)
         return left->nanoseconds < right->nanoseconds ? -1 : 1;
-    return compare_fractions(left->phase, left->frequency_hz,
-                             right->phase, right->frequency_hz);
+    return compare_fractions(left->phase, left->phase_denominator,
+                             right->phase, right->phase_denominator);
 }

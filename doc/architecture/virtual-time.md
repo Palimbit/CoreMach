@@ -19,10 +19,12 @@ host monotonic clock, but host time must not decide guest-visible event order.
 
 The clock arithmetic in `engine/src/clock_math.c` represents each clock
 position as whole virtual nanoseconds plus an exact fractional-nanosecond
-remainder. Its comparison never cross-multiplies frequencies, and repeated
-small advances have the same position as an equivalent bulk advance. It has
-no public API. One advance is bounded by the 64-bit intermediate product;
-overflow is reported without changing the clock position.
+remainder. Public clock rates are rational cycles per second, so a crystal
+divider such as `14318180/3` is not rounded to an integer frequency. Its
+comparison never cross-multiplies clock denominators, and repeated small
+advances have the same position as an equivalent bulk advance. The position
+representation has no public API. One advance is bounded by the 64-bit
+intermediate product; overflow is reported without changing the position.
 
 ## Scheduler contract and limits
 
@@ -33,8 +35,8 @@ overflow is reported without changing the clock position.
 2. `bm_engine_add_clocked_cpu()` supplies a cycle-returning step operation
    separate from the existing `run(context, budget, consumed)` operation. A
    clocked CPU reports native cycles for a completed execution boundary. Its
-   frequency belongs to machine wiring, not an opcode implementation or
-   frontend setting. The callback receives the integer virtual time at the
+   rational clock rate belongs to machine wiring, not an opcode implementation
+   or frontend setting. The callback receives the integer virtual time at the
    start of that boundary, not a timestamp for each bus access. The old
    `bm_cpu_ops_t` layout is unchanged.
 3. The engine selects the participant at the earliest virtual position. Equal-time
@@ -64,7 +66,8 @@ overflow is reported without changing the clock position.
   timeline. The current test proves one split-versus-combined run trace;
   broader interleaving and external-input tests remain required.
 - Clock conversion has no accumulated rounding drift, handles equal-time
-  ties and rejects overflow atomically.
+  ties, represents a divided-crystal rate without integer-Hz rounding and
+  rejects overflow atomically.
 - Tests cover an event between two instruction boundaries, recording the
   deterministic delay rather than asserting false cycle accuracy.
 - HALT/idle, wake-up, reset and invalid-progress paths have initial tests.

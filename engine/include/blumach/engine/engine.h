@@ -14,6 +14,12 @@ extern "C" {
 
 typedef struct bm_engine bm_engine_t;
 typedef uint32_t bm_cpu_id_t;
+/* Exact native clock rate in cycles per second. Keeping the divider explicit
+ * avoids rounding clocks derived from a shared crystal to an integer hertz. */
+typedef struct bm_clock_rate {
+    uint64_t cycles_per_second_numerator;
+    uint64_t cycles_per_second_denominator;
+} bm_clock_rate_t;
 typedef void (*bm_engine_event_fn)(bm_engine_t *engine, void *context);
 /* One completed architectural boundary, reporting cycles in this CPU's own
  * clock domain. start_ns is its integer virtual boundary-start time, not the
@@ -39,7 +45,8 @@ bm_status_t bm_engine_create_clocked(const bm_host_services_t *host,
 void bm_engine_destroy(bm_engine_t *engine);
 bm_status_t bm_engine_add_cpu(bm_engine_t *engine, const bm_cpu_t *cpu, bm_cpu_id_t *out_id);
 bm_status_t bm_engine_add_clocked_cpu(bm_engine_t *engine, const bm_cpu_t *cpu,
-                                      bm_clocked_cpu_step_fn step, uint64_t frequency_hz,
+                                      bm_clocked_cpu_step_fn step,
+                                      const bm_clock_rate_t *rate,
                                       bm_cpu_id_t *out_id);
 bm_status_t bm_engine_reset(bm_engine_t *engine);
 bm_status_t bm_engine_run_for(bm_engine_t *engine, bm_tick_t duration);
