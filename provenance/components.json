@@ -183,7 +183,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Opaque session lifecycle, typed machine factory, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, normalized physical-key input events and guest-owned keyboard-indicator queries independent of host lock state and guest scan-code sets, generic caller-owned storage-media replacement, and opaque named-state export while a machine is live"
+      "local_changes": "Opaque session lifecycle, typed machine factory with an explicit validated choice between instruction-tick and nanosecond clocked engine contracts, machine reset and inspection hooks, optional host-neutral framebuffer discovery/rendering operations with an explicit deterministic emulated-time input, normalized physical-key input events and guest-owned keyboard-indicator queries independent of host lock state and guest scan-code sets, generic caller-owned storage-media replacement, and opaque named-state export while a machine is live"
     },
     {
       "id": "null-host-platform",
@@ -215,7 +215,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, explicit generic persistent-state load/save or depleted-state selection, deterministic execution reporting including available RTC calendar state, and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies. Optional bounded failure diagnostics retain a configurable interleaved event tail plus a fixed interrupt-boundary history and full CPU register state"
+      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, explicit generic persistent-state load/save or depleted-state selection, deterministic execution and engine-mode reporting including available RTC calendar state, and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies. Optional bounded failure diagnostics retain a configurable interleaved event tail plus a fixed interrupt-boundary history and full CPU register state"
     },
     {
       "id": "portable-xta-controller",

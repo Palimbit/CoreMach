@@ -35,6 +35,11 @@ bm_machine_definition_validate(const bm_machine_definition_t *definition)
     if ((definition == NULL) || (definition->id == NULL) ||
         (definition->id[0] == '\0') ||
         (definition->scheduler_ticks_per_second == 0U) ||
+        ((definition->engine_mode != BM_MACHINE_ENGINE_INSTRUCTION_TICKS) &&
+         (definition->engine_mode != BM_MACHINE_ENGINE_CLOCKED)) ||
+        ((definition->engine_mode == BM_MACHINE_ENGINE_CLOCKED) &&
+         (definition->scheduler_ticks_per_second !=
+          BM_MACHINE_CLOCKED_TICKS_PER_SECOND)) ||
         (definition->configuration.type == NULL) ||
         (definition->configuration.type[0] == '\0') ||
         (definition->configuration.version == 0U) ||
@@ -94,18 +99,30 @@ bm_session_configure(bm_session_t *session, const bm_machine_config_t *configura
 bm_status_t
 bm_session_start(bm_session_t *session)
 {
+    const bm_machine_definition_t *definition;
     bm_status_t status;
 
     if (session == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
     if (session->state != BM_SESSION_CONFIGURED)
         return BM_STATUS_INVALID_STATE;
-    status = bm_engine_create(&session->host,
-                              &session->configuration.definition->engine,
-                              &session->engine);
+    definition = session->configuration.definition;
+    switch (definition->engine_mode) {
+    case BM_MACHINE_ENGINE_CLOCKED:
+        status = bm_engine_create_clocked(&session->host,
+                                          &definition->engine,
+                                          &session->engine);
+        break;
+    case BM_MACHINE_ENGINE_INSTRUCTION_TICKS:
+        status = bm_engine_create(&session->host, &definition->engine,
+                                  &session->engine);
+        break;
+    default:
+        return BM_STATUS_INVALID_ARGUMENT;
+    }
     if (status != BM_STATUS_OK)
         return status;
-    status = session->configuration.definition->ops.create(
+    status = definition->ops.create(
         session->engine, &session->host, &session->configuration.configuration,
         &session->machine);
     if ((status == BM_STATUS_OK) && (session->machine == NULL))
@@ -113,13 +130,13 @@ bm_session_start(bm_session_t *session)
     if (status == BM_STATUS_OK)
         status = bm_engine_reset(session->engine);
     if ((status == BM_STATUS_OK) &&
-        (session->configuration.definition->ops.reset != NULL))
-        status = session->configuration.definition->ops.reset(session->machine);
+        (definition->ops.reset != NULL))
+        status = definition->ops.reset(session->machine);
     if (status != BM_STATUS_OK) {
         bm_engine_destroy(session->engine);
         session->engine = NULL;
         if (session->machine != NULL)
-            session->configuration.definition->ops.destroy(session->machine);
+            definition->ops.destroy(session->machine);
         session->machine = NULL;
         return status;
     }
