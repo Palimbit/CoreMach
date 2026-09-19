@@ -46,6 +46,18 @@ capture_observer(void *context, const bm_bus_transaction_t *transaction)
     sink->last = *transaction;
 }
 
+static bm_status_t
+decline_after_mutation(void *context, bm_bus_transaction_t *transaction)
+{
+    access_sink_t *sink = context;
+
+    ++sink->calls;
+    sink->last = *transaction;
+    transaction->value = UINT64_C(0x8877665544332211);
+    transaction->wait_states += 7U;
+    return BM_STATUS_UNMAPPED;
+}
+
 static bm_bus_transaction_t
 make_transaction(bm_address_space_t space,
                  bm_bus_operation_t operation,
@@ -267,7 +279,7 @@ test_static_and_default_responses(void)
     };
     bm_bus_static_response_t invalid = open_bus;
 
-    assert(bm_bus_create(&host, 2U, &bus) == BM_STATUS_OK);
+    assert(bm_bus_create(&host, 3U, &bus) == BM_STATUS_OK);
     assert(bm_bus_map_static_response(
                NULL, BM_ADDRESS_MEMORY, 0U, 0U, &empty_rom) ==
            BM_STATUS_INVALID_ARGUMENT);
@@ -288,6 +300,8 @@ test_static_and_default_responses(void)
     io.read_value = 0x5aU;
     assert(bm_bus_map(bus, BM_ADDRESS_IO, 0x100U, 0x100U,
                       capture_access, &io) == BM_STATUS_OK);
+    assert(bm_bus_map(bus, BM_ADDRESS_IO, 0x101U, 0x101U,
+                      decline_after_mutation, &io) == BM_STATUS_OK);
     bm_bus_set_observer(bus, capture_observer, &observer);
 
     transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ,
@@ -310,6 +324,17 @@ test_static_and_default_responses(void)
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
     assert(transaction.value == 0xffU && io.calls == 2U);
 
+    transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_READ, 0x101U, 1U);
+    assert(transaction.wait_states == 2U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    assert(transaction.value == 0xffU);
+    assert(transaction.wait_states == 2U);
+    assert(io.calls == 3U);
+    assert(observer.calls == 6U);
+    assert(observer.last.address == 0x101U);
+    assert(observer.last.value == 0xffU);
+    assert(observer.last.wait_states == 2U);
+
     transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_READ, 0x1234U, 2U);
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
     assert(transaction.value == UINT64_C(0xffff));
@@ -317,13 +342,13 @@ test_static_and_default_responses(void)
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
     transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_FETCH, 0x1234U, 1U);
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_UNSUPPORTED);
-    assert(observer.calls == 7U);
+    assert(observer.calls == 8U);
 
     assert(bm_bus_set_default_response(bus, BM_ADDRESS_IO, NULL) ==
            BM_STATUS_OK);
     transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_READ, 0x1234U, 1U);
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_UNMAPPED);
-    assert(observer.calls == 7U);
+    assert(observer.calls == 8U);
     bm_bus_destroy(bus);
 }
 

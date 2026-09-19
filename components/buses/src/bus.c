@@ -216,9 +216,18 @@ bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction)
         bm_bus_mapping_t *mapping = &bus->mappings[index];
         if ((mapping->space == transaction->space) && (transaction->address >= mapping->first) &&
             (last <= mapping->last)) {
-            bm_status_t status = mapping->is_static ?
-                static_response_access(&mapping->response, transaction) :
-                mapping->access(mapping->context, transaction);
+            bm_status_t status;
+
+            if (mapping->is_static) {
+                status = static_response_access(&mapping->response,
+                                                transaction);
+            } else {
+                const bm_bus_transaction_t original = *transaction;
+
+                status = mapping->access(mapping->context, transaction);
+                if (status == BM_STATUS_UNMAPPED)
+                    *transaction = original;
+            }
             if (status != BM_STATUS_UNMAPPED) {
                 if ((status == BM_STATUS_OK) && (bus->observer != NULL))
                     bus->observer(bus->observer_context, transaction);

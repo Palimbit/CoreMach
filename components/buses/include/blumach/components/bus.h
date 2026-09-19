@@ -63,9 +63,11 @@ typedef struct bm_bus_static_response {
 typedef bm_status_t (*bm_bus_access_fn)(void *context, bm_bus_transaction_t *transaction);
 typedef void (*bm_bus_observer_fn)(void *context, const bm_bus_transaction_t *transaction);
 
-/* A mapped callback may return BM_STATUS_UNMAPPED when its device does not
- * respond to that operation. The bus then applies the address-space default,
- * when configured; otherwise BM_STATUS_UNMAPPED reaches the initiator. */
+/* A mapped callback may return BM_STATUS_UNMAPPED to declare that its device
+ * did not service the transaction. The bus discards any callback changes to
+ * the transaction and then applies the address-space default, when configured;
+ * otherwise BM_STATUS_UNMAPPED reaches the initiator. Changes made before any
+ * other returned status remain part of the callback result. */
 
 bm_status_t bm_bus_create(const bm_host_services_t *host, size_t max_mappings, bm_bus_t **out_bus);
 void bm_bus_destroy(bm_bus_t *bus);
