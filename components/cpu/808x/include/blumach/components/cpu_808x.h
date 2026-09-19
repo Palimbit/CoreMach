@@ -77,13 +77,21 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 1U
+#define BM_808X_TIMING_OBSERVATION_VERSION 2U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
+typedef enum bm_808x_execution_clock_kind {
+    BM_808X_EXECUTION_CLOCKS_UNKNOWN = 0,
+    BM_808X_EXECUTION_CLOCKS_EXACT = 1,
+    BM_808X_EXECUTION_CLOCKS_RANGE = 2
+} bm_808x_execution_clock_kind_t;
+
 /* Host-neutral timing observation for one completed architectural boundary.
- * execution_clocks are NEC execution-unit clocks and deliberately exclude
- * prefetch, pre-decode and bus waits. A zero execution_clocks_known value is
- * an explicit unimplemented timing classification, never a zero-cycle claim.
+ * execution_clocks_min/max are NEC execution-unit clocks and deliberately
+ * exclude prefetch, pre-decode and bus waits. EXACT means min == max. RANGE
+ * preserves a documented data-dependent interval without pretending that the
+ * realised value is known. UNKNOWN is an explicit unimplemented timing
+ * classification, never a zero-cycle claim.
  * logical_bus_transactions describe the current portable bus API and are not
  * yet a claim about physical V30 bus cycles. */
 typedef struct bm_808x_timing_observation {
@@ -93,13 +101,14 @@ typedef struct bm_808x_timing_observation {
     uint8_t opcode;
     uint8_t effective_opcode;
     uint8_t prefix_count;
-    uint8_t execution_clocks_known;
     uint8_t prefetch_queue_flushed;
     uint8_t prefetch_pointer_known;
     uint8_t prefetch_queue_capacity;
-    uint8_t reserved;
+    uint8_t reserved[2];
     uint16_t prefetch_pointer;
-    uint32_t execution_clocks;
+    bm_808x_execution_clock_kind_t execution_clock_kind;
+    uint32_t execution_clocks_min;
+    uint32_t execution_clocks_max;
     uint64_t logical_bus_transactions;
     uint64_t reported_wait_states;
 } bm_808x_timing_observation_t;
