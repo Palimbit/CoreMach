@@ -430,11 +430,14 @@ to host wall time.
 
 The 8253 is a selective port of the measured edge-state core, retaining Daniel
 Balsom and Clara's attribution. It covers modes 0-5, binary and BCD counts,
-gates, stable latches and output edges. Rational accumulators drive the PIT and
-RTC from scheduler time without floating point. The CPU timing observer is not
-yet consumed by the scheduler, so the PCS 86 continues to use a measured
-functional instruction rate for those domains and does not claim cycle
-accuracy.
+gates, stable latches and output edges. An optional, separately linked adapter
+can now drive that unchanged chip model from an exact rational engine clock;
+its contract test uses the PC `14.31818 MHz / 12` source and checks fractional
+mode-2 output-edge timestamps. The adapter currently advances one input edge
+per scheduler activation as a correctness baseline, not the final performance
+path. The PCS 86 still uses rational accumulators over its measured functional
+instruction rate because its V30 timing observer is not yet consumed by the
+scheduler, so that machine does not claim cycle accuracy.
 
 Maskable interrupts now have an explicit handshake. The PIC publishes its
 pending output, the machine routes that signal through the engine CPU contract,
