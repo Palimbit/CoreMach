@@ -240,7 +240,12 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-all logical transactions physical V30 bus cycles. Aligned V30 word memory
+their sum the elapsed instruction time. Timing-observation version 4 also
+reports four base clocks plus waits for every successful transfer, the subset
+spent on demand prefetch, and one queue-read clock per consumed instruction
+byte. These are exact BCU resource counters, not a serialized total: BCU and
+EXU work overlap and the current interpreter does not yet place every transfer
+on that shared timeline. Aligned V30 word memory
 operands, stack/vector transfers and word I/O at an even port now use one
 little-endian 16-bit bus transaction; an odd memory word or I/O port still uses
 the two byte cycles required by the hardware. Execution-overlapped prefetch
