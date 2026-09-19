@@ -23,15 +23,26 @@
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QStringList>
 #include <QStyle>
 #include <QToolBar>
 
+#include <algorithm>
+
 namespace {
 constexpr auto settingsOrganization = "BluMach";
 constexpr auto settingsApplication = "BluMach Portable";
+
+QString
+persistentStateKey(const QString &machineId, const QString &role,
+                   const QString &field)
+{
+    return QStringLiteral("machines/%1/persistent-state/%2/%3")
+        .arg(machineId, role, field);
+}
 }
 
 PortableWindow::AssetStorage::~AssetStorage()
@@ -47,6 +58,7 @@ PortableWindow::PortableWindow(QWidget *parent)
       pauseAction_(new QAction(tr("Pause"), this)),
       resetAction_(new QAction(tr("Reset"), this)),
       stopAction_(new QAction(tr("Stop"), this)),
+      retainStateAction_(new QAction(tr("Retain battery-backed state"), this)),
       insertFloppyAction_(new QAction(tr("Insert disk in A…"), this)),
       ejectFloppyAction_(new QAction(tr("Eject disk from A"), this)),
       fullScreenAction_(new QAction(tr("Fullscreen"), this)),
@@ -65,6 +77,8 @@ PortableWindow::PortableWindow(QWidget *parent)
     pauseAction_->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
     resetAction_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
     stopAction_->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
+    retainStateAction_->setCheckable(true);
+    retainStateAction_->setVisible(false);
     openAction->setShortcut(QKeySequence::Open);
     quitAction->setShortcut(QKeySequence::Quit);
     fullScreenAction_->setShortcut(Qt::Key_F11);
@@ -90,6 +104,8 @@ PortableWindow::PortableWindow(QWidget *parent)
     machineMenu->addAction(pauseAction_);
     machineMenu->addAction(resetAction_);
     machineMenu->addAction(stopAction_);
+    machineMenu->addSeparator();
+    machineMenu->addAction(retainStateAction_);
     machineMenu->addSeparator();
     machineMenu->addAction(quitAction);
 
@@ -170,6 +186,8 @@ PortableWindow::PortableWindow(QWidget *parent)
             [this] { resetMachine(); });
     connect(stopAction_, &QAction::triggered, this,
             [this] { stopMachine(); });
+    connect(retainStateAction_, &QAction::toggled, this,
+            [this](bool enabled) { setPersistentStateRetention(enabled); });
     connect(insertFloppyAction_, &QAction::triggered, this,
             [this] { insertFloppy(); });
     connect(ejectFloppyAction_, &QAction::triggered, this,
@@ -268,9 +286,18 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
                             const QHash<QString, QString> &paths)
 {
     size_t requirementCount = 0U;
+    size_t persistentStateCount = 0U;
     const bm_frontend_asset_requirement_t *requirements =
         bm_frontend_adapter_assets(adapter, &requirementCount);
+    const bm_frontend_persistent_state_requirement_t *stateRequirements =
+        bm_frontend_adapter_persistent_states(adapter, &persistentStateCount);
+    const bm_machine_definition_t *definition =
+        bm_frontend_adapter_definition(adapter);
+    const QString machineId = definition != nullptr ?
+        QString::fromUtf8(definition->id) : QString();
+    std::vector<SessionWorker::PersistentState> captureStates;
     closeMachine();
+    activeMachineId_ = machineId;
     for (size_t index = 0U; index < requirementCount; ++index) {
         if (requirements[index].replaceable &&
             (requirements[index].storage_kind == BM_STORAGE_DEVICE_FLOPPY) &&
@@ -330,15 +357,69 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         assets_.push_back(std::move(storage));
         bindings_.push_back(binding);
     }
-    bm_status_t result = bm_frontend_machine_open(
-        adapter, bindings_.data(), bindings_.size(), &machine_);
+    {
+        QSettings settings(settingsOrganization, settingsApplication);
+        persistentStates_.reserve(persistentStateCount);
+        persistentBindings_.reserve(persistentStateCount);
+        captureStates.reserve(persistentStateCount);
+        for (size_t index = 0U; index < persistentStateCount; ++index) {
+            const auto &requirement = stateRequirements[index];
+            auto storage = std::make_unique<PersistentStateStorage>();
+            const QString role = QString::fromUtf8(requirement.role);
+            storage->requirement = &requirement;
+            storage->retain = !requirement.battery_backed || settings.value(
+                persistentStateKey(machineId, role, QStringLiteral("retain")),
+                true).toBool();
+            const QByteArray saved = settings.value(
+                persistentStateKey(machineId, role, QStringLiteral("data")))
+                .toByteArray();
+            if (!storage->retain) {
+                storage->data = QByteArray(
+                    static_cast<qsizetype>(requirement.size), '\0');
+            } else if (saved.size() == static_cast<qsizetype>(requirement.size)) {
+                storage->data = saved;
+            } else if (requirement.default_data != nullptr) {
+                storage->data = QByteArray(
+                    reinterpret_cast<const char *>(requirement.default_data),
+                    static_cast<qsizetype>(requirement.size));
+            } else {
+                storage->data = QByteArray(
+                    static_cast<qsizetype>(requirement.size), '\0');
+            }
+            persistentBindings_.push_back({
+                requirement.role,
+                reinterpret_cast<const uint8_t *>(storage->data.constData()),
+                requirement.size
+            });
+            SessionWorker::PersistentState capture;
+            capture.role = requirement.role;
+            captureStates.push_back(std::move(capture));
+            persistentStates_.push_back(std::move(storage));
+        }
+    }
+    {
+        bool hasBatteryBackedState = false;
+        bool retainBatteryBackedState = true;
+        for (const auto &state : persistentStates_) {
+            if (!state->requirement->battery_backed)
+                continue;
+            hasBatteryBackedState = true;
+            retainBatteryBackedState = retainBatteryBackedState && state->retain;
+        }
+        const QSignalBlocker blocker(retainStateAction_);
+        retainStateAction_->setVisible(hasBatteryBackedState);
+        retainStateAction_->setChecked(retainBatteryBackedState);
+    }
+    bm_status_t result = bm_frontend_machine_open_with_persistent_state(
+        adapter, bindings_.data(), bindings_.size(), persistentBindings_.data(),
+        persistentBindings_.size(), &machine_);
     if (result == BM_STATUS_OK) {
         const uint64_t generation = workerGeneration_;
         worker_ = std::make_unique<SessionWorker>(
             host_, bm_frontend_machine_config(machine_),
             [this, generation](SessionWorker::Snapshot snapshot) {
                 queueSnapshot(generation, std::move(snapshot));
-            });
+            }, std::move(captureStates));
         result = worker_->start();
     }
     if (result != BM_STATUS_OK) {
@@ -348,10 +429,6 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         closeMachine();
         return false;
     }
-    const bm_machine_definition_t *definition =
-        bm_frontend_adapter_definition(adapter);
-    activeMachineId_ = definition != nullptr ?
-        QString::fromUtf8(definition->id) : QString();
     setWindowTitle(activeMachineId_.isEmpty() ? tr("BluMach Portable") :
         tr("%1 — BluMach Portable").arg(activeMachineId_));
     lastError_ = BM_STATUS_OK;
@@ -378,12 +455,36 @@ PortableWindow::closeMachine()
 {
     ++workerGeneration_;
     lifecyclePending_ = false;
+    if (worker_ != nullptr) {
+        worker_->shutdown();
+        QSettings settings(settingsOrganization, settingsApplication);
+        for (const SessionWorker::PersistentState &captured :
+             worker_->persistentStates()) {
+            const auto stored = std::find_if(
+                persistentStates_.begin(), persistentStates_.end(),
+                [&captured](const auto &entry) {
+                    return entry->requirement->role == captured.role;
+                });
+            if ((stored == persistentStates_.end()) || !(*stored)->retain ||
+                (captured.status != BM_STATUS_OK) ||
+                (captured.data.size() != (*stored)->requirement->size))
+                continue;
+            const QString role = QString::fromUtf8((*stored)->requirement->role);
+            settings.setValue(
+                persistentStateKey(activeMachineId_, role,
+                                   QStringLiteral("data")),
+                QByteArray(reinterpret_cast<const char *>(captured.data.data()),
+                           static_cast<qsizetype>(captured.data.size())));
+        }
+    }
     worker_.reset();
     snapshotMailbox_.clear();
     bm_frontend_machine_close(machine_);
     machine_ = nullptr;
     bindings_.clear();
     assets_.clear();
+    persistentBindings_.clear();
+    persistentStates_.clear();
     replaceableFloppy_ = nullptr;
     replaceableFloppyPresent_ = false;
     activeMachineId_.clear();
@@ -396,9 +497,38 @@ PortableWindow::closeMachine()
     keyboardStatus_->clear();
     keyboardStatus_->setVisible(false);
     storageStatus_->clear();
+    {
+        const QSignalBlocker blocker(retainStateAction_);
+        retainStateAction_->setVisible(false);
+        retainStateAction_->setChecked(false);
+    }
     setWindowTitle(tr("BluMach Portable"));
     display_->setFrame(QImage());
     updateActions();
+}
+
+void
+PortableWindow::setPersistentStateRetention(bool enabled)
+{
+    if (activeMachineId_.isEmpty())
+        return;
+    QSettings settings(settingsOrganization, settingsApplication);
+    for (auto &state : persistentStates_) {
+        if (!state->requirement->battery_backed)
+            continue;
+        state->retain = enabled;
+        const QString role = QString::fromUtf8(state->requirement->role);
+        settings.setValue(
+            persistentStateKey(activeMachineId_, role,
+                               QStringLiteral("retain")), enabled);
+        if (!enabled)
+            settings.remove(persistentStateKey(
+                activeMachineId_, role, QStringLiteral("data")));
+    }
+    statusBar()->showMessage(
+        enabled ? tr("Battery-backed state will be retained after power-off") :
+                  tr("Battery depleted: state will be lost after power-off"),
+        4000);
 }
 
 void

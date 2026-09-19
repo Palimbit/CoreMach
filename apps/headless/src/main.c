@@ -25,6 +25,7 @@ print_usage(const char *program)
             " --firmware-odd <path> [--floppy <path>]"
             " [--swap-floppy-at <tick> --swap-floppy <path>]"
             " [--hard-disk <path> | --working-hard-disk <path>]"
+            " [--persistent-state <role=path> | --depleted-state <role>]"
             " [--ticks <count>]"
             " [--frame <path>] [--type-at <tick> --type-text <text>]..."
             " [--key-ticks <count>] [--trace-tail <1..4096>]"
@@ -39,11 +40,30 @@ print_usage(const char *program)
             " --firmware-odd <path> [--floppy <path>]"
             " [--swap-floppy-at <tick> --swap-floppy <path>]"
             " [--hard-disk <path> | --working-hard-disk <path>]"
+    " [--persistent-state <role=path> | --depleted-state <role>]"
             " --scenario <path> [--frame <path>] [--trace-tail <1..4096>]\n"
             "     scenario v2 adds key=<tick>:<name>:down|up and"
             " tap=<tick>:<name>\n"
             "     text accepts \\n, \\r, \\t, \\b and \\\\ escapes\n",
             program, program, program, program, program);
+}
+
+static int
+parse_persistent_state(const char *value, char *role, size_t role_size,
+                       const char **path)
+{
+    const char *separator = value != NULL ? strchr(value, '=') : NULL;
+    size_t length;
+    if ((separator == NULL) || (separator == value) ||
+        (separator[1] == '\0'))
+        return 0;
+    length = (size_t) (separator - value);
+    if (length >= role_size)
+        return 0;
+    memcpy(role, value, length);
+    role[length] = '\0';
+    *path = separator + 1;
+    return 1;
 }
 
 static int
@@ -176,6 +196,8 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
     int key_ticks_was_set = 0;
     int frame_crc_was_set = 0;
     int scenario_was_set = 0;
+    int persistent_state_was_set = 0;
+    int depleted_state_was_set = 0;
     int trace_tail_was_set = 0;
     int trace_memory_was_set = 0;
     int trace_memory_image_was_set = 0;
@@ -228,6 +250,21 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
             if (!assign_once(&options->scenario_path, value))
                 return 0;
             scenario_was_set = 1;
+        } else if (strcmp(argument, "--persistent-state") == 0) {
+            if (persistent_state_was_set || depleted_state_was_set ||
+                !parse_persistent_state(
+                    value, options->persistent_state_role,
+                    sizeof(options->persistent_state_role),
+                    &options->persistent_state_path))
+                return 0;
+            persistent_state_was_set = 1;
+        } else if (strcmp(argument, "--depleted-state") == 0) {
+            if (persistent_state_was_set || depleted_state_was_set ||
+                (value[0] == '\0') ||
+                (strlen(value) >= sizeof(options->depleted_state_role)))
+                return 0;
+            strcpy(options->depleted_state_role, value);
+            depleted_state_was_set = 1;
         } else if (strcmp(argument, "--type-text") == 0) {
             if (!pending_type_at ||
                 !assign_once(&options->text_actions[

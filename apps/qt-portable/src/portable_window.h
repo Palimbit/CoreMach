@@ -12,6 +12,7 @@
 #include <blumach/runtime/runtime.h>
 
 #include <QHash>
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QMainWindow>
 #include <QString>
@@ -46,6 +47,12 @@ private:
         ~AssetStorage();
     };
 
+    struct PersistentStateStorage {
+        const bm_frontend_persistent_state_requirement_t *requirement = nullptr;
+        QByteArray data;
+        bool retain = true;
+    };
+
     void chooseMachine();
     bool openMachine(const bm_frontend_adapter_t *adapter,
                      const QHash<QString, QString> &paths);
@@ -53,6 +60,7 @@ private:
     void togglePause();
     void resetMachine();
     void stopMachine();
+    void setPersistentStateRetention(bool enabled);
     void insertFloppy();
     void ejectFloppy();
     void toggleFullscreen(bool enabled);
@@ -79,6 +87,7 @@ private:
     QAction *pauseAction_;
     QAction *resetAction_;
     QAction *stopAction_;
+    QAction *retainStateAction_;
     QAction *insertFloppyAction_;
     QAction *ejectFloppyAction_;
     QAction *fullScreenAction_;
@@ -97,6 +106,8 @@ private:
     SnapshotMailbox snapshotMailbox_;
     std::vector<std::unique_ptr<AssetStorage>> assets_;
     std::vector<bm_frontend_asset_binding_t> bindings_;
+    std::vector<std::unique_ptr<PersistentStateStorage>> persistentStates_;
+    std::vector<bm_frontend_persistent_state_binding_t> persistentBindings_;
     const bm_frontend_asset_requirement_t *replaceableFloppy_ = nullptr;
     bm_status_t lastError_ = BM_STATUS_OK;
     uint64_t workerGeneration_ = 0U;

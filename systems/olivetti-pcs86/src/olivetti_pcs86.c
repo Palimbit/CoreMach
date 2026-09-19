@@ -1691,6 +1691,29 @@ pcs86_inspect(const void *context, const char *name, uint64_t *value)
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+pcs86_persistent_state_size(const void *context, const char *name, size_t *size)
+{
+    if ((context == NULL) || (name == NULL) || (size == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (strcmp(name, "rtc") != 0)
+        return BM_STATUS_UNSUPPORTED;
+    *size = BM_PCS86_RTC_STATE_SIZE;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+pcs86_save_persistent_state(const void *context, const char *name,
+                            uint8_t *data, size_t size)
+{
+    const bm_pcs86_machine_t *machine = context;
+    if ((machine == NULL) || (name == NULL) || (data == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (strcmp(name, "rtc") != 0)
+        return BM_STATUS_UNSUPPORTED;
+    return bm_mm58167_save_state(machine->rtc, data, size);
+}
+
 const bm_pcs86_firmware_identity_t *
 bm_pcs86_expected_firmware(size_t *count)
 {
@@ -1719,7 +1742,9 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_storage_count,
         pcs86_storage_status,
         pcs86_storage_media,
-        pcs86_keyboard_leds
+        pcs86_keyboard_leds,
+        pcs86_persistent_state_size,
+        pcs86_save_persistent_state
     },
     .engine = { 1U, 10U }
 };

@@ -47,6 +47,15 @@ bm_frontend_adapter_assets(const bm_frontend_adapter_t *adapter, size_t *count)
     return adapter != NULL ? adapter->assets : NULL;
 }
 
+const bm_frontend_persistent_state_requirement_t *
+bm_frontend_adapter_persistent_states(const bm_frontend_adapter_t *adapter,
+                                      size_t *count)
+{
+    if (count != NULL)
+        *count = adapter != NULL ? adapter->persistent_state_count : 0U;
+    return adapter != NULL ? adapter->persistent_states : NULL;
+}
+
 bm_status_t
 bm_frontend_register_machines(bm_machine_registry_t *registry)
 {
@@ -67,10 +76,23 @@ bm_frontend_machine_open(const bm_frontend_adapter_t *adapter,
                          size_t binding_count,
                          bm_frontend_machine_t **out_machine)
 {
+    return bm_frontend_machine_open_with_persistent_state(
+        adapter, bindings, binding_count, NULL, 0U, out_machine);
+}
+
+bm_status_t
+bm_frontend_machine_open_with_persistent_state(
+    const bm_frontend_adapter_t *adapter,
+    const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+    const bm_frontend_persistent_state_binding_t *state_bindings,
+    size_t state_binding_count,
+    bm_frontend_machine_t **out_machine)
+{
     size_t binding_index;
     size_t requirement_index;
     if ((adapter == NULL) || (out_machine == NULL) ||
-        ((bindings == NULL) && (binding_count != 0U)))
+        ((bindings == NULL) && (binding_count != 0U)) ||
+        ((state_bindings == NULL) && (state_binding_count != 0U)))
         return BM_STATUS_INVALID_ARGUMENT;
     *out_machine = NULL;
     for (binding_index = 0U; binding_index < binding_count; ++binding_index) {
@@ -131,7 +153,34 @@ bm_frontend_machine_open(const bm_frontend_adapter_t *adapter,
                  adapter->assets[requirement_index].role) == NULL))
             return BM_STATUS_INVALID_ARGUMENT;
     }
-    return adapter->open(bindings, binding_count, out_machine);
+    for (binding_index = 0U; binding_index < state_binding_count;
+         ++binding_index) {
+        const bm_frontend_persistent_state_requirement_t *matched = NULL;
+        size_t matches = 0U;
+        if ((state_bindings[binding_index].role == NULL) ||
+            (state_bindings[binding_index].data == NULL))
+            return BM_STATUS_INVALID_ARGUMENT;
+        for (requirement_index = 0U;
+             requirement_index < adapter->persistent_state_count;
+             ++requirement_index) {
+            if (strcmp(state_bindings[binding_index].role,
+                       adapter->persistent_states[requirement_index].role) == 0) {
+                matched = &adapter->persistent_states[requirement_index];
+                ++matches;
+            }
+        }
+        if ((matches != 1U) ||
+            (state_bindings[binding_index].size != matched->size))
+            return BM_STATUS_INVALID_ARGUMENT;
+        for (requirement_index = binding_index + 1U;
+             requirement_index < state_binding_count; ++requirement_index) {
+            if (strcmp(state_bindings[binding_index].role,
+                       state_bindings[requirement_index].role) == 0)
+                return BM_STATUS_INVALID_ARGUMENT;
+        }
+    }
+    return adapter->open(bindings, binding_count, state_bindings,
+                         state_binding_count, out_machine);
 }
 
 const bm_machine_config_t *
@@ -176,6 +225,26 @@ bm_frontend_binding_find(const bm_frontend_asset_binding_t *bindings,
 {
     size_t index;
     const bm_frontend_asset_binding_t *result = NULL;
+    if ((bindings == NULL) || (role == NULL))
+        return NULL;
+    for (index = 0U; index < binding_count; ++index) {
+        if ((bindings[index].role == NULL) ||
+            (strcmp(bindings[index].role, role) != 0))
+            continue;
+        if (result != NULL)
+            return NULL;
+        result = &bindings[index];
+    }
+    return result;
+}
+
+const bm_frontend_persistent_state_binding_t *
+bm_frontend_persistent_state_binding_find(
+    const bm_frontend_persistent_state_binding_t *bindings,
+    size_t binding_count, const char *role)
+{
+    size_t index;
+    const bm_frontend_persistent_state_binding_t *result = NULL;
     if ((bindings == NULL) || (role == NULL))
         return NULL;
     for (index = 0U; index < binding_count; ++index) {

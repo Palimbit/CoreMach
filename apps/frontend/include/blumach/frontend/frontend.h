@@ -41,6 +41,20 @@ typedef struct bm_frontend_asset_binding {
     } value;
 } bm_frontend_asset_binding_t;
 
+typedef struct bm_frontend_persistent_state_requirement {
+    const char *role;
+    const char *label;
+    size_t size;
+    const uint8_t *default_data;
+    int battery_backed;
+} bm_frontend_persistent_state_requirement_t;
+
+typedef struct bm_frontend_persistent_state_binding {
+    const char *role;
+    const uint8_t *data;
+    size_t size;
+} bm_frontend_persistent_state_binding_t;
+
 /* Bindings and their backing bytes/callback contexts remain caller-owned and
  * must outlive both the prepared machine and every session configured from it.
  * The adapter contract has no dependency on paths, file APIs, Qt or a host UI. */
@@ -123,11 +137,20 @@ const bm_machine_definition_t *bm_frontend_adapter_definition(
     const bm_frontend_adapter_t *adapter);
 const bm_frontend_asset_requirement_t *bm_frontend_adapter_assets(
     const bm_frontend_adapter_t *adapter, size_t *count);
+const bm_frontend_persistent_state_requirement_t *
+bm_frontend_adapter_persistent_states(const bm_frontend_adapter_t *adapter,
+                                      size_t *count);
 bm_status_t bm_frontend_register_machines(bm_machine_registry_t *registry);
 
 bm_status_t bm_frontend_machine_open(
     const bm_frontend_adapter_t *adapter,
     const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+    bm_frontend_machine_t **out_machine);
+bm_status_t bm_frontend_machine_open_with_persistent_state(
+    const bm_frontend_adapter_t *adapter,
+    const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+    const bm_frontend_persistent_state_binding_t *state_bindings,
+    size_t state_binding_count,
     bm_frontend_machine_t **out_machine);
 const bm_machine_config_t *bm_frontend_machine_config(
     const bm_frontend_machine_t *machine);

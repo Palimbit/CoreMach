@@ -407,11 +407,23 @@ yearless calendar and instruction-domain scheduling are explicit fidelity
 limits; this is not a crystal- or battery-level simulation.
 
 The PCS 86 configuration may provide that complete 32-byte state explicitly.
-The engine never reads the host clock or a host file. Frontend adapters own the
-initial battery-backed image and may later replace it with persisted state. The
-deterministic fallback includes both nonzero calendar counters and the BIOS
-weekday/checksum encoding in alarm RAM; counters alone are insufficient because
-BIOS 1.08 rewrites those fields after its first successful `INT 1Ah` read.
+The engine never reads the host clock or a host file. A generic named-state
+runtime contract lets a frontend copy opaque machine state while a session is
+running or paused; it does not know how or whether those bytes are stored. The
+PCS 86 publishes its RTC as the `rtc` state. Frontend adapters declare the
+state's size, deterministic fallback and battery-backed policy independently
+of Qt or a path.
+
+Qt stores retained bytes in its host settings and exposes **Retain
+battery-backed state**. Disabling it removes the saved image, supplies zeroed
+bytes on the next cold start and discards the new state at power-off, modelling
+a depleted battery without changing reset semantics. Headless offers the same
+boundary explicitly with `--persistent-state rtc=<path>` and
+`--depleted-state rtc`. The deterministic first-use fallback includes both
+nonzero calendar counters and the BIOS weekday/checksum encoding in alarm RAM;
+counters alone are insufficient because BIOS 1.08 rewrites those fields after
+its first successful `INT 1Ah` read. None of these paths synchronizes the RTC
+to host wall time.
 
 The 8253 is a selective port of the measured edge-state core, retaining Daniel
 Balsom and Clara's attribution. It covers modes 0-5, binary and BCD counts,

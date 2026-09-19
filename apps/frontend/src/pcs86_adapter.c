@@ -9,6 +9,7 @@
 typedef struct pcs86_frontend_machine {
     bm_frontend_machine_t base;
     bm_pcs86_config_t pcs86;
+    uint8_t rtc_state[BM_PCS86_RTC_STATE_SIZE];
 } pcs86_frontend_machine_t;
 
 static const uint64_t firmware_sizes[] = { BM_PCS86_FIRMWARE_HALF_SIZE };
@@ -24,6 +25,11 @@ static const uint8_t default_rtc_state[BM_PCS86_RTC_STATE_SIZE] = {
     0x00U, 0x00U, 0x00U, 0x00U, 0x22U, 0x05U, 0x18U, 0x09U,
     /* Alarm RAM holds the BIOS weekday/checksum encoding as well as alarms. */
     0xe0U, 0x00U, 0x00U, 0x00U, 0x00U, 0xcdU, 0xfcU, 0xceU
+};
+
+static const bm_frontend_persistent_state_requirement_t persistent_states[] = {
+    { "rtc", "RTC and calendar", BM_PCS86_RTC_STATE_SIZE,
+      default_rtc_state, 1 }
 };
 
 static const bm_frontend_asset_requirement_t assets[] = {
@@ -160,6 +166,8 @@ destroy_machine(bm_frontend_machine_t *base)
 
 static bm_status_t
 open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+             const bm_frontend_persistent_state_binding_t *state_bindings,
+             size_t state_binding_count,
              bm_frontend_machine_t **out_machine)
 {
     const bm_frontend_asset_binding_t *even = bm_frontend_binding_find(
@@ -170,6 +178,9 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
         bindings, binding_count, "floppy-0");
     const bm_frontend_asset_binding_t *hard_disk = bm_frontend_binding_find(
         bindings, binding_count, "hard-disk-0");
+    const bm_frontend_persistent_state_binding_t *rtc_state =
+        bm_frontend_persistent_state_binding_find(
+            state_bindings, state_binding_count, "rtc");
     const bm_pcs86_firmware_identity_t *identities;
     const bm_pcs86_firmware_identity_t *even_identity;
     const bm_pcs86_firmware_identity_t *odd_identity;
@@ -232,8 +243,11 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     machine->pcs86.interrupt_trace = capture_interrupt;
     machine->pcs86.interrupt_trace_context = machine;
     machine->pcs86.ems_kib = BM_PCS86_EMS_1920_KIB;
-    machine->pcs86.rtc_initial_state = default_rtc_state;
-    machine->pcs86.rtc_initial_state_size = sizeof(default_rtc_state);
+    memcpy(machine->rtc_state,
+           rtc_state != NULL ? rtc_state->data : default_rtc_state,
+           sizeof(machine->rtc_state));
+    machine->pcs86.rtc_initial_state = machine->rtc_state;
+    machine->pcs86.rtc_initial_state_size = sizeof(machine->rtc_state);
     if (floppy != NULL) {
         machine->base.diagnostics.read_only_media_bytes =
             floppy->value.media.block_count * floppy->value.media.block_size;
@@ -262,5 +276,7 @@ const bm_frontend_adapter_t bm_frontend_pcs86_adapter = {
     bm_pcs86_machine_definition,
     assets,
     sizeof(assets) / sizeof(assets[0]),
+    persistent_states,
+    sizeof(persistent_states) / sizeof(persistent_states[0]),
     open_machine
 };
