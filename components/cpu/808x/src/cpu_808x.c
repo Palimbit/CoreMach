@@ -12,19 +12,6 @@
 
 #include <string.h>
 
-_Static_assert((int) BM_V30_BCU_PHASE_IDLE == (int) BM_808X_PREFETCH_IDLE,
-               "private and observed BCU phases must match");
-_Static_assert((int) BM_V30_BCU_PHASE_T1 == (int) BM_808X_PREFETCH_T1,
-               "private and observed BCU phases must match");
-_Static_assert((int) BM_V30_BCU_PHASE_T2 == (int) BM_808X_PREFETCH_T2,
-               "private and observed BCU phases must match");
-_Static_assert((int) BM_V30_BCU_PHASE_T3 == (int) BM_808X_PREFETCH_T3,
-               "private and observed BCU phases must match");
-_Static_assert((int) BM_V30_BCU_PHASE_TW == (int) BM_808X_PREFETCH_TW,
-               "private and observed BCU phases must match");
-_Static_assert((int) BM_V30_BCU_PHASE_T4 == (int) BM_808X_PREFETCH_T4,
-               "private and observed BCU phases must match");
-
 enum {
     REG_AX = 0,
     REG_CX,
@@ -4616,6 +4603,20 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
         minimum);
 }
 
+static bm_808x_prefetch_phase_t
+observed_prefetch_phase(const bm_v30_bcu_t *bcu)
+{
+    switch (bcu->prefetch_phase) {
+        case BM_V30_BCU_PHASE_IDLE: return BM_808X_PREFETCH_IDLE;
+        case BM_V30_BCU_PHASE_T1: return BM_808X_PREFETCH_T1;
+        case BM_V30_BCU_PHASE_T2: return BM_808X_PREFETCH_T2;
+        case BM_V30_BCU_PHASE_T3: return BM_808X_PREFETCH_T3;
+        case BM_V30_BCU_PHASE_TW: return BM_808X_PREFETCH_TW;
+        case BM_V30_BCU_PHASE_T4: return BM_808X_PREFETCH_T4;
+        default: return BM_808X_PREFETCH_IDLE;
+    }
+}
+
 static void
 begin_boundary_observation(bm_808x_state_t *state)
 {
@@ -4665,8 +4666,7 @@ emit_boundary_observation(bm_808x_state_t *state,
             state->bcu.boundary_demand_prefetch_bus_clocks,
         .instruction_queue_reads = kind == BM_808X_BOUNDARY_INSTRUCTION ?
             state->bcu.boundary_instruction_queue_reads : 0U,
-        .prefetch_phase =
-            (bm_808x_prefetch_phase_t) state->bcu.prefetch_phase,
+        .prefetch_phase = observed_prefetch_phase(&state->bcu),
         .prefetch_transactions = state->bcu.boundary_prefetch_transactions,
         .prefetch_phase_clocks = state->bcu.boundary_prefetch_phase_clocks
     };
