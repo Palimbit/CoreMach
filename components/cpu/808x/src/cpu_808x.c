@@ -187,6 +187,20 @@ write_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint8_t va
 static bm_status_t
 read_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t *value)
 {
+    if ((offset & 1U) == 0U) {
+        bm_bus_transaction_t transaction = {
+            BM_ADDRESS_MEMORY, BM_BUS_READ, physical_address(segment, offset),
+            0, 2, 2, 0, BM_ENDIAN_LITTLE,
+            state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
+        };
+        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+
+        record_bus_transaction(state, &transaction, status);
+        if (status == BM_STATUS_OK)
+            *value = (uint16_t) transaction.value;
+        return status;
+    }
+
     uint8_t low = 0;
     uint8_t high = 0;
     bm_status_t status = read_byte(state, segment, offset, BM_BUS_READ, &low);
@@ -200,6 +214,18 @@ read_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t *v
 static bm_status_t
 write_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t value)
 {
+    if ((offset & 1U) == 0U) {
+        bm_bus_transaction_t transaction = {
+            BM_ADDRESS_MEMORY, BM_BUS_WRITE, physical_address(segment, offset),
+            value, 2, 2, 0, BM_ENDIAN_LITTLE,
+            state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
+        };
+        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+
+        record_bus_transaction(state, &transaction, status);
+        return status;
+    }
+
     bm_status_t status = write_byte(state, segment, offset, (uint8_t) value);
     if (status == BM_STATUS_OK)
         status = write_byte(state, segment, (uint16_t) (offset + 1U), (uint8_t) (value >> 8U));

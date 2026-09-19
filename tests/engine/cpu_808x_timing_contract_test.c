@@ -29,6 +29,24 @@ typedef struct timing_io_fixture {
     uint8_t next_value;
 } timing_io_fixture_t;
 
+typedef struct bus_capture {
+    bm_bus_transaction_t transactions[16];
+    size_t count;
+} bus_capture_t;
+
+static void
+capture_bus_transaction(void *context,
+                        const bm_bus_transaction_t *transaction)
+{
+    bus_capture_t *capture = context;
+
+    assert(capture != NULL);
+    assert(transaction != NULL);
+    assert(capture->count <
+           sizeof(capture->transactions) / sizeof(capture->transactions[0]));
+    capture->transactions[capture->count++] = *transaction;
+}
+
 static bm_status_t
 timing_io_access(void *context, bm_bus_transaction_t *transaction)
 {
@@ -263,9 +281,13 @@ test_memory_timing_uses_operand_form_and_alignment(void)
         unsigned int odd;
 
         for (odd = 0U; odd <= 1U; ++odd) {
+            bus_capture_t bus_capture = { 0 };
+
             memset(&capture, 0, sizeof(capture));
             cpu_808x_test_machine_create(&machine, &config, add_word,
                                          sizeof(add_word));
+            bm_bus_set_observer(machine.bus, capture_bus_transaction,
+                                &bus_capture);
             start_program(&machine);
             state = cpu_808x_test_get_state(&machine);
             state.ds = 0x1000U;
@@ -274,8 +296,31 @@ test_memory_timing_uses_operand_form_and_alignment(void)
             cpu_808x_test_set_state(&machine, &state);
             cpu_808x_test_poke(&machine, 0x10040U + odd, 2U);
             cpu_808x_test_poke(&machine, 0x10041U + odd, 0U);
+            bus_capture.count = 0U;
             step_once(&machine, &capture);
             assert_exact_execution_clocks(&capture, odd ? 24U : 16U);
+            assert(bus_capture.count == (odd ? 6U : 4U));
+            assert(bus_capture.transactions[0].operation == BM_BUS_FETCH);
+            assert(bus_capture.transactions[1].operation == BM_BUS_FETCH);
+            if (odd) {
+                size_t index;
+
+                for (index = 2U; index < bus_capture.count; ++index) {
+                    assert(bus_capture.transactions[index].size == 1U);
+                    assert(bus_capture.transactions[index].alignment == 1U);
+                    assert(bus_capture.transactions[index].address ==
+                           0x10041U + ((index - 2U) & 1U));
+                }
+            } else {
+                assert(bus_capture.transactions[2].operation == BM_BUS_READ);
+                assert(bus_capture.transactions[3].operation == BM_BUS_WRITE);
+                assert(bus_capture.transactions[2].address == 0x10040U);
+                assert(bus_capture.transactions[3].address == 0x10040U);
+                assert(bus_capture.transactions[2].size == 2U);
+                assert(bus_capture.transactions[3].size == 2U);
+                assert(bus_capture.transactions[2].alignment == 2U);
+                assert(bus_capture.transactions[3].alignment == 2U);
+            }
             cpu_808x_test_machine_destroy(&machine);
         }
     }
@@ -860,7 +905,7 @@ test_interrupt_boundary_reports_queue_flush(void)
     assert(capture.last.prefetch_queue_flushed == 1U);
     assert(capture.last.prefetch_pointer_known == 1U);
     assert(capture.last.prefetch_pointer == 0x1234U);
-    assert(capture.last.logical_bus_transactions == 10U);
+    assert(capture.last.logical_bus_transactions == 5U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
