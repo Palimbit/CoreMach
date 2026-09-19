@@ -268,7 +268,8 @@ make_configuration(test_machine_t *machine, int optional_operations)
         .configuration = { "test.runtime-session.config", 1U,
                            sizeof(test_machine_t) },
         .ops = { test_validate, test_create, test_destroy,
-                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL },
+                 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                 NULL },
         .engine = { 1U, 2U }
     };
     bm_machine_config_t configuration = {

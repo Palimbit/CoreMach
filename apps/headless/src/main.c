@@ -263,7 +263,7 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
                 (value[0] == '\0') ||
                 (strlen(value) >= sizeof(options->depleted_state_role)))
                 return 0;
-            strcpy(options->depleted_state_role, value);
+            memcpy(options->depleted_state_role, value, strlen(value) + 1U);
             depleted_state_was_set = 1;
         } else if (strcmp(argument, "--type-text") == 0) {
             if (!pending_type_at ||
