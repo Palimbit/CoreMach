@@ -105,6 +105,44 @@ test_export_normalizes_public_fraction(void)
 }
 
 static void
+test_next_domain_edge_is_strict_and_exact(void)
+{
+    const bm_clock_rate_t three_hz = { 3U, 1U };
+    const bm_clock_rate_t one_ghz = { UINT64_C(1000000000), 1U };
+    bm_clock_position_t target = { 0U, 0U, 1U, 1U };
+    bm_clock_position_t next;
+
+    assert(bm_clock_position_next_after(&three_hz, &target, &next) ==
+           BM_STATUS_OK);
+    assert(next.nanoseconds == UINT64_C(333333333));
+    assert(next.phase == 1U);
+    assert(next.phase_denominator == 3U);
+
+    target = next;
+    assert(bm_clock_position_next_after(&three_hz, &target, &next) ==
+           BM_STATUS_OK);
+    assert(next.nanoseconds == UINT64_C(666666666));
+    assert(next.phase == 2U);
+    assert(next.phase_denominator == 3U);
+
+    target.nanoseconds = UINT64_C(500000000);
+    target.phase = 0U;
+    target.phase_denominator = 1U;
+    assert(bm_clock_position_next_after(&three_hz, &target, &next) ==
+           BM_STATUS_OK);
+    assert(next.nanoseconds == UINT64_C(666666666));
+    assert(next.phase == 2U);
+
+    target.nanoseconds = UINT64_MAX;
+    assert(bm_clock_position_next_after(&one_ghz, &target, &next) ==
+           BM_STATUS_CAPACITY_EXCEEDED);
+    target.nanoseconds = 0U;
+    target.phase_denominator = 0U;
+    assert(bm_clock_position_next_after(&three_hz, &target, &next) ==
+           BM_STATUS_INVALID_ARGUMENT);
+}
+
+static void
 test_invalid_and_overflow_are_atomic(void)
 {
     bm_clock_position_t clock;
@@ -139,6 +177,7 @@ main(void)
     test_rational_crystal_divider_has_no_drift();
     test_fraction_comparison_without_overflow();
     test_export_normalizes_public_fraction();
+    test_next_domain_edge_is_strict_and_exact();
     test_invalid_and_overflow_are_atomic();
     return 0;
 }
