@@ -91,17 +91,16 @@ test_buslock_marks_following_instruction(void)
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
     assert(consumed == 1U);
     assert(cpu_808x_test_peek(&machine, 0x0100U) == 0x2bU);
-    assert(capture.count == 5U);
+    assert(capture.count == 3U);
     assert(capture.events[0].operation == BM_BUS_FETCH &&
-           capture.events[0].address == 0xf0003U &&
-           capture.events[0].attributes == 0U);
-    for (index = 1U; index < capture.count; ++index)
+           capture.events[0].address == 0xf0004U);
+    for (index = 0U; index < capture.count; ++index)
         assert((capture.events[index].attributes &
                 BM_BUS_TRANSACTION_LOCKED) != 0U);
-    assert(capture.events[3].operation == BM_BUS_READ &&
-           capture.events[3].address == 0x0100U);
-    assert(capture.events[4].operation == BM_BUS_WRITE &&
-           capture.events[4].address == 0x0100U);
+    assert(capture.events[1].operation == BM_BUS_READ &&
+           capture.events[1].address == 0x0100U);
+    assert(capture.events[2].operation == BM_BUS_WRITE &&
+           capture.events[2].address == 0x0100U);
 
     memset(&capture, 0, sizeof(capture));
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_IDLE);

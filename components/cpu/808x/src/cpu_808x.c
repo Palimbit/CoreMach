@@ -44,6 +44,10 @@ typedef struct bm_808x_state {
     uint16_t registers[8];
     uint16_t segments[4];
     uint16_t ip;
+    uint16_t prefetch_pointer;
+    uint8_t prefetch_queue[BM_808X_V30_PREFETCH_QUEUE_CAPACITY];
+    uint8_t prefetch_head;
+    uint8_t prefetch_count;
     uint16_t flags;
     uint32_t last_fetch;
     uint8_t last_opcode;
@@ -102,6 +106,9 @@ record_bus_transaction(bm_808x_state_t *state,
 static void
 mark_prefetch_flush(bm_808x_state_t *state)
 {
+    state->prefetch_head = 0U;
+    state->prefetch_count = 0U;
+    state->prefetch_pointer = state->ip;
     state->boundary_prefetch_flushed = 1;
 }
 
@@ -143,11 +150,65 @@ read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
 }
 
 static bm_status_t
+fill_prefetch_queue(bm_808x_state_t *state)
+{
+    const uint8_t free_bytes = (uint8_t)
+        (BM_808X_V30_PREFETCH_QUEUE_CAPACITY - state->prefetch_count);
+    const uint8_t tail = (uint8_t)
+        ((state->prefetch_head + state->prefetch_count) %
+         BM_808X_V30_PREFETCH_QUEUE_CAPACITY);
+    bm_status_t status;
+
+    if ((state->prefetch_pointer & 1U) == 0U) {
+        bm_bus_transaction_t transaction;
+        uint8_t next_tail;
+
+        if (free_bytes < 2U)
+            return BM_STATUS_INVALID_STATE;
+        transaction = (bm_bus_transaction_t) {
+            BM_ADDRESS_MEMORY, BM_BUS_FETCH,
+            physical_address(state->segments[1], state->prefetch_pointer),
+            0, 2, 2, 0, BM_ENDIAN_LITTLE,
+            state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
+        };
+        status = bm_bus_transact(state->bus, &transaction);
+        record_bus_transaction(state, &transaction, status);
+        if (status != BM_STATUS_OK)
+            return status;
+        state->prefetch_queue[tail] = (uint8_t) transaction.value;
+        next_tail = (uint8_t)
+            ((tail + 1U) % BM_808X_V30_PREFETCH_QUEUE_CAPACITY);
+        state->prefetch_queue[next_tail] =
+            (uint8_t) (transaction.value >> 8U);
+        state->prefetch_count = (uint8_t) (state->prefetch_count + 2U);
+        state->prefetch_pointer = (uint16_t) (state->prefetch_pointer + 2U);
+        return BM_STATUS_OK;
+    }
+
+    if (free_bytes == 0U)
+        return BM_STATUS_INVALID_STATE;
+    status = read_byte(state, state->segments[1], state->prefetch_pointer,
+                       BM_BUS_FETCH, &state->prefetch_queue[tail]);
+    if (status == BM_STATUS_OK) {
+        ++state->prefetch_count;
+        ++state->prefetch_pointer;
+    }
+    return status;
+}
+
+static bm_status_t
 fetch_byte(bm_808x_state_t *state, uint8_t *value)
 {
-    bm_status_t status = read_byte(state, state->segments[1], state->ip,
-                                   BM_BUS_FETCH, value);
+    bm_status_t status = BM_STATUS_OK;
+
+    if (state->prefetch_count == 0U)
+        status = fill_prefetch_queue(state);
     if (status == BM_STATUS_OK) {
+        *value = state->prefetch_queue[state->prefetch_head];
+        state->prefetch_head = (uint8_t)
+            ((state->prefetch_head + 1U) %
+             BM_808X_V30_PREFETCH_QUEUE_CAPACITY);
+        --state->prefetch_count;
         if (state->last_instruction_length < 8U)
             state->last_instruction_bytes |=
                 (uint64_t) *value << (state->last_instruction_length * 8U);
@@ -406,8 +467,14 @@ execute_poll(bm_808x_state_t *state, uint16_t instruction_ip, int bus_lock)
         return status;
     if ((ready != 0) && (ready != 1))
         return BM_STATUS_DEVICE_ERROR;
-    if (!ready)
+    if (!ready) {
         state->ip = instruction_ip;
+        /* The current portable POLL contract exposes each pin sample as a
+         * boundary. Re-entering that boundary must therefore discard bytes
+         * fetched beyond the restored architectural IP. A future resumable
+         * POLL state will keep the instruction internal instead. */
+        mark_prefetch_flush(state);
+    }
     return BM_STATUS_OK;
 }
 
@@ -1590,6 +1657,10 @@ cpu_reset(void *context)
     memset(state->segments, 0, sizeof(state->segments));
     state->segments[1] = 0xffffU; /* CS:IP resolves to physical FFFF0h. */
     state->ip = 0;
+    state->prefetch_pointer = 0U;
+    state->prefetch_head = 0U;
+    state->prefetch_count = 0U;
+    memset(state->prefetch_queue, 0, sizeof(state->prefetch_queue));
     state->flags = 0xf002U;
     state->last_fetch = 0xffff0U;
     state->last_opcode = 0;
@@ -4577,10 +4648,10 @@ emit_boundary_observation(bm_808x_state_t *state,
                         state->last_prefix_count : 0U,
         .prefetch_queue_flushed =
             (uint8_t) !!state->boundary_prefetch_flushed,
-        .prefetch_pointer_known =
-            (uint8_t) !!state->boundary_prefetch_flushed,
+        .prefetch_pointer_known = 1U,
         .prefetch_queue_capacity = BM_808X_V30_PREFETCH_QUEUE_CAPACITY,
-        .prefetch_pointer = state->ip,
+        .prefetch_queue_count = state->prefetch_count,
+        .prefetch_pointer = state->prefetch_pointer,
         .logical_bus_transactions = state->boundary_bus_transactions,
         .reported_wait_states = state->boundary_wait_states
     };
@@ -4709,6 +4780,10 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
         *value = state->registers[REG_SP];
     else if (strcmp(name, "ip") == 0)
         *value = state->ip;
+    else if (strcmp(name, "prefetch_pointer") == 0)
+        *value = state->prefetch_pointer;
+    else if (strcmp(name, "prefetch_queue_count") == 0)
+        *value = state->prefetch_count;
     else if (strcmp(name, "flags") == 0)
         *value = psw_image(state->flags);
     else if (strcmp(name, "md_write_enabled") == 0)
@@ -4855,6 +4930,10 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->segments[2] = state_image->ss;
     state->segments[3] = state_image->ds;
     state->ip = state_image->ip;
+    state->prefetch_pointer = state_image->ip;
+    state->prefetch_head = 0U;
+    state->prefetch_count = 0U;
+    memset(state->prefetch_queue, 0, sizeof(state->prefetch_queue));
     state->flags = psw_image(state_image->flags);
     state->halted = state_image->halted;
     state->interrupt_inhibit = state_image->interrupt_inhibit;
