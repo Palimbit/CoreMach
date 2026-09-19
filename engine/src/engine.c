@@ -1,12 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <blumach/engine/engine.h>
+#include "clock_math.h"
 
 #include <limits.h>
 #include <string.h>
 
 typedef struct bm_cpu_slot {
     bm_cpu_t cpu;
+    bm_clocked_cpu_step_fn step_cycles;
     bm_tick_t local_time;
+    bm_clock_position_t clock_position;
+    int suspended;
 } bm_cpu_slot_t;
 
 typedef struct bm_event_slot {
@@ -26,6 +30,7 @@ struct bm_engine {
     size_t max_events;
     bm_tick_t now;
     uint64_t next_sequence;
+    int clocked;
 };
 
 bm_status_t
@@ -129,6 +134,18 @@ bm_engine_create(const bm_host_services_t *host,
     return BM_STATUS_OK;
 }
 
+bm_status_t
+bm_engine_create_clocked(const bm_host_services_t *host,
+                         const bm_engine_config_t *config,
+                         bm_engine_t **out_engine)
+{
+    bm_status_t status = bm_engine_create(host, config, out_engine);
+
+    if (status == BM_STATUS_OK)
+        (*out_engine)->clocked = 1;
+    return status;
+}
+
 void
 bm_engine_destroy(bm_engine_t *engine)
 {
@@ -153,7 +170,7 @@ bm_engine_add_cpu(bm_engine_t *engine, const bm_cpu_t *cpu, bm_cpu_id_t *out_id)
 {
     size_t index;
 
-    if ((engine == NULL) || (cpu == NULL) || (cpu->ops.reset == NULL) ||
+    if ((engine == NULL) || engine->clocked || (cpu == NULL) || (cpu->ops.reset == NULL) ||
         (cpu->ops.run == NULL) || (cpu->ops.signal == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     if (engine->cpu_count >= engine->max_cpus)
@@ -162,6 +179,39 @@ bm_engine_add_cpu(bm_engine_t *engine, const bm_cpu_t *cpu, bm_cpu_id_t *out_id)
     index = engine->cpu_count++;
     engine->cpus[index].cpu = *cpu;
     engine->cpus[index].local_time = engine->now;
+    if (out_id != NULL)
+        *out_id = (bm_cpu_id_t) index;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_engine_add_clocked_cpu(bm_engine_t *engine, const bm_cpu_t *cpu,
+                          bm_clocked_cpu_step_fn step,
+                          const bm_clock_rate_t *rate,
+                          bm_cpu_id_t *out_id)
+{
+    size_t index;
+    bm_cpu_slot_t *slot;
+
+    if ((engine == NULL) || !engine->clocked || (cpu == NULL) ||
+        (cpu->ops.reset == NULL) || (step == NULL) ||
+        (cpu->ops.signal == NULL) || (rate == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (engine->cpu_count >= engine->max_cpus)
+        return BM_STATUS_CAPACITY_EXCEEDED;
+    index = engine->cpu_count;
+    slot = &engine->cpus[index];
+    {
+        bm_status_t status = bm_clock_position_init(&slot->clock_position,
+                                                    rate);
+
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    slot->clock_position.nanoseconds = engine->now;
+    slot->cpu = *cpu;
+    slot->step_cycles = step;
+    ++engine->cpu_count;
     if (out_id != NULL)
         *out_id = (bm_cpu_id_t) index;
     return BM_STATUS_OK;
@@ -184,6 +234,11 @@ bm_engine_reset(bm_engine_t *engine)
         if (status != BM_STATUS_OK)
             return status;
         engine->cpus[index].local_time = 0;
+        if (engine->clocked) {
+            engine->cpus[index].clock_position.nanoseconds = 0U;
+            engine->cpus[index].clock_position.phase = 0U;
+            engine->cpus[index].suspended = 0;
+        }
     }
     return BM_STATUS_OK;
 }
@@ -263,6 +318,53 @@ run_cpus_to(bm_engine_t *engine, bm_tick_t limit)
     }
 }
 
+static bm_status_t
+run_clocked_cpus_to(bm_engine_t *engine, bm_tick_t *limit)
+{
+    for (;;) {
+        size_t index;
+        size_t selected = SIZE_MAX;
+        bm_clock_position_t deadline = { *limit, 0U, 1U, 1U };
+        bm_cpu_slot_t *slot;
+        uint64_t cycles = 0U;
+        bm_status_t status;
+
+        for (index = 0U; index < engine->cpu_count; ++index) {
+            const bm_cpu_slot_t *candidate = &engine->cpus[index];
+
+            if (candidate->suspended ||
+                (bm_clock_position_compare(&candidate->clock_position, &deadline) >= 0))
+                continue;
+            if ((selected == SIZE_MAX) ||
+                (bm_clock_position_compare(&candidate->clock_position,
+                                           &engine->cpus[selected].clock_position) < 0))
+                selected = index;
+        }
+        if (selected == SIZE_MAX)
+            return BM_STATUS_OK;
+        slot = &engine->cpus[selected];
+        status = slot->step_cycles(slot->cpu.context,
+                                   slot->clock_position.nanoseconds, &cycles);
+        if (status == BM_STATUS_IDLE) {
+            if (cycles != 0U)
+                return BM_STATUS_DEVICE_ERROR;
+            slot->suspended = 1;
+            *limit = next_event_time(engine, *limit);
+            continue;
+        }
+        if (status != BM_STATUS_OK)
+            return status;
+        if (cycles == 0U)
+            return BM_STATUS_DEVICE_ERROR;
+        status = bm_clock_position_advance(&slot->clock_position, cycles);
+        if (status != BM_STATUS_OK)
+            return status;
+        /* A CPU/device may schedule an earlier event during this boundary.
+         * Recompute the slice before any other CPU executes past it. */
+        *limit = next_event_time(engine, *limit);
+    }
+}
+
 static int
 take_next_event(bm_engine_t *engine, bm_tick_t when, bm_engine_event_fn *callback, void **context)
 {
@@ -301,7 +403,8 @@ bm_engine_run_for(bm_engine_t *engine, bm_tick_t duration)
         bm_engine_event_fn callback;
         void *context;
 
-        bm_status_t status = run_cpus_to(engine, slice_end);
+        bm_status_t status = engine->clocked ? run_clocked_cpus_to(engine, &slice_end) :
+                                                run_cpus_to(engine, slice_end);
         if (status != BM_STATUS_OK)
             return status;
         engine->now = slice_end;
@@ -314,9 +417,23 @@ bm_engine_run_for(bm_engine_t *engine, bm_tick_t duration)
 bm_status_t
 bm_engine_signal_cpu(bm_engine_t *engine, bm_cpu_id_t id, uint32_t line, int asserted)
 {
+    bm_status_t status;
+    bm_cpu_slot_t *slot;
+
     if ((engine == NULL) || ((size_t) id >= engine->cpu_count))
         return BM_STATUS_INVALID_ARGUMENT;
-    return engine->cpus[id].cpu.ops.signal(engine->cpus[id].cpu.context, line, asserted);
+    slot = &engine->cpus[id];
+    status = slot->cpu.ops.signal(slot->cpu.context, line, asserted);
+    if ((status == BM_STATUS_OK) && engine->clocked && asserted && slot->suspended) {
+        /* A whole instruction may have crossed the current event deadline.
+         * Do not move its local clock back when that event wakes it. */
+        if (slot->clock_position.nanoseconds < engine->now) {
+            slot->clock_position.nanoseconds = engine->now;
+            slot->clock_position.phase = 0U;
+        }
+        slot->suspended = 0;
+    }
+    return status;
 }
 
 bm_status_t

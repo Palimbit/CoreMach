@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 add_library(blumach_engine STATIC
+    src/clock_math.c
     src/engine.c
     src/storage.c
 )
