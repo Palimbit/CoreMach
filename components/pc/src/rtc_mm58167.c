@@ -30,7 +30,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <blumach/components/rtc_mm58167.h>
+#include "rtc_mm58167_private.h"
 
 #include <limits.h>
 #include <string.h>
@@ -73,18 +73,21 @@ enum {
     MM67_INT_MON = 0x80
 };
 
-struct bm_mm58167 {
-    bm_host_services_t host;
-    uint16_t interrupt_io_base;
-    uint16_t counter_io_base;
-    bm_mm58167_irq_fn interrupt;
-    void *interrupt_context;
-    uint8_t registers[BM_MM58167_STATE_SIZE];
-    uint16_t millisecond_count;
-    uint16_t microsecond_remainder;
-    uint16_t rollover_microseconds;
-    uint8_t irq_asserted;
-};
+static bm_status_t
+synchronize_clock(bm_mm58167_t *rtc)
+{
+    if (rtc->clock_sync == NULL)
+        return BM_STATUS_OK;
+    return rtc->clock_sync(rtc->clock_context);
+}
+
+static bm_status_t
+clock_state_changed(bm_mm58167_t *rtc)
+{
+    if (rtc->clock_changed == NULL)
+        return BM_STATUS_OK;
+    return rtc->clock_changed(rtc->clock_context);
+}
 
 static uint8_t
 to_bcd(unsigned int value)
@@ -381,14 +384,21 @@ rtc_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_mm58167_t *rtc = context;
     unsigned int reg;
+    bm_status_t status;
+
     if ((transaction->size != 1U) || (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
+    status = synchronize_clock(rtc);
+    if (status != BM_STATUS_OK)
+        return status;
     reg = register_for_port(rtc, transaction->address);
     if (transaction->operation == BM_BUS_READ)
         transaction->value = read_register(rtc, reg);
-    else
+    else {
         write_register(rtc, reg, (uint8_t) transaction->value);
-    return BM_STATUS_OK;
+        status = clock_state_changed(rtc);
+    }
+    return status;
 }
 
 bm_status_t
@@ -444,6 +454,8 @@ bm_mm58167_destroy(bm_mm58167_t *rtc)
 {
     if (rtc != NULL) {
         set_irq(rtc, 0);
+        if (rtc->clock_binding != NULL)
+            rtc->host.release(rtc->host.context, rtc->clock_binding);
         rtc->host.release(rtc->host.context, rtc);
     }
 }
@@ -455,6 +467,7 @@ bm_mm58167_reset(bm_mm58167_t *rtc)
     uint8_t stored;
     if (rtc == NULL)
         return;
+    (void) synchronize_clock(rtc);
     checksum = pcs86_checksum(rtc->registers);
     stored = (uint8_t) ((rtc->registers[MM67_AL_DOM] & 0x30U) |
                         ((rtc->registers[MM67_AL_MON] & 0x30U) >> 2U) |
@@ -462,6 +475,7 @@ bm_mm58167_reset(bm_mm58167_t *rtc)
     if (stored != checksum)
         repair_pcs86_checksum(rtc);
     set_interrupt_status(rtc, 0U);
+    (void) clock_state_changed(rtc);
 }
 
 void
@@ -469,10 +483,12 @@ bm_mm58167_cold_reset(bm_mm58167_t *rtc)
 {
     if (rtc == NULL)
         return;
+    (void) synchronize_clock(rtc);
     memset(rtc->registers, 0, sizeof(rtc->registers));
     reset_counters(rtc);
     repair_pcs86_checksum(rtc);
     set_interrupt_status(rtc, 0U);
+    (void) clock_state_changed(rtc);
 }
 
 bm_status_t
@@ -501,12 +517,17 @@ bm_mm58167_advance_microseconds(bm_mm58167_t *rtc, uint64_t microseconds)
 }
 
 bm_status_t
-bm_mm58167_save_state(const bm_mm58167_t *rtc,
+bm_mm58167_save_state(bm_mm58167_t *rtc,
                       uint8_t *state,
                       size_t state_size)
 {
+    bm_status_t status;
+
     if ((rtc == NULL) || (state == NULL) || (state_size != BM_MM58167_STATE_SIZE))
         return BM_STATUS_INVALID_ARGUMENT;
+    status = synchronize_clock(rtc);
+    if (status != BM_STATUS_OK)
+        return status;
     memcpy(state, rtc->registers, BM_MM58167_STATE_SIZE);
     return BM_STATUS_OK;
 }
@@ -516,8 +537,13 @@ bm_mm58167_load_state(bm_mm58167_t *rtc,
                       const uint8_t *state,
                       size_t state_size)
 {
+    bm_status_t status;
+
     if ((rtc == NULL) || (state == NULL) || (state_size != BM_MM58167_STATE_SIZE))
         return BM_STATUS_INVALID_ARGUMENT;
+    status = synchronize_clock(rtc);
+    if (status != BM_STATUS_OK)
+        return status;
     memcpy(rtc->registers, state, BM_MM58167_STATE_SIZE);
     rtc->millisecond_count = (uint16_t)
         ((rtc->registers[MM67_MSEC] >> 4U) +
@@ -525,15 +551,21 @@ bm_mm58167_load_state(bm_mm58167_t *rtc,
     rtc->microsecond_remainder = 0U;
     rtc->rollover_microseconds = 0U;
     set_irq(rtc, rtc->registers[MM67_ISTAT] != 0U);
-    return BM_STATUS_OK;
+    return clock_state_changed(rtc);
 }
 
 bm_status_t
-bm_mm58167_set_interrupt_status(bm_mm58167_t *rtc, uint8_t status)
+bm_mm58167_set_interrupt_status(bm_mm58167_t *rtc,
+                                uint8_t interrupt_status)
 {
+    bm_status_t sync_status;
+
     if (rtc == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
-    set_interrupt_status(rtc, status);
+    sync_status = synchronize_clock(rtc);
+    if (sync_status != BM_STATUS_OK)
+        return sync_status;
+    set_interrupt_status(rtc, interrupt_status);
     return BM_STATUS_OK;
 }
 
