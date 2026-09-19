@@ -221,10 +221,13 @@ control-transfer, flag and I/O forms whenever Table 2-8 provides a value that
 the current instruction boundary can determine exactly. Memory forms use the
 decoded effective-address parity for the V30's documented odd-word penalty;
 stack forms retain the entry SP so caller cleanup cannot corrupt that decision,
-and counted shifts use the actual count. An explicit
-`execution_clocks_known` flag leaves data-dependent multiply, signed divide,
-bit-field, string and other formula/range cases unclassified rather than
-inventing a representative value. All 8080-mode timings remain unclassified.
+and counted shifts use the actual count. Version 2 classifies each result as
+`UNKNOWN`, `EXACT` or `RANGE` and reports inclusive minimum and maximum clocks.
+The documented V30 intervals for signed and unsigned multiply, immediate
+signed multiply and signed divide are therefore preserved without inventing a
+representative value; a range is evidence, not a scheduler-ready exact time.
+Bit-field, string and other formula cases remain unclassified. All 8080-mode
+timings remain unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
 those logical transactions physical V30 bus cycles. Finally, taken control
@@ -233,9 +236,10 @@ invalidation and the new prefetch pointer. The observer is host-neutral and
 cannot alter execution.
 
 This establishes the boundary needed for the next CPU work without claiming a
-complete timing model. Queue fill, fetch/execution overlap, pre-decode,
-data-dependent and repeat-formula clock reporting, physical bus-cycle shape and
-scheduler consumption of the observations remain explicit subsequent work.
+complete timing model. Queue fill, fetch/execution overlap, pre-decode, exact
+realised clocks inside data-dependent ranges, repeat-formula clock reporting,
+physical bus-cycle shape and scheduler consumption of the observations remain
+explicit subsequent work.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
 bus waits, which is why the contract does not combine them into one misleading
 number.

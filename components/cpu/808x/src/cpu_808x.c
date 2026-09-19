@@ -3840,6 +3840,38 @@ rm_execution_clocks(const bm_808x_state_t *state, int word,
 }
 
 static int
+rm_execution_clock_range(const bm_808x_state_t *state, int word,
+                         uint32_t register_min, uint32_t register_max,
+                         uint32_t byte_memory_min, uint32_t byte_memory_max,
+                         uint32_t even_word_memory_min,
+                         uint32_t even_word_memory_max,
+                         uint32_t odd_word_memory_min,
+                         uint32_t odd_word_memory_max,
+                         uint32_t *minimum, uint32_t *maximum)
+{
+    if (!state->boundary_rm_valid)
+        return 0;
+    if (!state->boundary_rm_memory) {
+        *minimum = register_min;
+        *maximum = register_max;
+        return 1;
+    }
+    if (!word) {
+        *minimum = byte_memory_min;
+        *maximum = byte_memory_max;
+        return 1;
+    }
+    if ((state->boundary_rm_offset & 1U) != 0U) {
+        *minimum = odd_word_memory_min;
+        *maximum = odd_word_memory_max;
+    } else {
+        *minimum = even_word_memory_min;
+        *maximum = even_word_memory_max;
+    }
+    return 1;
+}
+
+static int
 direct_address(const bm_808x_state_t *state, uint16_t *offset)
 {
     uint8_t low = 0U;
@@ -3853,13 +3885,14 @@ direct_address(const bm_808x_state_t *state, uint16_t *offset)
     return 1;
 }
 
-static int
+static bm_808x_execution_clock_kind_t
 documented_native_execution_clocks(const bm_808x_state_t *state,
-                                   uint32_t *clocks)
+                                   uint32_t *minimum, uint32_t *maximum)
 {
     uint8_t opcode = state->last_effective_opcode;
     uint32_t base = 0U;
     int known = 1;
+    bm_808x_execution_clock_kind_t kind = BM_808X_EXECUTION_CLOCKS_EXACT;
 
     if ((opcode >= 0x40U) && (opcode <= 0x4fU))
         base = 2U; /* INC/DEC reg16. */
@@ -3916,6 +3949,24 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0x68:
                 base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
                 break;
+            case 0x69: case 0x6b: {
+                uint32_t range_min = 0U;
+                uint32_t range_max = 0U;
+                if (opcode == 0x6bU)
+                    known = rm_execution_clock_range(
+                        state, 1, 28U, 34U, 0U, 0U, 34U, 40U, 38U, 44U,
+                        &range_min, &range_max);
+                else
+                    known = rm_execution_clock_range(
+                        state, 1, 36U, 42U, 0U, 0U, 42U, 48U, 46U, 52U,
+                        &range_min, &range_max);
+                if (known) {
+                    *minimum = range_min + (uint32_t) state->last_prefix_count * 2U;
+                    *maximum = range_max + (uint32_t) state->last_prefix_count * 2U;
+                    return BM_808X_EXECUTION_CLOCKS_RANGE;
+                }
+                break;
+            }
             case 0x6a:
                 base = (state->boundary_initial_sp & 1U) ? 11U : 7U;
                 break;
@@ -4097,6 +4148,11 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                     break;
                 }
                 operation = (modrm >> 3U) & 7U;
+                if (((operation == 6U) || (operation == 7U)) &&
+                    state->interrupt_entered) {
+                    known = 0;
+                    break;
+                }
                 if (operation <= 1U)
                     known = rm_execution_clocks(state, word, 4U, 11U, 11U,
                                                 15U, &base);
@@ -4112,8 +4168,45 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                         base = 25U;
                     else
                         base = (state->boundary_rm_offset & 1U) ? 34U : 30U;
+                } else if ((operation == 4U) || (operation == 5U) ||
+                           (operation == 7U)) {
+                    uint32_t range_min = 0U;
+                    uint32_t range_max = 0U;
+                    if (operation == 4U) {
+                        if (word)
+                            known = rm_execution_clock_range(
+                                state, 1, 29U, 30U, 0U, 0U, 35U, 36U,
+                                39U, 40U, &range_min, &range_max);
+                        else
+                            known = rm_execution_clock_range(
+                                state, 0, 21U, 22U, 27U, 28U, 0U, 0U,
+                                0U, 0U, &range_min, &range_max);
+                    } else if (operation == 5U) {
+                        if (word)
+                            known = rm_execution_clock_range(
+                                state, 1, 41U, 47U, 0U, 0U, 47U, 53U,
+                                51U, 57U, &range_min, &range_max);
+                        else
+                            known = rm_execution_clock_range(
+                                state, 0, 33U, 39U, 39U, 45U, 0U, 0U,
+                                0U, 0U, &range_min, &range_max);
+                    } else if (word) {
+                        known = rm_execution_clock_range(
+                            state, 1, 38U, 43U, 0U, 0U, 43U, 48U,
+                            47U, 52U, &range_min, &range_max);
+                    } else {
+                        known = rm_execution_clock_range(
+                            state, 0, 29U, 34U, 34U, 39U, 0U, 0U,
+                            0U, 0U, &range_min, &range_max);
+                    }
+                    if (known) {
+                        *minimum = range_min +
+                                   (uint32_t) state->last_prefix_count * 2U;
+                        *maximum = range_max +
+                                   (uint32_t) state->last_prefix_count * 2U;
+                        return BM_808X_EXECUTION_CLOCKS_RANGE;
+                    }
                 } else {
-                    /* MUL, IMUL and IDIV are explicitly data-dependent. */
                     known = 0;
                 }
                 break;
@@ -4156,9 +4249,13 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 break;
         }
     }
-    if (known)
-        *clocks = base + (uint32_t) state->last_prefix_count * 2U;
-    return known;
+    if (!known)
+        kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    if (kind == BM_808X_EXECUTION_CLOCKS_EXACT) {
+        *minimum = base + (uint32_t) state->last_prefix_count * 2U;
+        *maximum = *minimum;
+    }
+    return kind;
 }
 
 static void
@@ -4202,9 +4299,10 @@ emit_boundary_observation(bm_808x_state_t *state,
     };
 
     if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)
-        observation.execution_clocks_known =
-            (uint8_t) documented_native_execution_clocks(
-                state, &observation.execution_clocks);
+        observation.execution_clock_kind =
+            documented_native_execution_clocks(
+                state, &observation.execution_clocks_min,
+                &observation.execution_clocks_max);
     if (state->timing != NULL)
         state->timing(state->timing_context, &observation);
 }
