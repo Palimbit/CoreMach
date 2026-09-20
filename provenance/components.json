@@ -15,7 +15,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Initial deterministic engine, rational CPU and dynamically controlled timed-device clock domains with an exact queryable source-cycle cursor, scheduler, host-neutral physical input and guest-owned keyboard-indicator value types, XRGB8888 framebuffer value types and caller-owned block-media contract; exact integral-period clock advances use an overflow-checked constant-time path while fractional domains retain the portable general algorithm"
+      "local_changes": "Initial deterministic engine, rational CPU and dynamically controlled timed-device clock domains with an exact queryable source-cycle cursor, scheduler, host-neutral physical input and guest-owned keyboard-indicator value types, XRGB8888 framebuffer value types and caller-owned block-media contract; exact integral-period clock advances use an overflow-checked constant-time path while fractional domains retain the portable general algorithm, and the scheduler reuses an exact nearest deadline until a successful event/source mutation invalidates it"
     },
     {
       "id": "generic-address-bus",

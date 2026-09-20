@@ -57,7 +57,11 @@ position and atomic overflow behavior are covered by the same contract.
 3. The engine selects the participant at the earliest virtual position. Equal-time
    participants have a stable registration order; same-time events have their
    existing insertion order. A halted participant is suspended until a signal
-   wakes it; it must not spin or advance the host clock.
+   wakes it; it must not spin or advance the host clock. The nearest exact
+   event/source deadline is reused across CPU boundaries until scheduling,
+   arming or disarming changes it. CPU callbacks that do make such a change
+   invalidate it before the next participant is selected, so caching cannot
+   defer a newly earlier deadline.
 4. A bus transaction already carries `wait_states`. The CPU adds applicable
    waits to its native-cycle result. Do not add a second CPU-level wait callback
    or silently claim that merely counting waits places individual bus accesses

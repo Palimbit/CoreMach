@@ -47,6 +47,7 @@ struct bm_engine {
     size_t firing_source;
     int dispatch_active;
     int source_callback_active;
+    int clock_deadline_changed;
     int clocked;
 };
 
@@ -325,6 +326,7 @@ bm_engine_arm_timed_source(bm_engine_t *engine, bm_timed_source_id_t id,
 
     source->deadline = candidate;
     source->active = 1;
+    engine->clock_deadline_changed = 1;
     return BM_STATUS_OK;
 }
 
@@ -338,6 +340,7 @@ bm_engine_disarm_timed_source(bm_engine_t *engine, bm_timed_source_id_t id)
         (engine->firing_source == (size_t) id))
         return BM_STATUS_INVALID_STATE;
     engine->timed_sources[id].active = 0;
+    engine->clock_deadline_changed = 1;
     return BM_STATUS_OK;
 }
 
@@ -370,6 +373,7 @@ bm_engine_reset(bm_engine_t *engine)
     engine->next_sequence = 0;
     engine->clock_now.nanoseconds = 0U;
     engine->clock_now.phase = 0U;
+    engine->clock_deadline_changed = 1;
     for (index = 0; index < engine->max_events; ++index)
         engine->events[index].active = 0;
     for (index = 0; index < engine->timed_source_count; ++index) {
@@ -424,6 +428,7 @@ bm_engine_schedule_at(bm_engine_t *engine,
             engine->events[index].callback = callback;
             engine->events[index].context = context;
             engine->events[index].active = 1;
+            engine->clock_deadline_changed = 1;
             return BM_STATUS_OK;
         }
     }
@@ -514,6 +519,8 @@ run_clocked_cpus_to(bm_engine_t *engine,
                     const bm_clock_position_t *finish,
                     bm_clock_position_t *deadline)
 {
+    next_clocked_deadline(engine, finish, deadline);
+    engine->clock_deadline_changed = 0;
     for (;;) {
         size_t index;
         size_t selected = SIZE_MAX;
@@ -521,7 +528,6 @@ run_clocked_cpus_to(bm_engine_t *engine,
         uint64_t cycles = 0U;
         bm_status_t status;
 
-        next_clocked_deadline(engine, finish, deadline);
         for (index = 0U; index < engine->cpu_count; ++index) {
             const bm_cpu_slot_t *candidate = &engine->cpus[index];
 
@@ -555,8 +561,13 @@ run_clocked_cpus_to(bm_engine_t *engine,
         status = bm_clock_position_advance(&slot->clock_position, cycles);
         if (status != BM_STATUS_OK)
             return status;
-        /* A CPU may have queued an earlier integer event while completing an
-         * indivisible instruction. Recompute every participant deadline. */
+        /* Most instructions do not change an event source. Reuse the exact
+         * deadline until one does; a device reached through the CPU step can
+         * still queue an earlier event or arm/disarm a timed source. */
+        if (engine->clock_deadline_changed) {
+            next_clocked_deadline(engine, finish, deadline);
+            engine->clock_deadline_changed = 0;
+        }
     }
 }
 
