@@ -3878,7 +3878,7 @@ execute_one(bm_808x_state_t *state)
             return status;
         }
         case 0xe6: { /* OUT imm8,AL */
-            uint8_t port;
+            uint8_t port = 0U;
             begin_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
@@ -3890,7 +3890,7 @@ execute_one(bm_808x_state_t *state)
             return io_write_byte(state, port, (uint8_t) state->registers[REG_AX]);
         }
         case 0xe7: { /* OUT imm8,AX */
-            uint8_t port;
+            uint8_t port = 0U;
             begin_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
