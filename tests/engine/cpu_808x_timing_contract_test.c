@@ -179,10 +179,10 @@ test_fixed_execution_clocks_and_prefix_cost(void)
         uint8_t queue_count;
         bm_808x_prefetch_phase_t prefetch_phase;
     } cases[] = {
-        { nop, sizeof(nop), 0x90U, 0U, 3U, 2U, 7U, 2U, 1U,
-          BM_808X_PREFETCH_T4 },
-        { prefixed_nop, sizeof(prefixed_nop), 0x2eU, 1U, 5U, 2U, 9U, 4U,
-          2U, BM_808X_PREFETCH_T2 }
+        { nop, sizeof(nop), 0x90U, 0U, 3U, 2U, 8U, 4U, 3U,
+          BM_808X_PREFETCH_IDLE },
+        { prefixed_nop, sizeof(prefixed_nop), 0x2eU, 1U, 5U, 3U, 11U, 4U,
+          2U, BM_808X_PREFETCH_T4 }
     };
     size_t index;
 
@@ -219,7 +219,7 @@ test_fixed_execution_clocks_and_prefix_cost(void)
                cases[index].prefetch_pointer);
         assert(capture.last.prefetch_queue_count == cases[index].queue_count);
         assert(capture.last.prefetch_phase == cases[index].prefetch_phase);
-        assert(capture.last.prefetch_transactions == 2U);
+        assert(capture.last.prefetch_transactions == index + 2U);
         assert(capture.last.prefetch_phase_clocks == cases[index].bus_clocks);
         assert(capture.last.operand_transactions == 0U);
         assert(capture.last.operand_bus_clocks == 0U);
@@ -232,7 +232,7 @@ static void
 test_operand_request_completes_inflight_prefetch(void)
 {
     static const uint8_t program[] = {
-        0x90U,       /* NOP leaves the next prefetch at T4. */
+        0x90U,       /* NOP leaves three bytes queued and the BCU idle. */
         0x50U,       /* PUSH AW requests the operand bus. */
         0x90U, 0x90U
     };
@@ -246,20 +246,20 @@ test_operand_request_completes_inflight_prefetch(void)
     cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
     start_program(&machine);
     step_once(&machine, &capture);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T4);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
 
     memset(&capture, 0, sizeof(capture));
     step_once(&machine, &capture);
     assert_exact_execution_clocks(&capture, 8U);
     assert_unknown_boundary_clocks(&capture);
-    assert(capture.last.logical_bus_transactions == 1U);
-    assert(capture.last.prefetch_transactions == 0U);
-    assert(capture.last.prefetch_phase_clocks == 1U);
+    assert(capture.last.logical_bus_transactions == 2U);
+    assert(capture.last.prefetch_transactions == 1U);
+    assert(capture.last.prefetch_phase_clocks == 4U);
     assert(capture.last.operand_transactions == 1U);
     assert(capture.last.operand_bus_clocks == 4U);
-    assert(capture.last.prefetch_handoff_clocks == 1U);
-    assert(capture.last.bus_active_clocks == 5U);
-    assert(capture.last.prefetch_queue_count == 2U);
+    assert(capture.last.prefetch_handoff_clocks == 3U);
+    assert(capture.last.bus_active_clocks == 8U);
+    assert(capture.last.prefetch_queue_count == 4U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -300,7 +300,7 @@ test_taken_branch_flushes_even_when_target_is_sequential(void)
     assert(capture.last.prefetch_pointer_known == 1U);
     assert(capture.last.prefetch_pointer == 4U);
     assert(capture.last.prefetch_queue_count == 2U);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T3);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -339,18 +339,18 @@ test_bus_waits_are_reported_but_not_folded_into_execution_clocks(void)
     assert((state.ax & 0x00ffU) == 0x00a5U);
     assert_exact_execution_clocks(&capture, 9U);
     assert_unknown_boundary_clocks(&capture);
-    assert(capture.last.logical_bus_transactions == 2U);
+    assert(capture.last.logical_bus_transactions == 3U);
     assert(capture.last.reported_wait_states == 3U);
-    assert(capture.last.bus_active_clocks == 11U);
+    assert(capture.last.bus_active_clocks == 15U);
     assert(capture.last.demand_prefetch_transactions == 1U);
     assert(capture.last.demand_prefetch_bus_clocks == 4U);
     assert(capture.last.instruction_queue_reads == 2U);
-    assert(capture.last.prefetch_transactions == 1U);
-    assert(capture.last.prefetch_phase_clocks == 4U);
+    assert(capture.last.prefetch_transactions == 2U);
+    assert(capture.last.prefetch_phase_clocks == 8U);
     assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
     assert(capture.last.operand_transactions == 1U);
     assert(capture.last.operand_bus_clocks == 7U);
-    assert(capture.last.prefetch_handoff_clocks == 0U);
+    assert(capture.last.prefetch_handoff_clocks == 2U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -376,10 +376,10 @@ test_memory_timing_uses_operand_form_and_alignment(void)
     step_once(&machine, &capture);
     assert_exact_execution_clocks(&capture, 9U);
     assert_unknown_boundary_clocks(&capture);
-    assert(capture.last.logical_bus_transactions == 2U);
+    assert(capture.last.logical_bus_transactions == 3U);
     assert(capture.last.operand_transactions == 1U);
     assert(capture.last.operand_bus_clocks == 4U);
-    assert(capture.last.prefetch_handoff_clocks == 0U);
+    assert(capture.last.prefetch_handoff_clocks == 2U);
     assert(cpu_808x_test_peek(&machine, 0x10040U) == 0x5aU);
     cpu_808x_test_machine_destroy(&machine);
 
@@ -407,35 +407,38 @@ test_memory_timing_uses_operand_form_and_alignment(void)
             step_once(&machine, &capture);
             assert_exact_execution_clocks(&capture, odd ? 24U : 16U);
             assert_unknown_boundary_clocks(&capture);
-            assert(bus_capture.count == (odd ? 5U : 3U));
-            assert(capture.last.bus_active_clocks == (odd ? 20U : 12U));
+            assert(bus_capture.count == (odd ? 6U : 4U));
+            assert(capture.last.bus_active_clocks == (odd ? 24U : 16U));
             assert(capture.last.demand_prefetch_transactions == 1U);
             assert(capture.last.demand_prefetch_bus_clocks == 4U);
             assert(capture.last.instruction_queue_reads == 2U);
             assert(capture.last.operand_transactions == (odd ? 4U : 2U));
             assert(capture.last.operand_bus_clocks == (odd ? 16U : 8U));
-            assert(capture.last.prefetch_handoff_clocks == 0U);
+            assert(capture.last.prefetch_handoff_clocks == 2U);
             assert(bus_capture.transactions[0].operation == BM_BUS_FETCH);
             assert(bus_capture.transactions[0].size == 2U);
             assert(bus_capture.transactions[0].alignment == 2U);
+            assert(bus_capture.transactions[1].operation == BM_BUS_FETCH);
+            assert(bus_capture.transactions[1].size == 2U);
+            assert(bus_capture.transactions[1].alignment == 2U);
             if (odd) {
                 size_t index;
 
-                for (index = 1U; index < bus_capture.count; ++index) {
+                for (index = 2U; index < bus_capture.count; ++index) {
                     assert(bus_capture.transactions[index].size == 1U);
                     assert(bus_capture.transactions[index].alignment == 1U);
                     assert(bus_capture.transactions[index].address ==
-                           0x10041U + ((index - 1U) & 1U));
+                           0x10041U + ((index - 2U) & 1U));
                 }
             } else {
-                assert(bus_capture.transactions[1].operation == BM_BUS_READ);
-                assert(bus_capture.transactions[2].operation == BM_BUS_WRITE);
-                assert(bus_capture.transactions[1].address == 0x10040U);
+                assert(bus_capture.transactions[2].operation == BM_BUS_READ);
+                assert(bus_capture.transactions[3].operation == BM_BUS_WRITE);
                 assert(bus_capture.transactions[2].address == 0x10040U);
-                assert(bus_capture.transactions[1].size == 2U);
+                assert(bus_capture.transactions[3].address == 0x10040U);
                 assert(bus_capture.transactions[2].size == 2U);
-                assert(bus_capture.transactions[1].alignment == 2U);
+                assert(bus_capture.transactions[3].size == 2U);
                 assert(bus_capture.transactions[2].alignment == 2U);
+                assert(bus_capture.transactions[3].alignment == 2U);
             }
             cpu_808x_test_machine_destroy(&machine);
         }
@@ -554,9 +557,9 @@ test_data_dependent_arithmetic_reports_documented_ranges(void)
         else if (index == 2U)
             assert_boundary_clock_range(&capture, 44U, 49U);
         else if (index == 4U)
-            assert_boundary_clock_range(&capture, 39U, 45U);
+            assert_boundary_clock_range(&capture, 37U, 43U);
         else if (index == 5U)
-            assert_boundary_clock_range(&capture, 55U, 61U);
+            assert_boundary_clock_range(&capture, 51U, 57U);
         else
             assert_unknown_boundary_clocks(&capture);
         cpu_808x_test_machine_destroy(&machine);
@@ -1058,13 +1061,13 @@ test_prefetched_byte_survives_later_memory_write(void)
     cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
     start_program(&machine);
     step_once(&machine, &capture);
-    assert(capture.last.prefetch_pointer == 2U);
-    assert(capture.last.prefetch_queue_count == 1U);
+    assert(capture.last.prefetch_pointer == 4U);
+    assert(capture.last.prefetch_queue_count == 3U);
     assert(capture.last.logical_bus_transactions == 2U);
-    assert(capture.last.bus_active_clocks == 7U);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T4);
+    assert(capture.last.bus_active_clocks == 8U);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
     assert(capture.last.prefetch_transactions == 2U);
-    assert(capture.last.prefetch_phase_clocks == 7U);
+    assert(capture.last.prefetch_phase_clocks == 8U);
 
     cpu_808x_test_poke(&machine, 0xf0001U, 0xf4U);
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
@@ -1072,16 +1075,16 @@ test_prefetched_byte_survives_later_memory_write(void)
     state = cpu_808x_test_get_state(&machine);
     assert(state.ip == 2U);
     assert(state.halted == 0U);
-    assert(capture.last.prefetch_pointer == 4U);
-    assert(capture.last.prefetch_queue_count == 2U);
-    assert(capture.last.logical_bus_transactions == 0U);
-    assert(capture.last.bus_active_clocks == 3U);
+    assert(capture.last.prefetch_pointer == 6U);
+    assert(capture.last.prefetch_queue_count == 4U);
+    assert(capture.last.logical_bus_transactions == 1U);
+    assert(capture.last.bus_active_clocks == 4U);
     assert(capture.last.demand_prefetch_transactions == 0U);
     assert(capture.last.demand_prefetch_bus_clocks == 0U);
     assert(capture.last.instruction_queue_reads == 1U);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T3);
-    assert(capture.last.prefetch_transactions == 0U);
-    assert(capture.last.prefetch_phase_clocks == 3U);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
+    assert(capture.last.prefetch_transactions == 1U);
+    assert(capture.last.prefetch_phase_clocks == 4U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -1103,16 +1106,16 @@ test_odd_prefetch_and_pointer_wrap(void)
     state.ip = 1U;
     cpu_808x_test_set_state(&machine, &state);
     step_once(&machine, &capture);
-    assert(capture.last.prefetch_pointer == 2U);
-    assert(capture.last.prefetch_queue_count == 0U);
+    assert(capture.last.prefetch_pointer == 4U);
+    assert(capture.last.prefetch_queue_count == 2U);
     assert(capture.last.logical_bus_transactions == 2U);
-    assert(capture.last.bus_active_clocks == 7U);
+    assert(capture.last.bus_active_clocks == 8U);
     assert(capture.last.demand_prefetch_transactions == 1U);
     assert(capture.last.demand_prefetch_bus_clocks == 4U);
     assert(capture.last.instruction_queue_reads == 1U);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T4);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
     assert(capture.last.prefetch_transactions == 2U);
-    assert(capture.last.prefetch_phase_clocks == 7U);
+    assert(capture.last.prefetch_phase_clocks == 8U);
 
     memset(&capture, 0, sizeof(capture));
     state = cpu_808x_test_get_state(&machine);
@@ -1120,16 +1123,16 @@ test_odd_prefetch_and_pointer_wrap(void)
     cpu_808x_test_set_state(&machine, &state);
     cpu_808x_test_poke(&machine, 0xfffffU, 0x90U);
     step_once(&machine, &capture);
-    assert(capture.last.prefetch_pointer == 0U);
-    assert(capture.last.prefetch_queue_count == 0U);
+    assert(capture.last.prefetch_pointer == 2U);
+    assert(capture.last.prefetch_queue_count == 2U);
     assert(capture.last.logical_bus_transactions == 2U);
-    assert(capture.last.bus_active_clocks == 7U);
+    assert(capture.last.bus_active_clocks == 8U);
     assert(capture.last.demand_prefetch_transactions == 1U);
     assert(capture.last.demand_prefetch_bus_clocks == 4U);
     assert(capture.last.instruction_queue_reads == 1U);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T4);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
     assert(capture.last.prefetch_transactions == 2U);
-    assert(capture.last.prefetch_phase_clocks == 7U);
+    assert(capture.last.prefetch_phase_clocks == 8U);
     cpu_808x_test_machine_destroy(&machine);
 }
 

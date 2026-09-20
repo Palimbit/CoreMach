@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 7U
+#define BM_808X_TIMING_OBSERVATION_VERSION 8U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -126,6 +126,9 @@ typedef enum bm_808x_prefetch_phase {
  * through the BCU. operand_* reports its exclusive bus ownership, while
  * prefetch_handoff_clocks is the subset of prefetch clocks required to finish
  * a transfer that was already in flight when an operand requested the bus.
+ * Version 8 also advances that same BCU during every instruction-queue read,
+ * matching the V30 predecoder clock instead of counting it only in the final
+ * elapsed-boundary total.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

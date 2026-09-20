@@ -240,14 +240,15 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 7 reports
+their sum the elapsed instruction time. Timing-observation version 8 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
 boundary duration. That duration is currently available only when every bus
-transaction in a native instruction boundary is a demand prefetch: demand-fetch
-clocks (including their waits) and queue-read clocks are added to the documented
-EXU interval, while later prefetch phases remain overlapped. Exact execution
+transaction in a native instruction boundary belongs to prefetch: demand-fetch
+stall clocks (including their waits) and queue-read clocks are added to the
+documented EXU interval, while speculative prefetch phases remain overlapped.
+Exact execution
 times therefore produce exact boundary times and documented execution ranges
 remain ranges. Operand-memory and I/O traffic leave the boundary duration
 `UNKNOWN` until their position relative to an already-running prefetch is
@@ -261,6 +262,12 @@ the portable bus access in T3 and publish fetched bytes to the queue in T4.
 An in-flight speculative fetch whose queue is empty when the next instruction
 needs a byte is reclassified as demand for its remaining phases, including
 when its T3 transaction completed in the preceding boundary.
+Every successful instruction-queue read now advances this same BCU by its one
+documented predecode clock. The byte is removed first, so the newly freed queue
+space may start a fetch; an in-flight fetch instead advances one phase. This is
+real overlap, not an additional serialized bus delay. Instruction fetches also
+remain ordinary bus cycles under `BUSLOCK`; only the instruction's operand
+transfers carry the locked transaction attribute.
 For native instructions whose NEC execution time is exact, which do not flush
 the queue and which perform no operand or I/O transfer, those phases progress
 concurrently for the documented EXU clocks and persist across instruction
@@ -300,7 +307,7 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 7 combines those quantities only for the uncontended cases
+bus waits. Version 8 combines those quantities only for the uncontended cases
 where their placement and overlap are known; every other boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
