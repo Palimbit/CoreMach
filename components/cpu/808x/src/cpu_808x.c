@@ -3807,8 +3807,11 @@ execute_one(bm_808x_state_t *state)
             uint8_t value = 0U;
             uint16_t offset = (uint16_t) (state->registers[REG_BX] +
                                           get_register_byte(state, 0U));
-            status = read_byte(state, state->segments[segment], offset,
-                               BM_BUS_READ, &value);
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 3U);
+            if (status == BM_STATUS_OK)
+                status = read_byte(state, state->segments[segment], offset,
+                                   BM_BUS_READ, &value);
             if (status == BM_STATUS_OK)
                 set_register_byte(state, 0U, value);
             return status;

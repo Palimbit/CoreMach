@@ -249,7 +249,8 @@ native instruction boundary belongs to prefetch and, from version 9, for the
 direct and DX-addressed `IN`/`OUT` forms. Version 10 also places every native
 prefix before the following instruction byte is decoded, so those I/O forms
 remain complete when prefixed. Version 11 adds the four direct
-accumulator-memory `MOV` forms, including even and odd word transfers.
+accumulator-memory `MOV` forms, including even and odd word transfers, and
+`XLAT` after its inherited three internal clocks.
 Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O or
@@ -294,8 +295,9 @@ EXU intervals advance prefetch, each operand transaction occupies its four base
 clocks, and any remaining documented clocks resume prefetch. Version 10 places
 each prefix's documented execution interval immediately after its queue read;
 this may finish a prefetch before a later operand requests the bus. Version 11
-places direct accumulator-memory `MOV` after its two-byte address and preserves
-the inherited internal clock before a store. The executor still lacks the
+places direct accumulator-memory `MOV` after its two-byte address, preserves
+the inherited internal clock before a store, and places `XLAT` after its three
+internal clocks. The executor still lacks the
 offsets for other operand instructions, documented timing
 ranges and unknown timings; those paths suspend this overlap model until their
 individual accesses can be placed. The observer
@@ -325,8 +327,8 @@ That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
 bus waits. Version 11 combines those quantities only for uncontended cases and
-the explicitly placed `IN`/`OUT` and direct accumulator-memory `MOV` forms;
-every other operand boundary remains
+the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
+forms; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by

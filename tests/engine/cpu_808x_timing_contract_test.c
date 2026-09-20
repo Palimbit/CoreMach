@@ -543,6 +543,36 @@ test_direct_memory_moves_have_a_complete_execution_timeline(void)
         }
         cpu_808x_test_machine_destroy(&machine);
     }
+
+    {
+        static const uint8_t xlat[] = { 0xd7U };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config, xlat, sizeof(xlat));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.bx = 0x0100U;
+        state.ax = 0U;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, 0x0100U, 0x5aU);
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert((state.ax & 0x00ffU) == 0x005aU);
+        assert_exact_execution_clocks(&capture, 9U);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions == 1U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == 9U);
+        assert(capture.last.operand_wait_states == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
 }
 
 static void

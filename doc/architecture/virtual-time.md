@@ -12,8 +12,8 @@ advances the BCU concurrently for the documented clock of every byte consumed
 from the instruction queue. Every native prefix advances that timeline at its
 decode point. The eight native `IN`/`OUT` opcodes therefore have exact complete
 boundaries with or without accepted prefixes, including I/O wait states. The
-four direct accumulator-memory `MOV` forms are also placed, including odd word
-transfers; other operand-bearing boundaries stay unresolved until their EXU
+four direct accumulator-memory `MOV` forms and `XLAT` are also placed,
+including odd word transfers; other operand-bearing boundaries stay unresolved until their EXU
 position is known.
 It is not
 yet registered as a clocked CPU. The existing PCS 86 engine
@@ -133,8 +133,8 @@ intermediate product; overflow is reported without changing the position.
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
-  `IN`/`OUT` and direct accumulator-memory `MOV` now place their inherited
-  internal waits and operand cycles on that timeline, and every decoded prefix
+  `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT` now place their
+  inherited internal waits and operand cycles on that timeline, and every decoded prefix
   advances it before the next queue read. Other operand offsets, realised
   values inside ranges and interrupt
   boundaries remain known unknowns. A
