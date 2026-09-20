@@ -204,8 +204,9 @@ intermediate product; overflow is reported without changing the position.
   BIOS proceeds through timer programming and IRQ0. With the preserved System
   Disk mounted read-only, it reaches 6.657920 seconds after placing both
   pointer reads, both stack writes and the queue flush of indirect far
-  `CALL m16:16` (`FF /3`). Execution remains in loaded code at `0070:11E4`;
-  the next strict timing guard is memory `POP r/m16` (`8F /0`). This measured distribution sets the next
+  `CALL m16:16` (`FF /3`) and memory `POP r/m16` (`8F /0`). Execution reaches
+  loaded code at `0070:206C`; the next strict timing guard is indirect far
+  `JMP m16:16` (`FF /5`). This measured distribution sets the next
   integration order instead of opcode-table convenience.
 - The V30 now exposes a clocked-engine step callback independently of its
   optional diagnostic observer. It reports a duration only for a complete,

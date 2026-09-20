@@ -3510,8 +3510,16 @@ execute_one(bm_808x_state_t *state)
             if (((modrm >> 3U) & 7U) != 0U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
+            if ((status == BM_STATUS_OK) && !operand.is_register)
+                status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = write_operand_word(state, &operand, value);
             return status;
@@ -4830,7 +4838,13 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0x8f: {
                 if (state->boundary_rm_valid && !state->boundary_rm_memory)
                     base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
-                else
+                else if (state->boundary_rm_valid) {
+                    base = 17U;
+                    if ((state->boundary_initial_sp & 1U) != 0U)
+                        base += 4U;
+                    if ((state->boundary_rm_offset & 1U) != 0U)
+                        base += 4U;
+                } else
                     known = 0;
                 break;
             }
