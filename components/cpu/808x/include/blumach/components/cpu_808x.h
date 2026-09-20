@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 34U
+#define BM_808X_TIMING_OBSERVATION_VERSION 35U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -189,6 +189,8 @@ typedef enum bm_808x_prefetch_phase {
  * prefetch suspension and target-queue invalidation.
  * Version 34 places normal, repeated and zero-count CMPS source and
  * destination reads without classifying interrupted repeat fragments.
+ * Version 35 places both pointer reads, both stack writes and the target-queue
+ * flush for indirect far calls with independent pointer and stack alignment.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

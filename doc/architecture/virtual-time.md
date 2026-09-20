@@ -202,10 +202,10 @@ intermediate product; overflow is reported without changing the position.
   unchanged. Accepting one V30 word-I/O transaction across the indexed VGA
   `3D4h/3D5h` pair then removes that component-boundary limitation: the same
   BIOS proceeds through timer programming and IRQ0. With the preserved System
-  Disk mounted read-only, it reaches 6.657824 seconds after placing normal,
-  repeated and zero-count `CMPS` reads. Execution advances from the initial
-  boot sector into loaded code at `0070:11B2`; the next strict timing guard is
-  indirect far `CALL m16:16` (`FF /3`). This measured distribution sets the next
+  Disk mounted read-only, it reaches 6.657920 seconds after placing both
+  pointer reads, both stack writes and the queue flush of indirect far
+  `CALL m16:16` (`FF /3`). Execution remains in loaded code at `0070:11E4`;
+  the next strict timing guard is memory `POP r/m16` (`8F /0`). This measured distribution sets the next
   integration order instead of opcode-table convenience.
 - The V30 now exposes a clocked-engine step callback independently of its
   optional diagnostic observer. It reports a duration only for a complete,
