@@ -3301,7 +3301,7 @@ execute_one(bm_808x_state_t *state)
             if (opcode != 0x81U) {
                 uint8_t immediate = 0;
                 uint8_t left = 0;
-                uint8_t result;
+                uint8_t result = 0U;
                 if (status == BM_STATUS_OK)
                     status = read_operand_byte(state, &operand, &left);
                 if (status == BM_STATUS_OK)
@@ -3333,7 +3333,7 @@ execute_one(bm_808x_state_t *state)
             } else {
                 uint16_t immediate = 0;
                 uint16_t left = 0;
-                uint16_t result;
+                uint16_t result = 0U;
                 if (status == BM_STATUS_OK)
                     status = read_operand_word(state, &operand, &left);
                 if (status == BM_STATUS_OK)
@@ -3393,7 +3393,7 @@ execute_one(bm_808x_state_t *state)
                 status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK) {
                 uint16_t extended = (uint16_t) (int16_t) (int8_t) immediate;
-                uint16_t result;
+                uint16_t result = 0U;
                 if (operation == 0U)
                     result = add16(state, left, extended);
                 else if (operation == 2U)
