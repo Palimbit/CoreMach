@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 11U
+#define BM_808X_TIMING_OBSERVATION_VERSION 12U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -140,6 +140,9 @@ typedef enum bm_808x_prefetch_phase {
  * unresolved until their individual transfers are placed.
  * Version 11 places the four direct accumulator-memory MOV forms and XLAT,
  * including inherited internal clocks and both bus cycles of an odd word.
+ * Version 12 places the four MOV r/m,reg forms when r/m names memory. Register
+ * forms retain the ordinary aggregate execution path because they do not
+ * arbitrate for the BCU.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

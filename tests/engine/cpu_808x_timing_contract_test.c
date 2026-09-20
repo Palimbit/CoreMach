@@ -596,11 +596,13 @@ test_memory_timing_uses_operand_form_and_alignment(void)
     cpu_808x_test_set_state(&machine, &state);
     step_once(&machine, &capture);
     assert_exact_execution_clocks(&capture, 9U);
-    assert_unknown_boundary_clocks(&capture);
-    assert(capture.last.logical_bus_transactions == 3U);
+    assert_exact_boundary_clocks(&capture, 16U);
+    assert(capture.last.logical_bus_transactions == 4U);
     assert(capture.last.operand_transactions == 1U);
     assert(capture.last.operand_bus_clocks == 4U);
-    assert(capture.last.prefetch_handoff_clocks == 2U);
+    assert(capture.last.prefetch_handoff_clocks == 1U);
+    assert(capture.last.execution_timeline_complete == 1U);
+    assert(capture.last.execution_clocks_placed == 9U);
     assert(cpu_808x_test_peek(&machine, 0x10040U) == 0x5aU);
     cpu_808x_test_machine_destroy(&machine);
 
@@ -663,6 +665,109 @@ test_memory_timing_uses_operand_form_and_alignment(void)
             }
             cpu_808x_test_machine_destroy(&machine);
         }
+    }
+}
+
+static void
+test_modrm_moves_have_a_complete_execution_timeline(void)
+{
+    const struct {
+        uint8_t program[4];
+        size_t size;
+        uint16_t bx;
+        uint64_t address;
+        uint32_t execution_clocks;
+        uint64_t operand_transactions;
+        int store;
+        int word;
+    } cases[] = {
+        { { 0x89U, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          9U, 1U, 1, 1 },
+        { { 0x89U, 0x07U, 0U, 0U }, 2U, 0x0101U, 0x0101U,
+          13U, 2U, 1, 1 },
+        { { 0x8aU, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 0, 0 },
+        { { 0x8bU, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 0, 1 },
+        { { 0x8bU, 0x07U, 0U, 0U }, 2U, 0x0101U, 0x0101U,
+          15U, 2U, 0, 1 },
+        { { 0x8aU, 0x47U, 0x01U, 0U }, 3U, 0x0100U, 0x0101U,
+          11U, 1U, 0, 0 },
+        { { 0x2eU, 0x8aU, 0x07U, 0U }, 3U, 0x0100U, 0xf0100U,
+          13U, 1U, 0, 0 }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.bx = cases[index].bx;
+        state.ax = 0xa55aU;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, cases[index].address,
+                           cases[index].store ? 0U : 0x5aU);
+        if (cases[index].word)
+            cpu_808x_test_poke(&machine, cases[index].address + 1U,
+                               cases[index].store ? 0U : 0xa5U);
+
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].operand_transactions);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed ==
+               cases[index].execution_clocks);
+        if (cases[index].store) {
+            assert(cpu_808x_test_peek(&machine, cases[index].address) ==
+                   0x5aU);
+            assert(cpu_808x_test_peek(&machine,
+                                      cases[index].address + 1U) == 0xa5U);
+        } else {
+            state = cpu_808x_test_get_state(&machine);
+            assert((state.ax & (cases[index].word ? 0xffffU : 0x00ffU)) ==
+                   (cases[index].word ? 0xa55aU : 0x005aU));
+        }
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        static const uint8_t register_move[] = { 0x8bU, 0xc3U };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config, register_move,
+                                     sizeof(register_move));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.bx = 0xa55aU;
+        cpu_808x_test_set_state(&machine, &state);
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ax == 0xa55aU);
+        assert_exact_execution_clocks(&capture, 2U);
+        assert(capture.last.operand_transactions == 0U);
+        assert(capture.last.execution_timeline_complete == 0U);
+        assert(capture.last.execution_clocks_placed == 0U);
+        cpu_808x_test_machine_destroy(&machine);
     }
 }
 
@@ -1400,6 +1505,7 @@ main(void)
     test_direct_io_has_a_complete_execution_timeline();
     test_direct_memory_moves_have_a_complete_execution_timeline();
     test_memory_timing_uses_operand_form_and_alignment();
+    test_modrm_moves_have_a_complete_execution_timeline();
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();
     test_divide_error_does_not_claim_normal_execution_clocks();

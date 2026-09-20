@@ -2911,6 +2911,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &source);
             if (status == BM_STATUS_OK)
@@ -2935,6 +2939,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 5U);
+            }
             if (status == BM_STATUS_OK)
                 status = write_operand_byte(state, &operand,
                                             get_register_byte(state,
@@ -2989,6 +2997,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 5U);
+            }
             if (status == BM_STATUS_OK)
                 status = write_operand_word(state, &operand,
                                             state->registers[(modrm >> 3U) & 7U]);
@@ -3025,6 +3037,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if (status == BM_STATUS_OK)
