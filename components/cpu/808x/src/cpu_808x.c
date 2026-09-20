@@ -3457,6 +3457,11 @@ execute_one(bm_808x_state_t *state)
                 (operation != 6U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && (operation <= 1U) &&
+                !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if ((status == BM_STATUS_OK) &&
                 ((operation == 3U) || (operation == 5U))) {
                 uint16_t segment = 0U;
@@ -3491,7 +3496,10 @@ execute_one(bm_808x_state_t *state)
                     compare16(state, value, 1U);
                 }
                 state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
-                return write_operand_word(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_word(state, &operand, result);
+                return status;
             }
             if (operation == 2U) {
                 status = push_word(state, state->ip);
@@ -3597,6 +3605,10 @@ execute_one(bm_808x_state_t *state)
             if (operation > 1U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if (status != BM_STATUS_OK)
@@ -3609,7 +3621,10 @@ execute_one(bm_808x_state_t *state)
                 compare8(state, value, 1U);
             }
             state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
-            return write_operand_byte(state, &operand, result);
+            status = place_execution_clocks(state, 2U);
+            if (status == BM_STATUS_OK)
+                status = write_operand_byte(state, &operand, result);
+            return status;
         }
         case 0xc6: /* MOV r/m8,imm8. */
         case 0xc7: { /* MOV r/m16,imm16. */
