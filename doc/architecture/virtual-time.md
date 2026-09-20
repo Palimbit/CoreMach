@@ -6,7 +6,7 @@ Status: experimental clocked scheduler and timed-device sources with synthetic
 tests; no real CPU or machine uses them yet. The V30 timing observer can now
 compose a complete native-clock duration for instruction boundaries without
 operand or I/O traffic, while preserving ranges and unresolved boundaries as
-such. Version 23 also routes memory and I/O transfers through the same BCU as
+such. Version 24 also routes memory and I/O transfers through the same BCU as
 prefetch, exposes the clocks needed to hand over an in-flight prefetch, and
 advances the BCU concurrently for the documented clock of every byte consumed
 from the instruction queue. Every native prefix advances that timeline at its
@@ -30,6 +30,8 @@ fragments remain deliberately unknown. Relative near `CALL` and both near
 suspension and target-queue flush.
 `MOVS` and `LODS` now place their source-side transfers as well, including
 repeated, zero-count, segment-overridden and odd-word forms.
+Accumulator-immediate `TEST` is now classified at its documented four clocks;
+it has no operand-bus transfer to place.
 It is not
 yet registered as a clocked CPU. The existing PCS 86 engine
 still advances one scheduler tick per completed V30 instruction boundary. Its
@@ -37,7 +39,8 @@ still advances one scheduler tick per completed V30 instruction boundary. Its
 No current machine becomes cycle accurate because of this change.
 The PCS 86 configuration can forward the versioned V30 timing observer to
 diagnostic consumers. The firmware probe reports complete/exact/ranged/unknown
-boundary totals and unknown counts per effective opcode without making timing a
+boundary totals, unknown counts per effective opcode and the first unknown
+boundary's execution, transaction and flush context without making timing a
 frontend or machine-policy dependency.
 
 ## Ownership
@@ -169,11 +172,12 @@ intermediate product; overflow is reported without changing the position.
   clocked callback and PCS 86 machine migration are later changes. Z80
   integration must not alter the legacy V30 tick meaning.
 - The current PCS 86 firmware baseline completes 1,385,861 observed instruction
-  boundaries before its known unsupported endpoint. Of those, 1,385,808 have a
-  complete exact boundary duration and 53 remain unknown. Placing `STOSW`
+  boundaries before its known unsupported endpoint. Of those, 1,385,836 have a
+  complete exact boundary duration and 25 remain unknown. Placing `STOSW`
   (`ABh`) and `SCASW` (`AFh`) removed 262,193 unknown boundaries without
   changing the endpoint or framebuffer CRC. Placing relative near `CALL` and
   near `RET` then removed another 1,457, and `MOVS`/`LODS` removed another 312.
+  Classifying accumulator-immediate `TEST` removed another 28.
   The remaining groups are small and semantically distinct; this measured
   distribution sets the next
   integration order instead of opcode-table convenience.

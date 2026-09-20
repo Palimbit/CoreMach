@@ -163,6 +163,38 @@ assert_boundary_clock_range(const timing_capture_t *capture,
 }
 
 static void
+test_accumulator_test_has_documented_timing(void)
+{
+    static const uint8_t programs[][4] = {
+        { 0xa8U, 0x55U, 0U, 0U },
+        { 0xa9U, 0x55U, 0xaaU, 0U },
+        { 0x2eU, 0xa8U, 0x55U, 0U }
+    };
+    const size_t sizes[] = { 2U, 3U, 3U };
+    size_t index;
+
+    for (index = 0U; index < sizeof(programs) / sizeof(programs[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+
+        cpu_808x_test_machine_create(&machine, &config, programs[index],
+                                     sizes[index]);
+        start_program(&machine);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, index == 2U ? 6U : 4U);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions == 0U);
+        assert(capture.last.execution_timeline_complete == (index == 2U));
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_fixed_execution_clocks_and_prefix_cost(void)
 {
     static const uint8_t nop[] = { 0x90U };
@@ -2643,6 +2675,7 @@ test_taken_branch_discards_sequential_prefetch(void)
 int
 main(void)
 {
+    test_accumulator_test_has_documented_timing();
     test_fixed_execution_clocks_and_prefix_cost();
     test_operand_timeline_can_finish_inflight_prefetch();
     test_taken_branch_flushes_even_when_target_is_sequential();

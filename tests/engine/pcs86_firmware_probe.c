@@ -37,6 +37,9 @@ typedef struct probe_trace {
     uint64_t timing_boundary_range;
     uint64_t timing_boundary_unknown;
     uint64_t timing_unknown_by_opcode[256];
+    bm_808x_timing_observation_t first_timing_unknown;
+    bm_808x_trace_t first_timing_unknown_trace;
+    int has_first_timing_unknown;
 } probe_trace_t;
 
 static void
@@ -112,6 +115,11 @@ capture_timing(void *context,
     } else {
         ++probe->timing_boundary_unknown;
         ++probe->timing_unknown_by_opcode[observation->effective_opcode];
+        if (!probe->has_first_timing_unknown) {
+            probe->first_timing_unknown = *observation;
+            probe->first_timing_unknown_trace = probe->last;
+            probe->has_first_timing_unknown = 1;
+        }
     }
 }
 
@@ -447,6 +455,26 @@ main(int argc, char **argv)
         }
     }
     fputc('\n', stdout);
+    if (probe.has_first_timing_unknown) {
+        const bm_808x_timing_observation_t *unknown =
+            &probe.first_timing_unknown;
+        const bm_808x_trace_t *trace = &probe.first_timing_unknown_trace;
+        printf("timing_first_unknown=%04x:%04x opcode=%02x effective=%02x"
+               " execution_kind=%u execution=%" PRIu32 "..%" PRIu32
+               " timeline=%u placed=%" PRIu32 " operand=%" PRIu64
+               " prefetch=%" PRIu64 " total_bus=%" PRIu64
+               " flushed=%u\n",
+               trace->cs, trace->ip, trace->opcode, trace->effective_opcode,
+               (unsigned int) unknown->execution_clock_kind,
+               unknown->execution_clocks_min,
+               unknown->execution_clocks_max,
+               unknown->execution_timeline_complete,
+               unknown->execution_clocks_placed,
+               unknown->operand_transactions,
+               unknown->prefetch_transactions,
+               unknown->logical_bus_transactions,
+               unknown->prefetch_queue_flushed);
+    }
     printf("video_status=%d width=%" PRIu32 " height=%" PRIu32
            " nonblack=%zu crc32=%08" PRIx32 " capture=%s\n",
            (int) video_status, geometry.width, geometry.height,

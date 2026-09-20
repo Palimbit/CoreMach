@@ -4525,6 +4525,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0x14: case 0x15: case 0x1c: case 0x1d:
             case 0x24: case 0x25: case 0x2c: case 0x2d:
             case 0x34: case 0x35: case 0x3c: case 0x3d:
+            case 0xa8: case 0xa9:
                 base = 4U; /* ALU accumulator,immediate. */
                 break;
             case 0x27: case 0x2f:
