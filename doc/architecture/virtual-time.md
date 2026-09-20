@@ -6,7 +6,10 @@ Status: experimental clocked scheduler and timed-device sources with synthetic
 tests; no real CPU or machine uses them yet. The V30 timing observer can now
 compose a complete native-clock duration for instruction boundaries without
 operand or I/O traffic, while preserving ranges and unresolved boundaries as
-such. It is not yet registered as a clocked CPU. The existing PCS 86 engine
+such. Version 7 also routes memory and I/O transfers through the same BCU as
+prefetch, exposes the clocks needed to hand over an in-flight prefetch, and
+keeps those boundaries unresolved until their EXU position is known. It is not
+yet registered as a clocked CPU. The existing PCS 86 engine
 still advances one scheduler tick per completed V30 instruction boundary. Its
 `scheduler_ticks_per_second` is pacing metadata, not the V30 crystal frequency.
 No current machine becomes cycle accurate because of this change.
@@ -120,8 +123,9 @@ intermediate product; overflow is reported without changing the position.
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
 - The existing PCS 86 suite remains unchanged and green. V30 observation
-  version 6 composes complete native-clock boundaries only where prefetch,
-  queue-read and EXU placement is proven; operand/I/O contention, realised
+  version 7 composes complete native-clock boundaries only where prefetch,
+  queue-read and EXU placement is proven. Operand/I/O requests now arbitrate
+  with in-flight prefetch through one BCU, but their EXU offsets, realised
   values inside ranges and interrupt boundaries remain known unknowns. A
   clocked callback and PCS 86 machine migration are later changes. Z80
   integration must not alter the legacy V30 tick meaning.

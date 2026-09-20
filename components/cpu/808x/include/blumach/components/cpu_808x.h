@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 6U
+#define BM_808X_TIMING_OBSERVATION_VERSION 7U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -122,7 +122,12 @@ typedef enum bm_808x_prefetch_phase {
  * boundary belongs to prefetch. This is the first scheduler-ready duration:
  * EXACT is safe to consume, RANGE preserves uncertainty, and UNKNOWN means
  * operand/I/O contention or another unresolved timing source still prevents
- * an elapsed-time claim. */
+ * an elapsed-time claim. Version 7 routes every operand and I/O transaction
+ * through the BCU. operand_* reports its exclusive bus ownership, while
+ * prefetch_handoff_clocks is the subset of prefetch clocks required to finish
+ * a transfer that was already in flight when an operand requested the bus.
+ * These fields expose arbitration resources, not yet a complete elapsed time,
+ * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {
     uint32_t size;
     uint32_t version;
@@ -151,6 +156,9 @@ typedef struct bm_808x_timing_observation {
     bm_808x_execution_clock_kind_t boundary_clock_kind;
     uint64_t boundary_clocks_min;
     uint64_t boundary_clocks_max;
+    uint64_t operand_transactions;
+    uint64_t operand_bus_clocks;
+    uint64_t prefetch_handoff_clocks;
 } bm_808x_timing_observation_t;
 
 typedef void (*bm_808x_timing_fn)(

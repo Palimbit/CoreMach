@@ -16,9 +16,10 @@
 /*
  * Instance-owned state for the V30 bus control unit (BCU). This component
  * owns the six-byte instruction queue, its independent prefetch pointer,
- * T1/T2/T3/Tw/T4 instruction-fetch phases and bus-resource observations.
- * Operand transactions remain synchronous until their micro-operation
- * positions are represented by the executor.
+ * T1/T2/T3/Tw/T4 bus phases and bus-resource observations. Operand
+ * transactions are synchronous at their semantic access point, but share
+ * this resource and complete an in-flight prefetch before acquiring it. Their
+ * exact EXU clock offsets remain subsequent executor work.
  */
 typedef struct bm_v30_bcu {
     uint16_t prefetch_pointer;
@@ -32,6 +33,9 @@ typedef struct bm_v30_bcu {
     uint64_t boundary_demand_prefetch_bus_clocks;
     uint64_t boundary_prefetch_transactions;
     uint64_t boundary_prefetch_phase_clocks;
+    uint64_t boundary_operand_transactions;
+    uint64_t boundary_operand_bus_clocks;
+    uint64_t boundary_prefetch_handoff_clocks;
     uint32_t boundary_instruction_queue_reads;
     int boundary_prefetch_flushed;
     /* Phase to execute on the next BCU clock. */
@@ -87,9 +91,13 @@ bm_status_t bm_v30_bcu_advance_prefetch(
     uint32_t transaction_attributes,
     uint32_t clock_budget);
 
-void bm_v30_bcu_record_transaction(
+/* Acquire the shared external bus for one operand or I/O transaction. An
+ * already-started instruction prefetch completes first; no new prefetch is
+ * started while the request waits. The transaction itself advances through
+ * T1/T2/T3/Tw/T4 and is presented to the portable bus at T3. */
+bm_status_t bm_v30_bcu_transact(
     bm_v30_bcu_t *bcu,
-    const bm_bus_transaction_t *transaction,
-    bm_status_t status);
+    bm_bus_t *bus,
+    bm_bus_transaction_t *transaction);
 
 #endif

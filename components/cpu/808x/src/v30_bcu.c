@@ -58,6 +58,9 @@ bm_v30_bcu_begin_boundary(bm_v30_bcu_t *bcu)
     bcu->boundary_demand_prefetch_bus_clocks = 0U;
     bcu->boundary_prefetch_transactions = 0U;
     bcu->boundary_prefetch_phase_clocks = 0U;
+    bcu->boundary_operand_transactions = 0U;
+    bcu->boundary_operand_bus_clocks = 0U;
+    bcu->boundary_prefetch_handoff_clocks = 0U;
     bcu->boundary_instruction_queue_reads = 0U;
     bcu->boundary_prefetch_flushed = 0;
 }
@@ -259,6 +262,11 @@ bm_v30_bcu_fill_on_demand(bm_v30_bcu_t *bcu,
     if ((bcu == NULL) || (bus == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     while (bm_v30_bcu_queue_count(bcu) == 0U) {
+        /* A speculative fetch may have started in an earlier boundary. Once
+         * an empty queue blocks the EXU, every remaining phase is demand
+         * latency even though the transaction itself was already issued. */
+        if (bcu->prefetch_phase != BM_V30_BCU_PHASE_IDLE)
+            bcu->pending_prefetch_demand = 1;
         status = bm_v30_bcu_step_prefetch(
             bcu, bus, code_segment, transaction_attributes, 1);
         if (status != BM_STATUS_OK)
@@ -267,17 +275,45 @@ bm_v30_bcu_fill_on_demand(bm_v30_bcu_t *bcu,
     return BM_STATUS_OK;
 }
 
-void
-bm_v30_bcu_record_transaction(bm_v30_bcu_t *bcu,
-                              const bm_bus_transaction_t *transaction,
-                              bm_status_t status)
+bm_status_t
+bm_v30_bcu_transact(bm_v30_bcu_t *bcu,
+                    bm_bus_t *bus,
+                    bm_bus_transaction_t *transaction)
 {
+    uint64_t handoff_start;
     uint64_t clocks;
+    bm_status_t status;
 
-    if ((status != BM_STATUS_OK) || (transaction == NULL))
-        return;
+    if ((bcu == NULL) || (bus == NULL) || (transaction == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+
+    /* NEC bus requests do not discard an instruction fetch already in
+     * progress. Finish only that transfer; a new prefetch must not win the
+     * bus after the operand request exists. */
+    handoff_start = bcu->boundary_prefetch_phase_clocks;
+    while (bcu->prefetch_phase != BM_V30_BCU_PHASE_IDLE) {
+        status = bm_v30_bcu_step_prefetch(bcu, bus, 0U, 0U, 0);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    bcu->boundary_prefetch_handoff_clocks +=
+        bcu->boundary_prefetch_phase_clocks - handoff_start;
+
+    /* T1 and T2 precede the portable access, which occurs at T3. Tw clocks
+     * reported by the mapped device follow T3, then T4 closes the cycle. */
+    bcu->total_phase_clocks += 3U;
+    bcu->boundary_bus_active_clocks += 3U;
+    bcu->boundary_operand_bus_clocks += 3U;
+    status = bm_bus_transact(bus, transaction);
+    if (status != BM_STATUS_OK)
+        return status;
+
     clocks = 4U + (uint64_t) transaction->wait_states;
     ++bcu->boundary_bus_transactions;
+    ++bcu->boundary_operand_transactions;
     bcu->boundary_wait_states += transaction->wait_states;
-    bcu->boundary_bus_active_clocks += clocks;
+    bcu->total_phase_clocks += clocks - 3U;
+    bcu->boundary_bus_active_clocks += clocks - 3U;
+    bcu->boundary_operand_bus_clocks += clocks - 3U;
+    return BM_STATUS_OK;
 }
