@@ -198,12 +198,18 @@ reports the exact instruction boundary and can emit a framebuffer capture;
 it does not weaken the rule that firmware is caller-owned local data.
 
 The 2026-09-20 local strict-clock baseline used the preserved System Disk
-read-only and completed 20 seconds of virtual time with 16,503,008 exact
-instruction boundaries, 11,977 I/O operations, no ranged or unknown boundary,
-and framebuffer CRC `06bd8a15`. The disk remained byte-identical at SHA-256
+read-only, disabled EMS and completed 20 seconds of virtual time with
+16,503,008 exact instruction boundaries, 11,977 I/O operations, no ranged or
+unknown boundary, and framebuffer CRC `06bd8a15`. The default frontend profile
+instead enables 1,920 KiB of EMS. At 60 seconds it completed the longer memory
+diagnostic, reached the MS-DOS 3.30a prompt, performed 51,180,092 instructions,
+152,359 I/O operations and 275 floppy reads with framebuffer CRC `e76fc1da`.
+The disk remained byte-identical at SHA-256
 `75E1A068AA5910DB736CE4B53E6B5FC179F83390FF5512D2AF421E57AF3A0C12`.
-These values are reproducibility evidence for the exercised boot path, not a
-claim that every possible instruction or device path is cycle accurate.
+These values are reproducibility evidence for the exercised boot paths, not a
+claim that every possible instruction or device path is cycle accurate. The
+repeatable procedure and desktop checklist are documented in
+`doc/validation/pcs86-portable-acceptance.md`.
 
 A local-only XTA probe used the preserved EPROM pair, system diskette and blank
 CP3026 image through read-only frontend bindings. At 240,000,000 engine ticks
