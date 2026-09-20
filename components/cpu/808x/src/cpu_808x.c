@@ -3641,11 +3641,14 @@ execute_one(bm_808x_state_t *state)
                 uint16_t segment = 0U;
                 if (operand.is_register)
                     return BM_STATUS_UNSUPPORTED;
-                if (operation == 3U)
-                    begin_operand_execution_timeline(state);
+                begin_operand_execution_timeline(state);
                 status = read_word(state, operand.segment, operand.offset, &value);
-                if ((status == BM_STATUS_OK) && (operation == 3U))
+                if (status == BM_STATUS_OK)
                     status = place_execution_clocks(state, 1U);
+                if ((status == BM_STATUS_OK) && (operation == 5U)) {
+                    bm_v30_bcu_suspend_prefetch(&state->bcu);
+                    status = place_suspended_execution_clocks(state, 1U);
+                }
                 if (status == BM_STATUS_OK)
                     status = read_word(state, operand.segment,
                                        (uint16_t) (operand.offset + 2U), &segment);
@@ -3678,6 +3681,7 @@ execute_one(bm_808x_state_t *state)
                     state->ip = value;
                     state->segments[1] = segment;
                     mark_prefetch_flush(state);
+                    state->boundary_flush_timeline_supported = 1;
                 }
                 return status;
             }

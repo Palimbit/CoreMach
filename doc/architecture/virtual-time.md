@@ -168,7 +168,8 @@ intermediate product; overflow is reported without changing the position.
   reads, `TEST` immediates and `NOT`/`NEG` writes are positioned without
   collapsing documented arithmetic ranges. `FEh`/`FFh` memory `INC`/`DEC`
   reads and writes and the common single-word `PUSH`/`POP` forms are positioned
-  as well. Every decoded
+  as well. Near and far indirect jumps now place their operand reads before
+  prefetch suspension and queue invalidation. Every decoded
   prefix
   advances it before the next queue read. Other operand offsets, realised
   values inside signed arithmetic ranges, a repeatedly busy `POLL`, and
