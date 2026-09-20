@@ -155,7 +155,7 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains green. V30 observation version 28 advances
+- The existing PCS 86 suite remains green. V30 observation version 29 advances
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
@@ -171,12 +171,14 @@ intermediate product; overflow is reported without changing the position.
   as well. Every decoded
   prefix
   advances it before the next queue read. Other operand offsets, realised
-  values inside ranges and external or fault
-  interrupt boundaries remain known unknowns. Software `INT` and `IRET` now
+  values inside signed arithmetic ranges and synchronous fault or single-step
+  interrupt boundaries remain known unknowns. Accepted NMI and maskable INT
+  boundaries now use the NEC V30's documented 38- and 49-clock aligned-stack
+  costs, add the three actual odd-stack transfer splits, and retain any BCU
+  prefetch handoff separately. Software `INT` and `IRET` now
   place their vector and stack transfers in inherited microcode order, and
   indirect near `CALL` places its independently aligned target read and stack
-  write. A
-  clocked callback and PCS 86 machine migration are later changes. Z80
+  write. PCS 86 machine migration is a later change. Z80
   integration must not alter the legacy V30 tick meaning.
 - The current PCS 86 firmware baseline completes 1,385,861 observed instruction
   boundaries before its known unsupported endpoint. All 1,385,861 now have a
@@ -198,8 +200,10 @@ intermediate product; overflow is reported without changing the position.
   optional diagnostic observer. It reports a duration only for a complete,
   exact scalar boundary; a ranged or unknown result stops with
   `BM_STATUS_UNSUPPORTED` and zero cycles. This is an intentional migration
-  guard: the firmware path is now scalar, but the PCS 86 remains on instruction
-  ticks until clocked hardware-interrupt boundaries are covered too.
+  guard: the firmware path plus accepted NMI and maskable INT are now scalar.
+  The PCS 86 remains on instruction ticks until its CPU, PIT and RTC are wired
+  to the clocked scheduler; single-step and synchronous-fault paths will still
+  stop explicitly if reached before their timing is completed.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,

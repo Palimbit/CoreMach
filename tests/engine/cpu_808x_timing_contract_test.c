@@ -2866,45 +2866,72 @@ static void
 test_interrupt_boundary_reports_queue_flush(void)
 {
     static const uint8_t program[] = { 0x90U };
-    timing_capture_t capture = { 0 };
-    cpu_808x_test_config_t config = {
-        .timing = capture_timing,
-        .timing_context = &capture,
-        .interrupt_ack = acknowledge_interrupt
+    const struct {
+        bm_808x_signal_t signal;
+        uint16_t sp;
+        uint32_t clocks;
+        uint64_t transactions;
+        uint64_t bus_clocks;
+    } cases[] = {
+        { BM_808X_SIGNAL_INT, 0x0100U, 49U, 5U, 20U },
+        { BM_808X_SIGNAL_INT, 0x0101U, 61U, 8U, 32U },
+        { BM_808X_SIGNAL_NMI, 0x0100U, 38U, 5U, 20U },
+        { BM_808X_SIGNAL_NMI, 0x0101U, 50U, 8U, 32U }
     };
-    cpu_808x_test_machine_t machine;
-    bm_808x_arch_state_t state;
-    bm_tick_t consumed = 99U;
+    size_t index;
 
-    cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
-    start_program(&machine);
-    cpu_808x_test_poke(&machine, 0x0080U, 0x34U);
-    cpu_808x_test_poke(&machine, 0x0081U, 0x12U);
-    cpu_808x_test_poke(&machine, 0x0082U, 0x00U);
-    cpu_808x_test_poke(&machine, 0x0083U, 0x20U);
-    state = cpu_808x_test_get_state(&machine);
-    state.ss = 0x1000U;
-    state.sp = 0x0100U;
-    state.flags |= TEST_FLAG_IF;
-    cpu_808x_test_set_state(&machine, &state);
-    assert(bm_engine_signal_cpu(machine.engine, 0U, BM_808X_SIGNAL_INT, 1) ==
-           BM_STATUS_OK);
-    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
-    assert(consumed == 1U && capture.count == 1U);
-    assert(capture.last.kind == BM_808X_BOUNDARY_INTERRUPT);
-    assert_unknown_execution_clocks(&capture);
-    assert(capture.last.prefetch_queue_flushed == 1U);
-    assert(capture.last.prefetch_pointer_known == 1U);
-    assert(capture.last.prefetch_pointer == 0x1234U);
-    assert(capture.last.logical_bus_transactions == 5U);
-    assert(capture.last.bus_active_clocks == 20U);
-    assert(capture.last.demand_prefetch_transactions == 0U);
-    assert(capture.last.demand_prefetch_bus_clocks == 0U);
-    assert(capture.last.instruction_queue_reads == 0U);
-    assert(capture.last.prefetch_transactions == 0U);
-    assert(capture.last.prefetch_phase_clocks == 0U);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
-    cpu_808x_test_machine_destroy(&machine);
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture,
+            .interrupt_ack = acknowledge_interrupt
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t cycles = 0U;
+        uint16_t vector_address =
+            cases[index].signal == BM_808X_SIGNAL_INT ? 0x0080U : 0x0008U;
+
+        cpu_808x_test_machine_create(&machine, &config, program,
+                                     sizeof(program));
+        start_program(&machine);
+        cpu_808x_test_poke(&machine, vector_address, 0x34U);
+        cpu_808x_test_poke(&machine, vector_address + 1U, 0x12U);
+        cpu_808x_test_poke(&machine, vector_address + 2U, 0x00U);
+        cpu_808x_test_poke(&machine, vector_address + 3U, 0x20U);
+        state = cpu_808x_test_get_state(&machine);
+        state.ss = 0x1000U;
+        state.sp = cases[index].sp;
+        state.flags |= TEST_FLAG_IF;
+        cpu_808x_test_set_state(&machine, &state);
+        assert(bm_engine_signal_cpu(machine.engine, 0U,
+                                    cases[index].signal, 1) == BM_STATUS_OK);
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        assert(capture.count == 1U);
+        assert(capture.last.kind == BM_808X_BOUNDARY_INTERRUPT);
+        assert_exact_execution_clocks(&capture, cases[index].clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(cycles == capture.last.boundary_clocks_min);
+        assert(cycles == cases[index].clocks +
+                         capture.last.prefetch_handoff_clocks);
+        assert(capture.last.prefetch_queue_flushed == 1U);
+        assert(capture.last.prefetch_pointer_known == 1U);
+        assert(capture.last.prefetch_pointer == 0x1236U);
+        assert(capture.last.operand_transactions ==
+               cases[index].transactions);
+        assert(capture.last.operand_bus_clocks == cases[index].bus_clocks);
+        assert(capture.last.demand_prefetch_transactions == 0U);
+        assert(capture.last.demand_prefetch_bus_clocks == 0U);
+        assert(capture.last.instruction_queue_reads == 0U);
+        assert(capture.last.prefetch_queue_count == 2U);
+        assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == cases[index].clocks);
+        cpu_808x_test_machine_destroy(&machine);
+    }
 }
 
 static void

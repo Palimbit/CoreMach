@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 28U
+#define BM_808X_TIMING_OBSERVATION_VERSION 29U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -177,6 +177,8 @@ typedef enum bm_808x_prefetch_phase {
  * stack writes around prefetch suspension and the target-queue flush.
  * Version 28 resolves unsigned MULU's documented one-clock data-dependent
  * interval using the inherited V30 microcode's high-half condition.
+ * Version 29 places accepted NMI and maskable interrupt boundaries, including
+ * interrupt acknowledgement and independently aligned stack-frame writes.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

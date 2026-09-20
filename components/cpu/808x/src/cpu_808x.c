@@ -91,6 +91,7 @@ typedef struct bm_808x_state {
     int boundary_execution_timeline_complete;
     int boundary_operand_timeline_supported;
     int boundary_flush_timeline_supported;
+    uint32_t boundary_interrupt_execution_clocks;
     bm_808x_execution_clock_kind_t last_boundary_clock_kind;
     uint64_t last_boundary_clocks_min;
     uint64_t last_boundary_clocks_max;
@@ -610,11 +611,33 @@ boundary_interrupt_ready(const bm_808x_state_t *state)
 static bm_status_t
 service_boundary_interrupt(bm_808x_state_t *state)
 {
+    bm_status_t status;
+    uint32_t acceptance_clocks;
+    uint32_t expected_clocks;
+
     if (nmi_ready(state))
-        return service_nmi(state);
-    if (maskable_interrupt_ready(state))
-        return service_interrupt(state);
-    return enter_interrupt(state, 1U);
+        acceptance_clocks = 2U;
+    else if (maskable_interrupt_ready(state))
+        acceptance_clocks = 13U;
+    else
+        return enter_interrupt(state, 1U);
+
+    expected_clocks = (acceptance_clocks == 2U ? 38U : 49U) +
+                      ((state->boundary_initial_sp & 1U) != 0U ? 12U : 0U);
+    begin_operand_execution_timeline(state);
+    bm_v30_bcu_suspend_prefetch(&state->bcu);
+    status = place_suspended_execution_clocks(state, acceptance_clocks);
+    if (status == BM_STATUS_OK)
+        status = acceptance_clocks == 2U ?
+                 service_nmi(state) : service_interrupt(state);
+    if ((status == BM_STATUS_OK) &&
+        (state->boundary_execution_clocks_placed != expected_clocks))
+        return BM_STATUS_INVALID_STATE;
+    if (status == BM_STATUS_OK) {
+        state->boundary_interrupt_execution_clocks = expected_clocks;
+        state->boundary_execution_timeline_complete = 1;
+    }
+    return status;
 }
 
 static int
@@ -1778,6 +1801,7 @@ cpu_reset(void *context)
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
     state->boundary_flush_timeline_supported = 0;
+    state->boundary_interrupt_execution_clocks = 0U;
     state->last_boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
     state->last_boundary_clocks_min = 0U;
     state->last_boundary_clocks_max = 0U;
@@ -5055,7 +5079,8 @@ compose_boundary_clocks(const bm_808x_state_t *state, int native_mode,
     uint64_t fixed_clocks;
 
     observation->boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
-    if ((observation->kind != BM_808X_BOUNDARY_INSTRUCTION) || !native_mode ||
+    if (((observation->kind != BM_808X_BOUNDARY_INSTRUCTION) &&
+         (observation->kind != BM_808X_BOUNDARY_INTERRUPT)) || !native_mode ||
         (observation->execution_clock_kind ==
          BM_808X_EXECUTION_CLOCKS_UNKNOWN))
         return;
@@ -5127,6 +5152,7 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
     state->boundary_flush_timeline_supported = 0;
+    state->boundary_interrupt_execution_clocks = 0U;
     state->last_boundary_observed = 0;
 }
 
@@ -5189,6 +5215,14 @@ emit_boundary_observation(bm_808x_state_t *state,
             documented_native_execution_clocks(
                 state, &observation.execution_clocks_min,
                 &observation.execution_clocks_max);
+    else if ((kind == BM_808X_BOUNDARY_INTERRUPT) && native_mode &&
+             (state->boundary_interrupt_execution_clocks != 0U)) {
+        observation.execution_clock_kind = BM_808X_EXECUTION_CLOCKS_EXACT;
+        observation.execution_clocks_min =
+            state->boundary_interrupt_execution_clocks;
+        observation.execution_clocks_max =
+            state->boundary_interrupt_execution_clocks;
+    }
     compose_boundary_clocks(state, native_mode, &observation);
     state->last_boundary_clock_kind = observation.boundary_clock_kind;
     state->last_boundary_clocks_min = observation.boundary_clocks_min;
@@ -5500,6 +5534,7 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
     state->boundary_flush_timeline_supported = 0;
+    state->boundary_interrupt_execution_clocks = 0U;
     state->last_boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
     state->last_boundary_clocks_min = 0U;
     state->last_boundary_clocks_max = 0U;
