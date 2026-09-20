@@ -2404,11 +2404,19 @@ execute_one(bm_808x_state_t *state)
         state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
         return BM_STATUS_OK;
     }
-    if ((opcode >= 0x50U) && (opcode <= 0x57U))
-        return push_word(state, state->registers[opcode - 0x50U]);
+    if ((opcode >= 0x50U) && (opcode <= 0x57U)) {
+        begin_operand_execution_timeline(state);
+        status = place_execution_clocks(state, 3U);
+        if (status == BM_STATUS_OK)
+            status = push_word(state, state->registers[opcode - 0x50U]);
+        return status;
+    }
     if ((opcode >= 0x58U) && (opcode <= 0x5fU)) {
         uint16_t value;
+        begin_operand_execution_timeline(state);
         status = pop_word(state, &value);
+        if (status == BM_STATUS_OK)
+            status = place_execution_clocks(state, 1U);
         if (status == BM_STATUS_OK)
             state->registers[opcode - 0x58U] = value;
         return status;
@@ -2506,13 +2514,24 @@ execute_one(bm_808x_state_t *state)
         case 0x68: { /* PUSH imm16. */
             uint16_t immediate = 0U;
             status = fetch_word(state, &immediate);
-            return status == BM_STATUS_OK ? push_word(state, immediate) : status;
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 4U);
+            }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, immediate);
+            return status;
         }
         case 0x6a: { /* PUSH sign-extended imm8. */
             uint8_t immediate = 0U;
             status = fetch_byte(state, &immediate);
-            return status == BM_STATUS_OK ?
-                push_word(state, (uint16_t) signed_byte(immediate)) : status;
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, (uint16_t) signed_byte(immediate));
+            return status;
         }
         case 0x69: /* IMUL r16,r/m16,imm16. */
         case 0x6b: { /* IMUL r16,r/m16,sign-extended imm8. */
@@ -2592,15 +2611,19 @@ execute_one(bm_808x_state_t *state)
             return BM_STATUS_OK;
         }
         case 0x06: /* PUSH ES */
-            return push_word(state, state->segments[0]);
         case 0x0e: /* PUSH CS */
-            return push_word(state, state->segments[1]);
         case 0x16: /* PUSH SS */
-            return push_word(state, state->segments[2]);
-        case 0x1e: /* PUSH DS */
-            return push_word(state, state->segments[3]);
+        case 0x1e: { /* PUSH DS */
+            unsigned int segment = (opcode >> 3U) & 3U;
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 3U);
+            if (status == BM_STATUS_OK)
+                status = push_word(state, state->segments[segment]);
+            return status;
+        }
         case 0x07: { /* POP ES */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK) {
                 state->segments[0] = value;
@@ -2611,6 +2634,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x1f: { /* POP DS */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK) {
                 state->segments[3] = value;
@@ -2621,6 +2645,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x17: { /* POP SS */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK) {
                 state->segments[2] = value;
@@ -2695,9 +2720,14 @@ execute_one(bm_808x_state_t *state)
                               (uint8_t) ((state->flags & 0x00d5U) | 0x02U));
             return BM_STATUS_OK;
         case 0x9c: /* PUSHF (NEC V30 reserved-bit image). */
-            return push_word(state, psw_image(state->flags));
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 3U);
+            if (status == BM_STATUS_OK)
+                status = push_word(state, psw_image(state->flags));
+            return status;
         case 0x9d: { /* POPF */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK)
                 restore_psw(state, value);
