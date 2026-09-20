@@ -3564,6 +3564,11 @@ execute_one(bm_808x_state_t *state)
                 begin_operand_execution_timeline(state);
                 status = place_execution_clocks(state, 1U);
             }
+            if ((status == BM_STATUS_OK) && (operation == 2U)) {
+                begin_operand_execution_timeline(state);
+                if (!operand.is_register)
+                    status = place_execution_clocks(state, 1U);
+            }
             if ((status == BM_STATUS_OK) &&
                 ((operation == 3U) || (operation == 5U))) {
                 uint16_t segment = 0U;
@@ -3604,11 +3609,17 @@ execute_one(bm_808x_state_t *state)
                 return status;
             }
             if (operation == 2U) {
-                status = push_word(state, state->ip);
+                uint16_t return_ip = state->ip;
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 4U);
                 if (status == BM_STATUS_OK) {
                     state->ip = value;
                     mark_prefetch_flush(state);
+                    state->boundary_flush_timeline_supported = 1;
+                    status = place_execution_clocks(state, 3U);
                 }
+                if (status == BM_STATUS_OK)
+                    status = push_word(state, return_ip);
                 return status;
             }
             if (operation == 4U) {
@@ -4918,9 +4929,17 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 if ((operation == 0U) || (operation == 1U))
                     known = rm_execution_clocks(state, 1, 2U, 0U, 16U, 24U,
                                                 &base);
-                else if ((operation == 2U) && state->boundary_rm_valid &&
-                         !state->boundary_rm_memory)
-                    base = (state->boundary_initial_sp & 1U) ? 18U : 14U;
+                else if ((operation == 2U) && state->boundary_rm_valid) {
+                    if (!state->boundary_rm_memory) {
+                        base = (state->boundary_initial_sp & 1U) ? 18U : 14U;
+                    } else {
+                        base = 23U;
+                        if ((state->boundary_rm_offset & 1U) != 0U)
+                            base += 4U;
+                        if ((state->boundary_initial_sp & 1U) != 0U)
+                            base += 4U;
+                    }
+                }
                 else if (operation == 4U)
                     known = rm_execution_clocks(state, 1, 11U, 0U, 20U, 24U,
                                                 &base);

@@ -1863,6 +1863,77 @@ test_near_call_and_return_have_a_complete_timeline(void)
 }
 
 static void
+test_indirect_near_call_has_a_complete_timeline(void)
+{
+    const struct {
+        uint8_t program[5];
+        size_t size;
+        uint16_t pointer;
+        uint16_t stack;
+        uint32_t clocks;
+        uint64_t transactions;
+        int register_operand;
+    } cases[] = {
+        { { 0xffU, 0x16U, 0x00U, 0x01U, 0U }, 4U,
+          0x0100U, 0x0200U, 23U, 2U, 0 },
+        { { 0xffU, 0x16U, 0x01U, 0x01U, 0U }, 4U,
+          0x0101U, 0x0200U, 27U, 3U, 0 },
+        { { 0xffU, 0x16U, 0x00U, 0x01U, 0U }, 4U,
+          0x0100U, 0x0201U, 27U, 3U, 0 },
+        { { 0xffU, 0x16U, 0x01U, 0x01U, 0U }, 4U,
+          0x0101U, 0x0201U, 31U, 4U, 0 },
+        { { 0x2eU, 0xffU, 0x16U, 0x00U, 0x01U }, 5U,
+          0x0100U, 0x0200U, 25U, 2U, 0 },
+        { { 0xffU, 0xd0U, 0U, 0U, 0U }, 2U,
+          0U, 0x0200U, 14U, 1U, 1 },
+        { { 0xffU, 0xd0U, 0U, 0U, 0U }, 2U,
+          0U, 0x0201U, 18U, 2U, 1 }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t pointer_physical = index == 4U ?
+            0xf0000U + cases[index].pointer : cases[index].pointer;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ss = 0U;
+        state.sp = cases[index].stack;
+        if (cases[index].register_operand) {
+            state.ax = 0x1234U;
+        } else {
+            cpu_808x_test_poke(&machine, pointer_physical, 0x34U);
+            cpu_808x_test_poke(&machine, pointer_physical + 1U, 0x12U);
+        }
+        cpu_808x_test_set_state(&machine, &state);
+
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == 0x1234U);
+        assert(state.sp == (uint16_t) (cases[index].stack - 2U));
+        assert_exact_execution_clocks(&capture, cases[index].clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].transactions);
+        assert(capture.last.prefetch_queue_flushed == 1U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == cases[index].clocks);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_software_interrupt_has_a_complete_timeline(void)
 {
     static const uint8_t program[] = { 0xcdU, 0x20U }; /* INT 20h. */
@@ -2900,6 +2971,7 @@ main(void)
     test_interrupted_string_timing_remains_unknown();
     test_far_pointer_loads_have_a_complete_timeline();
     test_near_call_and_return_have_a_complete_timeline();
+    test_indirect_near_call_has_a_complete_timeline();
     test_software_interrupt_has_a_complete_timeline();
     test_interrupt_latches_vector_before_writing_stack();
     test_interrupt_return_has_a_complete_timeline();

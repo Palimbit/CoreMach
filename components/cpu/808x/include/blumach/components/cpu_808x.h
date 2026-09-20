@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 26U
+#define BM_808X_TIMING_OBSERVATION_VERSION 27U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -173,6 +173,8 @@ typedef enum bm_808x_prefetch_phase {
  * Version 26 places software INT vector reads and interrupt-frame writes in
  * their inherited order, and places IRET stack reads around prefetch
  * suspension and the target-queue flush.
+ * Version 27 places register and memory indirect near CALL operand reads and
+ * stack writes around prefetch suspension and the target-queue flush.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {
