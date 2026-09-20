@@ -2793,8 +2793,7 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
-            if ((status == BM_STATUS_OK) && !operand.is_register &&
-                (opcode == 0x38U)) {
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
                 begin_operand_execution_timeline(state);
                 status = place_execution_clocks(state, 2U);
             }
@@ -2821,6 +2820,9 @@ execute_one(bm_808x_state_t *state)
                                            (uint8_t) (destination ^ source);
                 set_logic_flags(state, result, 8);
             }
+            status = place_execution_clocks(state, 4U);
+            if (status != BM_STATUS_OK)
+                return status;
             return write_operand_byte(state, &operand, result);
         }
         case 0x02: /* ADD r8,r/m8 */
@@ -2983,6 +2985,9 @@ execute_one(bm_808x_state_t *state)
                 (opcode == 0x39U)) {
                 begin_operand_execution_timeline(state);
                 status = place_execution_clocks(state, 2U);
+            } else if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
             }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &destination);
@@ -3008,6 +3013,9 @@ execute_one(bm_808x_state_t *state)
                                            (uint16_t) (destination ^ source);
                 set_logic_flags(state, result, 16);
             }
+            status = place_execution_clocks(state, 4U);
+            if (status != BM_STATUS_OK)
+                return status;
             return write_operand_word(state, &operand, result);
         }
         case 0x89: { /* MOV r/m16,r16 */

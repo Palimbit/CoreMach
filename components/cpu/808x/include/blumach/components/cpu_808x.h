@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 13U
+#define BM_808X_TIMING_OBSERVATION_VERSION 14U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -146,6 +146,8 @@ typedef enum bm_808x_prefetch_phase {
  * Version 13 places the read-only ModR/M ALU memory forms, including CMP in
  * either encoding direction. Read-modify-write ALU destinations remain
  * unresolved until both transfers can be placed.
+ * Version 14 places both transfers of ModR/M ALU read-modify-write memory
+ * destinations, preserving the inherited computation interval between them.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

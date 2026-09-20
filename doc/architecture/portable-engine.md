@@ -240,7 +240,7 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 13 reports
+their sum the elapsed instruction time. Timing-observation version 14 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
@@ -253,6 +253,7 @@ accumulator-memory `MOV` forms, including even and odd word transfers, and
 `XLAT` after its inherited three internal clocks. Version 12 adds memory forms
 of the four byte/word, load/store ModR/M `MOV` opcodes. Version 13 adds all
 read-only ModR/M ALU memory forms, including `CMP` in both encoding directions.
+Version 14 adds the read-modify-write ALU forms.
 Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O or
@@ -301,11 +302,12 @@ places direct accumulator-memory `MOV` after its two-byte address, preserves
 the inherited internal clock before a store, and places `XLAT` after its three
 internal clocks. Version 12 places ModR/M `MOV` memory loads after three
 internal clocks and stores after five, while leaving register forms on the
-bus-free path. The executor still lacks the
 bus-free path. Version 13 places byte ALU reads after two internal clocks,
 ordinary word ALU reads after one, and both byte/word `CMP` reads after two,
-as inherited. The executor still lacks the offsets for read-modify-write and
-other operand instructions, documented timing
+as inherited. Version 14 places the read-modify-write forms at those same
+read offsets and preserves the four inherited internal clocks between the read
+and write. The executor still lacks the offsets for other operand instructions,
+documented timing
 ranges and unknown timings; those paths suspend this overlap model until their
 individual accesses can be placed. The observer
 therefore still labels these as resource measurements rather than claiming a
@@ -333,10 +335,10 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 13 combines those quantities only for uncontended cases and
+bus waits. Version 14 combines those quantities only for uncontended cases and
 the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
-forms, memory forms of ModR/M `MOV`, and read-only ModR/M ALU forms; every
-other operand boundary remains
+forms, memory forms of ModR/M `MOV`, and all ModR/M ALU forms; every other
+operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by

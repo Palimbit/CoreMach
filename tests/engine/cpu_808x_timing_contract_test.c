@@ -629,15 +629,18 @@ test_memory_timing_uses_operand_form_and_alignment(void)
             bus_capture.count = 0U;
             step_once(&machine, &capture);
             assert_exact_execution_clocks(&capture, odd ? 24U : 16U);
-            assert_unknown_boundary_clocks(&capture);
-            assert(bus_capture.count == (odd ? 6U : 4U));
-            assert(capture.last.bus_active_clocks == (odd ? 24U : 16U));
+            assert_exact_boundary_clocks(&capture, odd ? 31U : 23U);
+            assert(bus_capture.count == (odd ? 8U : 6U));
+            assert(capture.last.bus_active_clocks == (odd ? 31U : 23U));
             assert(capture.last.demand_prefetch_transactions == 1U);
             assert(capture.last.demand_prefetch_bus_clocks == 4U);
             assert(capture.last.instruction_queue_reads == 2U);
             assert(capture.last.operand_transactions == (odd ? 4U : 2U));
             assert(capture.last.operand_bus_clocks == (odd ? 16U : 8U));
-            assert(capture.last.prefetch_handoff_clocks == 2U);
+            assert(capture.last.prefetch_handoff_clocks == 1U);
+            assert(capture.last.prefetch_transactions == 4U);
+            assert(capture.last.execution_timeline_complete == 1U);
+            assert(capture.last.execution_clocks_placed == (odd ? 24U : 16U));
             assert(bus_capture.transactions[0].operation == BM_BUS_FETCH);
             assert(bus_capture.transactions[0].size == 2U);
             assert(bus_capture.transactions[0].alignment == 2U);
@@ -647,21 +650,35 @@ test_memory_timing_uses_operand_form_and_alignment(void)
             if (odd) {
                 size_t index;
 
-                for (index = 2U; index < bus_capture.count; ++index) {
+                for (index = 2U; index < 4U; ++index) {
+                    assert(bus_capture.transactions[index].operation ==
+                           BM_BUS_READ);
                     assert(bus_capture.transactions[index].size == 1U);
                     assert(bus_capture.transactions[index].alignment == 1U);
                     assert(bus_capture.transactions[index].address ==
                            0x10041U + ((index - 2U) & 1U));
                 }
+                assert(bus_capture.transactions[4].operation == BM_BUS_FETCH);
+                for (index = 5U; index < 7U; ++index) {
+                    assert(bus_capture.transactions[index].operation ==
+                           BM_BUS_WRITE);
+                    assert(bus_capture.transactions[index].size == 1U);
+                    assert(bus_capture.transactions[index].alignment == 1U);
+                    assert(bus_capture.transactions[index].address ==
+                           0x10041U + ((index - 5U) & 1U));
+                }
+                assert(bus_capture.transactions[7].operation == BM_BUS_FETCH);
             } else {
                 assert(bus_capture.transactions[2].operation == BM_BUS_READ);
-                assert(bus_capture.transactions[3].operation == BM_BUS_WRITE);
+                assert(bus_capture.transactions[3].operation == BM_BUS_FETCH);
+                assert(bus_capture.transactions[4].operation == BM_BUS_WRITE);
+                assert(bus_capture.transactions[5].operation == BM_BUS_FETCH);
                 assert(bus_capture.transactions[2].address == 0x10040U);
-                assert(bus_capture.transactions[3].address == 0x10040U);
+                assert(bus_capture.transactions[4].address == 0x10040U);
                 assert(bus_capture.transactions[2].size == 2U);
-                assert(bus_capture.transactions[3].size == 2U);
+                assert(bus_capture.transactions[4].size == 2U);
                 assert(bus_capture.transactions[2].alignment == 2U);
-                assert(bus_capture.transactions[3].alignment == 2U);
+                assert(bus_capture.transactions[4].alignment == 2U);
             }
             cpu_808x_test_machine_destroy(&machine);
         }
@@ -857,6 +874,81 @@ test_modrm_alu_reads_have_a_complete_execution_timeline(void)
         step_once(&machine, &capture);
         state = cpu_808x_test_get_state(&machine);
         assert(state.ax == 3U);
+        assert_exact_execution_clocks(&capture, 2U);
+        assert(capture.last.operand_transactions == 0U);
+        assert(capture.last.execution_timeline_complete == 0U);
+        assert(capture.last.execution_clocks_placed == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
+test_modrm_alu_writes_have_a_complete_execution_timeline(void)
+{
+    const struct {
+        uint8_t program[4];
+        size_t size;
+        uint64_t address;
+        uint32_t execution_clocks;
+    } cases[] = {
+        { { 0x00U, 0x07U, 0U, 0U }, 2U, 0x0100U, 16U },
+        { { 0x2eU, 0x00U, 0x07U, 0U }, 3U, 0xf0100U, 18U }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.bx = 0x0100U;
+        state.ax = 1U;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, cases[index].address, 1U);
+
+        step_once(&machine, &capture);
+        assert(cpu_808x_test_peek(&machine, cases[index].address) == 2U);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions == 2U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed ==
+               cases[index].execution_clocks);
+        assert(capture.last.operand_wait_states == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        static const uint8_t register_add[] = { 0x01U, 0xc3U };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config, register_add,
+                                     sizeof(register_add));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ax = 1U;
+        state.bx = 2U;
+        cpu_808x_test_set_state(&machine, &state);
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.bx == 3U);
         assert_exact_execution_clocks(&capture, 2U);
         assert(capture.last.operand_transactions == 0U);
         assert(capture.last.execution_timeline_complete == 0U);
@@ -1601,6 +1693,7 @@ main(void)
     test_memory_timing_uses_operand_form_and_alignment();
     test_modrm_moves_have_a_complete_execution_timeline();
     test_modrm_alu_reads_have_a_complete_execution_timeline();
+    test_modrm_alu_writes_have_a_complete_execution_timeline();
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();
     test_divide_error_does_not_claim_normal_execution_clocks();
