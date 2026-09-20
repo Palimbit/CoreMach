@@ -2793,6 +2793,11 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register &&
+                (opcode == 0x38U)) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &destination);
             if (status != BM_STATUS_OK)
@@ -2832,6 +2837,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &source);
             if (status != BM_STATUS_OK)
@@ -2871,6 +2880,11 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(
+                    state, opcode == 0x3bU ? 2U : 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &source);
             if (status != BM_STATUS_OK)
@@ -2965,6 +2979,11 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register &&
+                (opcode == 0x39U)) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &destination);
             if (status != BM_STATUS_OK)
@@ -3016,6 +3035,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &source);
             if (status != BM_STATUS_OK)

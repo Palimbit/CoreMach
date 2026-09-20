@@ -772,6 +772,100 @@ test_modrm_moves_have_a_complete_execution_timeline(void)
 }
 
 static void
+test_modrm_alu_reads_have_a_complete_execution_timeline(void)
+{
+    const struct {
+        uint8_t program[4];
+        size_t size;
+        uint16_t bx;
+        uint64_t address;
+        uint32_t execution_clocks;
+        uint64_t operand_transactions;
+        int word;
+    } cases[] = {
+        { { 0x02U, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 0 },
+        { { 0x03U, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 1 },
+        { { 0x03U, 0x07U, 0U, 0U }, 2U, 0x0101U, 0x0101U,
+          15U, 2U, 1 },
+        { { 0x32U, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 0 },
+        { { 0x3aU, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 0 },
+        { { 0x38U, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 0 },
+        { { 0x39U, 0x07U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          11U, 1U, 1 },
+        { { 0x2eU, 0x3bU, 0x07U, 0U }, 3U, 0x0100U, 0xf0100U,
+          13U, 1U, 1 }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.bx = cases[index].bx;
+        state.ax = 1U;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, cases[index].address, 1U);
+        if (cases[index].word)
+            cpu_808x_test_poke(&machine, cases[index].address + 1U, 0U);
+
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].operand_transactions);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed ==
+               cases[index].execution_clocks);
+        assert(capture.last.operand_wait_states == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        static const uint8_t register_add[] = { 0x03U, 0xc3U };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config, register_add,
+                                     sizeof(register_add));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ax = 1U;
+        state.bx = 2U;
+        cpu_808x_test_set_state(&machine, &state);
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ax == 3U);
+        assert_exact_execution_clocks(&capture, 2U);
+        assert(capture.last.operand_transactions == 0U);
+        assert(capture.last.execution_timeline_complete == 0U);
+        assert(capture.last.execution_clocks_placed == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_counted_and_stack_timing(void)
 {
     static const uint8_t shift[] = { 0xc1U, 0xe0U, 0x05U }; /* SHL AW,5. */
@@ -1506,6 +1600,7 @@ main(void)
     test_direct_memory_moves_have_a_complete_execution_timeline();
     test_memory_timing_uses_operand_form_and_alignment();
     test_modrm_moves_have_a_complete_execution_timeline();
+    test_modrm_alu_reads_have_a_complete_execution_timeline();
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();
     test_divide_error_does_not_claim_normal_execution_clocks();
