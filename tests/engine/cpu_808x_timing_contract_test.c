@@ -135,6 +135,34 @@ assert_unknown_execution_clocks(const timing_capture_t *capture)
 }
 
 static void
+assert_exact_boundary_clocks(const timing_capture_t *capture, uint64_t clocks)
+{
+    assert(capture->last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_EXACT);
+    assert(capture->last.boundary_clocks_min == clocks);
+    assert(capture->last.boundary_clocks_max == clocks);
+}
+
+static void
+assert_unknown_boundary_clocks(const timing_capture_t *capture)
+{
+    assert(capture->last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_UNKNOWN);
+    assert(capture->last.boundary_clocks_min == 0U);
+    assert(capture->last.boundary_clocks_max == 0U);
+}
+
+static void
+assert_boundary_clock_range(const timing_capture_t *capture,
+                            uint64_t minimum, uint64_t maximum)
+{
+    assert(capture->last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_RANGE);
+    assert(capture->last.boundary_clocks_min == minimum);
+    assert(capture->last.boundary_clocks_max == maximum);
+}
+
+static void
 test_fixed_execution_clocks_and_prefix_cost(void)
 {
     static const uint8_t nop[] = { 0x90U };
@@ -175,6 +203,8 @@ test_fixed_execution_clocks_and_prefix_cost(void)
         assert(capture.last.effective_opcode == 0x90U);
         assert(capture.last.prefix_count == cases[index].prefix_count);
         assert_exact_execution_clocks(&capture, cases[index].clocks);
+        assert_exact_boundary_clocks(
+            &capture, index == 0U ? UINT64_C(8) : UINT64_C(11));
         assert(capture.last.logical_bus_transactions ==
                cases[index].bus_transactions);
         assert(capture.last.reported_wait_states == 0U);
@@ -214,6 +244,7 @@ test_taken_branch_flushes_even_when_target_is_sequential(void)
     cpu_808x_test_set_state(&machine, &state);
     step_once(&machine, &capture);
     assert_exact_execution_clocks(&capture, 14U);
+    assert_exact_boundary_clocks(&capture, 20U);
     assert(capture.last.prefetch_queue_flushed == 1U);
     assert(capture.last.prefetch_pointer_known == 1U);
     assert(capture.last.prefetch_pointer == 2U);
@@ -226,6 +257,7 @@ test_taken_branch_flushes_even_when_target_is_sequential(void)
     start_program(&machine);
     step_once(&machine, &capture);
     assert_exact_execution_clocks(&capture, 4U);
+    assert_exact_boundary_clocks(&capture, 10U);
     assert(capture.last.prefetch_queue_flushed == 0U);
     assert(capture.last.prefetch_pointer_known == 1U);
     assert(capture.last.prefetch_pointer == 4U);
@@ -268,6 +300,7 @@ test_bus_waits_are_reported_but_not_folded_into_execution_clocks(void)
     state = cpu_808x_test_get_state(&machine);
     assert((state.ax & 0x00ffU) == 0x00a5U);
     assert_exact_execution_clocks(&capture, 9U);
+    assert_unknown_boundary_clocks(&capture);
     assert(capture.last.logical_bus_transactions == 2U);
     assert(capture.last.reported_wait_states == 3U);
     assert(capture.last.bus_active_clocks == 11U);
@@ -301,6 +334,7 @@ test_memory_timing_uses_operand_form_and_alignment(void)
     cpu_808x_test_set_state(&machine, &state);
     step_once(&machine, &capture);
     assert_exact_execution_clocks(&capture, 9U);
+    assert_unknown_boundary_clocks(&capture);
     assert(capture.last.logical_bus_transactions == 2U);
     assert(cpu_808x_test_peek(&machine, 0x10040U) == 0x5aU);
     cpu_808x_test_machine_destroy(&machine);
@@ -328,6 +362,7 @@ test_memory_timing_uses_operand_form_and_alignment(void)
             bus_capture.count = 0U;
             step_once(&machine, &capture);
             assert_exact_execution_clocks(&capture, odd ? 24U : 16U);
+            assert_unknown_boundary_clocks(&capture);
             assert(bus_capture.count == (odd ? 5U : 3U));
             assert(capture.last.bus_active_clocks == (odd ? 20U : 12U));
             assert(capture.last.demand_prefetch_transactions == 1U);
@@ -467,6 +502,16 @@ test_data_dependent_arithmetic_reports_documented_ranges(void)
         step_once(&machine, &capture);
         assert_execution_clock_range(&capture, cases[index].minimum,
                                      cases[index].maximum);
+        if (index == 0U)
+            assert_boundary_clock_range(&capture, 27U, 28U);
+        else if (index == 2U)
+            assert_boundary_clock_range(&capture, 44U, 49U);
+        else if (index == 4U)
+            assert_boundary_clock_range(&capture, 39U, 45U);
+        else if (index == 5U)
+            assert_boundary_clock_range(&capture, 55U, 61U);
+        else
+            assert_unknown_boundary_clocks(&capture);
         cpu_808x_test_machine_destroy(&machine);
     }
 }

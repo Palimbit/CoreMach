@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 5U
+#define BM_808X_TIMING_OBSERVATION_VERSION 6U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -116,7 +116,13 @@ typedef enum bm_808x_prefetch_phase {
  * prefetch transactions and the BCU phase clocks advanced in this boundary.
  * Safe bus-free instructions with exact documented execution clocks now let
  * the BCU progress concurrently; data-bus contention and timings that are
- * ranges or unknown remain deliberately unscheduled. */
+ * ranges or unknown remain deliberately unscheduled.
+ * boundary_clocks_min/max compose demand-prefetch stalls, instruction-queue
+ * reads and documented execution clocks only when every transaction in the
+ * boundary belongs to prefetch. This is the first scheduler-ready duration:
+ * EXACT is safe to consume, RANGE preserves uncertainty, and UNKNOWN means
+ * operand/I/O contention or another unresolved timing source still prevents
+ * an elapsed-time claim. */
 typedef struct bm_808x_timing_observation {
     uint32_t size;
     uint32_t version;
@@ -142,6 +148,9 @@ typedef struct bm_808x_timing_observation {
     bm_808x_prefetch_phase_t prefetch_phase;
     uint64_t prefetch_transactions;
     uint64_t prefetch_phase_clocks;
+    bm_808x_execution_clock_kind_t boundary_clock_kind;
+    uint64_t boundary_clocks_min;
+    uint64_t boundary_clocks_max;
 } bm_808x_timing_observation_t;
 
 typedef void (*bm_808x_timing_fn)(
