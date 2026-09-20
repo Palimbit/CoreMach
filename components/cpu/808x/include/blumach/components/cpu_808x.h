@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 10U
+#define BM_808X_TIMING_OBSERVATION_VERSION 11U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -138,6 +138,8 @@ typedef enum bm_808x_prefetch_phase {
  * immediately after that prefix is decoded. Prefixed direct I/O can therefore
  * complete the same explicit timeline, while other prefixed operand forms stay
  * unresolved until their individual transfers are placed.
+ * Version 11 places the four direct accumulator-memory MOV forms, including
+ * the store's inherited internal clock and both bus cycles of an odd word.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

@@ -6,13 +6,15 @@ Status: experimental clocked scheduler and timed-device sources with synthetic
 tests; no real CPU or machine uses them yet. The V30 timing observer can now
 compose a complete native-clock duration for instruction boundaries without
 operand or I/O traffic, while preserving ranges and unresolved boundaries as
-such. Version 10 also routes memory and I/O transfers through the same BCU as
+such. Version 11 also routes memory and I/O transfers through the same BCU as
 prefetch, exposes the clocks needed to hand over an in-flight prefetch, and
 advances the BCU concurrently for the documented clock of every byte consumed
 from the instruction queue. Every native prefix advances that timeline at its
 decode point. The eight native `IN`/`OUT` opcodes therefore have exact complete
-boundaries with or without prefixes, including I/O wait states; other
-operand-bearing boundaries stay unresolved until their EXU position is known.
+boundaries with or without accepted prefixes, including I/O wait states. The
+four direct accumulator-memory `MOV` forms are also placed, including odd word
+transfers; other operand-bearing boundaries stay unresolved until their EXU
+position is known.
 It is not
 yet registered as a clocked CPU. The existing PCS 86 engine
 still advances one scheduler tick per completed V30 instruction boundary. Its
@@ -127,13 +129,14 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains green. V30 observation version 10 advances
+- The existing PCS 86 suite remains green. V30 observation version 11 advances
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
-  `IN`/`OUT` now place their inherited internal waits and operand cycles on that
-  timeline, and every decoded prefix advances it before the next queue read.
-  Other operand offsets, realised values inside ranges and interrupt
+  `IN`/`OUT` and direct accumulator-memory `MOV` now place their inherited
+  internal waits and operand cycles on that timeline, and every decoded prefix
+  advances it before the next queue read. Other operand offsets, realised
+  values inside ranges and interrupt
   boundaries remain known unknowns. A
   clocked callback and PCS 86 machine migration are later changes. Z80
   integration must not alter the legacy V30 tick meaning.

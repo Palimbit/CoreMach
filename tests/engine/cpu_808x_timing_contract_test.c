@@ -463,26 +463,84 @@ test_direct_io_has_a_complete_execution_timeline(void)
         cpu_808x_test_machine_destroy(&machine);
     }
 
-    {
-        static const uint8_t prefixed_memory_read[] = {
-            0x2eU, 0xa0U, 0x00U, 0x01U /* MOV AL,CS:[0100h]. */
-        };
+}
+
+static void
+test_direct_memory_moves_have_a_complete_execution_timeline(void)
+{
+    const struct {
+        uint8_t program[4];
+        size_t size;
+        uint16_t offset;
+        uint32_t execution_clocks;
+        uint64_t operand_transactions;
+        int store;
+        int word;
+        int code_segment;
+    } cases[] = {
+        { { 0xa0U, 0x00U, 0x01U, 0U }, 3U, 0x0100U, 10U, 1U, 0, 0, 0 },
+        { { 0xa1U, 0x00U, 0x01U, 0U }, 3U, 0x0100U, 10U, 1U, 0, 1, 0 },
+        { { 0xa1U, 0x01U, 0x01U, 0U }, 3U, 0x0101U, 14U, 2U, 0, 1, 0 },
+        { { 0xa2U, 0x00U, 0x01U, 0U }, 3U, 0x0100U, 9U, 1U, 1, 0, 0 },
+        { { 0xa3U, 0x00U, 0x01U, 0U }, 3U, 0x0100U, 9U, 1U, 1, 1, 0 },
+        { { 0xa3U, 0x01U, 0x01U, 0U }, 3U, 0x0101U, 13U, 2U, 1, 1, 0 },
+        { { 0x2eU, 0xa0U, 0x00U, 0x01U }, 4U, 0x0100U, 12U, 1U,
+          0, 0, 1 }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
         timing_capture_t capture = { 0 };
         cpu_808x_test_config_t config = {
             .timing = capture_timing,
             .timing_context = &capture
         };
         cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t address = cases[index].offset;
 
         cpu_808x_test_machine_create(&machine, &config,
-                                     prefixed_memory_read,
-                                     sizeof(prefixed_memory_read));
+                                     cases[index].program,
+                                     cases[index].size);
         start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ax = 0xa55aU;
+        cpu_808x_test_set_state(&machine, &state);
+        if (cases[index].code_segment)
+            address += UINT64_C(0xf0000);
+        cpu_808x_test_poke(&machine, address,
+                           cases[index].store ? 0U : 0x5aU);
+        if (cases[index].word)
+            cpu_808x_test_poke(&machine, address + 1U,
+                               cases[index].store ? 0U : 0xa5U);
+
         step_once(&machine, &capture);
-        assert(capture.last.operand_transactions == 1U);
-        assert_unknown_boundary_clocks(&capture);
-        assert(capture.last.execution_timeline_complete == 0U);
-        assert(capture.last.execution_clocks_placed == 2U);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.boundary_clocks_min ==
+               capture.last.execution_clocks_min +
+               capture.last.demand_prefetch_bus_clocks +
+               capture.last.instruction_queue_reads +
+               capture.last.prefetch_handoff_clocks);
+        assert(capture.last.boundary_clocks_max ==
+               capture.last.boundary_clocks_min);
+        assert(capture.last.operand_transactions ==
+               cases[index].operand_transactions);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed ==
+               cases[index].execution_clocks);
+        assert(capture.last.operand_wait_states == 0U);
+        if (cases[index].store) {
+            assert(cpu_808x_test_peek(&machine, address) == 0x5aU);
+            if (cases[index].word)
+                assert(cpu_808x_test_peek(&machine, address + 1U) == 0xa5U);
+        } else {
+            state = cpu_808x_test_get_state(&machine);
+            assert((state.ax & (cases[index].word ? 0xffffU : 0x00ffU)) ==
+                   (cases[index].word ? 0xa55aU : 0x005aU));
+        }
         cpu_808x_test_machine_destroy(&machine);
     }
 }
@@ -1310,6 +1368,7 @@ main(void)
     test_taken_branch_flushes_even_when_target_is_sequential();
     test_bus_waits_extend_boundary_but_not_execution_clocks();
     test_direct_io_has_a_complete_execution_timeline();
+    test_direct_memory_moves_have_a_complete_execution_timeline();
     test_memory_timing_uses_operand_form_and_alignment();
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();
