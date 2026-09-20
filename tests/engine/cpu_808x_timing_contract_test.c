@@ -224,6 +224,9 @@ test_fixed_execution_clocks_and_prefix_cost(void)
         assert(capture.last.operand_transactions == 0U);
         assert(capture.last.operand_bus_clocks == 0U);
         assert(capture.last.prefetch_handoff_clocks == 0U);
+        assert(capture.last.execution_timeline_complete == 0U);
+        assert(capture.last.execution_clocks_placed == 0U);
+        assert(capture.last.operand_wait_states == 0U);
         cpu_808x_test_machine_destroy(&machine);
     }
 }
@@ -317,8 +320,22 @@ wait_io_access(void *context, bm_bus_transaction_t *transaction)
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+timeline_io_access(void *context, bm_bus_transaction_t *transaction)
+{
+    (void) context;
+    assert(transaction->address >= 0x40U);
+    assert(transaction->address <= 0x44U);
+    assert((transaction->size == 1U) || (transaction->size == 2U));
+    if (transaction->operation == BM_BUS_READ)
+        transaction->value = transaction->size == 1U ? 0x5aU : 0xa55aU;
+    else
+        assert(transaction->operation == BM_BUS_WRITE);
+    return BM_STATUS_OK;
+}
+
 static void
-test_bus_waits_are_reported_but_not_folded_into_execution_clocks(void)
+test_bus_waits_extend_boundary_but_not_execution_clocks(void)
 {
     static const uint8_t program[] = { 0xe4U, 0x42U }; /* IN AL,42h. */
     timing_capture_t capture = { 0 };
@@ -338,20 +355,109 @@ test_bus_waits_are_reported_but_not_folded_into_execution_clocks(void)
     state = cpu_808x_test_get_state(&machine);
     assert((state.ax & 0x00ffU) == 0x00a5U);
     assert_exact_execution_clocks(&capture, 9U);
-    assert_unknown_boundary_clocks(&capture);
-    assert(capture.last.logical_bus_transactions == 3U);
+    assert_exact_boundary_clocks(&capture, 21U);
+    assert(capture.last.logical_bus_transactions == 4U);
     assert(capture.last.reported_wait_states == 3U);
-    assert(capture.last.bus_active_clocks == 15U);
+    assert(capture.last.bus_active_clocks == 21U);
     assert(capture.last.demand_prefetch_transactions == 1U);
     assert(capture.last.demand_prefetch_bus_clocks == 4U);
     assert(capture.last.instruction_queue_reads == 2U);
-    assert(capture.last.prefetch_transactions == 2U);
-    assert(capture.last.prefetch_phase_clocks == 8U);
-    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
+    assert(capture.last.prefetch_transactions == 3U);
+    assert(capture.last.prefetch_phase_clocks == 14U);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T3);
     assert(capture.last.operand_transactions == 1U);
     assert(capture.last.operand_bus_clocks == 7U);
-    assert(capture.last.prefetch_handoff_clocks == 2U);
+    assert(capture.last.prefetch_handoff_clocks == 3U);
+    assert(capture.last.execution_timeline_complete == 1U);
+    assert(capture.last.execution_clocks_placed == 9U);
+    assert(capture.last.operand_wait_states == 3U);
     cpu_808x_test_machine_destroy(&machine);
+}
+
+static void
+test_direct_io_has_a_complete_execution_timeline(void)
+{
+    const struct {
+        uint8_t program[2];
+        size_t size;
+        uint16_t dx;
+        uint32_t execution_clocks;
+        uint64_t boundary_clocks;
+        uint64_t operand_transactions;
+        uint64_t handoff_clocks;
+    } cases[] = {
+        { { 0xe4U, 0x42U }, 2U, 0U, 9U, 18U, 1U, 3U },
+        { { 0xe5U, 0x42U }, 2U, 0U, 9U, 18U, 1U, 3U },
+        { { 0xe5U, 0x43U }, 2U, 0U, 13U, 22U, 2U, 3U },
+        { { 0xe6U, 0x42U }, 2U, 0U, 8U, 14U, 1U, 0U },
+        { { 0xe7U, 0x42U }, 2U, 0U, 8U, 14U, 1U, 0U },
+        { { 0xe7U, 0x43U }, 2U, 0U, 12U, 18U, 2U, 0U },
+        { { 0xecU, 0U }, 1U, 0x42U, 8U, 14U, 1U, 1U },
+        { { 0xedU, 0U }, 1U, 0x42U, 8U, 14U, 1U, 1U },
+        { { 0xedU, 0U }, 1U, 0x43U, 12U, 18U, 2U, 1U },
+        { { 0xeeU, 0U }, 1U, 0x42U, 8U, 15U, 1U, 2U },
+        { { 0xefU, 0U }, 1U, 0x42U, 8U, 15U, 1U, 2U },
+        { { 0xefU, 0U }, 1U, 0x43U, 12U, 19U, 2U, 2U }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .bus_capacity = 2U,
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.dx = cases[index].dx;
+        state.ax = 0xa55aU;
+        cpu_808x_test_set_state(&machine, &state);
+        assert(bm_bus_map(machine.bus, BM_ADDRESS_IO, 0x40U, 0x44U,
+                          timeline_io_access, NULL) == BM_STATUS_OK);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert_exact_boundary_clocks(&capture, cases[index].boundary_clocks);
+        assert(capture.last.operand_transactions ==
+               cases[index].operand_transactions);
+        assert(capture.last.prefetch_handoff_clocks ==
+               cases[index].handoff_clocks);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed ==
+               cases[index].execution_clocks);
+        assert(capture.last.operand_wait_states == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        static const uint8_t prefixed_in[] = { 0x2eU, 0xe4U, 0x42U };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .bus_capacity = 2U,
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+
+        cpu_808x_test_machine_create(&machine, &config, prefixed_in,
+                                     sizeof(prefixed_in));
+        start_program(&machine);
+        assert(bm_bus_map(machine.bus, BM_ADDRESS_IO, 0x40U, 0x44U,
+                          timeline_io_access, NULL) == BM_STATUS_OK);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, 11U);
+        assert_unknown_boundary_clocks(&capture);
+        assert(capture.last.execution_timeline_complete == 0U);
+        assert(capture.last.execution_clocks_placed == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
 }
 
 static void
@@ -1175,7 +1281,8 @@ main(void)
     test_fixed_execution_clocks_and_prefix_cost();
     test_operand_request_completes_inflight_prefetch();
     test_taken_branch_flushes_even_when_target_is_sequential();
-    test_bus_waits_are_reported_but_not_folded_into_execution_clocks();
+    test_bus_waits_extend_boundary_but_not_execution_clocks();
+    test_direct_io_has_a_complete_execution_timeline();
     test_memory_timing_uses_operand_form_and_alignment();
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();

@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 8U
+#define BM_808X_TIMING_OBSERVATION_VERSION 9U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -129,6 +129,11 @@ typedef enum bm_808x_prefetch_phase {
  * Version 8 also advances that same BCU during every instruction-queue read,
  * matching the V30 predecoder clock instead of counting it only in the final
  * elapsed-boundary total.
+ * Version 9 begins placing operand transfers on an explicit EXU timeline.
+ * execution_timeline_complete is set only when every execution clock and
+ * operand transfer in this boundary has a known position. placed clocks
+ * include the four base clocks of each operand transaction but exclude wait
+ * states; operand_wait_states reports those extensions separately.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {
@@ -162,6 +167,10 @@ typedef struct bm_808x_timing_observation {
     uint64_t operand_transactions;
     uint64_t operand_bus_clocks;
     uint64_t prefetch_handoff_clocks;
+    uint8_t execution_timeline_complete;
+    uint8_t reserved_v9[3];
+    uint32_t execution_clocks_placed;
+    uint64_t operand_wait_states;
 } bm_808x_timing_observation_t;
 
 typedef void (*bm_808x_timing_fn)(
