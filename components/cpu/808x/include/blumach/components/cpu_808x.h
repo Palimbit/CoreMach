@@ -294,6 +294,14 @@ bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,
  * the boundary instead of an opcode, matching bm_cpu_ops.run with budget 1. */
 bm_status_t bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed);
 
+/* Engine callback for one cycle-reported architectural boundary. It succeeds
+ * only when the V30 timing model produced one exact scalar duration. Ranged or
+ * unknown boundaries return BM_STATUS_UNSUPPORTED with zero cycles, so a
+ * clocked machine cannot silently turn an unresolved timing into virtual time.
+ * The context must be the context owned by a CPU created by bm_808x_create(). */
+bm_status_t bm_808x_step_clocked(void *context, bm_tick_t start_ns,
+                                 uint64_t *cycles);
+
 #ifdef __cplusplus
 }
 #endif

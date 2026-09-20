@@ -91,6 +91,10 @@ typedef struct bm_808x_state {
     int boundary_execution_timeline_complete;
     int boundary_operand_timeline_supported;
     int boundary_flush_timeline_supported;
+    bm_808x_execution_clock_kind_t last_boundary_clock_kind;
+    uint64_t last_boundary_clocks_min;
+    uint64_t last_boundary_clocks_max;
+    int last_boundary_observed;
 } bm_808x_state_t;
 
 static void
@@ -1774,6 +1778,10 @@ cpu_reset(void *context)
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
     state->boundary_flush_timeline_supported = 0;
+    state->last_boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    state->last_boundary_clocks_min = 0U;
+    state->last_boundary_clocks_max = 0U;
+    state->last_boundary_observed = 0;
     return BM_STATUS_OK;
 }
 
@@ -5108,6 +5116,7 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
     state->boundary_flush_timeline_supported = 0;
+    state->last_boundary_observed = 0;
 }
 
 static void
@@ -5170,6 +5179,10 @@ emit_boundary_observation(bm_808x_state_t *state,
                 state, &observation.execution_clocks_min,
                 &observation.execution_clocks_max);
     compose_boundary_clocks(state, native_mode, &observation);
+    state->last_boundary_clock_kind = observation.boundary_clock_kind;
+    state->last_boundary_clocks_min = observation.boundary_clocks_min;
+    state->last_boundary_clocks_max = observation.boundary_clocks_max;
+    state->last_boundary_observed = 1;
     if (state->timing != NULL)
         state->timing(state->timing_context, &observation);
 }
@@ -5476,6 +5489,10 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
     state->boundary_flush_timeline_supported = 0;
+    state->last_boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    state->last_boundary_clocks_min = 0U;
+    state->last_boundary_clocks_max = 0U;
+    state->last_boundary_observed = 0;
     return BM_STATUS_OK;
 }
 
@@ -5485,4 +5502,31 @@ bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed)
     if (!is_808x_cpu(cpu))
         return BM_STATUS_INVALID_ARGUMENT;
     return cpu_run(cpu->context, 1U, consumed);
+}
+
+bm_status_t
+bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
+{
+    bm_808x_state_t *state = context;
+    bm_tick_t consumed = 0U;
+    bm_status_t status;
+
+    (void) start_ns;
+    if ((state == NULL) || (cycles == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *cycles = 0U;
+    state->last_boundary_observed = 0;
+    status = cpu_run(state, 1U, &consumed);
+    if ((status == BM_STATUS_IDLE) && (consumed == 0U))
+        return BM_STATUS_IDLE;
+    if ((status != BM_STATUS_OK) && (status != BM_STATUS_IDLE))
+        return status;
+    if ((consumed != 1U) || !state->last_boundary_observed)
+        return BM_STATUS_DEVICE_ERROR;
+    if ((state->last_boundary_clock_kind != BM_808X_EXECUTION_CLOCKS_EXACT) ||
+        (state->last_boundary_clocks_min == 0U) ||
+        (state->last_boundary_clocks_min != state->last_boundary_clocks_max))
+        return BM_STATUS_UNSUPPORTED;
+    *cycles = state->last_boundary_clocks_min;
+    return BM_STATUS_OK;
 }

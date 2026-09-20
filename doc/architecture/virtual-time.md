@@ -190,6 +190,12 @@ intermediate product; overflow is reported without changing the position.
   This measured
   distribution sets the next
   integration order instead of opcode-table convenience.
+- The V30 now exposes a clocked-engine step callback independently of its
+  optional diagnostic observer. It reports a duration only for a complete,
+  exact scalar boundary; a ranged or unknown result stops with
+  `BM_STATUS_UNSUPPORTED` and zero cycles. This is an intentional migration
+  guard: the PCS 86 remains on instruction ticks until every boundary reached
+  by its clocked validation path is scalar, including hardware interrupts.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,

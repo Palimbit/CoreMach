@@ -1934,6 +1934,54 @@ test_indirect_near_call_has_a_complete_timeline(void)
 }
 
 static void
+test_clocked_step_requires_an_exact_scalar_boundary(void)
+{
+    static const uint8_t exact_program[] = { 0x90U };
+    static const uint8_t ranged_program[] = { 0xf6U, 0xe0U };
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    uint64_t cycles = UINT64_MAX;
+
+    cpu_808x_test_machine_create(&machine, &config, exact_program,
+                                 sizeof(exact_program));
+    start_program(&machine);
+    assert(bm_808x_step_clocked(machine.cpu.context, 123U, &cycles) ==
+           BM_STATUS_OK);
+    assert(capture.count == 1U);
+    assert(capture.last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_EXACT);
+    assert(cycles == capture.last.boundary_clocks_min);
+    assert(cycles == capture.last.boundary_clocks_max);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, ranged_program,
+                                 sizeof(ranged_program));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ax = 2U;
+    cpu_808x_test_set_state(&machine, &state);
+    cycles = UINT64_MAX;
+    assert(bm_808x_step_clocked(machine.cpu.context, 456U, &cycles) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(cycles == 0U);
+    assert(capture.count == 1U);
+    assert(capture.last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_RANGE);
+    cpu_808x_test_machine_destroy(&machine);
+
+    assert(bm_808x_step_clocked(NULL, 0U, &cycles) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_808x_step_clocked((void *) 1, 0U, NULL) ==
+           BM_STATUS_INVALID_ARGUMENT);
+}
+
+static void
 test_software_interrupt_has_a_complete_timeline(void)
 {
     static const uint8_t program[] = { 0xcdU, 0x20U }; /* INT 20h. */
@@ -2972,6 +3020,7 @@ main(void)
     test_far_pointer_loads_have_a_complete_timeline();
     test_near_call_and_return_have_a_complete_timeline();
     test_indirect_near_call_has_a_complete_timeline();
+    test_clocked_step_requires_an_exact_scalar_boundary();
     test_software_interrupt_has_a_complete_timeline();
     test_interrupt_latches_vector_before_writing_stack();
     test_interrupt_return_has_a_complete_timeline();
