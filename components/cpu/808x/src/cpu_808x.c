@@ -135,8 +135,7 @@ static bm_status_t
 fill_prefetch_queue(bm_808x_state_t *state)
 {
     return bm_v30_bcu_fill_on_demand(
-        &state->bcu, state->bus, state->segments[1],
-        state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U);
+        &state->bcu, state->bus, state->segments[1], 0U);
 }
 
 static bm_status_t
@@ -156,6 +155,13 @@ fetch_byte(bm_808x_state_t *state, uint8_t *value)
         if (state->last_instruction_length != UINT8_MAX)
             ++state->last_instruction_length;
         ++state->ip;
+        /* The V30 predecoder consumes one clock for every byte removed from
+         * the instruction queue.  The BCU remains active during that clock,
+         * so an idle queue may start a speculative fetch and an in-flight
+         * fetch advances by one phase.  Keep the dequeue visible before the
+         * BCU step: the freed byte is what can make room for that fetch. */
+        status = bm_v30_bcu_advance_prefetch(
+            &state->bcu, state->bus, state->segments[1], 0U, 1U);
     }
     return status;
 }
