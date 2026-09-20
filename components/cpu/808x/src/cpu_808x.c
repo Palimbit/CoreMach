@@ -86,6 +86,9 @@ typedef struct bm_808x_state {
     int boundary_string_valid;
     uint8_t boundary_shift_count;
     int boundary_shift_count_valid;
+    uint32_t boundary_execution_clocks_placed;
+    int boundary_execution_timeline_active;
+    int boundary_execution_timeline_complete;
 } bm_808x_state_t;
 
 static void
@@ -115,6 +118,49 @@ physical_address(uint16_t segment, uint16_t offset)
     return ((((uint32_t) segment << 4U) + offset) & 0xfffffU);
 }
 
+static void
+begin_execution_timeline(bm_808x_state_t *state)
+{
+    /* Prefix execution has not yet been placed on this timeline. Keep
+     * prefixed forms explicitly unresolved until it is. */
+    if (state->last_prefix_count == 0U)
+        state->boundary_execution_timeline_active = 1;
+}
+
+static bm_status_t
+place_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
+{
+    bm_status_t status;
+
+    if (!state->boundary_execution_timeline_active)
+        return BM_STATUS_OK;
+    if (state->boundary_execution_clocks_placed > UINT32_MAX - clocks)
+        return BM_STATUS_INVALID_STATE;
+    status = bm_v30_bcu_advance_prefetch(
+        &state->bcu, state->bus, state->segments[1], 0U, clocks);
+    if (status == BM_STATUS_OK)
+        state->boundary_execution_clocks_placed += clocks;
+    return status;
+}
+
+static bm_status_t
+transact_operand(bm_808x_state_t *state,
+                 bm_bus_transaction_t *transaction)
+{
+    bm_status_t status = bm_v30_bcu_transact(
+        &state->bcu, state->bus, transaction);
+
+    /* NEC's documented execution interval includes the four base clocks of
+     * each external operand transfer, but not device wait states. */
+    if ((status == BM_STATUS_OK) &&
+        state->boundary_execution_timeline_active) {
+        if (state->boundary_execution_clocks_placed > UINT32_MAX - 4U)
+            return BM_STATUS_INVALID_STATE;
+        state->boundary_execution_clocks_placed += 4U;
+    }
+    return status;
+}
+
 static bm_status_t
 read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
           bm_bus_operation_t operation, uint8_t *value)
@@ -124,8 +170,7 @@ read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
         1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_v30_bcu_transact(
-        &state->bcu, state->bus, &transaction);
+    bm_status_t status = transact_operand(state, &transaction);
     if (status == BM_STATUS_OK)
         *value = (uint8_t) transaction.value;
     return status;
@@ -187,8 +232,7 @@ write_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint8_t va
         1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_v30_bcu_transact(
-        &state->bcu, state->bus, &transaction);
+    bm_status_t status = transact_operand(state, &transaction);
     return status;
 }
 
@@ -201,8 +245,7 @@ read_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t *v
             0, 2, 2, 0, BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_v30_bcu_transact(
-            &state->bcu, state->bus, &transaction);
+        bm_status_t status = transact_operand(state, &transaction);
 
         if (status == BM_STATUS_OK)
             *value = (uint16_t) transaction.value;
@@ -228,8 +271,7 @@ write_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t v
             value, 2, 2, 0, BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_v30_bcu_transact(
-            &state->bcu, state->bus, &transaction);
+        bm_status_t status = transact_operand(state, &transaction);
 
         return status;
     }
@@ -1494,8 +1536,7 @@ io_read_byte(bm_808x_state_t *state, uint16_t port, uint8_t *value)
         BM_ADDRESS_IO, BM_BUS_READ, port, 0, 1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_v30_bcu_transact(
-        &state->bcu, state->bus, &transaction);
+    bm_status_t status = transact_operand(state, &transaction);
     if (status == BM_STATUS_OK)
         *value = (uint8_t) transaction.value;
     return status;
@@ -1508,8 +1549,7 @@ io_write_byte(bm_808x_state_t *state, uint16_t port, uint8_t value)
         BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_v30_bcu_transact(
-        &state->bcu, state->bus, &transaction);
+    bm_status_t status = transact_operand(state, &transaction);
     return status;
 }
 
@@ -1522,8 +1562,7 @@ io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
             BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_v30_bcu_transact(
-            &state->bcu, state->bus, &transaction);
+        bm_status_t status = transact_operand(state, &transaction);
 
         if (status == BM_STATUS_OK)
             *value = (uint16_t) transaction.value;
@@ -1549,8 +1588,7 @@ io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
             BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_v30_bcu_transact(
-            &state->bcu, state->bus, &transaction);
+        bm_status_t status = transact_operand(state, &transaction);
 
         return status;
     }
@@ -3807,9 +3845,16 @@ execute_one(bm_808x_state_t *state)
         case 0xe4: { /* IN AL,imm8 */
             uint8_t port = 0;
             uint8_t value = 0;
-            status = fetch_byte(state, &port);
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status == BM_STATUS_OK)
+                status = fetch_byte(state, &port);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = io_read_byte(state, port, &value);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 state->registers[REG_AX] =
                     (uint16_t) ((state->registers[REG_AX] & 0xff00U) | value);
@@ -3818,30 +3863,52 @@ execute_one(bm_808x_state_t *state)
         case 0xe5: { /* IN AX,imm8 */
             uint8_t port = 0;
             uint16_t value = 0;
-            status = fetch_byte(state, &port);
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status == BM_STATUS_OK)
+                status = fetch_byte(state, &port);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = io_read_word(state, port, &value);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 state->registers[REG_AX] = value;
             return status;
         }
         case 0xe6: { /* OUT imm8,AL */
-            uint8_t port;
-            status = fetch_byte(state, &port);
+            uint8_t port = 0U;
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status == BM_STATUS_OK)
+                status = fetch_byte(state, &port);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status != BM_STATUS_OK)
                 return status;
             return io_write_byte(state, port, (uint8_t) state->registers[REG_AX]);
         }
         case 0xe7: { /* OUT imm8,AX */
-            uint8_t port;
-            status = fetch_byte(state, &port);
+            uint8_t port = 0U;
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status == BM_STATUS_OK)
+                status = fetch_byte(state, &port);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status != BM_STATUS_OK)
                 return status;
             return io_write_word(state, port, state->registers[REG_AX]);
         }
         case 0xec: { /* IN AL,DX */
             uint8_t value = 0;
-            status = io_read_byte(state, state->registers[REG_DX], &value);
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 2U);
+            if (status == BM_STATUS_OK)
+                status = io_read_byte(state, state->registers[REG_DX], &value);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 state->registers[REG_AX] =
                     (uint16_t) ((state->registers[REG_AX] & 0xff00U) | value);
@@ -3849,15 +3916,28 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xed: { /* IN AX,DX */
             uint16_t value = 0;
-            status = io_read_word(state, state->registers[REG_DX], &value);
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 2U);
+            if (status == BM_STATUS_OK)
+                status = io_read_word(state, state->registers[REG_DX], &value);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 state->registers[REG_AX] = value;
             return status;
         }
         case 0xee: /* OUT DX,AL */
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
             return io_write_byte(state, state->registers[REG_DX],
                                  (uint8_t) state->registers[REG_AX]);
         case 0xef: /* OUT DX,AX */
+            begin_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
             return io_write_word(state, state->registers[REG_DX], state->registers[REG_AX]);
         case 0xf5: /* CMC */
             state->flags ^= FLAG_CF;
@@ -4586,6 +4666,20 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
 
     if (!native_mode || state->bcu.boundary_prefetch_flushed)
         return BM_STATUS_OK;
+    if (state->boundary_execution_timeline_active) {
+        bm_status_t status;
+
+        kind = documented_native_execution_clocks(state, &minimum, &maximum);
+        if ((kind != BM_808X_EXECUTION_CLOCKS_EXACT) ||
+            (minimum != maximum) ||
+            (state->boundary_execution_clocks_placed > minimum))
+            return BM_STATUS_OK;
+        status = place_execution_clocks(
+            state, minimum - state->boundary_execution_clocks_placed);
+        if (status == BM_STATUS_OK)
+            state->boundary_execution_timeline_complete = 1;
+        return status;
+    }
     /* Operand and I/O cycles need their position inside the instruction before
      * the BCU may compete with them. Demand and already-running prefetches are
      * the only bus work admitted by this first overlap cut. */
@@ -4627,19 +4721,41 @@ compose_boundary_clocks(const bm_808x_state_t *state, int native_mode,
          BM_808X_EXECUTION_CLOCKS_UNKNOWN))
         return;
 
-    /* Operand and I/O transactions are synchronous today, but their position
-     * relative to an already-running prefetch is not. Do not turn their
-     * aggregate into a false elapsed duration until that contention is
-     * represented on the BCU timeline. */
     if (state->bcu.boundary_bus_transactions !=
-        state->bcu.boundary_prefetch_transactions)
-        return;
+        state->bcu.boundary_prefetch_transactions) {
+        uint64_t operand_base_clocks;
+        uint64_t operand_wait_clocks;
 
-    /* Demand prefetch is a real stall and already includes its wait states.
-     * Later prefetch phases run inside the documented EXU interval, while
-     * every consumed queue byte contributes its documented pre-decode clock. */
-    fixed_clocks = state->bcu.boundary_demand_prefetch_bus_clocks +
-                   state->bcu.boundary_instruction_queue_reads;
+        if (!state->boundary_execution_timeline_complete ||
+            (state->bcu.boundary_operand_transactions > UINT64_MAX / 4U))
+            return;
+        operand_base_clocks =
+            state->bcu.boundary_operand_transactions * UINT64_C(4);
+        if (state->bcu.boundary_operand_bus_clocks < operand_base_clocks)
+            return;
+        operand_wait_clocks =
+            state->bcu.boundary_operand_bus_clocks - operand_base_clocks;
+        if (state->bcu.boundary_demand_prefetch_bus_clocks >
+            UINT64_MAX - state->bcu.boundary_instruction_queue_reads)
+            return;
+        fixed_clocks = state->bcu.boundary_demand_prefetch_bus_clocks +
+                       state->bcu.boundary_instruction_queue_reads;
+        if (fixed_clocks >
+            UINT64_MAX - state->bcu.boundary_prefetch_handoff_clocks)
+            return;
+        fixed_clocks += state->bcu.boundary_prefetch_handoff_clocks;
+        if (fixed_clocks > UINT64_MAX - operand_wait_clocks)
+            return;
+        fixed_clocks += operand_wait_clocks;
+    } else {
+        /* Demand prefetch is a real stall and already includes its wait
+         * states. Later prefetch phases run inside the documented EXU
+         * interval, while every consumed queue byte contributes its
+         * documented pre-decode clock. */
+        fixed_clocks = state->bcu.boundary_demand_prefetch_bus_clocks +
+                       state->bcu.boundary_instruction_queue_reads;
+    }
+
     if ((fixed_clocks > UINT64_MAX - observation->execution_clocks_min) ||
         (fixed_clocks > UINT64_MAX - observation->execution_clocks_max))
         return;
@@ -4667,6 +4783,9 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
+    state->boundary_execution_clocks_placed = 0U;
+    state->boundary_execution_timeline_active = 0;
+    state->boundary_execution_timeline_complete = 0;
 }
 
 static void
@@ -4674,6 +4793,16 @@ emit_boundary_observation(bm_808x_state_t *state,
                           bm_808x_boundary_kind_t kind,
                           int native_mode)
 {
+    uint64_t operand_base_clocks = UINT64_MAX;
+    uint64_t operand_wait_states = 0U;
+
+    if (state->bcu.boundary_operand_transactions <= UINT64_MAX / 4U) {
+        operand_base_clocks =
+            state->bcu.boundary_operand_transactions * UINT64_C(4);
+        if (state->bcu.boundary_operand_bus_clocks >= operand_base_clocks)
+            operand_wait_states =
+                state->bcu.boundary_operand_bus_clocks - operand_base_clocks;
+    }
     bm_808x_timing_observation_t observation = {
         .size = sizeof(observation),
         .version = BM_808X_TIMING_OBSERVATION_VERSION,
@@ -4705,7 +4834,12 @@ emit_boundary_observation(bm_808x_state_t *state,
         .operand_transactions = state->bcu.boundary_operand_transactions,
         .operand_bus_clocks = state->bcu.boundary_operand_bus_clocks,
         .prefetch_handoff_clocks =
-            state->bcu.boundary_prefetch_handoff_clocks
+            state->bcu.boundary_prefetch_handoff_clocks,
+        .execution_timeline_complete =
+            (uint8_t) !!state->boundary_execution_timeline_complete,
+        .execution_clocks_placed =
+            state->boundary_execution_clocks_placed,
+        .operand_wait_states = operand_wait_states
     };
 
     if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)

@@ -240,19 +240,24 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 8 reports
+their sum the elapsed instruction time. Timing-observation version 9 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
-boundary duration. That duration is currently available only when every bus
-transaction in a native instruction boundary belongs to prefetch: demand-fetch
-stall clocks (including their waits) and queue-read clocks are added to the
-documented EXU interval, while speculative prefetch phases remain overlapped.
+boundary duration. That duration is available when every bus transaction in a
+native instruction boundary belongs to prefetch and, from version 9, for the
+unprefixed direct and DX-addressed `IN`/`OUT` forms. Demand-fetch stall clocks
+(including their waits) and queue-read clocks are added to the documented EXU
+interval, while speculative prefetch phases remain overlapped. A placed I/O
+operand contributes its four base bus clocks inside that EXU interval; device
+waits and prefetch handoff stalls extend the complete boundary outside it.
 Exact execution
 times therefore produce exact boundary times and documented execution ranges
-remain ranges. Operand-memory and I/O traffic leave the boundary duration
-`UNKNOWN` until their position relative to an already-running prefetch is
-represented. The underlying counters remain resource and timeline observations,
+remain ranges. Other operand-memory and I/O traffic leaves the boundary
+duration `UNKNOWN` until its position relative to an already-running prefetch
+is represented. The observer explicitly reports whether that placement is
+complete, how many documented EXU clocks were placed and the operand-only wait
+extension. The underlying counters remain resource and timeline observations,
 not a serialized sum: BCU and EXU work overlap. The queue, independent PFP and
 resource accounting
 now live in one private, instance-owned BCU component rather than as scattered
@@ -278,10 +283,14 @@ the two byte cycles required by the hardware. Every memory and I/O transaction
 now acquires that same BCU instead of calling the portable bus directly. If a
 prefetch is already in T1-T4, it completes before the operand begins its own
 T1/T2/T3/Tw/T4 transfer. Version 7 reports operand transaction clocks and the
-prefetch clocks spent handing over the bus separately. The executor still does
-not publish each operand's EXU-clock offset, so instructions with operand bus
-traffic, documented timing ranges or unknown timing deliberately suspend this
-first overlap model until their individual accesses can be placed. The observer
+prefetch clocks spent handing over the bus separately. Version 9 ports the
+inherited execution ordering for the eight native `IN`/`OUT` opcodes: internal
+EXU intervals advance prefetch, each operand transaction occupies its four base
+clocks, and any remaining documented clocks resume prefetch. Prefix timing is
+not placed yet, so prefixed I/O deliberately remains unresolved. The executor
+still lacks the offsets for other operand instructions, documented timing
+ranges and unknown timings; those paths suspend this overlap model until their
+individual accesses can be placed. The observer
 therefore still labels these as resource measurements rather than claiming a
 complete external-bus trace or elapsed duration. Instruction demand fetch uses a real
 six-byte queue and
@@ -296,9 +305,9 @@ every boundary, rather than inferring queue state only when a flush occurs.
 This establishes the first scheduler-ready boundary measurements without
 claiming a complete timing model or exposing a clocked CPU callback prematurely.
 The shared BCU now establishes real prefetch-versus-operand ownership, but
-placing the request on the EXU timeline, exact realised clocks inside
-data-dependent ranges, DMA arbitration and scheduler consumption of the
-observations remain explicit subsequent work. The limited uncontended overlap is
+placing the remaining requests on the EXU timeline, exact realised clocks
+inside data-dependent ranges, DMA arbitration and scheduler consumption of the
+observations remain explicit subsequent work. The limited overlap is
 cycle-phased, but the processor as a whole is not yet described as cycle
 accurate.
 `POLL` also requires a semantic
@@ -307,8 +316,8 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 8 combines those quantities only for the uncontended cases
-where their placement and overlap are known; every other boundary remains
+bus waits. Version 9 combines those quantities only for uncontended cases and
+the explicitly placed unprefixed `IN`/`OUT` forms; every other boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by
