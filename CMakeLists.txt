@@ -18,6 +18,9 @@ cmake_minimum_required(VERSION 3.21)
 
 cmake_policy(SET CMP0091 NEW)
 cmake_policy(SET CMP0079 NEW)
+if(POLICY CMP0207)
+    cmake_policy(SET CMP0207 NEW)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -73,6 +76,11 @@ else()
     set(BLUMACH_VERSION_FULL "${CMAKE_PROJECT_VERSION}")
 endif()
 
+# The portable engine is the next product generation and evolves independently
+# from the legacy product while both coexist in this repository.
+set(BLUMACH_PORTABLE_VERSION "0.2.0-dev")
+set(BLUMACH_PORTABLE_VERSION_NUMERIC "0.2.0")
+
 if (BLUMACH_BUILD_LEGACY AND NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
     message(FATAL_ERROR "Only 64-bit builds are supported.")
 endif()
@@ -81,7 +89,6 @@ if (BLUMACH_BUILD_LEGACY AND CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
     message(FATAL_ERROR "Big-endian builds are not supported.")
 endif()
 
-include(CPack)
 include(CMakeDependentOption)
 include(CTest)
 include(FetchContent)
@@ -320,3 +327,24 @@ endif()
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
+if(BLUMACH_BUILD_ENGINE AND NOT BLUMACH_BUILD_LEGACY)
+    set(CPACK_PACKAGE_NAME "BluMach-Portable")
+    set(CPACK_PACKAGE_VENDOR "BluMach")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+        "Portable BluMach emulator engine and frontends")
+    set(CPACK_PACKAGE_VERSION "${BLUMACH_PORTABLE_VERSION}")
+    set(CPACK_PACKAGE_FILE_NAME
+        "BluMach-Portable-${BLUMACH_PORTABLE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/COPYING")
+    set(CPACK_PACKAGE_CHECKSUM SHA256)
+    if(WIN32)
+        set(CPACK_GENERATOR ZIP)
+    else()
+        set(CPACK_GENERATOR TGZ)
+    endif()
+    install(FILES COPYING FORK-NOTICE.md AUTHORS DESTINATION .)
+endif()
+
+# CPack must see every install rule and the final portable-product metadata.
+include(CPack)

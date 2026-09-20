@@ -13,7 +13,10 @@ on:
       - apps/**
       - tests/engine/**
       - provenance/**
+      - doc/validation/**
       - tools/provenance_audit.py
+      - tools/portable_package_audit.py
+      - tools/validate-pcs86-portable.ps1
       - tools/tests/test_provenance_audit.py
       - CMakeLists.txt
       - tests/CMakeLists.txt
@@ -29,7 +32,10 @@ on:
       - apps/**
       - tests/engine/**
       - provenance/**
+      - doc/validation/**
       - tools/provenance_audit.py
+      - tools/portable_package_audit.py
+      - tools/validate-pcs86-portable.ps1
       - tools/tests/test_provenance_audit.py
       - CMakeLists.txt
       - tests/CMakeLists.txt
@@ -96,3 +102,59 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build/portable-qt --output-on-failure
+
+  windows-package:
+    name: Portable package (Windows x86-64)
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Prepare UCRT64 environment
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          release: true
+          update: true
+          msystem: UCRT64
+          pacboy: >-
+            ninja:p
+            cmake:p
+            gcc:p
+            qt6-base:p
+            qt6-tools:p
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Configure portable product
+        run: >-
+          cmake -S . -B build/portable-package -G Ninja
+          -D BLUMACH_BUILD_LEGACY=OFF
+          -D BLUMACH_BUILD_ENGINE=ON
+          -D BLUMACH_BUILD_PORTABLE_QT=ON
+          -D BUILD_TESTING=ON
+          -D CMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/portable-package --parallel 4
+      - name: Test
+        run: ctest --test-dir build/portable-package --output-on-failure
+      - name: Install
+        run: cmake --install build/portable-package --prefix "$PWD/build/portable-install"
+      - name: Audit installed package
+        run: >-
+          python -B tools/portable_package_audit.py
+          --root build/portable-install
+          --platform windows
+          --version 0.2.0-dev
+          --max-size-mib 100
+      - name: Create archive
+        run: >-
+          cpack --config build/portable-package/CPackConfig.cmake
+          -B build/portable-packages -G ZIP
+      - name: Upload package
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: BluMach-Portable-Windows-x86-64
+          path: build/portable-packages/*
+          retention-days: 7
