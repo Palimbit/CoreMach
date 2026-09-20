@@ -2,50 +2,20 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: experimental clocked scheduler and timed-device sources with synthetic
-tests; no real CPU or machine uses them yet. The V30 timing observer can now
-compose a complete native-clock duration for instruction boundaries without
-operand or I/O traffic, while preserving ranges and unresolved boundaries as
-such. Version 25 also routes memory and I/O transfers through the same BCU as
-prefetch, exposes the clocks needed to hand over an in-flight prefetch, and
-advances the BCU concurrently for the documented clock of every byte consumed
-from the instruction queue. Every native prefix advances that timeline at its
-decode point. The eight native `IN`/`OUT` opcodes therefore have exact complete
-boundaries with or without accepted prefixes, including I/O wait states. The
-four direct accumulator-memory `MOV` forms, `XLAT`, and memory forms of ModR/M
-`MOV` plus all ModR/M ALU forms are also placed, including both transfers of
-read-modify-write operations and odd words. ModR/M `TEST` and `XCHG` are placed
-as well. Immediate ALU groups `80h`-`83h` now read memory before consuming the
-immediate and place their optional write. Segment-register `MOV` memory forms
-and immediate-to-r/m `MOV` groups `C6h`-`C7h` are placed too. Group 3
-`F6h`-`F7h` memory operands are placed as well. Unsigned `MULU` resolves its
-documented one-clock data-dependent interval with the inherited V30
-microcode's high-half condition; signed multiply and signed-divide ranges
-remain incomplete rather than selecting a value from the range. Byte and word
-memory `INC`/`DEC` forms in groups `FEh`
-and `FFh` are placed too. Single-word register, segment, flags and immediate
-stack pushes and pops are placed as well. Other operand-bearing boundaries stay
-unresolved until their EXU position is known. `STOS` and `SCAS` now place their
-normal, repeated, zero-count and odd-word transfers too; interrupted repeat
-fragments remain deliberately unknown. Relative near `CALL` and both near
-`RET` forms now place their stack transfer around an explicit prefetch
-suspension and target-queue flush.
-`MOVS` and `LODS` now place their source-side transfers as well, including
-repeated, zero-count, segment-overridden and odd-word forms.
-Accumulator-immediate `TEST` is now classified at its documented four clocks;
-it has no operand-bus transfer to place.
-`LES` and `LDS` now place both far-pointer reads after their inherited setup,
-including odd pointers and accepted segment overrides.
-It is not
-yet registered as a clocked CPU. The existing PCS 86 engine
-still advances one scheduler tick per completed V30 instruction boundary. Its
-`scheduler_ticks_per_second` is pacing metadata, not the V30 crystal frequency.
-No current machine becomes cycle accurate because of this change.
-The PCS 86 configuration can forward the versioned V30 timing observer to
-diagnostic consumers. The firmware probe reports complete/exact/ranged/unknown
-boundary totals, unknown counts per effective opcode and the first unknown
-boundary's execution, transaction and flush context without making timing a
-frontend or machine-policy dependency.
+Status: the clocked scheduler and timed-device sources are active in the
+portable PCS 86. Its V30 runs at 10 MHz and reports one exact native-cycle
+duration for every accepted instruction boundary; PIT and RTC remain separate
+exact-rate participants. Timing-observation version 38 routes instruction
+prefetch and operand or I/O transfers through the instance-owned BCU, places
+their inherited EXU order, preserves wait states and rejects unresolved ranges
+instead of choosing a convenient value. The local firmware probe completed a
+20-second BIOS-and-floppy run with 16,503,008 exact boundaries and no unknown
+boundary. This proves the exercised path, not complete cycle accuracy: an
+instruction is still the scheduler's indivisible unit, interrupted string
+fragments, busy `POLL`, synchronous faults and single-step paths remain
+explicitly unresolved, and device models retain the limitations documented
+below. The probe reports exact/ranged/unknown totals and the first unsupported
+boundary without making timing a frontend or machine-policy dependency.
 
 ## Ownership
 
@@ -182,41 +152,22 @@ intermediate product; overflow is reported without changing the position.
   indirect near `CALL` places its independently aligned target read and stack
   write. The PCS 86 now consumes these durations at 10 MHz in the clocked
   engine. Z80 integration remains independent of the V30 clock domain.
-- The current PCS 86 firmware baseline completes 1,385,861 observed instruction
-  boundaries before its known unsupported endpoint. All 1,385,861 now have a
-  complete exact boundary duration. Placing `STOSW`
-  (`ABh`) and `SCASW` (`AFh`) removed 262,193 unknown boundaries without
-  changing the endpoint or framebuffer CRC. Placing relative near `CALL` and
-  near `RET` then removed another 1,457, and `MOVS`/`LODS` removed another 312.
-  Classifying accumulator-immediate `TEST` removed another 28.
-  Placing `LES`/`LDS` removed another 15, software `INT`/`IRET` removed 5, and
-  indirect near `CALL` removed 3. The final two unsigned byte multiplies use
-  the documented 27-or-28-clock interval plus the inherited V30 microcode's
-  explicit extra-clock condition: both firmware instances multiply zero and
-  therefore take 28 execution clocks. This derived condition remains marked
-  for hardware confirmation; it is not presented as a statement found in the
-  NEC manual. The initial clocked migration reached the same `F000:85F9`
-  unsupported endpoint with the same instruction and I/O counts. Its
-  deterministic framebuffer CRC was `cd3694c5` rather than the
-  instruction-tick baseline `e8bbbd1f`, because cursor/blink rendering receives
-  the new elapsed nanosecond timestamp; CRTC state and the endpoint were
-  unchanged. Accepting one V30 word-I/O transaction across the indexed VGA
-  `3D4h/3D5h` pair then removes that component-boundary limitation: the same
-  BIOS proceeds through timer programming and IRQ0. With the preserved System
-  Disk mounted read-only, it reaches 6.657920 seconds after placing both
-  pointer reads, both stack writes and the queue flush of indirect far
-  `CALL m16:16` (`FF /3`) and memory `POP r/m16` (`8F /0`). Execution reaches
-  loaded code at `0070:206C`; the next strict timing guard is indirect far
-  `JMP m16:16` (`FF /5`). This measured distribution sets the next
-  integration order instead of opcode-table convenience.
+- The current PCS 86 local firmware baseline mounts the preserved System Disk
+  read-only and completes 20 seconds of strict virtual time: 16,503,008
+  instruction boundaries, 11,977 I/O operations, no ranged or unknown
+  boundary, and framebuffer CRC `06bd8a15`. The last boundary is the BIOS idle
+  loop at `F000:E82E`; the disk image retains SHA-256
+  `75E1A068AA5910DB736CE4B53E6B5FC179F83390FF5512D2AF421E57AF3A0C12`.
+  This baseline was reached incrementally through real encountered boundaries,
+  ending with indirect far jump (`FF /5`) and direct far call (`9A`). It does
+  not imply that every architecturally possible V30 path is timed.
 - The V30 now exposes a clocked-engine step callback independently of its
   optional diagnostic observer. It reports a duration only for a complete,
   exact scalar boundary; a ranged or unknown result stops with
   `BM_STATUS_UNSUPPORTED` and zero cycles. This is an intentional migration
-  guard: the firmware path plus accepted NMI, maskable INT, immediately ready
-  `POLL` and near/immediate far returns are scalar up to the first unresolved
-  Group-5 memory-push timeline. The
-  PCS 86 now uses nanosecond virtual time with its
+  guard. The validated 20-second firmware-and-floppy path is fully scalar, but
+  unexercised paths can still stop at the first unresolved boundary. The PCS 86
+  now uses nanosecond virtual time with its
   V30, PIT and RTC registered as independent exact-rate participants;
   single-step, synchronous-fault and busy-`POLL` paths still stop explicitly if
   reached before their timing is completed.

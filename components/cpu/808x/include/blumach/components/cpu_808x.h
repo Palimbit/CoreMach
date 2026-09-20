@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 37U
+#define BM_808X_TIMING_OBSERVATION_VERSION 38U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -195,6 +195,8 @@ typedef enum bm_808x_prefetch_phase {
  * pre-pop effective-address calculation and both independent alignments.
  * Version 37 places both indirect far-jump pointer reads before prefetch
  * suspension and target-queue invalidation, including odd pointers.
+ * Version 38 places both stack writes and the target-queue flush of direct
+ * far calls in inherited microcode order.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

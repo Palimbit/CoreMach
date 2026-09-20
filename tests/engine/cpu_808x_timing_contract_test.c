@@ -1909,6 +1909,78 @@ test_near_call_and_return_have_a_complete_timeline(void)
 }
 
 static void
+test_direct_far_call_has_a_complete_timeline(void)
+{
+    const struct {
+        uint8_t program[6];
+        size_t size;
+        uint16_t stack;
+        uint16_t return_ip;
+        uint32_t clocks;
+        uint64_t transactions;
+    } cases[] = {
+        { { 0x9aU, 0x34U, 0x12U, 0x00U, 0x20U, 0U },
+          5U, 0x0200U, 5U, 21U, 2U },
+        { { 0x9aU, 0x34U, 0x12U, 0x00U, 0x20U, 0U },
+          5U, 0x0201U, 5U, 29U, 4U },
+        { { 0x2eU, 0x9aU, 0x34U, 0x12U, 0x00U, 0x20U },
+          6U, 0x0200U, 6U, 23U, 2U }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t cycles = 0U;
+        uint16_t return_cs;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        return_cs = state.cs;
+        state.ss = 0U;
+        state.sp = cases[index].stack;
+        cpu_808x_test_set_state(&machine, &state);
+
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == 0x1234U);
+        assert(state.cs == 0x2000U);
+        assert(state.sp == (uint16_t) (cases[index].stack - 4U));
+        assert(cpu_808x_test_peek(
+                   &machine, (uint16_t) (cases[index].stack - 4U)) ==
+               (uint8_t) cases[index].return_ip);
+        assert(cpu_808x_test_peek(
+                   &machine, (uint16_t) (cases[index].stack - 3U)) ==
+               (uint8_t) (cases[index].return_ip >> 8U));
+        assert(cpu_808x_test_peek(
+                   &machine, (uint16_t) (cases[index].stack - 2U)) ==
+               (uint8_t) return_cs);
+        assert(cpu_808x_test_peek(
+                   &machine, (uint16_t) (cases[index].stack - 1U)) ==
+               (uint8_t) (return_cs >> 8U));
+        assert_exact_execution_clocks(&capture, cases[index].clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].transactions);
+        assert(capture.last.prefetch_queue_flushed == 1U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == cases[index].clocks);
+        assert(cycles == capture.last.boundary_clocks_min);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_indirect_near_call_has_a_complete_timeline(void)
 {
     const struct {
@@ -3625,6 +3697,7 @@ main(void)
     test_interrupted_string_timing_remains_unknown();
     test_far_pointer_loads_have_a_complete_timeline();
     test_near_call_and_return_have_a_complete_timeline();
+    test_direct_far_call_has_a_complete_timeline();
     test_indirect_near_call_has_a_complete_timeline();
     test_far_returns_have_a_complete_timeline();
     test_indirect_near_jump_has_a_complete_timeline();

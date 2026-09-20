@@ -3917,18 +3917,37 @@ execute_one(bm_808x_state_t *state)
         case 0x9a: { /* CALL ptr16:16. */
             uint16_t destination = 0U;
             uint16_t segment = 0U;
+            uint16_t return_ip;
+            uint16_t return_cs;
             status = fetch_word(state, &destination);
             if (status == BM_STATUS_OK)
                 status = fetch_word(state, &segment);
+            if (status == BM_STATUS_OK) {
+                return_ip = state->ip;
+                return_cs = state->segments[1];
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 4U);
+            }
             if (status == BM_STATUS_OK)
-                status = push_word(state, state->segments[1]);
+                status = push_word(state, return_cs);
+            if (status == BM_STATUS_OK) {
+                state->segments[1] = segment;
+                status = place_suspended_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
-                status = push_word(state, state->ip);
+                status = place_suspended_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK) {
                 state->ip = destination;
-                state->segments[1] = segment;
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 3U);
             }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, return_ip);
             return status;
         }
         case 0xe9: { /* JMP rel16 */
