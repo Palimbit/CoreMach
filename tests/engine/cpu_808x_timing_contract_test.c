@@ -1863,6 +1863,142 @@ test_near_call_and_return_have_a_complete_timeline(void)
 }
 
 static void
+test_software_interrupt_has_a_complete_timeline(void)
+{
+    static const uint8_t program[] = { 0xcdU, 0x20U }; /* INT 20h. */
+    const uint16_t initial_stacks[] = { 0x0100U, 0x0101U };
+    size_t index;
+
+    for (index = 0U;
+         index < sizeof(initial_stacks) / sizeof(initial_stacks[0]);
+         ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint32_t clocks = index == 0U ? 38U : 50U;
+        uint64_t transactions = index == 0U ? 5U : 8U;
+
+        cpu_808x_test_machine_create(&machine, &config, program,
+                                     sizeof(program));
+        start_program(&machine);
+        cpu_808x_test_poke(&machine, 0x0080U, 0x34U);
+        cpu_808x_test_poke(&machine, 0x0081U, 0x12U);
+        cpu_808x_test_poke(&machine, 0x0082U, 0x00U);
+        cpu_808x_test_poke(&machine, 0x0083U, 0x20U);
+        state = cpu_808x_test_get_state(&machine);
+        state.ss = 0U;
+        state.sp = initial_stacks[index];
+        state.flags = (uint16_t) (state.flags | TEST_FLAG_IF);
+        cpu_808x_test_set_state(&machine, &state);
+
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == 0x1234U);
+        assert(state.cs == 0x2000U);
+        assert(state.sp == (uint16_t) (initial_stacks[index] - 6U));
+        assert((state.flags & TEST_FLAG_IF) == 0U);
+        assert_exact_execution_clocks(&capture, clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions == transactions);
+        assert(capture.last.prefetch_queue_flushed == 1U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == clocks);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
+test_interrupt_latches_vector_before_writing_stack(void)
+{
+    static const uint8_t program[] = { 0xcdU, 0x20U }; /* INT 20h. */
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+
+    cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
+    start_program(&machine);
+    cpu_808x_test_poke(&machine, 0x0080U, 0x34U);
+    cpu_808x_test_poke(&machine, 0x0081U, 0x12U);
+    cpu_808x_test_poke(&machine, 0x0082U, 0x00U);
+    cpu_808x_test_poke(&machine, 0x0083U, 0x20U);
+    state = cpu_808x_test_get_state(&machine);
+    state.ss = 0U;
+    state.sp = 0x0082U; /* The first push overwrites vector 20h's offset. */
+    cpu_808x_test_set_state(&machine, &state);
+
+    step_once(&machine, &capture);
+    state = cpu_808x_test_get_state(&machine);
+    assert(state.ip == 0x1234U);
+    assert(state.cs == 0x2000U);
+    assert(state.sp == 0x007cU);
+    assert_exact_execution_clocks(&capture, 38U);
+    assert(capture.last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_EXACT);
+    assert(capture.last.execution_timeline_complete == 1U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
+static void
+test_interrupt_return_has_a_complete_timeline(void)
+{
+    static const uint8_t program[] = { 0xcfU }; /* IRET. */
+    const uint16_t initial_stacks[] = { 0x0100U, 0x0101U };
+    size_t index;
+
+    for (index = 0U;
+         index < sizeof(initial_stacks) / sizeof(initial_stacks[0]);
+         ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint16_t stack = initial_stacks[index];
+        uint32_t clocks = index == 0U ? 27U : 39U;
+        uint64_t transactions = index == 0U ? 3U : 6U;
+
+        cpu_808x_test_machine_create(&machine, &config, program,
+                                     sizeof(program));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ss = 0U;
+        state.sp = stack;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, stack, 0x34U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 1U), 0x12U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 2U), 0x00U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 3U), 0x20U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 4U), 0x02U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 5U), 0x72U);
+
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == 0x1234U);
+        assert(state.cs == 0x2000U);
+        assert(state.sp == (uint16_t) (stack + 6U));
+        assert_exact_execution_clocks(&capture, clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions == transactions);
+        assert(capture.last.prefetch_queue_flushed == 1U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == clocks);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_counted_and_stack_timing(void)
 {
     static const uint8_t shift[] = { 0xc1U, 0xe0U, 0x05U }; /* SHL AW,5. */
@@ -2764,6 +2900,9 @@ main(void)
     test_interrupted_string_timing_remains_unknown();
     test_far_pointer_loads_have_a_complete_timeline();
     test_near_call_and_return_have_a_complete_timeline();
+    test_software_interrupt_has_a_complete_timeline();
+    test_interrupt_latches_vector_before_writing_stack();
+    test_interrupt_return_has_a_complete_timeline();
     test_interrupt_boundary_reports_queue_flush();
     test_prefetched_byte_survives_later_memory_write();
     test_odd_prefetch_and_pointer_wrap();

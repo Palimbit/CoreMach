@@ -153,7 +153,7 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains green. V30 observation version 20 advances
+- The existing PCS 86 suite remains green. V30 observation version 26 advances
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
@@ -169,18 +169,19 @@ intermediate product; overflow is reported without changing the position.
   as well. Every decoded
   prefix
   advances it before the next queue read. Other operand offsets, realised
-  values inside ranges and interrupt
-  boundaries remain known unknowns. A
+  values inside ranges and external or fault
+  interrupt boundaries remain known unknowns. Software `INT` and `IRET` now
+  place their vector and stack transfers in inherited microcode order. A
   clocked callback and PCS 86 machine migration are later changes. Z80
   integration must not alter the legacy V30 tick meaning.
 - The current PCS 86 firmware baseline completes 1,385,861 observed instruction
-  boundaries before its known unsupported endpoint. Of those, 1,385,851 have a
-  complete exact boundary duration and 10 remain unknown. Placing `STOSW`
+  boundaries before its known unsupported endpoint. Of those, 1,385,856 have a
+  complete exact boundary duration and 5 remain unknown. Placing `STOSW`
   (`ABh`) and `SCASW` (`AFh`) removed 262,193 unknown boundaries without
   changing the endpoint or framebuffer CRC. Placing relative near `CALL` and
   near `RET` then removed another 1,457, and `MOVS`/`LODS` removed another 312.
   Classifying accumulator-immediate `TEST` removed another 28.
-  Placing `LES`/`LDS` removed another 15.
+  Placing `LES`/`LDS` removed another 15, and software `INT`/`IRET` removed 5.
   The remaining groups are small and semantically distinct; this measured
   distribution sets the next
   integration order instead of opcode-table convenience.

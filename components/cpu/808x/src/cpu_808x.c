@@ -483,23 +483,52 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
 {
     uint16_t new_ip = 0;
     uint16_t new_cs = 0;
+    uint16_t old_ip = state->ip;
+    uint16_t old_cs = state->segments[1];
+    uint16_t old_flags = psw_image(state->flags);
     bm_status_t status;
 
-    status = push_word(state, psw_image(state->flags));
+    /* Preserve the V30 microcode order.  The vector is latched before the
+     * interrupt frame can overwrite memory, then prefetch is suspended while
+     * the three stack words are written. */
+    status = place_execution_clocks(state, 3U);
     if (status == BM_STATUS_OK)
-        status = push_word(state, state->segments[1]);
+        status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U),
+                           &new_ip);
     if (status == BM_STATUS_OK)
-        status = push_word(state, state->ip);
-    state->flags = (uint16_t) ((psw_image(state->flags) | FLAG_MD) &
-                               ~(FLAG_IF | FLAG_TF));
+        status = place_execution_clocks(state, 1U);
     if (status == BM_STATUS_OK)
-        status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U), &new_ip);
+        status = read_word(state, 0,
+                           (uint16_t) ((uint16_t) vector * 4U + 2U),
+                           &new_cs);
+    if (status == BM_STATUS_OK) {
+        bm_v30_bcu_suspend_prefetch(&state->bcu);
+        status = place_suspended_execution_clocks(state, 2U);
+    }
     if (status == BM_STATUS_OK)
-        status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U + 2U), &new_cs);
+        status = push_word(state, old_flags);
+    if (status == BM_STATUS_OK) {
+        state->flags = (uint16_t) ((old_flags | FLAG_MD) &
+                                   ~(FLAG_IF | FLAG_TF));
+        status = place_suspended_execution_clocks(state, 4U);
+    }
+    if (status == BM_STATUS_OK)
+        status = push_word(state, old_cs);
+    if (status == BM_STATUS_OK) {
+        state->segments[1] = new_cs;
+        status = place_suspended_execution_clocks(state, 1U);
+    }
+    if (status == BM_STATUS_OK)
+        status = place_suspended_execution_clocks(state, 2U);
     if (status == BM_STATUS_OK) {
         state->ip = new_ip;
-        state->segments[1] = new_cs;
         mark_prefetch_flush(state);
+        state->boundary_flush_timeline_supported = 1;
+        status = place_execution_clocks(state, 3U);
+    }
+    if (status == BM_STATUS_OK)
+        status = push_word(state, old_ip);
+    if (status == BM_STATUS_OK) {
         state->halted = 0;
         state->trap_pending = 0;
         state->interrupt_entered = 1;
@@ -3945,6 +3974,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &vector);
             if (status != BM_STATUS_OK)
                 return status;
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
             return enter_interrupt(state, vector);
         }
         case 0xce: /* INTO */
@@ -3954,16 +3987,30 @@ execute_one(bm_808x_state_t *state)
             uint16_t new_ip = 0;
             uint16_t new_cs = 0;
             uint16_t new_flags = 0;
-            status = pop_word(state, &new_ip);
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 2U);
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &new_ip);
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 2U);
+            }
+            if (status == BM_STATUS_OK)
+                status = place_suspended_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &new_cs);
-            if (status == BM_STATUS_OK)
-                status = pop_word(state, &new_flags);
             if (status == BM_STATUS_OK) {
                 state->ip = new_ip;
                 state->segments[1] = new_cs;
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 4U);
+            }
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &new_flags);
+            if (status == BM_STATUS_OK) {
                 restore_psw(state, new_flags);
+                status = place_execution_clocks(state, 1U);
             }
             return status;
         }
