@@ -1469,6 +1469,7 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
     state->boundary_string_valid = 1;
     state->boundary_repeat_mode = (uint8_t) repeat_mode;
     if ((opcode == 0xa4U) || (opcode == 0xa5U) ||
+        (opcode == 0xa6U) || (opcode == 0xa7U) ||
         (opcode == 0xaaU) || (opcode == 0xabU) ||
         (opcode == 0xacU) || (opcode == 0xadU) ||
         (opcode == 0xaeU) || (opcode == 0xafU)) {
@@ -1504,11 +1505,19 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                                         state->registers[REG_DI], value);
             }
         } else if ((opcode == 0xa6U) || (opcode == 0xa7U)) { /* CMPS */
+            /* Preserve the inherited operand order.  The final comparison
+             * interval is one clock shorter for the non-repeated primitive,
+             * whose documented total is thirteen clocks. */
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
             if (width == 1U) {
                 uint8_t source = 0;
                 uint8_t destination = 0;
                 status = read_byte(state, state->segments[source_segment],
                                    state->registers[REG_SI], BM_BUS_READ, &source);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 2U);
                 if (status == BM_STATUS_OK)
                     status = read_byte(state, state->segments[0],
                                        state->registers[REG_DI], BM_BUS_READ,
@@ -1520,11 +1529,16 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 status = read_word(state, state->segments[source_segment],
                                    state->registers[REG_SI], &value);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
                     status = read_word(state, state->segments[0],
                                        state->registers[REG_DI], &destination);
                 if (status == BM_STATUS_OK)
                     compare16(state, value, destination);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(
+                    state, repeat_mode != 0 ? 3U : 2U);
         } else if ((opcode == 0xaaU) || (opcode == 0xabU)) { /* STOS */
             if (width == 1U)
                 status = write_byte(state, state->segments[0],

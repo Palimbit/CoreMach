@@ -2174,6 +2174,82 @@ test_group5_push_has_a_complete_timeline(void)
 }
 
 static void
+test_cmps_has_a_complete_timeline(void)
+{
+    const struct {
+        uint8_t program[2];
+        size_t size;
+        uint16_t source;
+        uint16_t destination;
+        uint16_t count;
+        uint32_t clocks;
+        uint64_t transactions;
+        uint16_t remaining;
+    } cases[] = {
+        { { 0xa6U, 0U }, 1U, 0x0100U, 0x0200U,
+          1U, 13U, 2U, 1U },
+        { { 0xa7U, 0U }, 1U, 0x0100U, 0x0200U,
+          1U, 13U, 2U, 1U },
+        { { 0xa7U, 0U }, 1U, 0x0101U, 0x0200U,
+          1U, 17U, 3U, 1U },
+        { { 0xa7U, 0U }, 1U, 0x0101U, 0x0201U,
+          1U, 21U, 4U, 1U },
+        { { 0xf3U, 0xa6U }, 2U, 0x0100U, 0x0200U,
+          3U, 49U, 6U, 0U },
+        { { 0xf3U, 0xa6U }, 2U, 0x0100U, 0x0200U,
+          0U, 7U, 0U, 0U }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t cycles = 0U;
+        unsigned int byte_index;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ds = 0U;
+        state.es = 0x1000U;
+        state.si = cases[index].source;
+        state.di = cases[index].destination;
+        state.cx = cases[index].count;
+        cpu_808x_test_set_state(&machine, &state);
+        for (byte_index = 0U; byte_index < 6U; ++byte_index) {
+            cpu_808x_test_poke(
+                &machine, (uint16_t) (cases[index].source + byte_index),
+                (uint8_t) (0x40U + byte_index));
+            cpu_808x_test_poke(
+                &machine,
+                0x10000U + (uint16_t) (cases[index].destination + byte_index),
+                (uint8_t) (0x40U + byte_index));
+        }
+
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.cx == cases[index].remaining);
+        assert_exact_execution_clocks(&capture, cases[index].clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].transactions);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == cases[index].clocks);
+        assert(cycles == capture.last.boundary_clocks_min);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_clocked_step_requires_an_exact_scalar_boundary(void)
 {
     static const uint8_t exact_program[] = { 0x90U };
@@ -3336,6 +3412,7 @@ main(void)
     test_far_returns_have_a_complete_timeline();
     test_indirect_near_jump_has_a_complete_timeline();
     test_group5_push_has_a_complete_timeline();
+    test_cmps_has_a_complete_timeline();
     test_clocked_step_requires_an_exact_scalar_boundary();
     test_software_interrupt_has_a_complete_timeline();
     test_interrupt_latches_vector_before_writing_stack();
