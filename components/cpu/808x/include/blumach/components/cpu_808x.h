@@ -249,6 +249,34 @@ typedef struct bm_808x_timing_observation {
 typedef void (*bm_808x_timing_fn)(
     void *context, const bm_808x_timing_observation_t *observation);
 
+#define BM_808X_BUS_PHASE_OBSERVATION_VERSION 1U
+
+typedef enum bm_808x_bus_phase {
+    BM_808X_BUS_PHASE_T1 = 0,
+    BM_808X_BUS_PHASE_T2,
+    BM_808X_BUS_PHASE_T3,
+    BM_808X_BUS_PHASE_TW,
+    BM_808X_BUS_PHASE_T4
+} bm_808x_bus_phase_t;
+
+/* One active external-bus T-state. This deliberately excludes EU-only idle
+ * clocks: it is a bus-phase observation, not an instruction duration. The
+ * transaction is the logical transfer occupying the bus. The device response
+ * (including read/fetch data and wait_states) becomes valid from a successful
+ * T3 through the end of the cycle. */
+typedef struct bm_808x_bus_phase_observation {
+    uint32_t size;
+    uint32_t version;
+    uint64_t bus_active_clock_index;
+    bm_808x_bus_phase_t phase;
+    uint8_t response_valid;
+    uint8_t reserved[3];
+    bm_bus_transaction_t transaction;
+} bm_808x_bus_phase_observation_t;
+
+typedef void (*bm_808x_bus_phase_fn)(
+    void *context, const bm_808x_bus_phase_observation_t *observation);
+
 typedef struct bm_808x_config {
     bm_808x_model_t model;
     uint32_t frequency_hz;
@@ -268,6 +296,9 @@ typedef struct bm_808x_config {
      * a successfully completed instruction or accepted interrupt boundary. */
     bm_808x_timing_fn timing;
     void *timing_context;
+    /* Optional read-only observer for active T1/T2/T3/Tw/T4 bus phases. */
+    bm_808x_bus_phase_fn bus_phase;
+    void *bus_phase_context;
 } bm_808x_config_t;
 
 #define BM_808X_ARCH_STATE_VERSION 4U

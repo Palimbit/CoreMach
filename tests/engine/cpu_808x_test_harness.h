@@ -23,6 +23,8 @@ typedef struct cpu_808x_test_config {
     void *coprocessor_context;
     bm_808x_timing_fn timing;
     void *timing_context;
+    bm_808x_bus_phase_fn bus_phase;
+    void *bus_phase_context;
 } cpu_808x_test_config_t;
 
 typedef struct cpu_808x_test_machine {

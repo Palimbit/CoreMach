@@ -75,6 +75,8 @@ typedef struct bm_808x_state {
     void *coprocessor_context;
     bm_808x_timing_fn timing;
     void *timing_context;
+    bm_808x_bus_phase_fn bus_phase;
+    void *bus_phase_context;
     int boundary_rm_valid;
     int boundary_rm_memory;
     uint16_t boundary_rm_offset;
@@ -1915,6 +1917,8 @@ cpu_reset(void *context)
     state->ip = 0;
     bm_808x_biu_reset(&state->bcu, state->ip, state->profile->prefetch_capacity,
                       (uint8_t) (state->profile->external_bus_width / 8U));
+    bm_808x_biu_set_phase_observer(&state->bcu, state->bus_phase,
+                                   state->bus_phase_context);
     state->flags = 0xf002U;
     state->last_fetch = 0xffff0U;
     state->last_opcode = 0;
@@ -5811,6 +5815,8 @@ bm_808x_create(const bm_host_services_t *host,
     state->coprocessor_context = config->coprocessor_context;
     state->timing = config->timing;
     state->timing_context = config->timing_context;
+    state->bus_phase = config->bus_phase;
+    state->bus_phase_context = config->bus_phase_context;
     *out_cpu = (bm_cpu_t) {
         profile->name,
         state,
@@ -5903,6 +5909,8 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     bm_808x_biu_reset(&state->bcu, state_image->ip,
                       state->profile->prefetch_capacity,
                       (uint8_t) (state->profile->external_bus_width / 8U));
+    bm_808x_biu_set_phase_observer(&state->bcu, state->bus_phase,
+                                   state->bus_phase_context);
     state->flags = psw_image(state, state_image->flags);
     state->halted = state_image->halted;
     state->interrupt_inhibit = state_image->interrupt_inhibit;
@@ -5971,6 +5979,7 @@ bm_808x_set_prefetch_state(bm_cpu_t *cpu,
                            const bm_808x_prefetch_state_t *state_image)
 {
     bm_808x_state_t *state;
+    bm_status_t status;
 
     if (!is_808x_cpu(cpu) || (state_image == NULL) ||
         (state_image->size != sizeof(*state_image)) ||
@@ -5980,10 +5989,14 @@ bm_808x_set_prefetch_state(bm_cpu_t *cpu,
     if ((state_image->capacity != state->profile->prefetch_capacity) ||
         (state_image->count > state_image->capacity))
         return BM_STATUS_INVALID_ARGUMENT;
-    return bm_808x_biu_import_queue(
+    status = bm_808x_biu_import_queue(
         &state->bcu, state_image->pointer, state_image->bytes,
         state_image->count, state->profile->prefetch_capacity,
         (uint8_t) (state->profile->external_bus_width / 8U));
+    if (status == BM_STATUS_OK)
+        bm_808x_biu_set_phase_observer(&state->bcu, state->bus_phase,
+                                       state->bus_phase_context);
+    return status;
 }
 
 bm_status_t

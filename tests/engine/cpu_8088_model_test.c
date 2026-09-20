@@ -14,6 +14,11 @@ typedef struct timing_capture {
     size_t count;
 } timing_capture_t;
 
+typedef struct phase_capture {
+    bm_808x_bus_phase_observation_t observations[8];
+    size_t count;
+} phase_capture_t;
+
 static void
 capture_bus(void *context, const bm_bus_transaction_t *transaction)
 {
@@ -30,6 +35,16 @@ capture_timing(void *context,
     timing_capture_t *capture = context;
     capture->last = *observation;
     ++capture->count;
+}
+
+static void
+capture_phase(void *context,
+              const bm_808x_bus_phase_observation_t *observation)
+{
+    phase_capture_t *capture = context;
+
+    assert(capture->count < 8U);
+    capture->observations[capture->count++] = *observation;
 }
 
 static bm_status_t
@@ -398,6 +413,45 @@ test_prefetch_state_round_trip(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_public_bus_phase_observer_survives_state_install(void)
+{
+    static const uint8_t nop[] = { 0x90U };
+    cpu_808x_test_config_t config = intel_config();
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    bm_808x_prefetch_state_t empty_prefetch = {
+        .size = sizeof(empty_prefetch),
+        .version = BM_808X_PREFETCH_STATE_VERSION,
+        .pointer = 0U,
+        .count = 0U,
+        .capacity = BM_808X_8088_PREFETCH_QUEUE_CAPACITY,
+        .bytes = { 0U }
+    };
+    phase_capture_t capture = { 0 };
+    bm_tick_t consumed = 0U;
+
+    config.bus_phase = capture_phase;
+    config.bus_phase_context = &capture;
+    cpu_808x_test_machine_create(&machine, &config, nop, sizeof(nop));
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &empty_prefetch) ==
+           BM_STATUS_OK);
+
+    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
+    assert(capture.count == 4U);
+    assert(capture.observations[0].phase == BM_808X_BUS_PHASE_T1);
+    assert(capture.observations[1].phase == BM_808X_BUS_PHASE_T2);
+    assert(capture.observations[2].phase == BM_808X_BUS_PHASE_T3);
+    assert(capture.observations[3].phase == BM_808X_BUS_PHASE_T4);
+    assert(capture.observations[2].transaction.operation == BM_BUS_FETCH);
+    assert(capture.observations[2].transaction.address == 0xf0000U);
+    assert(capture.observations[2].transaction.value == 0x90U);
+    assert(capture.observations[2].response_valid == 1U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
 int
 main(void)
 {
@@ -406,5 +460,6 @@ main(void)
     test_byte_bus_memory_io_wrap_and_escape();
     test_interrupt_halt_queue_and_unknown_timing();
     test_prefetch_state_round_trip();
+    test_public_bus_phase_observer_survives_state_install();
     return 0;
 }
