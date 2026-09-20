@@ -240,7 +240,7 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 16 reports
+their sum the elapsed instruction time. Timing-observation version 17 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
@@ -256,6 +256,8 @@ read-only ModR/M ALU memory forms, including `CMP` in both encoding directions.
 Version 14 adds the read-modify-write ALU forms.
 Version 15 adds ModR/M `TEST` and `XCHG` memory forms.
 Version 16 adds the immediate ALU groups `80h`-`83h`.
+Version 17 adds segment-register `MOV` memory forms and the immediate-to-r/m
+`MOV` groups `C6h`-`C7h`.
 Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O or
@@ -313,7 +315,11 @@ more after its read; it places `XCHG` after two internal clocks and preserves
 the five-clock interval between its read and write. Version 16 restores the
 inherited ordering of an immediate ALU instruction: read the ModR/M operand,
 consume the immediate, advance one internal clock for the operation and two
-more before a possible write. The executor still lacks
+more before a possible write. Version 17 places a segment-register load after
+two inherited internal clocks and a store after three. Immediate-to-memory
+`MOV` advances two clocks before consuming its immediate, then two clocks for
+the byte form or one for the word form before writing. Register forms remain
+on the ordinary bus-free path. The executor still lacks
 the offsets for other operand instructions,
 documented timing
 ranges and unknown timings; those paths suspend this overlap model until their
@@ -343,10 +349,10 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 16 combines those quantities only for uncontended cases and
+bus waits. Version 17 combines those quantities only for uncontended cases and
 the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
 forms, memory forms of ModR/M `MOV`, all ModR/M ALU forms, immediate ALU groups,
-`TEST` and `XCHG`; every other operand boundary remains
+segment-register and immediate-to-r/m `MOV`, `TEST` and `XCHG`; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by

@@ -3306,6 +3306,10 @@ execute_one(bm_808x_state_t *state)
             if ((segment >= 4U) || (segment == 1U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
             if (status == BM_STATUS_OK) {
@@ -3326,6 +3330,10 @@ execute_one(bm_808x_state_t *state)
             if (segment >= 4U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
             if (status == BM_STATUS_OK) {
                 status = write_operand_word(state, &operand, state->segments[segment]);
                 if (status == BM_STATUS_OK)
@@ -3591,16 +3599,24 @@ execute_one(bm_808x_state_t *state)
             if (((modrm >> 3U) & 7U) != 0U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (opcode == 0xc6U) {
                 uint8_t immediate = 0;
                 if (status == BM_STATUS_OK)
                     status = fetch_byte(state, &immediate);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 2U);
                 if (status == BM_STATUS_OK)
                     status = write_operand_byte(state, &operand, immediate);
             } else {
                 uint16_t immediate = 0;
                 if (status == BM_STATUS_OK)
                     status = fetch_word(state, &immediate);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK)
                     status = write_operand_word(state, &operand, immediate);
             }
