@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 22U
+#define BM_808X_TIMING_OBSERVATION_VERSION 23U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -164,6 +164,8 @@ typedef enum bm_808x_prefetch_phase {
  * zero-count forms plus both physical transfers of an odd word.
  * Version 22 places relative near CALL and both near RET forms around an
  * explicit prefetch suspension and target-queue flush.
+ * Version 23 places MOVS and LODS source transfers, including repeated,
+ * segment-overridden, zero-count and odd-word forms.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

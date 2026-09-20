@@ -274,6 +274,9 @@ Version 22 places relative near `CALL` and both near `RET` forms. It models the
 inherited prefetch suspension separately from ordinary internal clocks, flushes
 at the actual control-transfer point and resumes target prefetch before or
 after the stack transfer in the inherited order.
+Version 23 places byte and word `MOVS` and `LODS` source transfers. It covers
+normal, repeated, zero-count and segment-overridden forms while preserving both
+physical transfers of an odd word.
 Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O or
@@ -350,21 +353,23 @@ Version 22 adds a BCU prefetch-suspend operation that preserves queued bytes
 until the subsequent control-transfer flush. Relative near `CALL` and both near
 `RET` forms can therefore place their internal clocks, stack transfer, flush
 and target prefetch without allowing a speculative fetch during a suspended
-interval. The executor still
-lacks the offsets for other operand instructions,
-documented timing
-ranges and unknown timings; those paths suspend this overlap model until their
-individual accesses can be placed. The observer
-therefore still labels these as resource measurements rather than claiming a
-complete external-bus trace or elapsed duration. Instruction demand fetch uses a real
-six-byte queue and
-per-instance PFP. An even PFP fetches one little-endian word in a single bus
-transaction; an odd PFP fetches one byte before the pointer returns to an even
-boundary. Consumed bytes remain queued across instruction boundaries, so later
-memory writes do not rewrite already-prefetched instructions. Taken control
-transfers, accepted interrupts and architectural state replacement discard the
-queue and restart PFP at the new IP. The observer reports PFP and occupancy at
-every boundary, rather than inferring queue state only when a flush occurs.
+interval.
+Version 23 additionally places `MOVS` source/destination transfer ordering and
+the post-read intervals of `LODS`; the repeated `MOVS` formula has no bus-free
+per-iteration interval beyond its two transfers, so its documented fixed tail
+is advanced only after the final iteration. The executor still lacks the
+offsets for other operand instructions, documented timing ranges and unknown
+timings; those paths suspend this overlap model until their individual accesses
+can be placed. The observer therefore still labels these as resource
+measurements rather than claiming a complete external-bus trace or elapsed
+duration. Instruction demand fetch uses a real six-byte queue and per-instance
+PFP. An even PFP fetches one little-endian word in a single bus transaction; an
+odd PFP fetches one byte before the pointer returns to an even boundary.
+Consumed bytes remain queued across instruction boundaries, so later memory
+writes do not rewrite already-prefetched instructions. Taken control transfers,
+accepted interrupts and architectural state replacement discard the queue and
+restart PFP at the new IP. The observer reports PFP and occupancy at every
+boundary, rather than inferring queue state only when a flush occurs.
 
 This establishes the first scheduler-ready boundary measurements without
 claiming a complete timing model or exposing a clocked CPU callback prematurely.
@@ -380,12 +385,12 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 22 combines those quantities only for uncontended cases and
+bus waits. Version 23 combines those quantities only for uncontended cases and
 the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
 forms, memory forms of ModR/M `MOV`, all ModR/M ALU forms, immediate ALU groups,
 segment-register and immediate-to-r/m `MOV`, Group 3 memory operands, ModR/M
 `TEST` and `XCHG`, `FEh`/`FFh` memory `INC`/`DEC`, and single-word stack
-`PUSH`/`POP`, `STOS`, `SCAS`, relative near `CALL` and near `RET`; every other operand boundary remains
+`PUSH`/`POP`, `MOVS`, `LODS`, `STOS`, `SCAS`, relative near `CALL` and near `RET`; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by

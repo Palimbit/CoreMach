@@ -1410,7 +1410,9 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
     }
     state->boundary_string_valid = 1;
     state->boundary_repeat_mode = (uint8_t) repeat_mode;
-    if ((opcode == 0xaaU) || (opcode == 0xabU) ||
+    if ((opcode == 0xa4U) || (opcode == 0xa5U) ||
+        (opcode == 0xaaU) || (opcode == 0xabU) ||
+        (opcode == 0xacU) || (opcode == 0xadU) ||
         (opcode == 0xaeU) || (opcode == 0xafU)) {
         begin_operand_execution_timeline(state);
         /* NEC's repeated primitive formula includes its repeat-prefix setup.
@@ -1429,12 +1431,16 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 uint8_t byte = 0;
                 status = read_byte(state, state->segments[source_segment],
                                    state->registers[REG_SI], BM_BUS_READ, &byte);
+                if ((status == BM_STATUS_OK) && (repeat_mode == 0))
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK)
                     status = write_byte(state, state->segments[0],
                                         state->registers[REG_DI], byte);
             } else {
                 status = read_word(state, state->segments[source_segment],
                                    state->registers[REG_SI], &value);
+                if ((status == BM_STATUS_OK) && (repeat_mode == 0))
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK)
                     status = write_word(state, state->segments[0],
                                         state->registers[REG_DI], value);
@@ -1480,6 +1486,9 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 status = read_word(state, state->segments[source_segment],
                                    state->registers[REG_SI], &state->registers[REG_AX]);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(
+                    state, repeat_mode != 0 ? 5U : 3U);
         } else { /* SCAS */
             /* The inherited V30 path performs its comparison setup before
              * acquiring ES:DI.  Repeated forms then have four internal clocks
