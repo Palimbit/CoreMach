@@ -1743,6 +1743,66 @@ test_single_word_stack_operations_have_a_complete_timeline(void)
 }
 
 static void
+test_far_pointer_loads_have_a_complete_timeline(void)
+{
+    const struct {
+        uint8_t program[5];
+        size_t size;
+        uint16_t address;
+        uint32_t execution_clocks;
+        uint64_t operand_transactions;
+        int load_ds;
+    } cases[] = {
+        { { 0xc4U, 0x06U, 0x00U, 0x01U, 0U }, 4U,
+          0x0100U, 18U, 2U, 0 },
+        { { 0xc5U, 0x06U, 0x01U, 0x01U, 0U }, 4U,
+          0x0101U, 26U, 4U, 1 },
+        { { 0x2eU, 0xc4U, 0x06U, 0x00U, 0x01U }, 5U,
+          0x0100U, 20U, 2U, 0 }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t physical = index == 2U ?
+            0xf0000U + cases[index].address : cases[index].address;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        cpu_808x_test_poke(&machine, physical, 0x34U);
+        cpu_808x_test_poke(&machine, physical + 1U, 0x12U);
+        cpu_808x_test_poke(&machine, physical + 2U, 0x78U);
+        cpu_808x_test_poke(&machine, physical + 3U, 0x56U);
+
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ax == 0x1234U);
+        if (cases[index].load_ds)
+            assert(state.ds == 0x5678U);
+        else
+            assert(state.es == 0x5678U);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].operand_transactions);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed ==
+               cases[index].execution_clocks);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_near_call_and_return_have_a_complete_timeline(void)
 {
     static const uint8_t program[] = {
@@ -2702,6 +2762,7 @@ main(void)
     test_stos_scas_have_a_complete_timeline();
     test_movs_lods_have_a_complete_timeline();
     test_interrupted_string_timing_remains_unknown();
+    test_far_pointer_loads_have_a_complete_timeline();
     test_near_call_and_return_have_a_complete_timeline();
     test_interrupt_boundary_reports_queue_flush();
     test_prefetched_byte_survives_later_memory_write();

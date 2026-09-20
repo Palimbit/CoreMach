@@ -3857,6 +3857,10 @@ execute_one(bm_808x_state_t *state)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
             if ((status == BM_STATUS_OK) && operand.is_register)
                 return BM_STATUS_UNSUPPORTED;
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 4U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_word(state, operand.segment, operand.offset, &offset);
             if (status == BM_STATUS_OK)

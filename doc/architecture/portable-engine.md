@@ -280,6 +280,10 @@ physical transfers of an odd word.
 Version 24 classifies accumulator-immediate `TEST` at the four clocks and zero
 external transfers documented by NEC. These bus-free forms use the aggregate
 path and do not require a fabricated operand position.
+Version 25 places the two word reads of `LES`/`LDS` after their four inherited
+setup clocks. Even far pointers use two word transactions; odd pointers retain
+all four physical byte transactions, and segment overrides add their ordinary
+prefix interval.
 Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O or
@@ -388,12 +392,12 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 24 combines those quantities only for uncontended cases and
+bus waits. Version 25 combines those quantities only for uncontended cases and
 the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
 forms, memory forms of ModR/M `MOV`, all ModR/M ALU forms, immediate ALU groups,
 segment-register and immediate-to-r/m `MOV`, Group 3 memory operands, ModR/M
 `TEST` and `XCHG`, `FEh`/`FFh` memory `INC`/`DEC`, and single-word stack
-`PUSH`/`POP`, `MOVS`, `LODS`, `STOS`, `SCAS`, relative near `CALL` and near `RET`; every other operand boundary remains
+`PUSH`/`POP`, `MOVS`, `LODS`, `STOS`, `SCAS`, `LES`/`LDS`, relative near `CALL` and near `RET`; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by
