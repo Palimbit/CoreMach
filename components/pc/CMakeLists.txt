@@ -31,6 +31,7 @@ endif()
 add_library(blumach_pc_engine_adapters STATIC
     src/pit8253_clock.c
     src/rtc_mm58167_clock.c
+    src/xta_clock.c
 )
 target_include_directories(blumach_pc_engine_adapters
     PUBLIC

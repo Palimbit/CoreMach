@@ -19,6 +19,14 @@ typedef enum bm_address_space {
     BM_ADDRESS_DATA
 } bm_address_space_t;
 
+typedef enum bm_bus_observer_space {
+    BM_BUS_OBSERVE_MEMORY = 1U << BM_ADDRESS_MEMORY,
+    BM_BUS_OBSERVE_IO = 1U << BM_ADDRESS_IO,
+    BM_BUS_OBSERVE_PROGRAM = 1U << BM_ADDRESS_PROGRAM,
+    BM_BUS_OBSERVE_DATA = 1U << BM_ADDRESS_DATA,
+    BM_BUS_OBSERVE_ALL = (1U << (BM_ADDRESS_DATA + 1U)) - 1U
+} bm_bus_observer_space_t;
+
 typedef enum bm_bus_operation {
     BM_BUS_READ = 0,
     BM_BUS_WRITE,
@@ -88,6 +96,10 @@ bm_status_t bm_bus_set_default_response(
     bm_address_space_t space,
     const bm_bus_static_response_t *response);
 bm_status_t bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction);
+bm_status_t bm_bus_set_observer_spaces(bm_bus_t *bus,
+                                       bm_bus_observer_fn observer,
+                                       void *context,
+                                       uint32_t spaces);
 void bm_bus_set_observer(bm_bus_t *bus, bm_bus_observer_fn observer, void *context);
 
 #ifdef __cplusplus

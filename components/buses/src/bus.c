@@ -20,6 +20,7 @@ struct bm_bus {
     size_t capacity;
     bm_bus_observer_fn observer;
     void *observer_context;
+    uint32_t observer_spaces;
     bm_bus_static_response_t default_response[BM_ADDRESS_DATA + 1];
     int has_default_response[BM_ADDRESS_DATA + 1];
 };
@@ -229,7 +230,9 @@ bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction)
                     *transaction = original;
             }
             if (status != BM_STATUS_UNMAPPED) {
-                if ((status == BM_STATUS_OK) && (bus->observer != NULL))
+                if ((status == BM_STATUS_OK) && (bus->observer != NULL) &&
+                    ((bus->observer_spaces &
+                      (1U << transaction->space)) != 0U))
                     bus->observer(bus->observer_context, transaction);
                 return status;
             }
@@ -239,7 +242,8 @@ bm_bus_transact(bm_bus_t *bus, bm_bus_transaction_t *transaction)
     if (bus->has_default_response[transaction->space]) {
         bm_status_t status = static_response_access(
             &bus->default_response[transaction->space], transaction);
-        if ((status == BM_STATUS_OK) && (bus->observer != NULL))
+        if ((status == BM_STATUS_OK) && (bus->observer != NULL) &&
+            ((bus->observer_spaces & (1U << transaction->space)) != 0U))
             bus->observer(bus->observer_context, transaction);
         return status;
     }
@@ -251,6 +255,24 @@ bm_bus_set_observer(bm_bus_t *bus, bm_bus_observer_fn observer, void *context)
 {
     if (bus == NULL)
         return;
+    if (observer == NULL) {
+        (void) bm_bus_set_observer_spaces(bus, NULL, NULL, 0U);
+        return;
+    }
+    (void) bm_bus_set_observer_spaces(bus, observer, context,
+                                      BM_BUS_OBSERVE_ALL);
+}
+
+bm_status_t
+bm_bus_set_observer_spaces(bm_bus_t *bus, bm_bus_observer_fn observer,
+                           void *context, uint32_t spaces)
+{
+    if ((bus == NULL) ||
+        ((observer == NULL) != (spaces == 0U)) ||
+        ((spaces & ~(uint32_t) BM_BUS_OBSERVE_ALL) != 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
     bus->observer = observer;
     bus->observer_context = context;
+    bus->observer_spaces = spaces;
+    return BM_STATUS_OK;
 }

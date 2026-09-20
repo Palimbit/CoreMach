@@ -61,6 +61,7 @@ void bm_xta_reset(bm_xta_t *xta);
 void bm_xta_set_enabled(bm_xta_t *xta, int enabled);
 /* Service a pending DREQ after guest software has programmed the 8237. */
 void bm_xta_service(bm_xta_t *xta);
+int bm_xta_service_pending(const bm_xta_t *xta);
 bm_status_t bm_xta_state(const bm_xta_t *xta, bm_xta_state_t *state);
 
 #ifdef __cplusplus

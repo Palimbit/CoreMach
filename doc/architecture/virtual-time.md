@@ -2,21 +2,20 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: experimental clocked scheduler and timed-device sources with synthetic
-tests; no real CPU or machine uses them yet. The V30 timing observer can now
-compose a complete native-clock duration for instruction boundaries without
-operand or I/O traffic, while preserving ranges and unresolved boundaries as
-such. Version 9 also routes memory and I/O transfers through the same BCU as
-prefetch, exposes the clocks needed to hand over an in-flight prefetch, and
-advances the BCU concurrently for the documented clock of every byte consumed
-from the instruction queue. The eight unprefixed native `IN`/`OUT` opcodes now
-have an explicit EXU timeline and exact complete boundaries, including I/O wait
-states; other operand-bearing boundaries stay unresolved until their EXU
-position is known. It is not
-yet registered as a clocked CPU. The existing PCS 86 engine
-still advances one scheduler tick per completed V30 instruction boundary. Its
-`scheduler_ticks_per_second` is pacing metadata, not the V30 crystal frequency.
-No current machine becomes cycle accurate because of this change.
+Status: the clocked scheduler and timed-device sources are active in the
+portable PCS 86. Its V30 runs at 10 MHz and reports one exact native-cycle
+duration for every accepted instruction boundary; PIT and RTC remain separate
+exact-rate participants. Timing-observation version 38 routes instruction
+prefetch and operand or I/O transfers through the instance-owned BCU, places
+their inherited EXU order, preserves wait states and rejects unresolved ranges
+instead of choosing a convenient value. The local firmware probe completed a
+20-second BIOS-and-floppy run with 16,503,008 exact boundaries and no unknown
+boundary. This proves the exercised path, not complete cycle accuracy: an
+instruction is still the scheduler's indivisible unit, interrupted string
+fragments, busy `POLL`, synchronous faults and single-step paths remain
+explicitly unresolved, and device models retain the limitations documented
+below. The probe reports exact/ranged/unknown totals and the first unsupported
+boundary without making timing a frontend or machine-policy dependency.
 
 ## Ownership
 
@@ -35,6 +34,10 @@ comparison never cross-multiplies clock denominators, and repeated small
 advances have the same position as an equivalent bulk advance. The position
 representation has no public API. One advance is bounded by the 64-bit
 intermediate product; overflow is reported without changing the position.
+When a domain has an integral nanosecond period, the same checked calculation
+uses a constant-time path instead of the general 64-step fractional algorithm.
+This is a representation optimization, not reduced precision: the resulting
+position and atomic overflow behavior are covered by the same contract.
 
 ## Scheduler contract and limits
 
@@ -54,7 +57,11 @@ intermediate product; overflow is reported without changing the position.
 3. The engine selects the participant at the earliest virtual position. Equal-time
    participants have a stable registration order; same-time events have their
    existing insertion order. A halted participant is suspended until a signal
-   wakes it; it must not spin or advance the host clock.
+   wakes it; it must not spin or advance the host clock. The nearest exact
+   event/source deadline is reused across CPU boundaries until scheduling,
+   arming or disarming changes it. CPU callbacks that do make such a change
+   invalidate it before the next participant is selected, so caching cannot
+   defer a newly earlier deadline.
 4. A bus transaction already carries `wait_states`. The CPU adds applicable
    waits to its native-cycle result. Do not add a second CPU-level wait callback
    or silently claim that merely counting waits places individual bus accesses
@@ -126,25 +133,66 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains green. V30 observation version 9 advances
+- The existing PCS 86 suite remains green. V30 observation version 30 advances
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
-  `IN`/`OUT` now place their inherited internal waits and operand cycles on that
-  timeline. Other operand offsets, prefix execution, realised values inside
-  ranges and interrupt boundaries remain known unknowns. A
-  clocked callback and PCS 86 machine migration are later changes. Z80
-  integration must not alter the legacy V30 tick meaning.
+  `IN`/`OUT`, direct accumulator-memory `MOV`, `XLAT`, and memory forms of
+  ModR/M `MOV` plus all ModR/M ALU forms now place their inherited internal
+  waits and operand cycles on that timeline, including the computation interval
+  between a memory read and write. ModR/M `TEST` and `XCHG` are placed too, and
+  immediate ALU groups preserve operand-before-immediate ordering. Segment-register
+  and immediate-to-r/m `MOV` memory forms now have placed transfers too. Group 3
+  reads, `TEST` immediates and `NOT`/`NEG` writes are positioned without
+  collapsing documented arithmetic ranges. `FEh`/`FFh` memory `INC`/`DEC`
+  reads and writes and the common single-word `PUSH`/`POP` forms are positioned
+  as well. Near and far indirect jumps now place their operand reads before
+  prefetch suspension and queue invalidation. Every decoded
+  prefix
+  advances it before the next queue read. Other operand offsets, realised
+  values inside signed arithmetic ranges, a repeatedly busy `POLL`, and
+  synchronous fault or single-step interrupt boundaries remain known unknowns.
+  An immediately ready `POLL` is the documented seven-clock case. Accepted NMI and maskable INT
+  boundaries now use the NEC V30's documented 38- and 49-clock aligned-stack
+  costs, add the three actual odd-stack transfer splits, and retain any BCU
+  prefetch handoff separately. Software `INT` and `IRET` now
+  place their vector and stack transfers in inherited microcode order, and
+  indirect near `CALL` places its independently aligned target read and stack
+  write. The PCS 86 now consumes these durations at 10 MHz in the clocked
+  engine. Z80 integration remains independent of the V30 clock domain.
+- The current PCS 86 local firmware baseline mounts the preserved System Disk
+  read-only and completes 20 seconds of strict virtual time: 16,503,008
+  instruction boundaries, 11,977 I/O operations, no ranged or unknown
+  boundary, and framebuffer CRC `06bd8a15`. The last boundary is the BIOS idle
+  loop at `F000:E82E`; the disk image retains SHA-256
+  `75E1A068AA5910DB736CE4B53E6B5FC179F83390FF5512D2AF421E57AF3A0C12`.
+  This baseline was reached incrementally through real encountered boundaries,
+  ending with indirect far jump (`FF /5`) and direct far call (`9A`). It does
+  not imply that every architecturally possible V30 path is timed.
+- The V30 now exposes a clocked-engine step callback independently of its
+  optional diagnostic observer. It reports a duration only for a complete,
+  exact scalar boundary; a ranged or unknown result stops with
+  `BM_STATUS_UNSUPPORTED` and zero cycles. This is an intentional migration
+  guard. The validated 20-second firmware-and-floppy path is fully scalar, but
+  unexercised paths can still stop at the first unresolved boundary. The PCS 86
+  now uses nanosecond virtual time with its
+  V30, PIT and RTC registered as independent exact-rate participants;
+  single-step, synchronous-fault and busy-`POLL` paths still stop explicitly if
+  reached before their timing is completed.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,
   invalid progress and waking a halted CPU from a fractional deadline. A
-  separate optional adapter now drives the real 8253 component from the exact
+  separate adapter now drives the real 8253 component from the exact
   `14.31818 MHz / 12` PC clock and verifies mode-2 output edges without making
   the chip own the scheduler. It deliberately fires once per input edge as a
-  correctness baseline; transition batching and lazy counter synchronization
-  must be measured before wiring it into the PCS 86 or calling the contract
-  production-ready. Video and storage sources remain unintegrated.
+  correctness baseline, with transition batching and lazy counter
+  synchronization covered independently. The PCS 86 uses that adapter and the
+  MM58167 microsecond adapter. Video remains render-on-demand from virtual time.
+  XTA DMA service has its own demand-driven timed source: it is disarmed while
+  idle and retries only while a transfer is pending, at the existing declared
+  functional interval of 32 microseconds. That interval is not presented as a
+  physical model of controller or drive latency.
 
 This path provides CPU-type independence without prematurely promising that
 all guest CPU models or their buses have the same timing fidelity.

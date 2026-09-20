@@ -56,6 +56,8 @@ typedef struct bm_v30_bcu {
 
 void bm_v30_bcu_reset(bm_v30_bcu_t *bcu, uint16_t instruction_pointer);
 void bm_v30_bcu_begin_boundary(bm_v30_bcu_t *bcu);
+/* Stop an in-flight prefetch without discarding already queued bytes. */
+void bm_v30_bcu_suspend_prefetch(bm_v30_bcu_t *bcu);
 void bm_v30_bcu_flush(bm_v30_bcu_t *bcu, uint16_t instruction_pointer);
 
 uint8_t bm_v30_bcu_free_bytes(const bm_v30_bcu_t *bcu);

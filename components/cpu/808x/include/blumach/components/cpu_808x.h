@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 9U
+#define BM_808X_TIMING_OBSERVATION_VERSION 38U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -134,6 +134,69 @@ typedef enum bm_808x_prefetch_phase {
  * operand transfer in this boundary has a known position. placed clocks
  * include the four base clocks of each operand transaction but exclude wait
  * states; operand_wait_states reports those extensions separately.
+ * Version 10 places the documented execution cost of every native prefix
+ * immediately after that prefix is decoded. Prefixed direct I/O can therefore
+ * complete the same explicit timeline, while other prefixed operand forms stay
+ * unresolved until their individual transfers are placed.
+ * Version 11 places the four direct accumulator-memory MOV forms and XLAT,
+ * including inherited internal clocks and both bus cycles of an odd word.
+ * Version 12 places the four MOV r/m,reg forms when r/m names memory. Register
+ * forms retain the ordinary aggregate execution path because they do not
+ * arbitrate for the BCU.
+ * Version 13 places the read-only ModR/M ALU memory forms, including CMP in
+ * either encoding direction. Read-modify-write ALU destinations remain
+ * unresolved until both transfers can be placed.
+ * Version 14 places both transfers of ModR/M ALU read-modify-write memory
+ * destinations, preserving the inherited computation interval between them.
+ * Version 15 places ModR/M TEST reads and both XCHG memory transfers, including
+ * the inherited internal interval before each exchange write.
+ * Version 16 restores the inherited operand-before-immediate order for groups
+ * 80h-83h and places their memory read, compute and optional write intervals.
+ * Version 17 places memory transfers for segment-register MOV and immediate
+ * MOV groups C6h-C7h without changing their bus-free register forms.
+ * Version 18 places Group 3 F6h-F7h memory reads and the TEST immediate and
+ * NOT/NEG write intervals. Signed multiply and divide ranges remain ranges.
+ * Version 19 places byte and word FEh/FFh INC/DEC memory reads, their
+ * computation interval and writes; other FFh control forms remain unresolved.
+ * Version 20 places single-word register, segment, flags and immediate stack
+ * pushes and pops, including the odd-stack transfer split.
+ * Version 21 places STOS and SCAS memory transfers, including repeated and
+ * zero-count forms plus both physical transfers of an odd word.
+ * Version 22 places relative near CALL and both near RET forms around an
+ * explicit prefetch suspension and target-queue flush.
+ * Version 23 places MOVS and LODS source transfers, including repeated,
+ * segment-overridden, zero-count and odd-word forms.
+ * Version 24 classifies the documented four-clock accumulator-immediate TEST
+ * forms; these are bus-free and need no operand placement.
+ * Version 25 places both word reads of LES/LDS, including odd pointers and
+ * accepted segment overrides.
+ * Version 26 places software INT vector reads and interrupt-frame writes in
+ * their inherited order, and places IRET stack reads around prefetch
+ * suspension and the target-queue flush.
+ * Version 27 places register and memory indirect near CALL operand reads and
+ * stack writes around prefetch suspension and the target-queue flush.
+ * Version 28 resolves unsigned MULU's documented one-clock data-dependent
+ * interval using the inherited V30 microcode's high-half condition.
+ * Version 29 places accepted NMI and maskable interrupt boundaries, including
+ * interrupt acknowledgement and independently aligned stack-frame writes.
+ * Version 30 classifies an immediately ready POLL sample as the documented
+ * seven-clock case while leaving a repeated busy wait explicitly unresolved.
+ * Version 31 places both stack reads and the target-queue flush for far
+ * returns, with and without immediate caller cleanup.
+ * Version 32 places the source read, inherited internal interval and stack
+ * write for Group 5 PUSH, including independent source and stack alignment.
+ * Version 33 places register and memory indirect near-jump targets before
+ * prefetch suspension and target-queue invalidation.
+ * Version 34 places normal, repeated and zero-count CMPS source and
+ * destination reads without classifying interrupted repeat fragments.
+ * Version 35 places both pointer reads, both stack writes and the target-queue
+ * flush for indirect far calls with independent pointer and stack alignment.
+ * Version 36 places POP r/m16 stack reads and destination writes, preserving
+ * pre-pop effective-address calculation and both independent alignments.
+ * Version 37 places both indirect far-jump pointer reads before prefetch
+ * suspension and target-queue invalidation, including odd pointers.
+ * Version 38 places both stack writes and the target-queue flush of direct
+ * far calls in inherited microcode order.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {
@@ -252,6 +315,14 @@ bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,
 /* Execute one architectural boundary. A pending accepted interrupt consumes
  * the boundary instead of an opcode, matching bm_cpu_ops.run with budget 1. */
 bm_status_t bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed);
+
+/* Engine callback for one cycle-reported architectural boundary. It succeeds
+ * only when the V30 timing model produced one exact scalar duration. Ranged or
+ * unknown boundaries return BM_STATUS_UNSUPPORTED with zero cycles, so a
+ * clocked machine cannot silently turn an unresolved timing into virtual time.
+ * The context must be the context owned by a CPU created by bm_808x_create(). */
+bm_status_t bm_808x_step_clocked(void *context, bm_tick_t start_ns,
+                                 uint64_t *cycles);
 
 #ifdef __cplusplus
 }

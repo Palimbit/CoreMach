@@ -294,6 +294,13 @@ test_prefetch_abort_and_bus_error(void)
     assert(bm_v30_bcu_step_prefetch(&bcu, bus, 0U, 0U, 0) ==
            BM_STATUS_OK);
     assert(bcu.prefetch_phase == BM_V30_BCU_PHASE_T2);
+    bm_v30_bcu_suspend_prefetch(&bcu);
+    assert(bcu.prefetch_phase == BM_V30_BCU_PHASE_IDLE);
+    assert(bm_v30_bcu_prefetch_pointer(&bcu) == 0U);
+    assert(bm_v30_bcu_queue_count(&bcu) == 0U);
+    assert(bm_v30_bcu_step_prefetch(&bcu, bus, 0U, 0U, 0) ==
+           BM_STATUS_OK);
+    assert(bcu.prefetch_phase == BM_V30_BCU_PHASE_T2);
     bm_v30_bcu_flush(&bcu, 0x4567U);
     assert(bcu.prefetch_phase == BM_V30_BCU_PHASE_IDLE);
     assert(bm_v30_bcu_prefetch_pointer(&bcu) == 0x4567U);

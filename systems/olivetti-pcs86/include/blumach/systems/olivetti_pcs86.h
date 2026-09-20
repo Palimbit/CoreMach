@@ -19,7 +19,7 @@ extern "C" {
 #define BM_PCS86_ROM_BASE 0xf0000U
 #define BM_PCS86_ROM_SIZE 65536U
 #define BM_PCS86_CONFIG_TYPE "blumach.system.olivetti-pcs86.config"
-#define BM_PCS86_CONFIG_VERSION 5U
+#define BM_PCS86_CONFIG_VERSION 6U
 #define BM_PCS86_RTC_STATE_SIZE 32U
 
 typedef struct bm_pcs86_hard_disk_config {
@@ -53,6 +53,8 @@ typedef struct bm_pcs86_config {
     bm_blob_view_t firmware_odd;
     bm_808x_trace_fn trace;
     void *trace_context;
+    bm_808x_timing_fn timing;
+    void *timing_context;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
     bm_pcs86_memory_trace_fn memory_trace;

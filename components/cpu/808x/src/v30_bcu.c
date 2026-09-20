@@ -66,6 +66,12 @@ bm_v30_bcu_begin_boundary(bm_v30_bcu_t *bcu)
 }
 
 void
+bm_v30_bcu_suspend_prefetch(bm_v30_bcu_t *bcu)
+{
+    abort_pending_prefetch(bcu);
+}
+
+void
 bm_v30_bcu_flush(bm_v30_bcu_t *bcu, uint16_t instruction_pointer)
 {
     abort_pending_prefetch(bcu);

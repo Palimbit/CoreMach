@@ -67,6 +67,16 @@ multiply_divide(uint64_t left, uint64_t right, uint64_t denominator,
     if ((whole != 0U) && (right > (UINT64_MAX / whole)))
         return BM_STATUS_CAPACITY_EXCEEDED;
     whole *= right;
+    /* Integral domains are common (for example, a 10 MHz CPU advances by
+     * exactly 100 ns per cycle). Once left has no remainder, the general
+     * bitwise multiply/divide cannot contribute another quotient bit or a
+     * fractional remainder. Avoid paying its fixed 64-iteration cost at every
+     * instruction boundary while preserving the same overflow decision. */
+    if ((residual == 0U) || (right == 0U)) {
+        *quotient = whole;
+        *remainder = 0U;
+        return BM_STATUS_OK;
+    }
 
     for (bit = 64U; bit-- > 0U;) {
         uint64_t carry = 0U;

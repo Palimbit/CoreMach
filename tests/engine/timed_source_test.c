@@ -403,7 +403,7 @@ arming_cpu_signal(void *context, uint32_t line, int asserted)
 }
 
 static void
-test_cpu_control_uses_exact_instruction_start_boundary(void)
+test_cpu_arm_invalidates_cached_deadline_at_exact_boundary(void)
 {
     bm_engine_t *engine = make_clocked_engine(1U);
     controlled_source_t source = { 0 };
@@ -422,6 +422,8 @@ test_cpu_control_uses_exact_instruction_start_boundary(void)
     cpu.ops.signal = arming_cpu_signal;
     assert(bm_engine_add_clocked_cpu(engine, &cpu, arming_cpu_step,
                                      &rate_3_hz, NULL) == BM_STATUS_OK);
+    /* The run starts with no active source deadline. Arming from step two must
+     * replace that cached finish boundary before the CPU can step again. */
     assert(bm_engine_run_for(engine, UINT64_C(666666667)) == BM_STATUS_OK);
     assert(cpu_context.arm_status == BM_STATUS_OK);
     assert(cpu_context.cursor_status == BM_STATUS_OK);
@@ -675,7 +677,7 @@ main(void)
     test_same_boundary_event_can_cancel_source();
     test_same_time_order_is_stable();
     test_fractional_source_wakes_idle_cpu_without_time_travel();
-    test_cpu_control_uses_exact_instruction_start_boundary();
+    test_cpu_arm_invalidates_cached_deadline_at_exact_boundary();
     test_source_cycle_cursor_tracks_domain_while_disarmed();
     test_control_validation_and_overflow_are_atomic();
     test_validation_and_invalid_progress();

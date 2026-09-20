@@ -240,17 +240,56 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 9 reports
+their sum the elapsed instruction time. Timing-observation version 20 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
 boundary duration. That duration is available when every bus transaction in a
 native instruction boundary belongs to prefetch and, from version 9, for the
-unprefixed direct and DX-addressed `IN`/`OUT` forms. Demand-fetch stall clocks
+direct and DX-addressed `IN`/`OUT` forms. Version 10 also places every native
+prefix before the following instruction byte is decoded, so those I/O forms
+remain complete when prefixed. Version 11 adds the four direct
+accumulator-memory `MOV` forms, including even and odd word transfers, and
+`XLAT` after its inherited three internal clocks. Version 12 adds memory forms
+of the four byte/word, load/store ModR/M `MOV` opcodes. Version 13 adds all
+read-only ModR/M ALU memory forms, including `CMP` in both encoding directions.
+Version 14 adds the read-modify-write ALU forms.
+Version 15 adds ModR/M `TEST` and `XCHG` memory forms.
+Version 16 adds the immediate ALU groups `80h`-`83h`.
+Version 17 adds segment-register `MOV` memory forms and the immediate-to-r/m
+`MOV` groups `C6h`-`C7h`.
+Version 18 places Group 3 `F6h`-`F7h` memory operands. Exact `TEST`, `NOT`,
+`NEG` and successful `DIV` forms can complete their timelines; multiply and
+signed-divide intervals remain explicitly ranged where the documentation is
+ranged.
+Version 19 places byte and word `INC`/`DEC` memory forms in groups `FEh` and
+`FFh`; the other `FFh` indirect control and stack forms remain unresolved.
+Version 20 places the single-word stack transfers used by register, segment,
+flags and immediate `PUSH`/`POP` forms, including odd-stack splits.
+Version 21 places byte and word `STOS` and `SCAS` transfers. Repeated forms
+retain the inherited setup and per-iteration ordering, zero-count repeats have
+no operand transaction, and odd words retain both physical byte transfers.
+An interrupted repeat fragment remains unclassified.
+Version 22 places relative near `CALL` and both near `RET` forms. It models the
+inherited prefetch suspension separately from ordinary internal clocks, flushes
+at the actual control-transfer point and resumes target prefetch before or
+after the stack transfer in the inherited order.
+Version 23 places byte and word `MOVS` and `LODS` source transfers. It covers
+normal, repeated, zero-count and segment-overridden forms while preserving both
+physical transfers of an odd word.
+Version 24 classifies accumulator-immediate `TEST` at the four clocks and zero
+external transfers documented by NEC. These bus-free forms use the aggregate
+path and do not require a fabricated operand position.
+Version 25 places the two word reads of `LES`/`LDS` after their four inherited
+setup clocks. Even far pointers use two word transactions; odd pointers retain
+all four physical byte transactions, and segment overrides add their ordinary
+prefix interval.
+Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
-interval, while speculative prefetch phases remain overlapped. A placed I/O
-operand contributes its four base bus clocks inside that EXU interval; device
-waits and prefetch handoff stalls extend the complete boundary outside it.
+interval, while speculative prefetch phases remain overlapped. A placed I/O or
+memory operand contributes its four base clocks per physical bus transaction
+inside that EXU interval; device waits and prefetch handoff stalls extend the
+complete boundary outside it.
 Exact execution
 times therefore produce exact boundary times and documented execution ranges
 remain ranges. Other operand-memory and I/O traffic leaves the boundary
@@ -286,21 +325,58 @@ T1/T2/T3/Tw/T4 transfer. Version 7 reports operand transaction clocks and the
 prefetch clocks spent handing over the bus separately. Version 9 ports the
 inherited execution ordering for the eight native `IN`/`OUT` opcodes: internal
 EXU intervals advance prefetch, each operand transaction occupies its four base
-clocks, and any remaining documented clocks resume prefetch. Prefix timing is
-not placed yet, so prefixed I/O deliberately remains unresolved. The executor
-still lacks the offsets for other operand instructions, documented timing
-ranges and unknown timings; those paths suspend this overlap model until their
-individual accesses can be placed. The observer
-therefore still labels these as resource measurements rather than claiming a
-complete external-bus trace or elapsed duration. Instruction demand fetch uses a real
-six-byte queue and
-per-instance PFP. An even PFP fetches one little-endian word in a single bus
-transaction; an odd PFP fetches one byte before the pointer returns to an even
-boundary. Consumed bytes remain queued across instruction boundaries, so later
-memory writes do not rewrite already-prefetched instructions. Taken control
-transfers, accepted interrupts and architectural state replacement discard the
-queue and restart PFP at the new IP. The observer reports PFP and occupancy at
-every boundary, rather than inferring queue state only when a flush occurs.
+clocks, and any remaining documented clocks resume prefetch. Version 10 places
+each prefix's documented execution interval immediately after its queue read;
+this may finish a prefetch before a later operand requests the bus. Version 11
+places direct accumulator-memory `MOV` after its two-byte address, preserves
+the inherited internal clock before a store, and places `XLAT` after its three
+internal clocks. Version 12 places ModR/M `MOV` memory loads after three
+internal clocks and stores after five, while leaving register forms on the
+bus-free path. Version 13 places byte ALU reads after two internal clocks,
+ordinary word ALU reads after one, and both byte/word `CMP` reads after two,
+as inherited. Version 14 places the read-modify-write forms at those same
+read offsets and preserves the four inherited internal clocks between the read
+and write. Version 15 places `TEST` after two internal clocks and advances two
+more after its read; it places `XCHG` after two internal clocks and preserves
+the five-clock interval between its read and write. Version 16 restores the
+inherited ordering of an immediate ALU instruction: read the ModR/M operand,
+consume the immediate, advance one internal clock for the operation and two
+more before a possible write. Version 17 places a segment-register load after
+two inherited internal clocks and a store after three. Immediate-to-memory
+`MOV` advances two clocks before consuming its immediate, then two clocks for
+the byte form or one for the word form before writing. Register forms remain
+on the ordinary bus-free path. Version 18 places the Group 3 read after one
+inherited internal clock, the `TEST` operation after its immediate, and the
+two-clock interval before a `NOT` or `NEG` write. A ranged multiplication still
+reports the placed read without claiming a complete elapsed boundary.
+Version 19 places the `INC`/`DEC` read after one internal clock and preserves
+the inherited two-clock computation interval before the write.
+Version 20 places register, segment and flags pushes after three internal
+clocks, immediate pushes after their encoded operand and their documented
+internal interval, and single-word pops at their stack read. Version 21 places
+`STOS` writes and the comparison setup, read and post-read intervals of `SCAS`;
+the documented fixed tail completes only after the last repeated transfer.
+Version 22 adds a BCU prefetch-suspend operation that preserves queued bytes
+until the subsequent control-transfer flush. Relative near `CALL` and both near
+`RET` forms can therefore place their internal clocks, stack transfer, flush
+and target prefetch without allowing a speculative fetch during a suspended
+interval.
+Version 23 additionally places `MOVS` source/destination transfer ordering and
+the post-read intervals of `LODS`; the repeated `MOVS` formula has no bus-free
+per-iteration interval beyond its two transfers, so its documented fixed tail
+is advanced only after the final iteration. The executor still lacks the
+offsets for other operand instructions, documented timing ranges and unknown
+timings; those paths suspend this overlap model until their individual accesses
+can be placed. The observer therefore still labels these as resource
+measurements rather than claiming a complete external-bus trace or elapsed
+duration. Instruction demand fetch uses a real six-byte queue and per-instance
+PFP. An even PFP fetches one little-endian word in a single bus transaction; an
+odd PFP fetches one byte before the pointer returns to an even boundary.
+Consumed bytes remain queued across instruction boundaries, so later memory
+writes do not rewrite already-prefetched instructions. Taken control transfers,
+accepted interrupts and architectural state replacement discard the queue and
+restart PFP at the new IP. The observer reports PFP and occupancy at every
+boundary, rather than inferring queue state only when a flush occurs.
 
 This establishes the first scheduler-ready boundary measurements without
 claiming a complete timing model or exposing a clocked CPU callback prematurely.
@@ -316,8 +392,12 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 9 combines those quantities only for uncontended cases and
-the explicitly placed unprefixed `IN`/`OUT` forms; every other boundary remains
+bus waits. Version 25 combines those quantities only for uncontended cases and
+the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
+forms, memory forms of ModR/M `MOV`, all ModR/M ALU forms, immediate ALU groups,
+segment-register and immediate-to-r/m `MOV`, Group 3 memory operands, ModR/M
+`TEST` and `XCHG`, `FEh`/`FFh` memory `INC`/`DEC`, and single-word stack
+`PUSH`/`POP`, `MOVS`, `LODS`, `STOS`, `SCAS`, `LES`/`LDS`, relative near `CALL` and near `RET`; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by
@@ -387,8 +467,10 @@ The next cut adds explicit, independently testable instances of the single
 8259A interrupt controller and the 8253 timer. The PCS 86 owns its board glue:
 known registers at `60h-6Fh` and the jumper byte at `100h` are not hidden in a
 generic PC global. PIT channel 0 raises the machine's PIC IRQ0 input, while a
-bus observer can capture successful I/O transactions without coupling devices
-to a debugger or frontend.
+bus observer can capture successful transactions without coupling devices to a
+debugger or frontend. Observers declare the address spaces they need, so an
+I/O-only diagnostic does not add a callback to every memory fetch; the original
+all-space observer entry point remains available for callers that require it.
 
 The V30 subset now performs byte-oriented `IN` and `OUT` operations, including
 word forms as two consecutive 8-bit bus transfers, and supports CLI, STI and

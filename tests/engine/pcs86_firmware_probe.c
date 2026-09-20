@@ -31,6 +31,15 @@ typedef struct probe_trace {
     uint8_t timer0_failure_pic_requests;
     uint8_t timer0_failure_pic_in_service;
     uint8_t timer0_failure_pic_lines;
+    uint64_t timing_boundaries;
+    uint64_t timing_complete;
+    uint64_t timing_boundary_exact;
+    uint64_t timing_boundary_range;
+    uint64_t timing_boundary_unknown;
+    uint64_t timing_unknown_by_opcode[256];
+    bm_808x_timing_observation_t first_timing_unknown;
+    bm_808x_trace_t first_timing_unknown_trace;
+    int has_first_timing_unknown;
 } probe_trace_t;
 
 static void
@@ -85,6 +94,33 @@ capture_io(void *context, const bm_pcs86_io_trace_t *trace)
     probe_trace_t *probe = context;
     (void) trace;
     ++probe->io_operations;
+}
+
+static void
+capture_timing(void *context,
+               const bm_808x_timing_observation_t *observation)
+{
+    probe_trace_t *probe = context;
+
+    if (observation->kind != BM_808X_BOUNDARY_INSTRUCTION)
+        return;
+    ++probe->timing_boundaries;
+    if (observation->execution_timeline_complete)
+        ++probe->timing_complete;
+    if (observation->boundary_clock_kind == BM_808X_EXECUTION_CLOCKS_EXACT) {
+        ++probe->timing_boundary_exact;
+    } else if (observation->boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_RANGE) {
+        ++probe->timing_boundary_range;
+    } else {
+        ++probe->timing_boundary_unknown;
+        ++probe->timing_unknown_by_opcode[observation->effective_opcode];
+        if (!probe->has_first_timing_unknown) {
+            probe->first_timing_unknown = *observation;
+            probe->first_timing_unknown_trace = probe->last;
+            probe->has_first_timing_unknown = 1;
+        }
+    }
 }
 
 static uint8_t *
@@ -239,7 +275,7 @@ main(int argc, char **argv)
     size_t pixel_count = 0;
     size_t nonblack = 0;
     uint32_t frame_crc = 0;
-    uint64_t run_ticks = UINT64_C(10000000);
+    uint64_t run_nanoseconds = UINT64_C(5000000000);
     uint64_t fdc_dor = 0U;
     uint64_t fdc_msr = 0U;
     uint64_t fdc_irq = 0U;
@@ -255,17 +291,17 @@ main(int argc, char **argv)
 
     if ((argc < 3) || (argc > 6)) {
         fprintf(stderr, "usage: %s <even-rom> <odd-rom>"
-                        " [frame.ppm [ticks [floppy.img]]]\n", argv[0]);
+                        " [frame.ppm [nanoseconds [floppy.img]]]\n", argv[0]);
         return 2;
     }
     if (argc >= 5) {
         char *end = NULL;
         unsigned long long parsed = strtoull(argv[4], &end, 10);
         if ((argv[4][0] == '\0') || (end == NULL) || (*end != '\0') || (parsed == 0U)) {
-            fputs("ticks must be a positive decimal integer\n", stderr);
+            fputs("nanoseconds must be a positive decimal integer\n", stderr);
             return 2;
         }
-        run_ticks = (uint64_t) parsed;
+        run_nanoseconds = (uint64_t) parsed;
     }
     even = read_firmware(argv[1]);
     odd = read_firmware(argv[2]);
@@ -296,6 +332,8 @@ main(int argc, char **argv)
         },
         .trace = capture_instruction,
         .trace_context = &probe,
+        .timing = capture_timing,
+        .timing_context = &probe,
         .io_trace = capture_io,
         .io_trace_context = &probe
     };
@@ -314,7 +352,7 @@ main(int argc, char **argv)
         status = bm_session_start(session);
     probe.session = session;
     if (status == BM_STATUS_OK)
-        status = bm_session_run_for(session, run_ticks);
+        status = bm_session_run_for(session, run_nanoseconds);
 
     if (session != NULL) {
         (void) bm_session_inspect_cpu(session, 0, "ax", &ax);
@@ -372,9 +410,11 @@ main(int argc, char **argv)
     }
 
     printf("status=%d instructions=%" PRIu64 " io=%" PRIu64
+           " time_ns=%" PRIu64
            " last=%04x:%04x physical=%05" PRIx32
            " opcode=%02x effective=%02x prefixes=%u bytes=",
            (int) status, probe.instructions, probe.io_operations,
+           bm_session_time(session),
            probe.last.cs, probe.last.ip, probe.last.physical_address,
            probe.last.opcode, probe.last.effective_opcode, probe.last.prefix_count);
     {
@@ -399,6 +439,44 @@ main(int argc, char **argv)
            probe.timer0_failure_pic_pending, probe.timer0_failure_pic_mask,
            probe.timer0_failure_pic_requests, probe.timer0_failure_pic_in_service,
            probe.timer0_failure_pic_lines);
+    printf("timing_boundaries=%" PRIu64 " complete=%" PRIu64
+           " exact=%" PRIu64 " range=%" PRIu64 " unknown=%" PRIu64 "\n",
+           probe.timing_boundaries, probe.timing_complete,
+           probe.timing_boundary_exact, probe.timing_boundary_range,
+           probe.timing_boundary_unknown);
+    fputs("timing_unknown_opcodes=", stdout);
+    {
+        unsigned int opcode;
+        int first = 1;
+        for (opcode = 0U; opcode < 256U; ++opcode) {
+            if (probe.timing_unknown_by_opcode[opcode] == 0U)
+                continue;
+            printf("%s%02x:%" PRIu64, first ? "" : ",", opcode,
+                   probe.timing_unknown_by_opcode[opcode]);
+            first = 0;
+        }
+    }
+    fputc('\n', stdout);
+    if (probe.has_first_timing_unknown) {
+        const bm_808x_timing_observation_t *unknown =
+            &probe.first_timing_unknown;
+        const bm_808x_trace_t *trace = &probe.first_timing_unknown_trace;
+        printf("timing_first_unknown=%04x:%04x opcode=%02x effective=%02x"
+               " execution_kind=%u execution=%" PRIu32 "..%" PRIu32
+               " timeline=%u placed=%" PRIu32 " operand=%" PRIu64
+               " prefetch=%" PRIu64 " total_bus=%" PRIu64
+               " flushed=%u\n",
+               trace->cs, trace->ip, trace->opcode, trace->effective_opcode,
+               (unsigned int) unknown->execution_clock_kind,
+               unknown->execution_clocks_min,
+               unknown->execution_clocks_max,
+               unknown->execution_timeline_complete,
+               unknown->execution_clocks_placed,
+               unknown->operand_transactions,
+               unknown->prefetch_transactions,
+               unknown->logical_bus_transactions,
+               unknown->prefetch_queue_flushed);
+    }
     printf("video_status=%d width=%" PRIu32 " height=%" PRIu32
            " nonblack=%zu crc32=%08" PRIx32 " capture=%s\n",
            (int) video_status, geometry.width, geometry.height,

@@ -89,6 +89,14 @@ typedef struct bm_808x_state {
     uint32_t boundary_execution_clocks_placed;
     int boundary_execution_timeline_active;
     int boundary_execution_timeline_complete;
+    int boundary_operand_timeline_supported;
+    int boundary_flush_timeline_supported;
+    uint32_t boundary_interrupt_execution_clocks;
+    int boundary_poll_ready;
+    bm_808x_execution_clock_kind_t last_boundary_clock_kind;
+    uint64_t last_boundary_clocks_min;
+    uint64_t last_boundary_clocks_max;
+    int last_boundary_observed;
 } bm_808x_state_t;
 
 static void
@@ -119,12 +127,10 @@ physical_address(uint16_t segment, uint16_t offset)
 }
 
 static void
-begin_execution_timeline(bm_808x_state_t *state)
+begin_operand_execution_timeline(bm_808x_state_t *state)
 {
-    /* Prefix execution has not yet been placed on this timeline. Keep
-     * prefixed forms explicitly unresolved until it is. */
-    if (state->last_prefix_count == 0U)
-        state->boundary_execution_timeline_active = 1;
+    state->boundary_execution_timeline_active = 1;
+    state->boundary_operand_timeline_supported = 1;
 }
 
 static bm_status_t
@@ -144,6 +150,17 @@ place_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
 }
 
 static bm_status_t
+place_suspended_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
+{
+    if (!state->boundary_execution_timeline_active)
+        return BM_STATUS_OK;
+    if (state->boundary_execution_clocks_placed > UINT32_MAX - clocks)
+        return BM_STATUS_INVALID_STATE;
+    state->boundary_execution_clocks_placed += clocks;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
 transact_operand(bm_808x_state_t *state,
                  bm_bus_transaction_t *transaction)
 {
@@ -153,7 +170,7 @@ transact_operand(bm_808x_state_t *state,
     /* NEC's documented execution interval includes the four base clocks of
      * each external operand transfer, but not device wait states. */
     if ((status == BM_STATUS_OK) &&
-        state->boundary_execution_timeline_active) {
+        state->boundary_operand_timeline_supported) {
         if (state->boundary_execution_clocks_placed > UINT32_MAX - 4U)
             return BM_STATUS_INVALID_STATE;
         state->boundary_execution_clocks_placed += 4U;
@@ -456,6 +473,7 @@ execute_poll(bm_808x_state_t *state, uint16_t instruction_ip, int bus_lock)
         return status;
     if ((ready != 0) && (ready != 1))
         return BM_STATUS_DEVICE_ERROR;
+    state->boundary_poll_ready = ready;
     if (!ready) {
         state->ip = instruction_ip;
         /* The current portable POLL contract exposes each pin sample as a
@@ -472,23 +490,52 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
 {
     uint16_t new_ip = 0;
     uint16_t new_cs = 0;
+    uint16_t old_ip = state->ip;
+    uint16_t old_cs = state->segments[1];
+    uint16_t old_flags = psw_image(state->flags);
     bm_status_t status;
 
-    status = push_word(state, psw_image(state->flags));
+    /* Preserve the V30 microcode order.  The vector is latched before the
+     * interrupt frame can overwrite memory, then prefetch is suspended while
+     * the three stack words are written. */
+    status = place_execution_clocks(state, 3U);
     if (status == BM_STATUS_OK)
-        status = push_word(state, state->segments[1]);
+        status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U),
+                           &new_ip);
     if (status == BM_STATUS_OK)
-        status = push_word(state, state->ip);
-    state->flags = (uint16_t) ((psw_image(state->flags) | FLAG_MD) &
-                               ~(FLAG_IF | FLAG_TF));
+        status = place_execution_clocks(state, 1U);
     if (status == BM_STATUS_OK)
-        status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U), &new_ip);
+        status = read_word(state, 0,
+                           (uint16_t) ((uint16_t) vector * 4U + 2U),
+                           &new_cs);
+    if (status == BM_STATUS_OK) {
+        bm_v30_bcu_suspend_prefetch(&state->bcu);
+        status = place_suspended_execution_clocks(state, 2U);
+    }
     if (status == BM_STATUS_OK)
-        status = read_word(state, 0, (uint16_t) ((uint16_t) vector * 4U + 2U), &new_cs);
+        status = push_word(state, old_flags);
+    if (status == BM_STATUS_OK) {
+        state->flags = (uint16_t) ((old_flags | FLAG_MD) &
+                                   ~(FLAG_IF | FLAG_TF));
+        status = place_suspended_execution_clocks(state, 4U);
+    }
+    if (status == BM_STATUS_OK)
+        status = push_word(state, old_cs);
+    if (status == BM_STATUS_OK) {
+        state->segments[1] = new_cs;
+        status = place_suspended_execution_clocks(state, 1U);
+    }
+    if (status == BM_STATUS_OK)
+        status = place_suspended_execution_clocks(state, 2U);
     if (status == BM_STATUS_OK) {
         state->ip = new_ip;
-        state->segments[1] = new_cs;
         mark_prefetch_flush(state);
+        state->boundary_flush_timeline_supported = 1;
+        status = place_execution_clocks(state, 3U);
+    }
+    if (status == BM_STATUS_OK)
+        status = push_word(state, old_ip);
+    if (status == BM_STATUS_OK) {
         state->halted = 0;
         state->trap_pending = 0;
         state->interrupt_entered = 1;
@@ -566,11 +613,33 @@ boundary_interrupt_ready(const bm_808x_state_t *state)
 static bm_status_t
 service_boundary_interrupt(bm_808x_state_t *state)
 {
+    bm_status_t status;
+    uint32_t acceptance_clocks;
+    uint32_t expected_clocks;
+
     if (nmi_ready(state))
-        return service_nmi(state);
-    if (maskable_interrupt_ready(state))
-        return service_interrupt(state);
-    return enter_interrupt(state, 1U);
+        acceptance_clocks = 2U;
+    else if (maskable_interrupt_ready(state))
+        acceptance_clocks = 13U;
+    else
+        return enter_interrupt(state, 1U);
+
+    expected_clocks = (acceptance_clocks == 2U ? 38U : 49U) +
+                      ((state->boundary_initial_sp & 1U) != 0U ? 12U : 0U);
+    begin_operand_execution_timeline(state);
+    bm_v30_bcu_suspend_prefetch(&state->bcu);
+    status = place_suspended_execution_clocks(state, acceptance_clocks);
+    if (status == BM_STATUS_OK)
+        status = acceptance_clocks == 2U ?
+                 service_nmi(state) : service_interrupt(state);
+    if ((status == BM_STATUS_OK) &&
+        (state->boundary_execution_clocks_placed != expected_clocks))
+        return BM_STATUS_INVALID_STATE;
+    if (status == BM_STATUS_OK) {
+        state->boundary_interrupt_execution_clocks = expected_clocks;
+        state->boundary_execution_timeline_complete = 1;
+    }
+    return status;
 }
 
 static int
@@ -1399,6 +1468,21 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
     }
     state->boundary_string_valid = 1;
     state->boundary_repeat_mode = (uint8_t) repeat_mode;
+    if ((opcode == 0xa4U) || (opcode == 0xa5U) ||
+        (opcode == 0xa6U) || (opcode == 0xa7U) ||
+        (opcode == 0xaaU) || (opcode == 0xabU) ||
+        (opcode == 0xacU) || (opcode == 0xadU) ||
+        (opcode == 0xaeU) || (opcode == 0xafU)) {
+        begin_operand_execution_timeline(state);
+        /* NEC's repeated primitive formula includes its repeat-prefix setup.
+         * Preserve the inherited one-clock setup before the first iteration;
+         * the fixed tail is completed after the final bus access. */
+        if (repeat_mode != 0) {
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+    }
     while ((repeat_mode == 0) || (state->registers[REG_CX] != 0)) {
         uint16_t value = 0;
         if ((opcode == 0xa4U) || (opcode == 0xa5U)) { /* MOVS */
@@ -1406,22 +1490,34 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 uint8_t byte = 0;
                 status = read_byte(state, state->segments[source_segment],
                                    state->registers[REG_SI], BM_BUS_READ, &byte);
+                if ((status == BM_STATUS_OK) && (repeat_mode == 0))
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK)
                     status = write_byte(state, state->segments[0],
                                         state->registers[REG_DI], byte);
             } else {
                 status = read_word(state, state->segments[source_segment],
                                    state->registers[REG_SI], &value);
+                if ((status == BM_STATUS_OK) && (repeat_mode == 0))
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK)
                     status = write_word(state, state->segments[0],
                                         state->registers[REG_DI], value);
             }
         } else if ((opcode == 0xa6U) || (opcode == 0xa7U)) { /* CMPS */
+            /* Preserve the inherited operand order.  The final comparison
+             * interval is one clock shorter for the non-repeated primitive,
+             * whose documented total is thirteen clocks. */
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
             if (width == 1U) {
                 uint8_t source = 0;
                 uint8_t destination = 0;
                 status = read_byte(state, state->segments[source_segment],
                                    state->registers[REG_SI], BM_BUS_READ, &source);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 2U);
                 if (status == BM_STATUS_OK)
                     status = read_byte(state, state->segments[0],
                                        state->registers[REG_DI], BM_BUS_READ,
@@ -1433,11 +1529,16 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 status = read_word(state, state->segments[source_segment],
                                    state->registers[REG_SI], &value);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
                     status = read_word(state, state->segments[0],
                                        state->registers[REG_DI], &destination);
                 if (status == BM_STATUS_OK)
                     compare16(state, value, destination);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(
+                    state, repeat_mode != 0 ? 3U : 2U);
         } else if ((opcode == 0xaaU) || (opcode == 0xabU)) { /* STOS */
             if (width == 1U)
                 status = write_byte(state, state->segments[0],
@@ -1457,7 +1558,16 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 status = read_word(state, state->segments[source_segment],
                                    state->registers[REG_SI], &state->registers[REG_AX]);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(
+                    state, repeat_mode != 0 ? 5U : 3U);
         } else { /* SCAS */
+            /* The inherited V30 path performs its comparison setup before
+             * acquiring ES:DI.  Repeated forms then have four internal clocks
+             * before the next iteration; the non-repeated primitive has one. */
+            status = place_execution_clocks(state, 2U);
+            if (status != BM_STATUS_OK)
+                return status;
             if (width == 1U) {
                 uint8_t byte = 0;
                 status = read_byte(state, state->segments[0],
@@ -1470,6 +1580,9 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 if (status == BM_STATUS_OK)
                     compare16(state, state->registers[REG_AX], value);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(
+                    state, repeat_mode != 0 ? 4U : 1U);
         }
         if (status != BM_STATUS_OK)
             return status;
@@ -1699,6 +1812,16 @@ cpu_reset(void *context)
     state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
+    state->boundary_execution_clocks_placed = 0U;
+    state->boundary_execution_timeline_active = 0;
+    state->boundary_execution_timeline_complete = 0;
+    state->boundary_operand_timeline_supported = 0;
+    state->boundary_flush_timeline_supported = 0;
+    state->boundary_interrupt_execution_clocks = 0U;
+    state->last_boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    state->last_boundary_clocks_min = 0U;
+    state->last_boundary_clocks_max = 0U;
+    state->last_boundary_observed = 0;
     return BM_STATUS_OK;
 }
 
@@ -2320,6 +2443,10 @@ execute_one(bm_808x_state_t *state)
         if (bus_lock)
             state->bus_lock_active = 1;
         ++prefix_count;
+        state->boundary_execution_timeline_active = 1;
+        status = place_execution_clocks(state, 2U);
+        if (status != BM_STATUS_OK)
+            return status;
         status = fetch_byte(state, &opcode);
         if (status != BM_STATUS_OK)
             return status;
@@ -2397,11 +2524,26 @@ execute_one(bm_808x_state_t *state)
         state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
         return BM_STATUS_OK;
     }
-    if ((opcode >= 0x50U) && (opcode <= 0x57U))
-        return push_word(state, state->registers[opcode - 0x50U]);
+    if ((opcode >= 0x50U) && (opcode <= 0x57U)) {
+        unsigned int index = opcode - 0x50U;
+        uint16_t value = state->registers[index];
+
+        begin_operand_execution_timeline(state);
+        status = place_execution_clocks(state, 3U);
+        /* V30 stack semantics decrement SP before the source is observed.
+         * This matters only for the SP encoding itself. */
+        if ((status == BM_STATUS_OK) && (index == REG_SP))
+            value = (uint16_t) (state->registers[REG_SP] - 2U);
+        if (status == BM_STATUS_OK)
+            status = push_word(state, value);
+        return status;
+    }
     if ((opcode >= 0x58U) && (opcode <= 0x5fU)) {
         uint16_t value;
+        begin_operand_execution_timeline(state);
         status = pop_word(state, &value);
+        if (status == BM_STATUS_OK)
+            status = place_execution_clocks(state, 1U);
         if (status == BM_STATUS_OK)
             state->registers[opcode - 0x58U] = value;
         return status;
@@ -2499,13 +2641,24 @@ execute_one(bm_808x_state_t *state)
         case 0x68: { /* PUSH imm16. */
             uint16_t immediate = 0U;
             status = fetch_word(state, &immediate);
-            return status == BM_STATUS_OK ? push_word(state, immediate) : status;
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 4U);
+            }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, immediate);
+            return status;
         }
         case 0x6a: { /* PUSH sign-extended imm8. */
             uint8_t immediate = 0U;
             status = fetch_byte(state, &immediate);
-            return status == BM_STATUS_OK ?
-                push_word(state, (uint16_t) signed_byte(immediate)) : status;
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, (uint16_t) signed_byte(immediate));
+            return status;
         }
         case 0x69: /* IMUL r16,r/m16,imm16. */
         case 0x6b: { /* IMUL r16,r/m16,sign-extended imm8. */
@@ -2513,7 +2666,7 @@ execute_one(bm_808x_state_t *state)
             uint16_t source = 0U;
             int32_t immediate;
             int32_t result;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override,
@@ -2585,15 +2738,19 @@ execute_one(bm_808x_state_t *state)
             return BM_STATUS_OK;
         }
         case 0x06: /* PUSH ES */
-            return push_word(state, state->segments[0]);
         case 0x0e: /* PUSH CS */
-            return push_word(state, state->segments[1]);
         case 0x16: /* PUSH SS */
-            return push_word(state, state->segments[2]);
-        case 0x1e: /* PUSH DS */
-            return push_word(state, state->segments[3]);
+        case 0x1e: { /* PUSH DS */
+            unsigned int segment = (opcode >> 3U) & 3U;
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 3U);
+            if (status == BM_STATUS_OK)
+                status = push_word(state, state->segments[segment]);
+            return status;
+        }
         case 0x07: { /* POP ES */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK) {
                 state->segments[0] = value;
@@ -2604,6 +2761,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x1f: { /* POP DS */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK) {
                 state->segments[3] = value;
@@ -2614,6 +2772,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x17: { /* POP SS */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK) {
                 state->segments[2] = value;
@@ -2688,9 +2847,14 @@ execute_one(bm_808x_state_t *state)
                               (uint8_t) ((state->flags & 0x00d5U) | 0x02U));
             return BM_STATUS_OK;
         case 0x9c: /* PUSHF (NEC V30 reserved-bit image). */
-            return push_word(state, psw_image(state->flags));
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 3U);
+            if (status == BM_STATUS_OK)
+                status = push_word(state, psw_image(state->flags));
+            return status;
         case 0x9d: { /* POPF */
             uint16_t value;
+            begin_operand_execution_timeline(state);
             status = pop_word(state, &value);
             if (status == BM_STATUS_OK)
                 restore_psw(state, value);
@@ -2782,10 +2946,14 @@ execute_one(bm_808x_state_t *state)
             uint8_t destination = 0;
             uint8_t source;
             uint8_t result;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &destination);
             if (status != BM_STATUS_OK)
@@ -2809,6 +2977,9 @@ execute_one(bm_808x_state_t *state)
                                            (uint8_t) (destination ^ source);
                 set_logic_flags(state, result, 8);
             }
+            status = place_execution_clocks(state, 4U);
+            if (status != BM_STATUS_OK)
+                return status;
             return write_operand_byte(state, &operand, result);
         }
         case 0x02: /* ADD r8,r/m8 */
@@ -2821,10 +2992,14 @@ execute_one(bm_808x_state_t *state)
             uint8_t source = 0;
             uint8_t result;
             unsigned int destination;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &source);
             if (status != BM_STATUS_OK)
@@ -2860,10 +3035,15 @@ execute_one(bm_808x_state_t *state)
             uint8_t modrm;
             unsigned int destination;
             uint16_t source = 0;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(
+                    state, opcode == 0x3bU ? 2U : 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &source);
             if (status != BM_STATUS_OK)
@@ -2904,6 +3084,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &source);
             if (status == BM_STATUS_OK)
@@ -2924,10 +3108,14 @@ execute_one(bm_808x_state_t *state)
         }
         case 0x88: { /* MOV r/m8,r8 */
             uint8_t modrm;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 5U);
+            }
             if (status == BM_STATUS_OK)
                 status = write_operand_byte(state, &operand,
                                             get_register_byte(state,
@@ -2946,10 +3134,18 @@ execute_one(bm_808x_state_t *state)
             uint16_t destination = 0;
             uint16_t source;
             uint16_t result;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register &&
+                (opcode == 0x39U)) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            } else if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &destination);
             if (status != BM_STATUS_OK)
@@ -2974,14 +3170,21 @@ execute_one(bm_808x_state_t *state)
                                            (uint16_t) (destination ^ source);
                 set_logic_flags(state, result, 16);
             }
+            status = place_execution_clocks(state, 4U);
+            if (status != BM_STATUS_OK)
+                return status;
             return write_operand_word(state, &operand, result);
         }
         case 0x89: { /* MOV r/m16,r16 */
             uint8_t modrm;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 5U);
+            }
             if (status == BM_STATUS_OK)
                 status = write_operand_word(state, &operand,
                                             state->registers[(modrm >> 3U) & 7U]);
@@ -2993,10 +3196,14 @@ execute_one(bm_808x_state_t *state)
             unsigned int destination;
             uint8_t source = 0;
             uint8_t value;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &source);
             if (status != BM_STATUS_OK)
@@ -3014,10 +3221,14 @@ execute_one(bm_808x_state_t *state)
         case 0x8a: { /* MOV r8,r/m8. */
             uint8_t modrm;
             uint8_t value = 0;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if (status == BM_STATUS_OK)
@@ -3028,17 +3239,23 @@ execute_one(bm_808x_state_t *state)
         case 0x87: { /* XCHG r/m16,r16. */
             uint8_t modrm;
             unsigned int register_index;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status != BM_STATUS_OK)
                 return status;
             register_index = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (opcode == 0x86U) {
                 uint8_t value = 0U;
                 uint8_t register_value = get_register_byte(state, register_index);
                 if (status == BM_STATUS_OK)
                     status = read_operand_byte(state, &operand, &value);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 5U);
                 if (status == BM_STATUS_OK)
                     status = write_operand_byte(state, &operand, register_value);
                 if (status == BM_STATUS_OK)
@@ -3049,6 +3266,8 @@ execute_one(bm_808x_state_t *state)
                 if (status == BM_STATUS_OK)
                     status = read_operand_word(state, &operand, &value);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 5U);
+                if (status == BM_STATUS_OK)
                     status = write_operand_word(state, &operand, register_value);
                 if (status == BM_STATUS_OK)
                     state->registers[register_index] = value;
@@ -3058,10 +3277,14 @@ execute_one(bm_808x_state_t *state)
         case 0x84: /* TEST r/m8,r8. */
         case 0x85: { /* TEST r/m16,r16. */
             uint8_t modrm;
-            bm_808x_operand_t operand;
+            bm_808x_operand_t operand = { 0 };
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status != BM_STATUS_OK)
                 return status;
             if (opcode == 0x84U) {
@@ -3077,6 +3300,8 @@ execute_one(bm_808x_state_t *state)
                     set_logic_flags(state, (uint16_t)
                         (value & state->registers[(modrm >> 3U) & 7U]), 16U);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 2U);
             return status;
         }
         case 0x80: /* Immediate arithmetic group; basic r/m8 operations. */
@@ -3090,14 +3315,20 @@ execute_one(bm_808x_state_t *state)
                 return status;
             operation = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (opcode != 0x81U) {
                 uint8_t immediate = 0;
                 uint8_t left = 0;
-                uint8_t result;
+                uint8_t result = 0U;
+                if (status == BM_STATUS_OK)
+                    status = read_operand_byte(state, &operand, &left);
                 if (status == BM_STATUS_OK)
                     status = fetch_byte(state, &immediate);
                 if (status == BM_STATUS_OK)
-                    status = read_operand_byte(state, &operand, &left);
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK) {
                     if (operation == 0U)
                         result = add8(state, left, immediate);
@@ -3110,47 +3341,47 @@ execute_one(bm_808x_state_t *state)
                         compare8(state, left, immediate);
                     } else if (operation == 7U) {
                         compare8(state, left, immediate);
-                        return BM_STATUS_OK;
                     } else {
                         result = operation == 1U ? (uint8_t) (left | immediate) :
                                  operation == 4U ? (uint8_t) (left & immediate) :
                                                    (uint8_t) (left ^ immediate);
                         set_logic_flags(state, result, 8);
                     }
-                    status = write_operand_byte(state, &operand, result);
+                    status = place_execution_clocks(state, 2U);
+                    if ((status == BM_STATUS_OK) && (operation != 7U))
+                        status = write_operand_byte(state, &operand, result);
                 }
             } else {
                 uint16_t immediate = 0;
                 uint16_t left = 0;
-                uint16_t result;
+                uint16_t result = 0U;
+                if (status == BM_STATUS_OK)
+                    status = read_operand_word(state, &operand, &left);
                 if (status == BM_STATUS_OK)
                     status = fetch_word(state, &immediate);
                 if (status == BM_STATUS_OK)
-                    status = read_operand_word(state, &operand, &left);
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK) {
-                    if (operation == 0U) {
+                    if (operation == 0U)
                         result = add16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
-                    } else if (operation == 2U) {
+                    else if (operation == 2U)
                         result = adc16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
-                    } else if (operation == 3U) {
+                    else if (operation == 3U)
                         result = sbb16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
-                    } else if (operation == 5U) {
+                    else if (operation == 5U) {
                         result = (uint16_t) (left - immediate);
                         compare16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
                     } else if (operation == 7U) {
                         compare16(state, left, immediate);
                     } else {
                         result = operation == 1U ? (uint16_t) (left | immediate) :
                                  operation == 4U ? (uint16_t) (left & immediate) :
                                                    (uint16_t) (left ^ immediate);
-                        status = write_operand_word(state, &operand, result);
-                        if (status == BM_STATUS_OK)
-                            set_logic_flags(state, result, 16);
+                        set_logic_flags(state, result, 16);
                     }
+                    status = place_execution_clocks(state, 2U);
+                    if ((status == BM_STATUS_OK) && (operation != 7U))
+                        status = write_operand_word(state, &operand, result);
                 }
             }
             return status;
@@ -3171,13 +3402,19 @@ execute_one(bm_808x_state_t *state)
                 (operation != 6U) && (operation != 7U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
+            if (status == BM_STATUS_OK)
+                status = read_operand_word(state, &operand, &left);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &immediate);
             if (status == BM_STATUS_OK)
-                status = read_operand_word(state, &operand, &left);
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK) {
                 uint16_t extended = (uint16_t) (int16_t) (int8_t) immediate;
-                uint16_t result;
+                uint16_t result = 0U;
                 if (operation == 0U)
                     result = add16(state, left, extended);
                 else if (operation == 2U)
@@ -3189,14 +3426,15 @@ execute_one(bm_808x_state_t *state)
                     compare16(state, left, extended);
                 } else if (operation == 7U) {
                     compare16(state, left, extended);
-                    return BM_STATUS_OK;
                 } else {
                     result = operation == 1U ? (uint16_t) (left | extended) :
                              operation == 4U ? (uint16_t) (left & extended) :
                                                (uint16_t) (left ^ extended);
                     set_logic_flags(state, result, 16);
                 }
-                status = write_operand_word(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if ((status == BM_STATUS_OK) && (operation != 7U))
+                    status = write_operand_word(state, &operand, result);
             }
             return status;
         }
@@ -3225,6 +3463,10 @@ execute_one(bm_808x_state_t *state)
             if ((segment >= 4U) || (segment == 1U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
             if (status == BM_STATUS_OK) {
@@ -3245,6 +3487,10 @@ execute_one(bm_808x_state_t *state)
             if (segment >= 4U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 3U);
+            }
             if (status == BM_STATUS_OK) {
                 status = write_operand_word(state, &operand, state->segments[segment]);
                 if (status == BM_STATUS_OK)
@@ -3264,8 +3510,16 @@ execute_one(bm_808x_state_t *state)
             if (((modrm >> 3U) & 7U) != 0U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &value);
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
+            if ((status == BM_STATUS_OK) && !operand.is_register)
+                status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = write_operand_word(state, &operand, value);
             return status;
@@ -3280,6 +3534,10 @@ execute_one(bm_808x_state_t *state)
                 return status;
             operation = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
             if ((status == BM_STATUS_OK) &&
@@ -3287,13 +3545,20 @@ execute_one(bm_808x_state_t *state)
                 uint16_t immediate = 0;
                 status = fetch_word(state, &immediate);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 1U);
+                if (status == BM_STATUS_OK)
                     set_logic_flags(state, (uint16_t) (value & immediate), 16);
             } else if ((status == BM_STATUS_OK) && (operation == 2U)) {
-                status = write_operand_word(state, &operand, (uint16_t) ~value);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_word(state, &operand,
+                                                (uint16_t) ~value);
             } else if ((status == BM_STATUS_OK) && (operation == 3U)) {
                 uint16_t result = (uint16_t) (0U - value);
                 compare16(state, 0U, value);
-                status = write_operand_word(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_word(state, &operand, result);
             } else if ((status == BM_STATUS_OK) && (operation == 4U)) {
                 uint32_t result = (uint32_t) state->registers[REG_AX] * value;
                 state->registers[REG_AX] = (uint16_t) result;
@@ -3357,23 +3622,66 @@ execute_one(bm_808x_state_t *state)
                 (operation != 6U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && (operation <= 1U) &&
+                !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
+            if ((status == BM_STATUS_OK) && (operation == 2U)) {
+                begin_operand_execution_timeline(state);
+                if (!operand.is_register)
+                    status = place_execution_clocks(state, 1U);
+            }
+            if ((status == BM_STATUS_OK) && (operation == 4U))
+                begin_operand_execution_timeline(state);
+            if ((status == BM_STATUS_OK) && (operation == 6U))
+                begin_operand_execution_timeline(state);
             if ((status == BM_STATUS_OK) &&
                 ((operation == 3U) || (operation == 5U))) {
                 uint16_t segment = 0U;
                 if (operand.is_register)
                     return BM_STATUS_UNSUPPORTED;
+                begin_operand_execution_timeline(state);
                 status = read_word(state, operand.segment, operand.offset, &value);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 1U);
+                if ((status == BM_STATUS_OK) && (operation == 5U)) {
+                    bm_v30_bcu_suspend_prefetch(&state->bcu);
+                    status = place_suspended_execution_clocks(state, 1U);
+                }
                 if (status == BM_STATUS_OK)
                     status = read_word(state, operand.segment,
                                        (uint16_t) (operand.offset + 2U), &segment);
-                if ((status == BM_STATUS_OK) && (operation == 3U))
-                    status = push_word(state, state->segments[1]);
-                if ((status == BM_STATUS_OK) && (operation == 3U))
-                    status = push_word(state, state->ip);
-                if (status == BM_STATUS_OK) {
+                if ((status == BM_STATUS_OK) && (operation == 3U)) {
+                    uint16_t return_ip = state->ip;
+                    uint16_t return_cs = state->segments[1];
+
+                    status = place_execution_clocks(state, 1U);
+                    if (status == BM_STATUS_OK) {
+                        bm_v30_bcu_suspend_prefetch(&state->bcu);
+                        status = place_suspended_execution_clocks(state, 4U);
+                    }
+                    if (status == BM_STATUS_OK)
+                        status = push_word(state, return_cs);
+                    if (status == BM_STATUS_OK) {
+                        state->segments[1] = segment;
+                        status = place_suspended_execution_clocks(state, 2U);
+                    }
+                    if (status == BM_STATUS_OK)
+                        status = place_suspended_execution_clocks(state, 1U);
+                    if (status == BM_STATUS_OK) {
+                        state->ip = value;
+                        mark_prefetch_flush(state);
+                        state->boundary_flush_timeline_supported = 1;
+                        status = place_execution_clocks(state, 3U);
+                    }
+                    if (status == BM_STATUS_OK)
+                        status = push_word(state, return_ip);
+                } else if (status == BM_STATUS_OK) {
                     state->ip = value;
                     state->segments[1] = segment;
                     mark_prefetch_flush(state);
+                    state->boundary_flush_timeline_supported = 1;
                 }
                 return status;
             }
@@ -3391,20 +3699,53 @@ execute_one(bm_808x_state_t *state)
                     compare16(state, value, 1U);
                 }
                 state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
-                return write_operand_word(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_word(state, &operand, result);
+                return status;
             }
             if (operation == 2U) {
-                status = push_word(state, state->ip);
+                uint16_t return_ip = state->ip;
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 4U);
                 if (status == BM_STATUS_OK) {
                     state->ip = value;
                     mark_prefetch_flush(state);
+                    state->boundary_flush_timeline_supported = 1;
+                    status = place_execution_clocks(state, 3U);
                 }
+                if (status == BM_STATUS_OK)
+                    status = push_word(state, return_ip);
                 return status;
             }
             if (operation == 4U) {
-                state->ip = value;
-                mark_prefetch_flush(state);
-                return BM_STATUS_OK;
+                /* Register targets consume one extra inherited entry state;
+                 * memory targets have already occupied that position with
+                 * their source read.  Both then suspend sequential prefetch
+                 * before committing the new instruction pointer. */
+                if (operand.is_register)
+                    status = place_execution_clocks(state, 1U);
+                if (status == BM_STATUS_OK) {
+                    bm_v30_bcu_suspend_prefetch(&state->bcu);
+                    status = place_suspended_execution_clocks(state, 1U);
+                }
+                if (status == BM_STATUS_OK) {
+                    state->ip = value;
+                    mark_prefetch_flush(state);
+                    state->boundary_flush_timeline_supported = 1;
+                }
+                return status;
+            }
+            if (operation == 6U) {
+                /* The inherited V30 microcode performs three internal states
+                 * between reading the source and writing the stack word. */
+                status = place_execution_clocks(state, 3U);
+                if ((status == BM_STATUS_OK) && operand.is_register &&
+                    (operand.register_index == REG_SP))
+                    value = (uint16_t) (state->registers[REG_SP] - 2U);
+                if (status == BM_STATUS_OK)
+                    status = push_word(state, value);
+                return status;
             }
             return push_word(state, value);
         }
@@ -3418,6 +3759,10 @@ execute_one(bm_808x_state_t *state)
                 return status;
             operation = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if ((status == BM_STATUS_OK) &&
@@ -3425,13 +3770,20 @@ execute_one(bm_808x_state_t *state)
                 uint8_t immediate = 0;
                 status = fetch_byte(state, &immediate);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 1U);
+                if (status == BM_STATUS_OK)
                     set_logic_flags(state, (uint8_t) (value & immediate), 8);
             } else if ((status == BM_STATUS_OK) && (operation == 2U)) {
-                status = write_operand_byte(state, &operand, (uint8_t) ~value);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_byte(state, &operand,
+                                                (uint8_t) ~value);
             } else if ((status == BM_STATUS_OK) && (operation == 3U)) {
                 uint8_t result = (uint8_t) (0U - value);
                 compare8(state, 0U, value);
-                status = write_operand_byte(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_byte(state, &operand, result);
             } else if ((status == BM_STATUS_OK) && (operation == 4U)) {
                 uint16_t result = (uint16_t) ((uint8_t) state->registers[REG_AX] * value);
                 state->registers[REG_AX] = result;
@@ -3486,6 +3838,10 @@ execute_one(bm_808x_state_t *state)
             if (operation > 1U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if (status != BM_STATUS_OK)
@@ -3498,7 +3854,10 @@ execute_one(bm_808x_state_t *state)
                 compare8(state, value, 1U);
             }
             state->flags = (uint16_t) ((state->flags & ~FLAG_CF) | carry);
-            return write_operand_byte(state, &operand, result);
+            status = place_execution_clocks(state, 2U);
+            if (status == BM_STATUS_OK)
+                status = write_operand_byte(state, &operand, result);
+            return status;
         }
         case 0xc6: /* MOV r/m8,imm8. */
         case 0xc7: { /* MOV r/m16,imm16. */
@@ -3510,10 +3869,16 @@ execute_one(bm_808x_state_t *state)
             if (((modrm >> 3U) & 7U) != 0U)
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (opcode == 0xc6U) {
                 uint8_t immediate = 0;
                 if (status == BM_STATUS_OK)
                     status = fetch_byte(state, &immediate);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 2U);
                 if (status == BM_STATUS_OK)
                     status = write_operand_byte(state, &operand, immediate);
             } else {
@@ -3521,36 +3886,68 @@ execute_one(bm_808x_state_t *state)
                 if (status == BM_STATUS_OK)
                     status = fetch_word(state, &immediate);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 1U);
+                if (status == BM_STATUS_OK)
                     status = write_operand_word(state, &operand, immediate);
             }
             return status;
         }
         case 0xe8: { /* CALL rel16. */
             uint16_t displacement;
+            uint16_t return_ip = 0U;
             status = fetch_word(state, &displacement);
-            if (status == BM_STATUS_OK)
-                status = push_word(state, state->ip);
+            if (status == BM_STATUS_OK) {
+                return_ip = state->ip;
+                begin_operand_execution_timeline(state);
+            }
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 4U);
+            }
             if (status == BM_STATUS_OK) {
                 state->ip = (uint16_t) (state->ip + (int16_t) displacement);
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 3U);
             }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, return_ip);
             return status;
         }
         case 0x9a: { /* CALL ptr16:16. */
             uint16_t destination = 0U;
             uint16_t segment = 0U;
+            uint16_t return_ip = 0U;
+            uint16_t return_cs = 0U;
             status = fetch_word(state, &destination);
             if (status == BM_STATUS_OK)
                 status = fetch_word(state, &segment);
+            if (status == BM_STATUS_OK) {
+                return_ip = state->ip;
+                return_cs = state->segments[1];
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 4U);
+            }
             if (status == BM_STATUS_OK)
-                status = push_word(state, state->segments[1]);
+                status = push_word(state, return_cs);
+            if (status == BM_STATUS_OK) {
+                state->segments[1] = segment;
+                status = place_suspended_execution_clocks(state, 2U);
+            }
             if (status == BM_STATUS_OK)
-                status = push_word(state, state->ip);
+                status = place_suspended_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK) {
                 state->ip = destination;
-                state->segments[1] = segment;
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 3U);
             }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, return_ip);
             return status;
         }
         case 0xe9: { /* JMP rel16 */
@@ -3603,11 +4000,26 @@ execute_one(bm_808x_state_t *state)
             uint16_t adjustment = 0U;
             if (opcode == 0xc2U)
                 status = fetch_word(state, &adjustment);
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                if (opcode == 0xc2U)
+                    status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &destination);
             if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
                 state->ip = destination;
+                status = place_suspended_execution_clocks(
+                    state, opcode == 0xc2U ? 2U : 1U);
+            }
+            if (status == BM_STATUS_OK) {
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(
+                    state, opcode == 0xc2U ? 3U : 2U);
+            }
+            if (status == BM_STATUS_OK) {
                 state->registers[REG_SP] =
                     (uint16_t) (state->registers[REG_SP] + adjustment);
             }
@@ -3624,6 +4036,10 @@ execute_one(bm_808x_state_t *state)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
             if ((status == BM_STATUS_OK) && operand.is_register)
                 return BM_STATUS_UNSUPPORTED;
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 4U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_word(state, operand.segment, operand.offset, &offset);
             if (status == BM_STATUS_OK)
@@ -3688,14 +4104,35 @@ execute_one(bm_808x_state_t *state)
             uint16_t adjustment = 0U;
             if (opcode == 0xcaU)
                 status = fetch_word(state, &adjustment);
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                /* RETF without an immediate enters the inherited far-return
+                 * micro-routine through one additional internal state. */
+                if (opcode == 0xcbU)
+                    status = place_execution_clocks(state, 1U);
+            }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &destination);
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 2U);
+            }
+            if (status == BM_STATUS_OK)
+                status = place_suspended_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &segment);
             if (status == BM_STATUS_OK) {
                 state->ip = destination;
                 state->segments[1] = segment;
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 2U);
+            }
+            if ((status == BM_STATUS_OK) && (opcode == 0xcaU))
+                status = place_execution_clocks(state, 1U);
+            if (status == BM_STATUS_OK) {
                 state->registers[REG_SP] =
                     (uint16_t) (state->registers[REG_SP] + adjustment);
             }
@@ -3708,6 +4145,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &vector);
             if (status != BM_STATUS_OK)
                 return status;
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
             return enter_interrupt(state, vector);
         }
         case 0xce: /* INTO */
@@ -3717,16 +4158,30 @@ execute_one(bm_808x_state_t *state)
             uint16_t new_ip = 0;
             uint16_t new_cs = 0;
             uint16_t new_flags = 0;
-            status = pop_word(state, &new_ip);
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 2U);
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &new_ip);
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 2U);
+            }
+            if (status == BM_STATUS_OK)
+                status = place_suspended_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &new_cs);
-            if (status == BM_STATUS_OK)
-                status = pop_word(state, &new_flags);
             if (status == BM_STATUS_OK) {
                 state->ip = new_ip;
                 state->segments[1] = new_cs;
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 4U);
+            }
+            if (status == BM_STATUS_OK)
+                status = pop_word(state, &new_flags);
+            if (status == BM_STATUS_OK) {
                 restore_psw(state, new_flags);
+                status = place_execution_clocks(state, 1U);
             }
             return status;
         }
@@ -3800,8 +4255,11 @@ execute_one(bm_808x_state_t *state)
             uint8_t value = 0U;
             uint16_t offset = (uint16_t) (state->registers[REG_BX] +
                                           get_register_byte(state, 0U));
-            status = read_byte(state, state->segments[segment], offset,
-                               BM_BUS_READ, &value);
+            begin_operand_execution_timeline(state);
+            status = place_execution_clocks(state, 3U);
+            if (status == BM_STATUS_OK)
+                status = read_byte(state, state->segments[segment], offset,
+                                   BM_BUS_READ, &value);
             if (status == BM_STATUS_OK)
                 set_register_byte(state, 0U, value);
             return status;
@@ -3822,6 +4280,7 @@ execute_one(bm_808x_state_t *state)
             uint16_t offset;
             unsigned int segment = (segment_override >= 0) ?
                                    (unsigned int) segment_override : 3U;
+            begin_operand_execution_timeline(state);
             status = fetch_word(state, &offset);
             if (status != BM_STATUS_OK)
                 return status;
@@ -3836,6 +4295,9 @@ execute_one(bm_808x_state_t *state)
             if (opcode == 0xa1U)
                 return read_word(state, state->segments[segment], offset,
                                  &state->registers[REG_AX]);
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
             if (opcode == 0xa2U)
                 return write_byte(state, state->segments[segment], offset,
                                   (uint8_t) state->registers[REG_AX]);
@@ -3845,7 +4307,7 @@ execute_one(bm_808x_state_t *state)
         case 0xe4: { /* IN AL,imm8 */
             uint8_t port = 0;
             uint8_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3863,7 +4325,7 @@ execute_one(bm_808x_state_t *state)
         case 0xe5: { /* IN AX,imm8 */
             uint8_t port = 0;
             uint16_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3879,7 +4341,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xe6: { /* OUT imm8,AL */
             uint8_t port = 0U;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3891,7 +4353,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xe7: { /* OUT imm8,AX */
             uint8_t port = 0U;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3903,7 +4365,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xec: { /* IN AL,DX */
             uint8_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = io_read_byte(state, state->registers[REG_DX], &value);
@@ -3916,7 +4378,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xed: { /* IN AX,DX */
             uint16_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = io_read_word(state, state->registers[REG_DX], &value);
@@ -3927,14 +4389,14 @@ execute_one(bm_808x_state_t *state)
             return status;
         }
         case 0xee: /* OUT DX,AL */
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status != BM_STATUS_OK)
                 return status;
             return io_write_byte(state, state->registers[REG_DX],
                                  (uint8_t) state->registers[REG_AX]);
         case 0xef: /* OUT DX,AX */
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status != BM_STATUS_OK)
                 return status;
@@ -4285,6 +4747,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0x14: case 0x15: case 0x1c: case 0x1d:
             case 0x24: case 0x25: case 0x2c: case 0x2d:
             case 0x34: case 0x35: case 0x3c: case 0x3d:
+            case 0xa8: case 0xa9:
                 base = 4U; /* ALU accumulator,immediate. */
                 break;
             case 0x27: case 0x2f:
@@ -4398,7 +4861,13 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0x8f: {
                 if (state->boundary_rm_valid && !state->boundary_rm_memory)
                     base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
-                else
+                else if (state->boundary_rm_valid) {
+                    base = 17U;
+                    if ((state->boundary_initial_sp & 1U) != 0U)
+                        base += 4U;
+                    if ((state->boundary_rm_offset & 1U) != 0U)
+                        base += 4U;
+                } else
                     known = 0;
                 break;
             }
@@ -4410,6 +4879,12 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 return BM_808X_EXECUTION_CLOCKS_RANGE;
             case 0x9a:
                 base = (state->boundary_initial_sp & 1U) ? 29U : 21U;
+                break;
+            case 0x9b:
+                if (state->boundary_poll_ready)
+                    base = 7U;
+                else
+                    known = 0;
                 break;
             case 0x9e: base = 3U; break; /* MOV PSW,AH. */
             case 0x9f: base = 2U; break; /* MOV AH,PSW. */
@@ -4580,6 +5055,17 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                             known = rm_execution_clock_range(
                                 state, 0, 21U, 22U, 27U, 28U, 0U, 0U,
                                 0U, 0U, &range_min, &range_max);
+                        /* NEC documents the one-clock range as data-dependent.
+                         * The inherited V30 microcode spends the additional
+                         * clock when the unsigned product has no high half. */
+                        if (known) {
+                            int high_half_is_zero = word ?
+                                state->registers[REG_DX] == 0U :
+                                (state->registers[REG_AX] & 0xff00U) == 0U;
+                            base = range_min +
+                                   (high_half_is_zero ? 1U : 0U);
+                            kind = BM_808X_EXECUTION_CLOCKS_EXACT;
+                        }
                     } else if (operation == 5U) {
                         if (word)
                             known = rm_execution_clock_range(
@@ -4598,7 +5084,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                             state, 0, 29U, 34U, 34U, 39U, 0U, 0U,
                             0U, 0U, &range_min, &range_max);
                     }
-                    if (known) {
+                    if (known && (operation != 4U)) {
                         *minimum = range_min +
                                    (uint32_t) state->last_prefix_count * 2U;
                         *maximum = range_max +
@@ -4626,15 +5112,42 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 if ((operation == 0U) || (operation == 1U))
                     known = rm_execution_clocks(state, 1, 2U, 0U, 16U, 24U,
                                                 &base);
-                else if ((operation == 2U) && state->boundary_rm_valid &&
-                         !state->boundary_rm_memory)
-                    base = (state->boundary_initial_sp & 1U) ? 18U : 14U;
+                else if ((operation == 2U) && state->boundary_rm_valid) {
+                    if (!state->boundary_rm_memory) {
+                        base = (state->boundary_initial_sp & 1U) ? 18U : 14U;
+                    } else {
+                        base = 23U;
+                        if ((state->boundary_rm_offset & 1U) != 0U)
+                            base += 4U;
+                        if ((state->boundary_initial_sp & 1U) != 0U)
+                            base += 4U;
+                    }
+                }
+                else if ((operation == 3U) && state->boundary_rm_valid &&
+                         state->boundary_rm_memory) {
+                    base = 31U;
+                    if ((state->boundary_rm_offset & 1U) != 0U)
+                        base += 8U;
+                    if ((state->boundary_initial_sp & 1U) != 0U)
+                        base += 8U;
+                }
                 else if (operation == 4U)
                     known = rm_execution_clocks(state, 1, 11U, 0U, 20U, 24U,
                                                 &base);
                 else if (operation == 5U)
                     known = rm_execution_clocks(state, 1, 0U, 0U, 27U, 35U,
                                                 &base);
+                else if ((operation == 6U) && state->boundary_rm_valid) {
+                    if (!state->boundary_rm_memory) {
+                        base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
+                    } else {
+                        base = 18U;
+                        if ((state->boundary_rm_offset & 1U) != 0U)
+                            base += 4U;
+                        if ((state->boundary_initial_sp & 1U) != 0U)
+                            base += 4U;
+                    }
+                }
                 else
                     known = 0;
                 break;
@@ -4664,11 +5177,18 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
     uint32_t maximum = 0U;
     bm_808x_execution_clock_kind_t kind;
 
-    if (!native_mode || state->bcu.boundary_prefetch_flushed)
+    if (!native_mode)
         return BM_STATUS_OK;
     if (state->boundary_execution_timeline_active) {
         bm_status_t status;
 
+        if (state->bcu.boundary_prefetch_flushed &&
+            !state->boundary_flush_timeline_supported)
+            return BM_STATUS_OK;
+        if ((state->bcu.boundary_bus_transactions !=
+             state->bcu.boundary_prefetch_transactions) &&
+            !state->boundary_operand_timeline_supported)
+            return BM_STATUS_OK;
         kind = documented_native_execution_clocks(state, &minimum, &maximum);
         if ((kind != BM_808X_EXECUTION_CLOCKS_EXACT) ||
             (minimum != maximum) ||
@@ -4680,6 +5200,8 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
             state->boundary_execution_timeline_complete = 1;
         return status;
     }
+    if (state->bcu.boundary_prefetch_flushed)
+        return BM_STATUS_OK;
     /* Operand and I/O cycles need their position inside the instruction before
      * the BCU may compete with them. Demand and already-running prefetches are
      * the only bus work admitted by this first overlap cut. */
@@ -4716,7 +5238,8 @@ compose_boundary_clocks(const bm_808x_state_t *state, int native_mode,
     uint64_t fixed_clocks;
 
     observation->boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
-    if ((observation->kind != BM_808X_BOUNDARY_INSTRUCTION) || !native_mode ||
+    if (((observation->kind != BM_808X_BOUNDARY_INSTRUCTION) &&
+         (observation->kind != BM_808X_BOUNDARY_INTERRUPT)) || !native_mode ||
         (observation->execution_clock_kind ==
          BM_808X_EXECUTION_CLOCKS_UNKNOWN))
         return;
@@ -4786,6 +5309,11 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_execution_clocks_placed = 0U;
     state->boundary_execution_timeline_active = 0;
     state->boundary_execution_timeline_complete = 0;
+    state->boundary_operand_timeline_supported = 0;
+    state->boundary_flush_timeline_supported = 0;
+    state->boundary_interrupt_execution_clocks = 0U;
+    state->boundary_poll_ready = 0;
+    state->last_boundary_observed = 0;
 }
 
 static void
@@ -4847,7 +5375,19 @@ emit_boundary_observation(bm_808x_state_t *state,
             documented_native_execution_clocks(
                 state, &observation.execution_clocks_min,
                 &observation.execution_clocks_max);
+    else if ((kind == BM_808X_BOUNDARY_INTERRUPT) && native_mode &&
+             (state->boundary_interrupt_execution_clocks != 0U)) {
+        observation.execution_clock_kind = BM_808X_EXECUTION_CLOCKS_EXACT;
+        observation.execution_clocks_min =
+            state->boundary_interrupt_execution_clocks;
+        observation.execution_clocks_max =
+            state->boundary_interrupt_execution_clocks;
+    }
     compose_boundary_clocks(state, native_mode, &observation);
+    state->last_boundary_clock_kind = observation.boundary_clock_kind;
+    state->last_boundary_clocks_min = observation.boundary_clocks_min;
+    state->last_boundary_clocks_max = observation.boundary_clocks_max;
+    state->last_boundary_observed = 1;
     if (state->timing != NULL)
         state->timing(state->timing_context, &observation);
 }
@@ -5149,6 +5689,16 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
+    state->boundary_execution_clocks_placed = 0U;
+    state->boundary_execution_timeline_active = 0;
+    state->boundary_execution_timeline_complete = 0;
+    state->boundary_operand_timeline_supported = 0;
+    state->boundary_flush_timeline_supported = 0;
+    state->boundary_interrupt_execution_clocks = 0U;
+    state->last_boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    state->last_boundary_clocks_min = 0U;
+    state->last_boundary_clocks_max = 0U;
+    state->last_boundary_observed = 0;
     return BM_STATUS_OK;
 }
 
@@ -5158,4 +5708,31 @@ bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed)
     if (!is_808x_cpu(cpu))
         return BM_STATUS_INVALID_ARGUMENT;
     return cpu_run(cpu->context, 1U, consumed);
+}
+
+bm_status_t
+bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
+{
+    bm_808x_state_t *state = context;
+    bm_tick_t consumed = 0U;
+    bm_status_t status;
+
+    (void) start_ns;
+    if ((state == NULL) || (cycles == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *cycles = 0U;
+    state->last_boundary_observed = 0;
+    status = cpu_run(state, 1U, &consumed);
+    if ((status == BM_STATUS_IDLE) && (consumed == 0U))
+        return BM_STATUS_IDLE;
+    if ((status != BM_STATUS_OK) && (status != BM_STATUS_IDLE))
+        return status;
+    if ((consumed != 1U) || !state->last_boundary_observed)
+        return BM_STATUS_DEVICE_ERROR;
+    if ((state->last_boundary_clock_kind != BM_808X_EXECUTION_CLOCKS_EXACT) ||
+        (state->last_boundary_clocks_min == 0U) ||
+        (state->last_boundary_clocks_min != state->last_boundary_clocks_max))
+        return BM_STATUS_UNSUPPORTED;
+    *cycles = state->last_boundary_clocks_min;
+    return BM_STATUS_OK;
 }

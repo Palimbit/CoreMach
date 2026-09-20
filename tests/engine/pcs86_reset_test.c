@@ -19,6 +19,12 @@ typedef struct io_trace_sink {
     size_t count;
 } io_trace_sink_t;
 
+typedef struct timing_sink {
+    bm_808x_timing_observation_t last;
+    size_t count;
+    size_t complete;
+} timing_sink_t;
+
 static void
 capture_trace(void *context, const bm_808x_trace_t *trace)
 {
@@ -33,6 +39,19 @@ capture_io_trace(void *context, const bm_pcs86_io_trace_t *trace)
     io_trace_sink_t *sink = context;
     assert(sink->count < (sizeof(sink->entries) / sizeof(sink->entries[0])));
     sink->entries[sink->count++] = *trace;
+}
+
+static void
+capture_timing(void *context,
+               const bm_808x_timing_observation_t *observation)
+{
+    timing_sink_t *sink = context;
+
+    assert(observation->version == BM_808X_TIMING_OBSERVATION_VERSION);
+    sink->last = *observation;
+    ++sink->count;
+    if (observation->execution_timeline_complete)
+        ++sink->complete;
 }
 
 static void
@@ -53,12 +72,45 @@ inspect(bm_session_t *session, const char *name)
 }
 
 static void
+run_until_halted(bm_session_t *session)
+{
+    uint64_t elapsed;
+
+    for (elapsed = 0U; elapsed < UINT64_C(10000000); elapsed += 100U) {
+        if (inspect(session, "halted") != 0U)
+            return;
+        assert(bm_session_run_for(session, 100U) == BM_STATUS_OK);
+    }
+    assert(0 && "PCS 86 did not halt before the virtual-time deadline");
+}
+
+static void
 test_partial_initialization_cleanup(const bm_pcs86_config_t *config)
 {
+    size_t startup_allocations;
     size_t failure;
 
-    /* Exercise every allocation performed while starting this machine. */
-    for (failure = 0; failure < 16; ++failure) {
+    /* Measure, then exercise every allocation performed while starting this
+     * machine so the test remains complete as components are added. */
+    {
+        failure_injection_host_t tracker;
+        bm_host_services_t host;
+        bm_machine_config_t machine = bm_pcs86_machine_config(config);
+        bm_session_t *session = NULL;
+        size_t before_start;
+
+        failure_injection_host_initialize(&tracker);
+        host = failure_injection_host_services(&tracker);
+        assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+        assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+        before_start = tracker.allocation_calls;
+        assert(bm_session_start(session) == BM_STATUS_OK);
+        startup_allocations = tracker.allocation_calls - before_start;
+        bm_session_destroy(session);
+        assert(tracker.outstanding_allocations == 0U);
+    }
+    assert(startup_allocations != 0U);
+    for (failure = 0; failure < startup_allocations; ++failure) {
         failure_injection_host_t tracker;
         bm_host_services_t host;
         bm_machine_config_t machine = bm_pcs86_machine_config(config);
@@ -128,6 +180,7 @@ main(void)
     };
     trace_sink_t trace = { 0 };
     io_trace_sink_t io_trace = { 0 };
+    timing_sink_t timing = { 0 };
     bm_pcs86_config_t config;
     bm_machine_config_t machine;
     const bm_machine_definition_t *definition;
@@ -161,6 +214,8 @@ main(void)
         .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL },
         .trace = capture_trace,
         .trace_context = &trace,
+        .timing = capture_timing,
+        .timing_context = &timing,
         .io_trace = capture_io_trace,
         .io_trace_context = &io_trace,
         .ems_kib = BM_PCS86_EMS_1920_KIB,
@@ -178,6 +233,10 @@ main(void)
     assert(strcmp(definition->configuration.type, BM_PCS86_CONFIG_TYPE) == 0);
     assert(definition->configuration.version == BM_PCS86_CONFIG_VERSION);
     assert(definition->configuration.size == sizeof(config));
+    assert(definition->scheduler_ticks_per_second ==
+           BM_MACHINE_CLOCKED_TICKS_PER_SECOND);
+    assert(definition->engine_mode == BM_MACHINE_ENGINE_CLOCKED);
+    assert(definition->engine.max_timed_sources == 3U);
     assert(machine.definition == definition);
     assert(machine.configuration.data == &config);
 
@@ -240,7 +299,8 @@ main(void)
         assert(value == 2U);
     }
 
-    assert(bm_session_run_for(session, 59) == BM_STATUS_OK);
+    run_until_halted(session);
+    assert(bm_session_time(session) >= 100U);
     assert(inspect(session, "cs") == 0xf000);
     assert(inspect(session, "ip") == 0x016f);
     assert(inspect(session, "ax") == 0xff08U);
@@ -256,6 +316,9 @@ main(void)
         assert(value == 1U);
     }
     assert(trace.count == 53);
+    assert(timing.count == trace.count);
+    assert(timing.complete > 0U);
+    assert(timing.last.kind == BM_808X_BOUNDARY_INSTRUCTION);
     assert(trace.entries[14].physical_address == 0xf0120U);
     assert(trace.entries[14].opcode == 0x8bU);
     assert(trace.entries[0].physical_address == 0xffff0U);
@@ -284,6 +347,7 @@ main(void)
 
     trace.count = 0;
     io_trace.count = 0;
+    memset(&timing, 0, sizeof(timing));
     assert(bm_session_reset(session) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xffffU);
     assert(inspect(session, "ip") == 0U);
@@ -315,9 +379,11 @@ main(void)
         assert(bm_session_inspect_machine(session, "unknown", &value) ==
                BM_STATUS_INVALID_ARGUMENT);
     }
-    assert(bm_session_run_for(session, 59) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect(session, "halted") == 1U);
     assert(trace.count == 53U);
+    assert(timing.count == trace.count);
+    assert(timing.complete > 0U);
     assert(io_trace.count == 16U);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);
