@@ -202,10 +202,10 @@ intermediate product; overflow is reported without changing the position.
   unchanged. Accepting one V30 word-I/O transaction across the indexed VGA
   `3D4h/3D5h` pair then removes that component-boundary limitation: the same
   BIOS proceeds through timer programming and IRQ0. With the preserved System
-  Disk mounted read-only, it reaches 5.780448 seconds after placing both stack
-  reads and the queue flush of `RETF imm16`. The next strict timing guard is a
-  CS-overridden `PUSH r/m16` (`FF /6`) after the FDC interrupt path. This measured
-  distribution sets the next
+  Disk mounted read-only, it reaches 6.554240 seconds after placing the source
+  read, internal interval and stack write of Group 5 `PUSH r/m16` (`FF /6`).
+  The next strict timing guard is a CS-overridden indirect near `JMP r/m16`
+  (`FF /4`). This measured distribution sets the next
   integration order instead of opcode-table convenience.
 - The V30 now exposes a clocked-engine step callback independently of its
   optional diagnostic observer. It reports a duration only for a complete,

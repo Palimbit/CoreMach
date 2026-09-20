@@ -2511,10 +2511,17 @@ execute_one(bm_808x_state_t *state)
         return BM_STATUS_OK;
     }
     if ((opcode >= 0x50U) && (opcode <= 0x57U)) {
+        unsigned int index = opcode - 0x50U;
+        uint16_t value = state->registers[index];
+
         begin_operand_execution_timeline(state);
         status = place_execution_clocks(state, 3U);
+        /* V30 stack semantics decrement SP before the source is observed.
+         * This matters only for the SP encoding itself. */
+        if ((status == BM_STATUS_OK) && (index == REG_SP))
+            value = (uint16_t) (state->registers[REG_SP] - 2U);
         if (status == BM_STATUS_OK)
-            status = push_word(state, state->registers[opcode - 0x50U]);
+            status = push_word(state, value);
         return status;
     }
     if ((opcode >= 0x58U) && (opcode <= 0x5fU)) {
@@ -3603,6 +3610,8 @@ execute_one(bm_808x_state_t *state)
                 if (!operand.is_register)
                     status = place_execution_clocks(state, 1U);
             }
+            if ((status == BM_STATUS_OK) && (operation == 6U))
+                begin_operand_execution_timeline(state);
             if ((status == BM_STATUS_OK) &&
                 ((operation == 3U) || (operation == 5U))) {
                 uint16_t segment = 0U;
@@ -3660,6 +3669,17 @@ execute_one(bm_808x_state_t *state)
                 state->ip = value;
                 mark_prefetch_flush(state);
                 return BM_STATUS_OK;
+            }
+            if (operation == 6U) {
+                /* The inherited V30 microcode performs three internal states
+                 * between reading the source and writing the stack word. */
+                status = place_execution_clocks(state, 3U);
+                if ((status == BM_STATUS_OK) && operand.is_register &&
+                    (operand.register_index == REG_SP))
+                    value = (uint16_t) (state->registers[REG_SP] - 2U);
+                if (status == BM_STATUS_OK)
+                    status = push_word(state, value);
+                return status;
             }
             return push_word(state, value);
         }
@@ -5018,6 +5038,17 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                 else if (operation == 5U)
                     known = rm_execution_clocks(state, 1, 0U, 0U, 27U, 35U,
                                                 &base);
+                else if ((operation == 6U) && state->boundary_rm_valid) {
+                    if (!state->boundary_rm_memory) {
+                        base = (state->boundary_initial_sp & 1U) ? 12U : 8U;
+                    } else {
+                        base = 18U;
+                        if ((state->boundary_rm_offset & 1U) != 0U)
+                            base += 4U;
+                        if ((state->boundary_initial_sp & 1U) != 0U)
+                            base += 4U;
+                    }
+                }
                 else
                     known = 0;
                 break;
