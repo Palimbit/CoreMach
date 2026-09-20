@@ -33,6 +33,19 @@ inspect_machine(bm_session_t *session, const char *name)
 }
 
 static void
+run_until_halted(bm_session_t *session)
+{
+    uint64_t elapsed;
+
+    for (elapsed = 0U; elapsed < UINT64_C(10000000); elapsed += 100U) {
+        if (inspect_cpu(session, "halted") != 0U)
+            return;
+        assert(bm_session_run_for(session, 100U) == BM_STATUS_OK);
+    }
+    assert(0 && "PCS 86 did not halt before the virtual-time deadline");
+}
+
+static void
 run_ems_variant(const bm_host_services_t *host,
                 uint32_t ems_kib,
                 uint16_t ems_pages,
@@ -104,7 +117,7 @@ run_ems_variant(const bm_host_services_t *host,
     assert(inspect_machine(session, "ems_kib") == ems_kib);
     assert(inspect_machine(session, "ems_pages") == ems_pages);
     assert(inspect_machine(session, "ems_selector0") == 0U);
-    assert(bm_session_run_for(session, 80U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == expected_bx);
     assert(inspect_cpu(session, "cx") == expected_cx);

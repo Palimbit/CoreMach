@@ -16,8 +16,10 @@
 #include <blumach/components/lpt_spp.h>
 #include <blumach/components/pic8259.h>
 #include <blumach/components/pit8253.h>
+#include <blumach/components/pit8253_clock.h>
 #include <blumach/components/pvga1a.h>
 #include <blumach/components/rtc_mm58167.h>
+#include <blumach/components/rtc_mm58167_clock.h>
 #include <blumach/components/uart16450.h>
 #include <blumach/components/xta.h>
 
@@ -76,9 +78,6 @@ typedef struct bm_pcs86_machine {
     uint8_t video_setup_latch;
     uint8_t video_select_latch;
     uint8_t ems_page_selector[6][4];
-    bm_tick_t last_clock_time;
-    uint64_t pit_clock_remainder;
-    uint64_t rtc_clock_remainder;
     bm_pcs86_io_trace_fn io_trace;
     void *io_trace_context;
     bm_pcs86_memory_trace_fn memory_trace;
@@ -87,12 +86,8 @@ typedef struct bm_pcs86_machine {
     void *interrupt_trace_context;
 } bm_pcs86_machine_t;
 
-/* The current interpreter reports retired instructions, not V30 clock cycles.
- * Use the measured functional scheduler rate until cycle accounting becomes
- * part of the CPU contract; this is not a claim of cycle accuracy. */
-#define PCS86_SCHEDULER_TICKS_PER_SECOND UINT64_C(2000000)
-#define PCS86_PIT_TICKS_PER_SECOND UINT64_C(1193182)
-#define PCS86_CLOCK_QUANTUM UINT64_C(64)
+#define PCS86_V30_CLOCK_HZ UINT64_C(10000000)
+#define PCS86_XTA_SERVICE_PERIOD_NS UINT64_C(32000)
 #define PCS86_EMS_APERTURE_BASE UINT32_C(0x40000)
 #define PCS86_EMS_APERTURE_SIZE UINT32_C(0x60000)
 #define PCS86_EMS_WINDOW_SIZE UINT32_C(0x4000)
@@ -1056,27 +1051,12 @@ pcs86_clock_event(bm_engine_t *engine, void *context)
 {
     bm_pcs86_machine_t *machine = context;
     bm_tick_t now = bm_engine_now(engine);
-    bm_tick_t elapsed = now - machine->last_clock_time;
-    uint64_t pit_ticks;
-    uint64_t rtc_microseconds;
-
-    machine->last_clock_time = now;
-    machine->pit_clock_remainder += elapsed * PCS86_PIT_TICKS_PER_SECOND;
-    pit_ticks = machine->pit_clock_remainder / PCS86_SCHEDULER_TICKS_PER_SECOND;
-    machine->pit_clock_remainder %= PCS86_SCHEDULER_TICKS_PER_SECOND;
-    if (pit_ticks != 0U)
-        (void) bm_pit8253_advance(machine->pit, (uint32_t) pit_ticks);
 
     bm_xta_service(machine->xta);
 
-    machine->rtc_clock_remainder += elapsed * UINT64_C(1000000);
-    rtc_microseconds = machine->rtc_clock_remainder / PCS86_SCHEDULER_TICKS_PER_SECOND;
-    machine->rtc_clock_remainder %= PCS86_SCHEDULER_TICKS_PER_SECOND;
-    if (rtc_microseconds != 0U)
-        (void) bm_mm58167_advance_microseconds(machine->rtc, rtc_microseconds);
-
-    if (now <= UINT64_MAX - PCS86_CLOCK_QUANTUM)
-        (void) bm_engine_schedule_at(engine, now + PCS86_CLOCK_QUANTUM,
+    if (now <= UINT64_MAX - PCS86_XTA_SERVICE_PERIOD_NS)
+        (void) bm_engine_schedule_at(engine,
+                                     now + PCS86_XTA_SERVICE_PERIOD_NS,
                                      pcs86_clock_event, machine);
 }
 
@@ -1097,7 +1077,7 @@ pcs86_video_render(const void *context, bm_tick_t emulated_time,
     if (machine == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
     return bm_pvga1a_render(machine->video, emulated_time,
-                            PCS86_SCHEDULER_TICKS_PER_SECOND, framebuffer);
+                            BM_MACHINE_CLOCKED_TICKS_PER_SECOND, framebuffer);
 }
 
 static size_t
@@ -1351,6 +1331,16 @@ pcs86_create(bm_engine_t *engine,
         status = bm_mm58167_create(host, machine->bus, &rtc_config, &machine->rtc);
     }
     if (status == BM_STATUS_OK) {
+        static const bm_clock_rate_t pit_rate = {
+            UINT64_C(14318180), 12U
+        };
+
+        status = bm_pit8253_attach_clock(engine, machine->pit, &pit_rate,
+                                         NULL);
+    }
+    if (status == BM_STATUS_OK)
+        status = bm_mm58167_attach_clock(engine, machine->rtc, NULL);
+    if (status == BM_STATUS_OK) {
         bm_lpt_spp_config_t lpt_config = { NULL, pcs86_lpt_irq, machine };
         status = bm_lpt_spp_create(host, &lpt_config, &machine->lpt);
     }
@@ -1406,7 +1396,13 @@ pcs86_create(bm_engine_t *engine,
         status = bm_808x_create(host, &cpu_config, &cpu);
     }
     if (status == BM_STATUS_OK) {
-        status = bm_engine_add_cpu(engine, &cpu, &machine->cpu_id);
+        static const bm_clock_rate_t v30_rate = {
+            PCS86_V30_CLOCK_HZ, 1U
+        };
+
+        status = bm_engine_add_clocked_cpu(engine, &cpu,
+                                           bm_808x_step_clocked, &v30_rate,
+                                           &machine->cpu_id);
         if (status != BM_STATUS_OK)
             cpu.ops.destroy(cpu.context);
         else {
@@ -1465,11 +1461,9 @@ pcs86_reset(void *context)
     machine->video_setup_latch = 0U;
     machine->video_select_latch = 0U;
     memset(machine->ems_page_selector, 0, sizeof(machine->ems_page_selector));
-    machine->pit_clock_remainder = 0U;
-    machine->rtc_clock_remainder = 0U;
     now = bm_engine_now(machine->engine);
-    machine->last_clock_time = now;
-    return bm_engine_schedule_at(machine->engine, now + PCS86_CLOCK_QUANTUM,
+    return bm_engine_schedule_at(machine->engine,
+                                 now + PCS86_XTA_SERVICE_PERIOD_NS,
                                  pcs86_clock_event, machine);
 }
 
@@ -1680,7 +1674,8 @@ bm_pcs86_expected_firmware(size_t *count)
 
 static const bm_machine_definition_t pcs86_definition = {
     .id = "olivetti-pcs86",
-    .scheduler_ticks_per_second = PCS86_SCHEDULER_TICKS_PER_SECOND,
+    .scheduler_ticks_per_second = BM_MACHINE_CLOCKED_TICKS_PER_SECOND,
+    .engine_mode = BM_MACHINE_ENGINE_CLOCKED,
     .configuration = {
         BM_PCS86_CONFIG_TYPE,
         BM_PCS86_CONFIG_VERSION,
@@ -1702,7 +1697,7 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_persistent_state_size,
         pcs86_save_persistent_state
     },
-    .engine = { 1U, 10U, 0U }
+    .engine = { 1U, 10U, 2U }
 };
 
 const bm_machine_definition_t *

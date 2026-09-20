@@ -105,7 +105,9 @@ main(void)
     definition = bm_frontend_adapter_definition(adapter);
     assert(definition != NULL);
     assert(strcmp(definition->id, "olivetti-pcs86") == 0);
-    assert(definition->scheduler_ticks_per_second == UINT64_C(2000000));
+    assert(definition->scheduler_ticks_per_second ==
+           BM_MACHINE_CLOCKED_TICKS_PER_SECOND);
+    assert(definition->engine_mode == BM_MACHINE_ENGINE_CLOCKED);
     assets = bm_frontend_adapter_assets(adapter, &asset_count);
     assert(assets != NULL);
     assert(asset_count == 4U);
@@ -167,7 +169,7 @@ main(void)
     assert(bm_session_configure(session, bm_frontend_machine_config(machine)) ==
            BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 128U) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 1000U) == BM_STATUS_OK);
     assert(observation.calls != 0U);
     assert(observation.instructions != 0U);
     assert(observation.memory != 0U);
@@ -176,7 +178,7 @@ main(void)
         assert(bm_frontend_machine_set_debug_observer(machine, NULL,
                                                       &observation) ==
                BM_STATUS_OK);
-        assert(bm_session_run_for(session, 128U) == BM_STATUS_OK);
+        assert(bm_session_run_for(session, 1000U) == BM_STATUS_OK);
         assert(observation.calls == calls);
     }
     {

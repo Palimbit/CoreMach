@@ -12,6 +12,7 @@ target_link_libraries(blumach_system_olivetti_pcs86
         blumach_cpu_808x
         blumach_memory
         blumach_pc_components
+        blumach_pc_engine_adapters
         blumach_storage
         blumach_video
 )

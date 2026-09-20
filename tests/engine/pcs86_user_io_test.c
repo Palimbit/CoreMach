@@ -59,6 +59,25 @@ inspect_machine(bm_session_t *session, const char *name)
 }
 
 static void
+run_until_cpu_value(bm_session_t *session, const char *name, uint64_t expected)
+{
+    uint64_t elapsed;
+
+    for (elapsed = 0U; elapsed < UINT64_C(10000000); elapsed += 100U) {
+        if (inspect_cpu(session, name) == expected)
+            return;
+        assert(bm_session_run_for(session, 100U) == BM_STATUS_OK);
+    }
+    assert(0 && "PCS 86 did not reach the expected CPU state");
+}
+
+static void
+run_until_halted(bm_session_t *session)
+{
+    run_until_cpu_value(session, "halted", 1U);
+}
+
+static void
 test_unclaimed_io(const bm_host_services_t *host,
                   bm_pcs86_config_t *config,
                   uint8_t *even,
@@ -88,7 +107,7 @@ test_unclaimed_io(const bm_host_services_t *host,
     assert(bm_session_create(host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 8U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "dx") == port);
     assert((inspect_cpu(session, "ax") & 0xffU) == 0xffU);
     assert(inspect_cpu(session, "halted") == 1U);
@@ -124,7 +143,7 @@ test_absent_xta_slots(const bm_host_services_t *host,
     assert(bm_session_create(host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == 0xffffU);
     assert((inspect_cpu(session, "cx") & 0xffU) == 0xffU);
@@ -165,7 +184,7 @@ test_passive_register_directions(const bm_host_services_t *host,
     assert(bm_session_create(host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == 0xffffU);
     assert(inspect_cpu(session, "cx") == 0xffffU);
@@ -225,7 +244,7 @@ test_keyboard_scan_stream(const bm_host_services_t *host)
         assert(bm_session_send_input(session, &events[index]) == BM_STATUS_OK);
     assert(inspect_machine(session, "keyboard_queue_depth") ==
            sizeof(expected) / sizeof(expected[0]) - 1U);
-    assert(bm_session_run_for(session, 16U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(io_trace.count == sizeof(expected) / sizeof(expected[0]));
     for (index = 0U; index < sizeof(expected) / sizeof(expected[0]); ++index) {
@@ -275,7 +294,9 @@ test_interrupt_trace(const bm_host_services_t *host)
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
     assert(bm_session_send_input(session, &key) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 16U) == BM_STATUS_OK);
+    for (index = 0U; (index < 100000U) && (interrupt_trace.count == 0U);
+         ++index)
+        assert(bm_session_run_for(session, 100U) == BM_STATUS_OK);
     assert(interrupt_trace.count == 1U);
     assert(interrupt_trace.vector == 0x09U);
     assert(bm_session_stop(session) == BM_STATUS_OK);
@@ -315,7 +336,7 @@ test_keyboard_led_protocol(const bm_host_services_t *host)
     assert(bm_session_start(session) == BM_STATUS_OK);
     assert(bm_session_keyboard_leds(session, &leds) == BM_STATUS_OK);
     assert(leds.indicators == 0U);
-    assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == 0xfafaU);
     assert(bm_session_keyboard_leds(session, &leds) == BM_STATUS_OK);
@@ -354,7 +375,7 @@ test_absent_at_cmos(const bm_host_services_t *host, bm_pcs86_config_t *config,
     assert(bm_session_create(host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 32U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == 0xffffU);
     bm_session_destroy(session);
@@ -410,10 +431,12 @@ test_ps2_mouse_stream(const bm_host_services_t *host)
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
     assert(bm_session_send_input(session, &pointer) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 24U) == BM_STATUS_OK);
+    /* Wait until firmware is polling the auxiliary-output bit. The first
+     * pointer event preceded stream enable and is intentionally discarded. */
+    run_until_cpu_value(session, "ip", 0x0109U);
     assert(inspect_cpu(session, "halted") == 0U);
     assert(bm_session_send_input(session, &pointer) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 160U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "ax") == 0x24feU);
     assert(inspect_cpu(session, "bx") == 0xfe29U);
@@ -454,7 +477,7 @@ test_absent_coprocessor_and_extended_dma_latches(
     assert(bm_session_create(host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 250U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == 0x4412U);
     assert(inspect_cpu(session, "cx") == 0x0587U);
@@ -515,7 +538,7 @@ main(void)
     assert(bm_session_create(&host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
-    assert(bm_session_run_for(session, 64U) == BM_STATUS_OK);
+    run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
     assert(inspect_cpu(session, "bx") == 0xa55aU);
     assert(inspect_cpu(session, "cx") == 0xfa20U);

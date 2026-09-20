@@ -92,6 +92,7 @@ typedef struct bm_808x_state {
     int boundary_operand_timeline_supported;
     int boundary_flush_timeline_supported;
     uint32_t boundary_interrupt_execution_clocks;
+    int boundary_poll_ready;
     bm_808x_execution_clock_kind_t last_boundary_clock_kind;
     uint64_t last_boundary_clocks_min;
     uint64_t last_boundary_clocks_max;
@@ -472,6 +473,7 @@ execute_poll(bm_808x_state_t *state, uint16_t instruction_ip, int bus_lock)
         return status;
     if ((ready != 0) && (ready != 1))
         return BM_STATUS_DEVICE_ERROR;
+    state->boundary_poll_ready = ready;
     if (!ready) {
         state->ip = instruction_ip;
         /* The current portable POLL contract exposes each pin sample as a
@@ -4746,6 +4748,12 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
             case 0x9a:
                 base = (state->boundary_initial_sp & 1U) ? 29U : 21U;
                 break;
+            case 0x9b:
+                if (state->boundary_poll_ready)
+                    base = 7U;
+                else
+                    known = 0;
+                break;
             case 0x9e: base = 3U; break; /* MOV PSW,AH. */
             case 0x9f: base = 2U; break; /* MOV AH,PSW. */
             case 0xa0: case 0xa1: case 0xa2: case 0xa3: {
@@ -5153,6 +5161,7 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_operand_timeline_supported = 0;
     state->boundary_flush_timeline_supported = 0;
     state->boundary_interrupt_execution_clocks = 0U;
+    state->boundary_poll_ready = 0;
     state->last_boundary_observed = 0;
 }
 

@@ -67,6 +67,13 @@ timing_io_access(void *context, bm_bus_transaction_t *transaction)
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+sample_poll_level(void *context, int *ready)
+{
+    *ready = *(const int *) context;
+    return BM_STATUS_OK;
+}
+
 static void
 capture_timing(void *context,
                const bm_808x_timing_observation_t *observation)
@@ -192,6 +199,44 @@ test_accumulator_test_has_documented_timing(void)
         assert(capture.last.execution_timeline_complete == (index == 2U));
         cpu_808x_test_machine_destroy(&machine);
     }
+}
+
+static void
+test_poll_ready_timing_is_exact_but_busy_wait_is_not(void)
+{
+    static const uint8_t program[] = { 0x9bU };
+    int ready = 1;
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .poll = sample_poll_level,
+        .coprocessor_context = &ready,
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    uint64_t cycles = 0U;
+
+    cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
+    start_program(&machine);
+    assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+           BM_STATUS_OK);
+    assert_exact_execution_clocks(&capture, 7U);
+    assert(capture.last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_EXACT);
+    assert(cycles == capture.last.boundary_clocks_min);
+    cpu_808x_test_machine_destroy(&machine);
+
+    ready = 0;
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
+    start_program(&machine);
+    cycles = UINT64_MAX;
+    assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(cycles == 0U);
+    assert_unknown_execution_clocks(&capture);
+    assert_unknown_boundary_clocks(&capture);
+    cpu_808x_test_machine_destroy(&machine);
 }
 
 static void
@@ -3062,6 +3107,7 @@ int
 main(void)
 {
     test_accumulator_test_has_documented_timing();
+    test_poll_ready_timing_is_exact_but_busy_wait_is_not();
     test_fixed_execution_clocks_and_prefix_cost();
     test_operand_timeline_can_finish_inflight_prefetch();
     test_taken_branch_flushes_even_when_target_is_sequential();

@@ -155,7 +155,7 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains green. V30 observation version 29 advances
+- The existing PCS 86 suite remains green. V30 observation version 30 advances
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
@@ -171,15 +171,16 @@ intermediate product; overflow is reported without changing the position.
   as well. Every decoded
   prefix
   advances it before the next queue read. Other operand offsets, realised
-  values inside signed arithmetic ranges and synchronous fault or single-step
-  interrupt boundaries remain known unknowns. Accepted NMI and maskable INT
+  values inside signed arithmetic ranges, a repeatedly busy `POLL`, and
+  synchronous fault or single-step interrupt boundaries remain known unknowns.
+  An immediately ready `POLL` is the documented seven-clock case. Accepted NMI and maskable INT
   boundaries now use the NEC V30's documented 38- and 49-clock aligned-stack
   costs, add the three actual odd-stack transfer splits, and retain any BCU
   prefetch handoff separately. Software `INT` and `IRET` now
   place their vector and stack transfers in inherited microcode order, and
   indirect near `CALL` places its independently aligned target read and stack
-  write. PCS 86 machine migration is a later change. Z80
-  integration must not alter the legacy V30 tick meaning.
+  write. The PCS 86 now consumes these durations at 10 MHz in the clocked
+  engine. Z80 integration remains independent of the V30 clock domain.
 - The current PCS 86 firmware baseline completes 1,385,861 observed instruction
   boundaries before its known unsupported endpoint. All 1,385,861 now have a
   complete exact boundary duration. Placing `STOSW`
@@ -193,27 +194,34 @@ intermediate product; overflow is reported without changing the position.
   explicit extra-clock condition: both firmware instances multiply zero and
   therefore take 28 execution clocks. This derived condition remains marked
   for hardware confirmation; it is not presented as a statement found in the
-  NEC manual. This measured
+  NEC manual. The clocked run reaches the same `F000:85F9` unsupported endpoint
+  with the same instruction and I/O counts. Its deterministic framebuffer CRC
+  is now `cd3694c5` rather than the instruction-tick baseline `e8bbbd1f`, because
+  cursor/blink rendering receives the new elapsed nanosecond timestamp; CRTC
+  state and the endpoint are unchanged. This measured
   distribution sets the next
   integration order instead of opcode-table convenience.
 - The V30 now exposes a clocked-engine step callback independently of its
   optional diagnostic observer. It reports a duration only for a complete,
   exact scalar boundary; a ranged or unknown result stops with
   `BM_STATUS_UNSUPPORTED` and zero cycles. This is an intentional migration
-  guard: the firmware path plus accepted NMI and maskable INT are now scalar.
-  The PCS 86 remains on instruction ticks until its CPU, PIT and RTC are wired
-  to the clocked scheduler; single-step and synchronous-fault paths will still
-  stop explicitly if reached before their timing is completed.
+  guard: the firmware path plus accepted NMI, maskable INT and immediately
+  ready `POLL` are scalar. The PCS 86 now uses nanosecond virtual time with its
+  V30, PIT and RTC registered as independent exact-rate participants;
+  single-step, synchronous-fault and busy-`POLL` paths still stop explicitly if
+  reached before their timing is completed.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,
   invalid progress and waking a halted CPU from a fractional deadline. A
-  separate optional adapter now drives the real 8253 component from the exact
+  separate adapter now drives the real 8253 component from the exact
   `14.31818 MHz / 12` PC clock and verifies mode-2 output edges without making
   the chip own the scheduler. It deliberately fires once per input edge as a
-  correctness baseline; transition batching and lazy counter synchronization
-  must be measured before wiring it into the PCS 86 or calling the contract
-  production-ready. Video and storage sources remain unintegrated.
+  correctness baseline, with transition batching and lazy counter
+  synchronization covered independently. The PCS 86 uses that adapter and the
+  MM58167 microsecond adapter. Video remains render-on-demand from virtual time;
+  XTA service retains an explicit functional 32-microsecond event pending a
+  device-level deadline model.
 
 This path provides CPU-type independence without prematurely promising that
 all guest CPU models or their buses have the same timing fidelity.

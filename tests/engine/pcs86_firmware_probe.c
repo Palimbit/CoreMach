@@ -275,7 +275,7 @@ main(int argc, char **argv)
     size_t pixel_count = 0;
     size_t nonblack = 0;
     uint32_t frame_crc = 0;
-    uint64_t run_ticks = UINT64_C(10000000);
+    uint64_t run_nanoseconds = UINT64_C(5000000000);
     uint64_t fdc_dor = 0U;
     uint64_t fdc_msr = 0U;
     uint64_t fdc_irq = 0U;
@@ -291,17 +291,17 @@ main(int argc, char **argv)
 
     if ((argc < 3) || (argc > 6)) {
         fprintf(stderr, "usage: %s <even-rom> <odd-rom>"
-                        " [frame.ppm [ticks [floppy.img]]]\n", argv[0]);
+                        " [frame.ppm [nanoseconds [floppy.img]]]\n", argv[0]);
         return 2;
     }
     if (argc >= 5) {
         char *end = NULL;
         unsigned long long parsed = strtoull(argv[4], &end, 10);
         if ((argv[4][0] == '\0') || (end == NULL) || (*end != '\0') || (parsed == 0U)) {
-            fputs("ticks must be a positive decimal integer\n", stderr);
+            fputs("nanoseconds must be a positive decimal integer\n", stderr);
             return 2;
         }
-        run_ticks = (uint64_t) parsed;
+        run_nanoseconds = (uint64_t) parsed;
     }
     even = read_firmware(argv[1]);
     odd = read_firmware(argv[2]);
@@ -352,7 +352,7 @@ main(int argc, char **argv)
         status = bm_session_start(session);
     probe.session = session;
     if (status == BM_STATUS_OK)
-        status = bm_session_run_for(session, run_ticks);
+        status = bm_session_run_for(session, run_nanoseconds);
 
     if (session != NULL) {
         (void) bm_session_inspect_cpu(session, 0, "ax", &ax);
@@ -410,9 +410,11 @@ main(int argc, char **argv)
     }
 
     printf("status=%d instructions=%" PRIu64 " io=%" PRIu64
+           " time_ns=%" PRIu64
            " last=%04x:%04x physical=%05" PRIx32
            " opcode=%02x effective=%02x prefixes=%u bytes=",
            (int) status, probe.instructions, probe.io_operations,
+           bm_session_time(session),
            probe.last.cs, probe.last.ip, probe.last.physical_address,
            probe.last.opcode, probe.last.effective_opcode, probe.last.prefix_count);
     {
