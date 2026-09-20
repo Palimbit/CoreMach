@@ -3088,11 +3088,17 @@ execute_one(bm_808x_state_t *state)
                 return status;
             register_index = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (opcode == 0x86U) {
                 uint8_t value = 0U;
                 uint8_t register_value = get_register_byte(state, register_index);
                 if (status == BM_STATUS_OK)
                     status = read_operand_byte(state, &operand, &value);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 5U);
                 if (status == BM_STATUS_OK)
                     status = write_operand_byte(state, &operand, register_value);
                 if (status == BM_STATUS_OK)
@@ -3102,6 +3108,8 @@ execute_one(bm_808x_state_t *state)
                 uint16_t register_value = state->registers[register_index];
                 if (status == BM_STATUS_OK)
                     status = read_operand_word(state, &operand, &value);
+                if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 5U);
                 if (status == BM_STATUS_OK)
                     status = write_operand_word(state, &operand, register_value);
                 if (status == BM_STATUS_OK)
@@ -3116,6 +3124,10 @@ execute_one(bm_808x_state_t *state)
             status = fetch_byte(state, &modrm);
             if (status == BM_STATUS_OK)
                 status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (status != BM_STATUS_OK)
                 return status;
             if (opcode == 0x84U) {
@@ -3131,6 +3143,8 @@ execute_one(bm_808x_state_t *state)
                     set_logic_flags(state, (uint16_t)
                         (value & state->registers[(modrm >> 3U) & 7U]), 16U);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 2U);
             return status;
         }
         case 0x80: /* Immediate arithmetic group; basic r/m8 operations. */
