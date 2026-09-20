@@ -240,7 +240,7 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 17 reports
+their sum the elapsed instruction time. Timing-observation version 18 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
@@ -258,6 +258,10 @@ Version 15 adds ModR/M `TEST` and `XCHG` memory forms.
 Version 16 adds the immediate ALU groups `80h`-`83h`.
 Version 17 adds segment-register `MOV` memory forms and the immediate-to-r/m
 `MOV` groups `C6h`-`C7h`.
+Version 18 places Group 3 `F6h`-`F7h` memory operands. Exact `TEST`, `NOT`,
+`NEG` and successful `DIV` forms can complete their timelines; multiply and
+signed-divide intervals remain explicitly ranged where the documentation is
+ranged.
 Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O or
@@ -319,8 +323,11 @@ more before a possible write. Version 17 places a segment-register load after
 two inherited internal clocks and a store after three. Immediate-to-memory
 `MOV` advances two clocks before consuming its immediate, then two clocks for
 the byte form or one for the word form before writing. Register forms remain
-on the ordinary bus-free path. The executor still lacks
-the offsets for other operand instructions,
+on the ordinary bus-free path. Version 18 places the Group 3 read after one
+inherited internal clock, the `TEST` operation after its immediate, and the
+two-clock interval before a `NOT` or `NEG` write. A ranged multiplication still
+reports the placed read without claiming a complete elapsed boundary. The
+executor still lacks the offsets for other operand instructions,
 documented timing
 ranges and unknown timings; those paths suspend this overlap model until their
 individual accesses can be placed. The observer
@@ -349,10 +356,11 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 17 combines those quantities only for uncontended cases and
+bus waits. Version 18 combines those quantities only for uncontended cases and
 the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
 forms, memory forms of ModR/M `MOV`, all ModR/M ALU forms, immediate ALU groups,
-segment-register and immediate-to-r/m `MOV`, `TEST` and `XCHG`; every other operand boundary remains
+segment-register and immediate-to-r/m `MOV`, Group 3 memory operands, ModR/M
+`TEST` and `XCHG`; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by

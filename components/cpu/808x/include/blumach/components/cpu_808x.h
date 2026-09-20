@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 17U
+#define BM_808X_TIMING_OBSERVATION_VERSION 18U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -154,6 +154,8 @@ typedef enum bm_808x_prefetch_phase {
  * 80h-83h and places their memory read, compute and optional write intervals.
  * Version 17 places memory transfers for segment-register MOV and immediate
  * MOV groups C6h-C7h without changing their bus-free register forms.
+ * Version 18 places Group 3 F6h-F7h memory reads and the TEST immediate and
+ * NOT/NEG write intervals. Documented multiply ranges remain ranges.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

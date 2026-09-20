@@ -6,7 +6,7 @@ Status: experimental clocked scheduler and timed-device sources with synthetic
 tests; no real CPU or machine uses them yet. The V30 timing observer can now
 compose a complete native-clock duration for instruction boundaries without
 operand or I/O traffic, while preserving ranges and unresolved boundaries as
-such. Version 17 also routes memory and I/O transfers through the same BCU as
+such. Version 18 also routes memory and I/O transfers through the same BCU as
 prefetch, exposes the clocks needed to hand over an in-flight prefetch, and
 advances the BCU concurrently for the documented clock of every byte consumed
 from the instruction queue. Every native prefix advances that timeline at its
@@ -17,10 +17,11 @@ four direct accumulator-memory `MOV` forms, `XLAT`, and memory forms of ModR/M
 read-modify-write operations and odd words. ModR/M `TEST` and `XCHG` are placed
 as well. Immediate ALU groups `80h`-`83h` now read memory before consuming the
 immediate and place their optional write. Segment-register `MOV` memory forms
-and immediate-to-r/m `MOV` groups `C6h`-`C7h` are placed too; other
-operand-bearing boundaries stay
-unresolved until their EXU
-position is known.
+and immediate-to-r/m `MOV` groups `C6h`-`C7h` are placed too. Group 3
+`F6h`-`F7h` memory operands are placed as well, while documented
+multiply and signed-divide ranges remain incomplete rather than selecting a
+value from the range. Other operand-bearing boundaries stay unresolved until
+their EXU position is known.
 It is not
 yet registered as a clocked CPU. The existing PCS 86 engine
 still advances one scheduler tick per completed V30 instruction boundary. Its
@@ -135,7 +136,7 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains green. V30 observation version 17 advances
+- The existing PCS 86 suite remains green. V30 observation version 18 advances
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
@@ -144,7 +145,9 @@ intermediate product; overflow is reported without changing the position.
   waits and operand cycles on that timeline, including the computation interval
   between a memory read and write. ModR/M `TEST` and `XCHG` are placed too, and
   immediate ALU groups preserve operand-before-immediate ordering. Segment-register
-  and immediate-to-r/m `MOV` memory forms now have placed transfers too. Every decoded
+  and immediate-to-r/m `MOV` memory forms now have placed transfers too. Group 3
+  reads, `TEST` immediates and `NOT`/`NEG` writes are positioned without
+  collapsing documented arithmetic ranges. Every decoded
   prefix
   advances it before the next queue read. Other operand offsets, realised
   values inside ranges and interrupt

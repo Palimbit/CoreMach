@@ -1289,6 +1289,184 @@ test_special_moves_have_a_complete_execution_timeline(void)
 }
 
 static void
+test_group3_memory_operands_have_a_placed_timeline(void)
+{
+    const struct {
+        uint8_t program[5];
+        size_t size;
+        uint16_t bx;
+        uint64_t address;
+        uint32_t execution_clocks;
+        uint64_t operand_transactions;
+        uint16_t initial_value;
+        uint16_t expected_value;
+        int word;
+    } cases[] = {
+        { { 0xf6U, 0x07U, 0x0fU, 0U, 0U }, 3U, 0x0100U, 0x0100U,
+          11U, 1U, 0x00f0U, 0x00f0U, 0 },
+        { { 0xf7U, 0x07U, 0x0fU, 0x00U, 0U }, 4U, 0x0100U, 0x0100U,
+          11U, 1U, 0x00f0U, 0x00f0U, 1 },
+        { { 0xf7U, 0x07U, 0x0fU, 0x00U, 0U }, 4U, 0x0101U, 0x0101U,
+          15U, 2U, 0x00f0U, 0x00f0U, 1 },
+        { { 0xf6U, 0x17U, 0U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          16U, 2U, 0x000fU, 0x00f0U, 0 },
+        { { 0xf6U, 0x1fU, 0U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          16U, 2U, 0x0002U, 0x00feU, 0 },
+        { { 0xf7U, 0x17U, 0U, 0U, 0U }, 2U, 0x0100U, 0x0100U,
+          16U, 2U, 0x00ffU, 0xff00U, 1 },
+        { { 0xf7U, 0x1fU, 0U, 0U, 0U }, 2U, 0x0101U, 0x0101U,
+          24U, 4U, 0x0002U, 0xfffeU, 1 },
+        { { 0x2eU, 0xf6U, 0x17U, 0U, 0U }, 3U, 0x0100U, 0xf0100U,
+          18U, 2U, 0x000fU, 0x00f0U, 0 }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        uint16_t value;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        {
+            bm_808x_arch_state_t state = cpu_808x_test_get_state(&machine);
+            state.bx = cases[index].bx;
+            cpu_808x_test_set_state(&machine, &state);
+        }
+        cpu_808x_test_poke(&machine, cases[index].address,
+                           (uint8_t) cases[index].initial_value);
+        if (cases[index].word)
+            cpu_808x_test_poke(&machine, cases[index].address + 1U,
+                               (uint8_t) (cases[index].initial_value >> 8U));
+
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].operand_transactions);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed ==
+               cases[index].execution_clocks);
+        value = cpu_808x_test_peek(&machine, cases[index].address);
+        if (cases[index].word)
+            value |= (uint16_t) cpu_808x_test_peek(
+                &machine, cases[index].address + 1U) << 8U;
+        assert(value == cases[index].expected_value);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        const struct {
+            uint8_t program[2];
+            uint16_t bx;
+            uint32_t execution_clocks;
+            uint64_t operand_transactions;
+            int word;
+        } divide_cases[] = {
+            { { 0xf6U, 0x37U }, 0x0100U, 25U, 1U, 0 },
+            { { 0xf7U, 0x37U }, 0x0100U, 30U, 1U, 1 },
+            { { 0xf7U, 0x37U }, 0x0101U, 34U, 2U, 1 }
+        };
+
+        for (index = 0U;
+             index < sizeof(divide_cases) / sizeof(divide_cases[0]);
+             ++index) {
+            timing_capture_t capture = { 0 };
+            cpu_808x_test_config_t config = {
+                .timing = capture_timing,
+                .timing_context = &capture
+            };
+            cpu_808x_test_machine_t machine;
+            bm_808x_arch_state_t state;
+
+            cpu_808x_test_machine_create(&machine, &config,
+                                         divide_cases[index].program, 2U);
+            start_program(&machine);
+            state = cpu_808x_test_get_state(&machine);
+            state.ax = 8U;
+            state.dx = 0U;
+            state.bx = divide_cases[index].bx;
+            cpu_808x_test_set_state(&machine, &state);
+            cpu_808x_test_poke(&machine, divide_cases[index].bx, 2U);
+            if (divide_cases[index].word)
+                cpu_808x_test_poke(&machine,
+                                   divide_cases[index].bx + 1U, 0U);
+            step_once(&machine, &capture);
+            state = cpu_808x_test_get_state(&machine);
+            assert(state.ax == 4U && state.dx == 0U);
+            assert_exact_execution_clocks(
+                &capture, divide_cases[index].execution_clocks);
+            assert(capture.last.boundary_clock_kind ==
+                   BM_808X_EXECUTION_CLOCKS_EXACT);
+            assert(capture.last.operand_transactions ==
+                   divide_cases[index].operand_transactions);
+            assert(capture.last.execution_timeline_complete == 1U);
+            assert(capture.last.execution_clocks_placed ==
+                   divide_cases[index].execution_clocks);
+            cpu_808x_test_machine_destroy(&machine);
+        }
+    }
+
+    {
+        static const uint8_t multiply[] = { 0xf6U, 0x27U };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config, multiply,
+                                     sizeof(multiply));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ax = 2U;
+        state.bx = 0x0100U;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, 0x0100U, 3U);
+        step_once(&machine, &capture);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ax == 6U);
+        assert_execution_clock_range(&capture, 27U, 28U);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_UNKNOWN);
+        assert(capture.last.operand_transactions == 1U);
+        assert(capture.last.execution_timeline_complete == 0U);
+        assert(capture.last.execution_clocks_placed == 5U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        static const uint8_t register_not[] = { 0xf6U, 0xd0U };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+
+        cpu_808x_test_machine_create(&machine, &config, register_not,
+                                     sizeof(register_not));
+        start_program(&machine);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, 2U);
+        assert(capture.last.operand_transactions == 0U);
+        assert(capture.last.execution_timeline_complete == 0U);
+        assert(capture.last.execution_clocks_placed == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_counted_and_stack_timing(void)
 {
     static const uint8_t shift[] = { 0xc1U, 0xe0U, 0x05U }; /* SHL AW,5. */
@@ -2028,6 +2206,7 @@ main(void)
     test_modrm_test_and_exchange_have_a_complete_execution_timeline();
     test_immediate_alu_groups_have_a_complete_execution_timeline();
     test_special_moves_have_a_complete_execution_timeline();
+    test_group3_memory_operands_have_a_placed_timeline();
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();
     test_divide_error_does_not_claim_normal_execution_clocks();

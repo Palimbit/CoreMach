@@ -3369,6 +3369,10 @@ execute_one(bm_808x_state_t *state)
                 return status;
             operation = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_word(state, &operand, &value);
             if ((status == BM_STATUS_OK) &&
@@ -3376,13 +3380,20 @@ execute_one(bm_808x_state_t *state)
                 uint16_t immediate = 0;
                 status = fetch_word(state, &immediate);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 1U);
+                if (status == BM_STATUS_OK)
                     set_logic_flags(state, (uint16_t) (value & immediate), 16);
             } else if ((status == BM_STATUS_OK) && (operation == 2U)) {
-                status = write_operand_word(state, &operand, (uint16_t) ~value);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_word(state, &operand,
+                                                (uint16_t) ~value);
             } else if ((status == BM_STATUS_OK) && (operation == 3U)) {
                 uint16_t result = (uint16_t) (0U - value);
                 compare16(state, 0U, value);
-                status = write_operand_word(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_word(state, &operand, result);
             } else if ((status == BM_STATUS_OK) && (operation == 4U)) {
                 uint32_t result = (uint32_t) state->registers[REG_AX] * value;
                 state->registers[REG_AX] = (uint16_t) result;
@@ -3507,6 +3518,10 @@ execute_one(bm_808x_state_t *state)
                 return status;
             operation = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = read_operand_byte(state, &operand, &value);
             if ((status == BM_STATUS_OK) &&
@@ -3514,13 +3529,20 @@ execute_one(bm_808x_state_t *state)
                 uint8_t immediate = 0;
                 status = fetch_byte(state, &immediate);
                 if (status == BM_STATUS_OK)
+                    status = place_execution_clocks(state, 1U);
+                if (status == BM_STATUS_OK)
                     set_logic_flags(state, (uint8_t) (value & immediate), 8);
             } else if ((status == BM_STATUS_OK) && (operation == 2U)) {
-                status = write_operand_byte(state, &operand, (uint8_t) ~value);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_byte(state, &operand,
+                                                (uint8_t) ~value);
             } else if ((status == BM_STATUS_OK) && (operation == 3U)) {
                 uint8_t result = (uint8_t) (0U - value);
                 compare8(state, 0U, value);
-                status = write_operand_byte(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if (status == BM_STATUS_OK)
+                    status = write_operand_byte(state, &operand, result);
             } else if ((status == BM_STATUS_OK) && (operation == 4U)) {
                 uint16_t result = (uint16_t) ((uint8_t) state->registers[REG_AX] * value);
                 state->registers[REG_AX] = result;
