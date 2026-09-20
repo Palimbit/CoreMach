@@ -266,6 +266,10 @@ Version 19 places byte and word `INC`/`DEC` memory forms in groups `FEh` and
 `FFh`; the other `FFh` indirect control and stack forms remain unresolved.
 Version 20 places the single-word stack transfers used by register, segment,
 flags and immediate `PUSH`/`POP` forms, including odd-stack splits.
+Version 21 places byte and word `STOS` and `SCAS` transfers. Repeated forms
+retain the inherited setup and per-iteration ordering, zero-count repeats have
+no operand transaction, and odd words retain both physical byte transfers.
+An interrupted repeat fragment remains unclassified.
 Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O or
@@ -335,7 +339,9 @@ Version 19 places the `INC`/`DEC` read after one internal clock and preserves
 the inherited two-clock computation interval before the write.
 Version 20 places register, segment and flags pushes after three internal
 clocks, immediate pushes after their encoded operand and their documented
-internal interval, and single-word pops at their stack read. The executor still
+internal interval, and single-word pops at their stack read. Version 21 places
+`STOS` writes and the comparison setup, read and post-read intervals of `SCAS`;
+the documented fixed tail completes only after the last repeated transfer. The executor still
 lacks the offsets for other operand instructions,
 documented timing
 ranges and unknown timings; those paths suspend this overlap model until their
@@ -365,12 +371,12 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 20 combines those quantities only for uncontended cases and
+bus waits. Version 21 combines those quantities only for uncontended cases and
 the explicitly placed `IN`/`OUT`, direct accumulator-memory `MOV` and `XLAT`
 forms, memory forms of ModR/M `MOV`, all ModR/M ALU forms, immediate ALU groups,
 segment-register and immediate-to-r/m `MOV`, Group 3 memory operands, ModR/M
 `TEST` and `XCHG`, `FEh`/`FFh` memory `INC`/`DEC`, and single-word stack
-`PUSH`/`POP`; every other operand boundary remains
+`PUSH`/`POP`, `STOS` and `SCAS`; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by

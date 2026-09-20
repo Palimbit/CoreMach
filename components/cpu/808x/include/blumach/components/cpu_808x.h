@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 20U
+#define BM_808X_TIMING_OBSERVATION_VERSION 21U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -160,6 +160,8 @@ typedef enum bm_808x_prefetch_phase {
  * computation interval and writes; other FFh control forms remain unresolved.
  * Version 20 places single-word register, segment, flags and immediate stack
  * pushes and pops, including the odd-stack transfer split.
+ * Version 21 places STOS and SCAS memory transfers, including repeated and
+ * zero-count forms plus both physical transfers of an odd word.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {

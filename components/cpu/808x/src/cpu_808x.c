@@ -1398,6 +1398,18 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
     }
     state->boundary_string_valid = 1;
     state->boundary_repeat_mode = (uint8_t) repeat_mode;
+    if ((opcode == 0xaaU) || (opcode == 0xabU) ||
+        (opcode == 0xaeU) || (opcode == 0xafU)) {
+        begin_operand_execution_timeline(state);
+        /* NEC's repeated primitive formula includes its repeat-prefix setup.
+         * Preserve the inherited one-clock setup before the first iteration;
+         * the fixed tail is completed after the final bus access. */
+        if (repeat_mode != 0) {
+            status = place_execution_clocks(state, 1U);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+    }
     while ((repeat_mode == 0) || (state->registers[REG_CX] != 0)) {
         uint16_t value = 0;
         if ((opcode == 0xa4U) || (opcode == 0xa5U)) { /* MOVS */
@@ -1457,6 +1469,12 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                                    state->registers[REG_SI], &state->registers[REG_AX]);
             }
         } else { /* SCAS */
+            /* The inherited V30 path performs its comparison setup before
+             * acquiring ES:DI.  Repeated forms then have four internal clocks
+             * before the next iteration; the non-repeated primitive has one. */
+            status = place_execution_clocks(state, 2U);
+            if (status != BM_STATUS_OK)
+                return status;
             if (width == 1U) {
                 uint8_t byte = 0;
                 status = read_byte(state, state->segments[0],
@@ -1469,6 +1487,9 @@ execute_string(bm_808x_state_t *state, uint8_t opcode, int repeat_mode,
                 if (status == BM_STATUS_OK)
                     compare16(state, state->registers[REG_AX], value);
             }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(
+                    state, repeat_mode != 0 ? 4U : 1U);
         }
         if (status != BM_STATUS_OK)
             return status;
