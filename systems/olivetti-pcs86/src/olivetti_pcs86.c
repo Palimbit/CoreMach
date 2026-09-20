@@ -1397,6 +1397,8 @@ pcs86_create(bm_engine_t *engine,
             .bus = machine->bus,
             .trace = config->trace,
             .trace_context = config->trace_context,
+            .timing = config->timing,
+            .timing_context = config->timing_context,
             .interrupt_ack = pcs86_interrupt_acknowledge,
             .interrupt_context = machine,
             .poll = pcs86_coprocessor_poll

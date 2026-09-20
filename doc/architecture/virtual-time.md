@@ -29,6 +29,10 @@ yet registered as a clocked CPU. The existing PCS 86 engine
 still advances one scheduler tick per completed V30 instruction boundary. Its
 `scheduler_ticks_per_second` is pacing metadata, not the V30 crystal frequency.
 No current machine becomes cycle accurate because of this change.
+The PCS 86 configuration can forward the versioned V30 timing observer to
+diagnostic consumers. The firmware probe reports complete/exact/ranged/unknown
+boundary totals and unknown counts per effective opcode without making timing a
+frontend or machine-policy dependency.
 
 ## Ownership
 
@@ -158,6 +162,12 @@ intermediate product; overflow is reported without changing the position.
   boundaries remain known unknowns. A
   clocked callback and PCS 86 machine migration are later changes. Z80
   integration must not alter the legacy V30 tick meaning.
+- The current PCS 86 firmware baseline completes 1,385,861 observed instruction
+  boundaries before its known unsupported endpoint. Of those, 1,121,846 have a
+  complete exact boundary duration and 264,015 remain unknown. `STOSW` (`ABh`)
+  and `SCASW` (`AFh`) account for 262,193 of the unknown boundaries, followed
+  by `RET`, `CALL` and `MOVSB`; this measured distribution sets the next
+  integration order instead of opcode-table convenience.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,

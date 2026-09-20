@@ -19,6 +19,12 @@ typedef struct io_trace_sink {
     size_t count;
 } io_trace_sink_t;
 
+typedef struct timing_sink {
+    bm_808x_timing_observation_t last;
+    size_t count;
+    size_t complete;
+} timing_sink_t;
+
 static void
 capture_trace(void *context, const bm_808x_trace_t *trace)
 {
@@ -33,6 +39,19 @@ capture_io_trace(void *context, const bm_pcs86_io_trace_t *trace)
     io_trace_sink_t *sink = context;
     assert(sink->count < (sizeof(sink->entries) / sizeof(sink->entries[0])));
     sink->entries[sink->count++] = *trace;
+}
+
+static void
+capture_timing(void *context,
+               const bm_808x_timing_observation_t *observation)
+{
+    timing_sink_t *sink = context;
+
+    assert(observation->version == BM_808X_TIMING_OBSERVATION_VERSION);
+    sink->last = *observation;
+    ++sink->count;
+    if (observation->execution_timeline_complete)
+        ++sink->complete;
 }
 
 static void
@@ -128,6 +147,7 @@ main(void)
     };
     trace_sink_t trace = { 0 };
     io_trace_sink_t io_trace = { 0 };
+    timing_sink_t timing = { 0 };
     bm_pcs86_config_t config;
     bm_machine_config_t machine;
     const bm_machine_definition_t *definition;
@@ -161,6 +181,8 @@ main(void)
         .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL },
         .trace = capture_trace,
         .trace_context = &trace,
+        .timing = capture_timing,
+        .timing_context = &timing,
         .io_trace = capture_io_trace,
         .io_trace_context = &io_trace,
         .ems_kib = BM_PCS86_EMS_1920_KIB,
@@ -256,6 +278,9 @@ main(void)
         assert(value == 1U);
     }
     assert(trace.count == 53);
+    assert(timing.count == trace.count);
+    assert(timing.complete > 0U);
+    assert(timing.last.kind == BM_808X_BOUNDARY_INSTRUCTION);
     assert(trace.entries[14].physical_address == 0xf0120U);
     assert(trace.entries[14].opcode == 0x8bU);
     assert(trace.entries[0].physical_address == 0xffff0U);
@@ -284,6 +309,7 @@ main(void)
 
     trace.count = 0;
     io_trace.count = 0;
+    memset(&timing, 0, sizeof(timing));
     assert(bm_session_reset(session) == BM_STATUS_OK);
     assert(inspect(session, "cs") == 0xffffU);
     assert(inspect(session, "ip") == 0U);
@@ -318,6 +344,8 @@ main(void)
     assert(bm_session_run_for(session, 59) == BM_STATUS_OK);
     assert(inspect(session, "halted") == 1U);
     assert(trace.count == 53U);
+    assert(timing.count == trace.count);
+    assert(timing.complete > 0U);
     assert(io_trace.count == 16U);
 
     assert(bm_session_stop(session) == BM_STATUS_OK);

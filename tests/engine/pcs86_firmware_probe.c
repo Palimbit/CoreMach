@@ -31,6 +31,12 @@ typedef struct probe_trace {
     uint8_t timer0_failure_pic_requests;
     uint8_t timer0_failure_pic_in_service;
     uint8_t timer0_failure_pic_lines;
+    uint64_t timing_boundaries;
+    uint64_t timing_complete;
+    uint64_t timing_boundary_exact;
+    uint64_t timing_boundary_range;
+    uint64_t timing_boundary_unknown;
+    uint64_t timing_unknown_by_opcode[256];
 } probe_trace_t;
 
 static void
@@ -85,6 +91,28 @@ capture_io(void *context, const bm_pcs86_io_trace_t *trace)
     probe_trace_t *probe = context;
     (void) trace;
     ++probe->io_operations;
+}
+
+static void
+capture_timing(void *context,
+               const bm_808x_timing_observation_t *observation)
+{
+    probe_trace_t *probe = context;
+
+    if (observation->kind != BM_808X_BOUNDARY_INSTRUCTION)
+        return;
+    ++probe->timing_boundaries;
+    if (observation->execution_timeline_complete)
+        ++probe->timing_complete;
+    if (observation->boundary_clock_kind == BM_808X_EXECUTION_CLOCKS_EXACT) {
+        ++probe->timing_boundary_exact;
+    } else if (observation->boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_RANGE) {
+        ++probe->timing_boundary_range;
+    } else {
+        ++probe->timing_boundary_unknown;
+        ++probe->timing_unknown_by_opcode[observation->effective_opcode];
+    }
 }
 
 static uint8_t *
@@ -296,6 +324,8 @@ main(int argc, char **argv)
         },
         .trace = capture_instruction,
         .trace_context = &probe,
+        .timing = capture_timing,
+        .timing_context = &probe,
         .io_trace = capture_io,
         .io_trace_context = &probe
     };
@@ -399,6 +429,24 @@ main(int argc, char **argv)
            probe.timer0_failure_pic_pending, probe.timer0_failure_pic_mask,
            probe.timer0_failure_pic_requests, probe.timer0_failure_pic_in_service,
            probe.timer0_failure_pic_lines);
+    printf("timing_boundaries=%" PRIu64 " complete=%" PRIu64
+           " exact=%" PRIu64 " range=%" PRIu64 " unknown=%" PRIu64 "\n",
+           probe.timing_boundaries, probe.timing_complete,
+           probe.timing_boundary_exact, probe.timing_boundary_range,
+           probe.timing_boundary_unknown);
+    fputs("timing_unknown_opcodes=", stdout);
+    {
+        unsigned int opcode;
+        int first = 1;
+        for (opcode = 0U; opcode < 256U; ++opcode) {
+            if (probe.timing_unknown_by_opcode[opcode] == 0U)
+                continue;
+            printf("%s%02x:%" PRIu64, first ? "" : ",", opcode,
+                   probe.timing_unknown_by_opcode[opcode]);
+            first = 0;
+        }
+    }
+    fputc('\n', stdout);
     printf("video_status=%d width=%" PRIu32 " height=%" PRIu32
            " nonblack=%zu crc32=%08" PRIx32 " capture=%s\n",
            (int) video_status, geometry.width, geometry.height,
