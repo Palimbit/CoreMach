@@ -13,7 +13,16 @@ target_link_libraries(blumach_headless PRIVATE
     blumach_platform_null
 )
 target_compile_features(blumach_headless PRIVATE c_std_11)
-set_target_properties(blumach_headless PROPERTIES C_EXTENSIONS OFF OUTPUT_NAME BluMach-headless)
+set_target_properties(blumach_headless PROPERTIES
+    C_EXTENSIONS OFF
+    MACOSX_BUNDLE FALSE
+    OUTPUT_NAME BluMach-headless
+)
+
+include(GNUInstallDirs)
+install(TARGETS blumach_headless
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+)
 
 if(MSVC)
     target_compile_options(blumach_headless PRIVATE /W4 /WX)

@@ -45,6 +45,47 @@ set_target_properties(blumach_portable_qt PROPERTIES
     CXX_EXTENSIONS OFF
     OUTPUT_NAME BluMach-portable
 )
+if(APPLE)
+    set_target_properties(blumach_portable_qt PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "BluMach Portable"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "org.blumach.portable"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${BLUMACH_PORTABLE_VERSION_NUMERIC}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${BLUMACH_PORTABLE_VERSION_NUMERIC}"
+    )
+endif()
+
+include(GNUInstallDirs)
+install(TARGETS blumach_portable_qt
+    RUNTIME_DEPENDENCY_SET blumach_portable_runtime_dependencies
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    BUNDLE DESTINATION "."
+)
+
+if(WIN32)
+    get_filename_component(blumach_qt_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
+    get_filename_component(blumach_compiler_directory
+        "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    install(RUNTIME_DEPENDENCY_SET blumach_portable_runtime_dependencies
+        DIRECTORIES
+            "${blumach_qt_prefix}/bin"
+            "${blumach_compiler_directory}"
+        PRE_EXCLUDE_REGEXES
+            "^api-ms-"
+            "^ext-ms-"
+        POST_EXCLUDE_REGEXES
+            ".*[Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\\\][Ss][Yy][Ss][Tt][Ee][Mm]32.*"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    )
+endif()
+
+qt_generate_deploy_app_script(
+    TARGET blumach_portable_qt
+    OUTPUT_SCRIPT blumach_portable_deploy_script
+    NO_TRANSLATIONS
+    NO_UNSUPPORTED_PLATFORM_ERROR
+)
+install(SCRIPT "${blumach_portable_deploy_script}")
 
 if(MSVC)
     target_compile_options(blumach_portable_qt PRIVATE /W4 /WX)

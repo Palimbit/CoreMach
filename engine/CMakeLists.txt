@@ -6,8 +6,15 @@ add_library(blumach_engine STATIC
     src/storage.c
 )
 
+configure_file(
+    include/blumach/engine/version.h.in
+    "${CMAKE_CURRENT_BINARY_DIR}/include/blumach/engine/version.h"
+    @ONLY
+)
+
 target_include_directories(blumach_engine
     PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
         "$<INSTALL_INTERFACE:include>"
 )
