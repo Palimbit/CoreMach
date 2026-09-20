@@ -178,6 +178,23 @@ target_link_libraries(portable-engine-xta
     PRIVATE blumach_pc_components blumach_memory blumach_platform_null
 )
 
+add_executable(portable-engine-xta-clock xta_clock_test.c)
+target_link_libraries(portable-engine-xta-clock
+    PRIVATE
+        blumach_pc_engine_adapters
+        blumach_memory
+        blumach_platform_null
+)
+target_compile_features(portable-engine-xta-clock PRIVATE c_std_11)
+set_target_properties(portable-engine-xta-clock PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-xta-clock PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-xta-clock
+        PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+    )
+endif()
+
 add_executable(portable-engine-dma8237 dma8237_test.c)
 target_link_libraries(portable-engine-dma8237
     PRIVATE blumach_pc_components blumach_memory blumach_platform_null
@@ -490,6 +507,7 @@ add_test(NAME portable-engine.pcs86-user-io COMMAND portable-engine-pcs86-user-i
 add_test(NAME portable-engine.pcs86-ems COMMAND portable-engine-pcs86-ems)
 add_test(NAME portable-engine.pc-platform COMMAND portable-engine-pc-platform)
 add_test(NAME portable-engine.xta COMMAND portable-engine-xta)
+add_test(NAME portable-engine.xta-clock COMMAND portable-engine-xta-clock)
 add_test(NAME portable-engine.dma8237-programming COMMAND portable-engine-dma8237)
 add_test(NAME portable-engine.fdc765-dma COMMAND portable-engine-fdc765)
 add_test(NAME portable-engine.fdc765-contracts COMMAND portable-engine-fdc765-contracts)

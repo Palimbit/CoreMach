@@ -236,7 +236,7 @@ main(void)
     assert(definition->scheduler_ticks_per_second ==
            BM_MACHINE_CLOCKED_TICKS_PER_SECOND);
     assert(definition->engine_mode == BM_MACHINE_ENGINE_CLOCKED);
-    assert(definition->engine.max_timed_sources == 2U);
+    assert(definition->engine.max_timed_sources == 3U);
     assert(machine.definition == definition);
     assert(machine.configuration.data == &config);
 

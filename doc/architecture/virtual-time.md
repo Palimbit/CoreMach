@@ -180,9 +180,11 @@ intermediate product; overflow is reported without changing the position.
   the chip own the scheduler. It deliberately fires once per input edge as a
   correctness baseline, with transition batching and lazy counter
   synchronization covered independently. The PCS 86 uses that adapter and the
-  MM58167 microsecond adapter. Video remains render-on-demand from virtual time;
-  XTA service retains an explicit functional 32-microsecond event pending a
-  device-level deadline model.
+  MM58167 microsecond adapter. Video remains render-on-demand from virtual time.
+  XTA DMA service has its own demand-driven timed source: it is disarmed while
+  idle and retries only while a transfer is pending, at the existing declared
+  functional interval of 32 microseconds. That interval is not presented as a
+  physical model of controller or drive latency.
 
 This path provides CPU-type independence without prematurely promising that
 all guest CPU models or their buses have the same timing fidelity.

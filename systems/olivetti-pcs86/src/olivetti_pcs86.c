@@ -22,6 +22,7 @@
 #include <blumach/components/rtc_mm58167_clock.h>
 #include <blumach/components/uart16450.h>
 #include <blumach/components/xta.h>
+#include <blumach/components/xta_clock.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -87,7 +88,8 @@ typedef struct bm_pcs86_machine {
 } bm_pcs86_machine_t;
 
 #define PCS86_V30_CLOCK_HZ UINT64_C(10000000)
-#define PCS86_XTA_SERVICE_PERIOD_NS UINT64_C(32000)
+#define PCS86_XTA_SERVICE_RATE_HZ UINT64_C(1000000)
+#define PCS86_XTA_SERVICE_INTERVAL_CYCLES UINT64_C(32)
 #define PCS86_EMS_APERTURE_BASE UINT32_C(0x40000)
 #define PCS86_EMS_APERTURE_SIZE UINT32_C(0x60000)
 #define PCS86_EMS_WINDOW_SIZE UINT32_C(0x4000)
@@ -1046,20 +1048,6 @@ pcs86_destroy(void *context)
     machine->host.release(machine->host.context, machine);
 }
 
-static void
-pcs86_clock_event(bm_engine_t *engine, void *context)
-{
-    bm_pcs86_machine_t *machine = context;
-    bm_tick_t now = bm_engine_now(engine);
-
-    bm_xta_service(machine->xta);
-
-    if (now <= UINT64_MAX - PCS86_XTA_SERVICE_PERIOD_NS)
-        (void) bm_engine_schedule_at(engine,
-                                     now + PCS86_XTA_SERVICE_PERIOD_NS,
-                                     pcs86_clock_event, machine);
-}
-
 static bm_status_t
 pcs86_video_geometry(const void *context, bm_video_geometry_t *geometry)
 {
@@ -1341,6 +1329,15 @@ pcs86_create(bm_engine_t *engine,
     if (status == BM_STATUS_OK)
         status = bm_mm58167_attach_clock(engine, machine->rtc, NULL);
     if (status == BM_STATUS_OK) {
+        static const bm_clock_rate_t xta_service_rate = {
+            PCS86_XTA_SERVICE_RATE_HZ, 1U
+        };
+
+        status = bm_xta_attach_service_clock(
+            engine, machine->xta, &xta_service_rate,
+            PCS86_XTA_SERVICE_INTERVAL_CYCLES, NULL);
+    }
+    if (status == BM_STATUS_OK) {
         bm_lpt_spp_config_t lpt_config = { NULL, pcs86_lpt_irq, machine };
         status = bm_lpt_spp_create(host, &lpt_config, &machine->lpt);
     }
@@ -1423,7 +1420,6 @@ static bm_status_t
 pcs86_reset(void *context)
 {
     bm_pcs86_machine_t *machine = context;
-    bm_tick_t now;
     if (machine == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
 
@@ -1461,10 +1457,7 @@ pcs86_reset(void *context)
     machine->video_setup_latch = 0U;
     machine->video_select_latch = 0U;
     memset(machine->ems_page_selector, 0, sizeof(machine->ems_page_selector));
-    now = bm_engine_now(machine->engine);
-    return bm_engine_schedule_at(machine->engine,
-                                 now + PCS86_XTA_SERVICE_PERIOD_NS,
-                                 pcs86_clock_event, machine);
+    return BM_STATUS_OK;
 }
 
 static bm_status_t
@@ -1697,7 +1690,7 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_persistent_state_size,
         pcs86_save_persistent_state
     },
-    .engine = { 1U, 10U, 2U }
+    .engine = { 1U, 10U, 3U }
 };
 
 const bm_machine_definition_t *

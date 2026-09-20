@@ -8,6 +8,8 @@
  */
 #include <blumach/components/xta.h>
 
+#include "xta_private.h"
+
 #include <string.h>
 
 enum xta_phase {
@@ -56,38 +58,6 @@ enum {
 #define XTA_ERR_SEEK 0x15U
 #define XTA_ERR_ILLEGAL_COMMAND 0x20U
 #define XTA_ERR_ILLEGAL_ADDRESS 0x21U
-
-struct bm_xta {
-    bm_host_services_t host;
-    bm_dma8237_t *dma;
-    bm_block_media_t media;
-    bm_xta_geometry_t physical_geometry;
-    bm_xta_geometry_t active_geometry;
-    bm_xta_irq_fn irq;
-    void *irq_context;
-    unsigned int dma_channel;
-    uint8_t option_switches;
-    uint8_t phase;
-    uint8_t status;
-    uint8_t sense;
-    uint8_t completion;
-    uint8_t interrupt_mask;
-    uint8_t dcb[6];
-    uint8_t buffer[512];
-    uint8_t sector_buffer[512];
-    size_t buffer_index;
-    size_t buffer_length;
-    uint16_t cylinder;
-    uint8_t head;
-    uint8_t sector;
-    unsigned int remaining;
-    uint64_t read_operations;
-    uint64_t write_operations;
-    uint8_t active_command;
-    int drive_present;
-    int enabled;
-    int interrupt_asserted;
-};
 
 static void
 xta_set_irq(bm_xta_t *xta, int asserted)
@@ -272,12 +242,23 @@ xta_transfer_dma(bm_xta_t *xta, int writing)
     xta_complete(xta, XTA_ERR_NONE);
 }
 
-static void
+static bm_status_t
 xta_begin_dma(bm_xta_t *xta)
 {
+    bm_status_t status;
+
     xta->phase = XTA_DMA_PENDING;
     xta->status = XTA_STAT_BSY;
     (void) bm_dma8237_set_dreq(xta->dma, xta->dma_channel, 1);
+    if (xta->service_changed == NULL)
+        return BM_STATUS_OK;
+    status = xta->service_changed(xta->service_context);
+    if (status != BM_STATUS_OK) {
+        (void) bm_dma8237_set_dreq(xta->dma, xta->dma_channel, 0);
+        xta->phase = XTA_IDLE;
+        xta->status = 0U;
+    }
+    return status;
 }
 
 static void
@@ -311,7 +292,7 @@ xta_format(bm_xta_t *xta, int whole_drive)
     xta_complete(xta, XTA_ERR_NONE);
 }
 
-static void
+static bm_status_t
 xta_execute(bm_xta_t *xta)
 {
     uint8_t command = xta->dcb[0];
@@ -329,7 +310,7 @@ xta_execute(bm_xta_t *xta)
         (command != XTA_CMD_RAM_DIAGS) &&
         (command != XTA_CMD_CTRL_DIAGS)) {
         xta_complete(xta, XTA_ERR_NOT_READY);
-        return;
+        return BM_STATUS_OK;
     }
     switch (command) {
         case XTA_CMD_TEST_READY:
@@ -352,15 +333,19 @@ xta_execute(bm_xta_t *xta)
             xta->status = XTA_STAT_BSY | XTA_STAT_IO | XTA_STAT_REQ;
             break;
         case XTA_CMD_READ_SECTORS:
-            if ((xta->interrupt_mask & XTA_DMA_ENABLE) != 0U)
-                xta_begin_dma(xta);
-            else
+            if ((xta->interrupt_mask & XTA_DMA_ENABLE) != 0U) {
+                bm_status_t status = xta_begin_dma(xta);
+                if (status != BM_STATUS_OK)
+                    return status;
+            } else
                 xta_prepare_pio_sector(xta, 1);
             break;
         case XTA_CMD_WRITE_SECTORS:
-            if ((xta->interrupt_mask & XTA_DMA_ENABLE) != 0U)
-                xta_begin_dma(xta);
-            else
+            if ((xta->interrupt_mask & XTA_DMA_ENABLE) != 0U) {
+                bm_status_t status = xta_begin_dma(xta);
+                if (status != BM_STATUS_OK)
+                    return status;
+            } else
                 xta_prepare_pio_sector(xta, 0);
             break;
         case XTA_CMD_READ_VERIFY:
@@ -368,12 +353,12 @@ xta_execute(bm_xta_t *xta)
                 bm_status_t status = xta_media_read(xta);
                 if (status != BM_STATUS_OK) {
                     xta_complete(xta, xta_media_error(status, 0));
-                    return;
+                    return BM_STATUS_OK;
                 }
                 --xta->remaining;
                 if ((xta->remaining != 0U) && !xta_next_sector(xta)) {
                     xta_complete(xta, XTA_ERR_ILLEGAL_ADDRESS);
-                    return;
+                    return BM_STATUS_OK;
                 }
             }
             xta_complete(xta, XTA_ERR_NONE);
@@ -418,6 +403,7 @@ xta_execute(bm_xta_t *xta)
             xta_complete(xta, XTA_ERR_ILLEGAL_COMMAND);
             break;
     }
+    return BM_STATUS_OK;
 }
 
 static void
@@ -502,11 +488,14 @@ xta_access(void *context, bm_bus_transaction_t *transaction)
         else
             xta->buffer[xta->buffer_index] = value;
         if (++xta->buffer_index == xta->buffer_length) {
+            bm_status_t status = BM_STATUS_OK;
             xta->status = (uint8_t) (xta->status & ~(XTA_STAT_REQ | XTA_STAT_CD));
             if (xta->phase == XTA_RECEIVE_DCB)
-                xta_execute(xta);
+                status = xta_execute(xta);
             else
                 xta_finish_receive(xta);
+            if (status != BM_STATUS_OK)
+                return status;
         }
     } else if (reg == 1U) {
         bm_xta_reset(xta);
@@ -579,8 +568,11 @@ bm_xta_create(const bm_host_services_t *host, bm_bus_t *bus,
 void
 bm_xta_destroy(bm_xta_t *xta)
 {
-    if (xta != NULL)
+    if (xta != NULL) {
+        if (xta->service_binding != NULL)
+            xta->host.release(xta->host.context, xta->service_binding);
         xta->host.release(xta->host.context, xta);
+    }
 }
 
 void
@@ -605,6 +597,8 @@ bm_xta_reset(bm_xta_t *xta)
     xta->active_geometry = xta->physical_geometry;
     xta->read_operations = 0U;
     xta->write_operations = 0U;
+    if (xta->service_changed != NULL)
+        (void) xta->service_changed(xta->service_context);
 }
 
 void
@@ -636,6 +630,12 @@ bm_xta_service(bm_xta_t *xta)
          (transfer_type != (writing ? 0x08U : 0x04U))))
         return;
     xta_transfer_dma(xta, writing);
+}
+
+int
+bm_xta_service_pending(const bm_xta_t *xta)
+{
+    return (xta != NULL) && (xta->phase == XTA_DMA_PENDING);
 }
 
 bm_status_t
