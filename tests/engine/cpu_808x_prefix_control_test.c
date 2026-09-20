@@ -92,25 +92,30 @@ test_buslock_marks_following_instruction(void)
     assert(consumed == 1U);
     assert(cpu_808x_test_peek(&machine, 0x0100U) == 0x2bU);
     /* The pending instruction fetch started while the preceding MOV executed
-     * and completes as the locked instruction consumes its queue. Instruction
-     * fetch never belongs to the BUSLOCK window; only the operand cycles do. */
-    assert(capture.count == 3U);
+     * and completes as the locked instruction consumes its queue. The placed
+     * BUSLOCK prefix interval then admits the next speculative fetch before
+     * the operand request. Instruction fetch never belongs to the BUSLOCK
+     * window; only the operand cycles do. */
+    assert(capture.count == 4U);
     assert(capture.events[0].operation == BM_BUS_FETCH &&
            capture.events[0].address == 0xf0006U &&
            capture.events[0].attributes == 0U);
-    for (index = 1U; index < capture.count; ++index)
+    assert(capture.events[1].operation == BM_BUS_FETCH &&
+           capture.events[1].address == 0xf0008U &&
+           capture.events[1].attributes == 0U);
+    for (index = 2U; index < capture.count; ++index)
         assert((capture.events[index].attributes &
                 BM_BUS_TRANSACTION_LOCKED) != 0U);
-    assert(capture.events[1].operation == BM_BUS_READ &&
-           capture.events[1].address == 0x0100U);
-    assert(capture.events[2].operation == BM_BUS_WRITE &&
+    assert(capture.events[2].operation == BM_BUS_READ &&
            capture.events[2].address == 0x0100U);
+    assert(capture.events[3].operation == BM_BUS_WRITE &&
+           capture.events[3].address == 0x0100U);
 
     memset(&capture, 0, sizeof(capture));
     assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_IDLE);
     assert(consumed == 1U && capture.count == 1U);
     assert(capture.events[0].operation == BM_BUS_FETCH &&
-           capture.events[0].address == 0xf0008U &&
+           capture.events[0].address == 0xf000aU &&
            capture.events[0].attributes == 0U);
     cpu_808x_test_machine_destroy(&machine);
 }

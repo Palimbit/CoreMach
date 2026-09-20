@@ -224,8 +224,9 @@ test_fixed_execution_clocks_and_prefix_cost(void)
         assert(capture.last.operand_transactions == 0U);
         assert(capture.last.operand_bus_clocks == 0U);
         assert(capture.last.prefetch_handoff_clocks == 0U);
-        assert(capture.last.execution_timeline_complete == 0U);
-        assert(capture.last.execution_clocks_placed == 0U);
+        assert(capture.last.execution_timeline_complete == (index != 0U));
+        assert(capture.last.execution_clocks_placed ==
+               (index != 0U ? cases[index].clocks : 0U));
         assert(capture.last.operand_wait_states == 0U);
         cpu_808x_test_machine_destroy(&machine);
     }
@@ -453,9 +454,35 @@ test_direct_io_has_a_complete_execution_timeline(void)
                           timeline_io_access, NULL) == BM_STATUS_OK);
         step_once(&machine, &capture);
         assert_exact_execution_clocks(&capture, 11U);
+        /* Prefix execution finishes the pending prefetch before I/O needs the
+         * bus, so it replaces the three-clock handoff seen by the unprefixed
+         * form instead of extending that boundary. */
+        assert_exact_boundary_clocks(&capture, 18U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == 11U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    {
+        static const uint8_t prefixed_memory_read[] = {
+            0x2eU, 0xa0U, 0x00U, 0x01U /* MOV AL,CS:[0100h]. */
+        };
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     prefixed_memory_read,
+                                     sizeof(prefixed_memory_read));
+        start_program(&machine);
+        step_once(&machine, &capture);
+        assert(capture.last.operand_transactions == 1U);
         assert_unknown_boundary_clocks(&capture);
         assert(capture.last.execution_timeline_complete == 0U);
-        assert(capture.last.execution_clocks_placed == 0U);
+        assert(capture.last.execution_clocks_placed == 2U);
         cpu_808x_test_machine_destroy(&machine);
     }
 }
@@ -665,7 +692,7 @@ test_data_dependent_arithmetic_reports_documented_ranges(void)
         else if (index == 4U)
             assert_boundary_clock_range(&capture, 37U, 43U);
         else if (index == 5U)
-            assert_boundary_clock_range(&capture, 51U, 57U);
+            assert_boundary_clock_range(&capture, 49U, 55U);
         else
             assert_unknown_boundary_clocks(&capture);
         cpu_808x_test_machine_destroy(&machine);

@@ -240,13 +240,15 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 9 reports
+their sum the elapsed instruction time. Timing-observation version 10 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
 boundary duration. That duration is available when every bus transaction in a
 native instruction boundary belongs to prefetch and, from version 9, for the
-unprefixed direct and DX-addressed `IN`/`OUT` forms. Demand-fetch stall clocks
+direct and DX-addressed `IN`/`OUT` forms. Version 10 also places every native
+prefix before the following instruction byte is decoded, so those I/O forms
+remain complete when prefixed. Demand-fetch stall clocks
 (including their waits) and queue-read clocks are added to the documented EXU
 interval, while speculative prefetch phases remain overlapped. A placed I/O
 operand contributes its four base bus clocks inside that EXU interval; device
@@ -286,8 +288,9 @@ T1/T2/T3/Tw/T4 transfer. Version 7 reports operand transaction clocks and the
 prefetch clocks spent handing over the bus separately. Version 9 ports the
 inherited execution ordering for the eight native `IN`/`OUT` opcodes: internal
 EXU intervals advance prefetch, each operand transaction occupies its four base
-clocks, and any remaining documented clocks resume prefetch. Prefix timing is
-not placed yet, so prefixed I/O deliberately remains unresolved. The executor
+clocks, and any remaining documented clocks resume prefetch. Version 10 places
+each prefix's documented execution interval immediately after its queue read;
+this may finish a prefetch before a later operand requests the bus. The executor
 still lacks the offsets for other operand instructions, documented timing
 ranges and unknown timings; those paths suspend this overlap model until their
 individual accesses can be placed. The observer
@@ -316,8 +319,8 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 9 combines those quantities only for uncontended cases and
-the explicitly placed unprefixed `IN`/`OUT` forms; every other boundary remains
+bus waits. Version 10 combines those quantities only for uncontended cases and
+the explicitly placed `IN`/`OUT` forms; every other operand boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
 The native-extension cut implements the documented V30 Group 3 map used by

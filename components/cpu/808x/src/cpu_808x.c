@@ -89,6 +89,7 @@ typedef struct bm_808x_state {
     uint32_t boundary_execution_clocks_placed;
     int boundary_execution_timeline_active;
     int boundary_execution_timeline_complete;
+    int boundary_operand_timeline_supported;
 } bm_808x_state_t;
 
 static void
@@ -119,12 +120,10 @@ physical_address(uint16_t segment, uint16_t offset)
 }
 
 static void
-begin_execution_timeline(bm_808x_state_t *state)
+begin_operand_execution_timeline(bm_808x_state_t *state)
 {
-    /* Prefix execution has not yet been placed on this timeline. Keep
-     * prefixed forms explicitly unresolved until it is. */
-    if (state->last_prefix_count == 0U)
-        state->boundary_execution_timeline_active = 1;
+    state->boundary_execution_timeline_active = 1;
+    state->boundary_operand_timeline_supported = 1;
 }
 
 static bm_status_t
@@ -153,7 +152,7 @@ transact_operand(bm_808x_state_t *state,
     /* NEC's documented execution interval includes the four base clocks of
      * each external operand transfer, but not device wait states. */
     if ((status == BM_STATUS_OK) &&
-        state->boundary_execution_timeline_active) {
+        state->boundary_operand_timeline_supported) {
         if (state->boundary_execution_clocks_placed > UINT32_MAX - 4U)
             return BM_STATUS_INVALID_STATE;
         state->boundary_execution_clocks_placed += 4U;
@@ -1699,6 +1698,10 @@ cpu_reset(void *context)
     state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
+    state->boundary_execution_clocks_placed = 0U;
+    state->boundary_execution_timeline_active = 0;
+    state->boundary_execution_timeline_complete = 0;
+    state->boundary_operand_timeline_supported = 0;
     return BM_STATUS_OK;
 }
 
@@ -2320,6 +2323,10 @@ execute_one(bm_808x_state_t *state)
         if (bus_lock)
             state->bus_lock_active = 1;
         ++prefix_count;
+        state->boundary_execution_timeline_active = 1;
+        status = place_execution_clocks(state, 2U);
+        if (status != BM_STATUS_OK)
+            return status;
         status = fetch_byte(state, &opcode);
         if (status != BM_STATUS_OK)
             return status;
@@ -3845,7 +3852,7 @@ execute_one(bm_808x_state_t *state)
         case 0xe4: { /* IN AL,imm8 */
             uint8_t port = 0;
             uint8_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3863,7 +3870,7 @@ execute_one(bm_808x_state_t *state)
         case 0xe5: { /* IN AX,imm8 */
             uint8_t port = 0;
             uint16_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3879,7 +3886,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xe6: { /* OUT imm8,AL */
             uint8_t port = 0U;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3891,7 +3898,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xe7: { /* OUT imm8,AX */
             uint8_t port = 0U;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &port);
@@ -3903,7 +3910,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xec: { /* IN AL,DX */
             uint8_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = io_read_byte(state, state->registers[REG_DX], &value);
@@ -3916,7 +3923,7 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xed: { /* IN AX,DX */
             uint16_t value = 0;
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 2U);
             if (status == BM_STATUS_OK)
                 status = io_read_word(state, state->registers[REG_DX], &value);
@@ -3927,14 +3934,14 @@ execute_one(bm_808x_state_t *state)
             return status;
         }
         case 0xee: /* OUT DX,AL */
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status != BM_STATUS_OK)
                 return status;
             return io_write_byte(state, state->registers[REG_DX],
                                  (uint8_t) state->registers[REG_AX]);
         case 0xef: /* OUT DX,AX */
-            begin_execution_timeline(state);
+            begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 1U);
             if (status != BM_STATUS_OK)
                 return status;
@@ -4669,6 +4676,10 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
     if (state->boundary_execution_timeline_active) {
         bm_status_t status;
 
+        if ((state->bcu.boundary_bus_transactions !=
+             state->bcu.boundary_prefetch_transactions) &&
+            !state->boundary_operand_timeline_supported)
+            return BM_STATUS_OK;
         kind = documented_native_execution_clocks(state, &minimum, &maximum);
         if ((kind != BM_808X_EXECUTION_CLOCKS_EXACT) ||
             (minimum != maximum) ||
@@ -4786,6 +4797,7 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_execution_clocks_placed = 0U;
     state->boundary_execution_timeline_active = 0;
     state->boundary_execution_timeline_complete = 0;
+    state->boundary_operand_timeline_supported = 0;
 }
 
 static void
