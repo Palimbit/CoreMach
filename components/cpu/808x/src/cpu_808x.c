@@ -3158,14 +3158,20 @@ execute_one(bm_808x_state_t *state)
                 return status;
             operation = (modrm >> 3U) & 7U;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
             if (opcode != 0x81U) {
                 uint8_t immediate = 0;
                 uint8_t left = 0;
                 uint8_t result;
                 if (status == BM_STATUS_OK)
+                    status = read_operand_byte(state, &operand, &left);
+                if (status == BM_STATUS_OK)
                     status = fetch_byte(state, &immediate);
                 if (status == BM_STATUS_OK)
-                    status = read_operand_byte(state, &operand, &left);
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK) {
                     if (operation == 0U)
                         result = add8(state, left, immediate);
@@ -3178,47 +3184,47 @@ execute_one(bm_808x_state_t *state)
                         compare8(state, left, immediate);
                     } else if (operation == 7U) {
                         compare8(state, left, immediate);
-                        return BM_STATUS_OK;
                     } else {
                         result = operation == 1U ? (uint8_t) (left | immediate) :
                                  operation == 4U ? (uint8_t) (left & immediate) :
                                                    (uint8_t) (left ^ immediate);
                         set_logic_flags(state, result, 8);
                     }
-                    status = write_operand_byte(state, &operand, result);
+                    status = place_execution_clocks(state, 2U);
+                    if ((status == BM_STATUS_OK) && (operation != 7U))
+                        status = write_operand_byte(state, &operand, result);
                 }
             } else {
                 uint16_t immediate = 0;
                 uint16_t left = 0;
                 uint16_t result;
                 if (status == BM_STATUS_OK)
+                    status = read_operand_word(state, &operand, &left);
+                if (status == BM_STATUS_OK)
                     status = fetch_word(state, &immediate);
                 if (status == BM_STATUS_OK)
-                    status = read_operand_word(state, &operand, &left);
+                    status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK) {
-                    if (operation == 0U) {
+                    if (operation == 0U)
                         result = add16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
-                    } else if (operation == 2U) {
+                    else if (operation == 2U)
                         result = adc16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
-                    } else if (operation == 3U) {
+                    else if (operation == 3U)
                         result = sbb16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
-                    } else if (operation == 5U) {
+                    else if (operation == 5U) {
                         result = (uint16_t) (left - immediate);
                         compare16(state, left, immediate);
-                        status = write_operand_word(state, &operand, result);
                     } else if (operation == 7U) {
                         compare16(state, left, immediate);
                     } else {
                         result = operation == 1U ? (uint16_t) (left | immediate) :
                                  operation == 4U ? (uint16_t) (left & immediate) :
                                                    (uint16_t) (left ^ immediate);
-                        status = write_operand_word(state, &operand, result);
-                        if (status == BM_STATUS_OK)
-                            set_logic_flags(state, result, 16);
+                        set_logic_flags(state, result, 16);
                     }
+                    status = place_execution_clocks(state, 2U);
+                    if ((status == BM_STATUS_OK) && (operation != 7U))
+                        status = write_operand_word(state, &operand, result);
                 }
             }
             return status;
@@ -3239,10 +3245,16 @@ execute_one(bm_808x_state_t *state)
                 (operation != 6U) && (operation != 7U))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
+            if ((status == BM_STATUS_OK) && !operand.is_register) {
+                begin_operand_execution_timeline(state);
+                status = place_execution_clocks(state, 2U);
+            }
+            if (status == BM_STATUS_OK)
+                status = read_operand_word(state, &operand, &left);
             if (status == BM_STATUS_OK)
                 status = fetch_byte(state, &immediate);
             if (status == BM_STATUS_OK)
-                status = read_operand_word(state, &operand, &left);
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK) {
                 uint16_t extended = (uint16_t) (int16_t) (int8_t) immediate;
                 uint16_t result;
@@ -3257,14 +3269,15 @@ execute_one(bm_808x_state_t *state)
                     compare16(state, left, extended);
                 } else if (operation == 7U) {
                     compare16(state, left, extended);
-                    return BM_STATUS_OK;
                 } else {
                     result = operation == 1U ? (uint16_t) (left | extended) :
                              operation == 4U ? (uint16_t) (left & extended) :
                                                (uint16_t) (left ^ extended);
                     set_logic_flags(state, result, 16);
                 }
-                status = write_operand_word(state, &operand, result);
+                status = place_execution_clocks(state, 2U);
+                if ((status == BM_STATUS_OK) && (operation != 7U))
+                    status = write_operand_word(state, &operand, result);
             }
             return status;
         }

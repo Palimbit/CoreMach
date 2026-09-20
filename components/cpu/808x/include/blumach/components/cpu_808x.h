@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 15U
+#define BM_808X_TIMING_OBSERVATION_VERSION 16U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -150,6 +150,8 @@ typedef enum bm_808x_prefetch_phase {
  * destinations, preserving the inherited computation interval between them.
  * Version 15 places ModR/M TEST reads and both XCHG memory transfers, including
  * the inherited internal interval before each exchange write.
+ * Version 16 restores the inherited operand-before-immediate order for groups
+ * 80h-83h and places their memory read, compute and optional write intervals.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {
