@@ -62,7 +62,7 @@ class Intel8088ConformanceTests(unittest.TestCase):
         changed["final"]["queue"] = [0x90]
         errors, queue_matches = conformance.compare_case(
             changed, response, expected_ram, 0xFFEF,
-            require_final_queue=True,
+            require_raw_final_queue=True,
         )
         self.assertFalse(queue_matches)
         self.assertTrue(any(error.startswith("queue=") for error in errors))

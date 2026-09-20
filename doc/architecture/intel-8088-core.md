@@ -130,10 +130,12 @@ starts `portable-engine-808x-vector-runner` explicitly in `intel-8088` mode.
 The gate executes both empty-queue and preloaded-queue vectors and compares
 defined registers, masked FLAGS and changed memory. A separate versioned
 prefetch-state contract installs the physical corpus bytes without treating the
-queue as architectural register state. Final queue contents are now measured
-and reported separately. They remain diagnostic rather than a passing
-criterion by default because the Intel EU/BIU overlap schedule is not yet
-implemented; `--require-final-queue` turns them into a strict local gate.
+queue as architectural register state. Raw final queue contents are now
+measured and reported separately. This is not yet a fidelity percentage: the
+hardware corpus ends when the first byte of the following instruction is read
+from the queue, whereas `bm_808x_step()` returns after the current instruction.
+The raw comparison is diagnostic while those boundaries differ; the deliberately
+named `--require-raw-final-queue` option exists only for focused local work.
 
 The component also exposes a versioned, read-only observation for each active
 external-bus phase: `T1`, `T2`, `T3`, zero or more `Tw`, and `T4`. It reports

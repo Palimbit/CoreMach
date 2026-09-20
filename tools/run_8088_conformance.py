@@ -4,9 +4,11 @@
 The hardware corpus remains outside BluMach.  Check out the exact revision
 documented below and pass its ``v2`` directory explicitly. This first gate
 checks architectural register and memory results with both empty and preloaded
-prefetch queues. Final queue state is measured and can optionally be required;
-physical cycle traces remain deliberately unverified until the active bus-phase
-observations are joined with an Intel EU/BIU schedule and corpus trace adapter.
+prefetch queues. The raw final queue is measured for diagnostics, but the
+corpus ends on the next instruction's first-byte queue event while the runner
+returns at the current instruction boundary. Physical cycle traces therefore
+remain deliberately unverified until the active bus-phase observations are
+joined with an Intel EU/BIU schedule and a boundary-aligned trace adapter.
 
 Expected corpus:
   repository: https://github.com/SingleStepTests/8088
@@ -84,7 +86,7 @@ def encode_case(test: dict) -> tuple[str, list[list[int]]]:
 
 
 def compare_case(test: dict, response: str, expected_ram: list[list[int]],
-                 flags_mask: int, require_final_queue: bool = False
+                 flags_mask: int, require_raw_final_queue: bool = False
                  ) -> tuple[list[str], bool]:
     fields = response.split()
     if len(fields) < 20 or fields[0] != "H":
@@ -143,7 +145,7 @@ def compare_case(test: dict, response: str, expected_ram: list[list[int]],
         errors.append(f"ram={actual_ram}, expected={expected_ram_values}")
     expected_queue = test["final"].get("queue", [])
     queue_matches = actual_queue == expected_queue
-    if require_final_queue and not queue_matches:
+    if require_raw_final_queue and not queue_matches:
         errors.append(
             f"queue={actual_queue}, expected={expected_queue}, "
             f"prefetch_pointer={actual_prefetch_pointer:04X}"
@@ -163,8 +165,9 @@ def main() -> int:
                         help="Maximum eligible vectors per opcode; zero means all")
     parser.add_argument("--max-failures", type=int, default=20)
     parser.add_argument(
-        "--require-final-queue", action="store_true",
-        help="Fail vectors whose final hardware prefetch queue differs",
+        "--require-raw-final-queue", action="store_true",
+        help=("Fail raw final-queue differences despite the known "
+              "core/corpus instruction-boundary mismatch"),
     )
     args = parser.parse_args()
 
@@ -213,7 +216,7 @@ def main() -> int:
                     raise RuntimeError("vector runner terminated unexpectedly")
                 errors, queue_match = compare_case(
                     test, response, expected_ram, flags_mask,
-                    args.require_final_queue,
+                    args.require_raw_final_queue,
                 )
                 total += 1
                 queue_matches += int(queue_match)
@@ -239,7 +242,7 @@ def main() -> int:
         return_code = process.wait()
     print(
         f"SUMMARY vectors={total} failures={failures} "
-        f"prefetched={prefetched} queue_matches={queue_matches}/{total} "
+        f"prefetched={prefetched} raw_queue_matches={queue_matches}/{total} "
         "cycle_traces=not-yet-compared"
     )
     if return_code != 0:
