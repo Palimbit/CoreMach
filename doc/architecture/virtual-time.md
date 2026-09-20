@@ -34,6 +34,10 @@ comparison never cross-multiplies clock denominators, and repeated small
 advances have the same position as an equivalent bulk advance. The position
 representation has no public API. One advance is bounded by the 64-bit
 intermediate product; overflow is reported without changing the position.
+When a domain has an integral nanosecond period, the same checked calculation
+uses a constant-time path instead of the general 64-step fractional algorithm.
+This is a representation optimization, not reduced precision: the resulting
+position and atomic overflow behavior are covered by the same contract.
 
 ## Scheduler contract and limits
 

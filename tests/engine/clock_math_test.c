@@ -72,6 +72,31 @@ test_rational_crystal_divider_has_no_drift(void)
 }
 
 static void
+test_integral_period_large_advance_and_overflow(void)
+{
+    bm_clock_position_t clock;
+    const bm_clock_rate_t ten_megahertz = { UINT64_C(10000000), 1U };
+
+    assert(bm_clock_position_init(&clock, &ten_megahertz) == BM_STATUS_OK);
+    assert(clock.phase_denominator == 1U);
+    assert(clock.nanoseconds_per_cycle_numerator == 100U);
+    assert(bm_clock_position_advance(&clock, UINT64_C(16503008)) ==
+           BM_STATUS_OK);
+    assert(clock.nanoseconds == UINT64_C(1650300800));
+    assert(clock.phase == 0U);
+
+    clock.nanoseconds = UINT64_MAX - 99U;
+    assert(bm_clock_position_advance(&clock, 1U) ==
+           BM_STATUS_CAPACITY_EXCEEDED);
+    assert(clock.nanoseconds == UINT64_MAX - 99U);
+    assert(clock.phase == 0U);
+    assert(bm_clock_position_advance(&clock, UINT64_MAX) ==
+           BM_STATUS_CAPACITY_EXCEEDED);
+    assert(clock.nanoseconds == UINT64_MAX - 99U);
+    assert(clock.phase == 0U);
+}
+
+static void
 test_fraction_comparison_without_overflow(void)
 {
     bm_clock_position_t left = {
@@ -225,6 +250,7 @@ main(void)
     test_distinct_domains_and_exact_rendezvous();
     test_no_accumulated_rounding();
     test_rational_crystal_divider_has_no_drift();
+    test_integral_period_large_advance_and_overflow();
     test_fraction_comparison_without_overflow();
     test_export_normalizes_public_fraction();
     test_next_domain_edge_is_strict_and_exact();
