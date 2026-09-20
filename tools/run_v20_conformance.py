@@ -126,7 +126,8 @@ def main() -> int:
         parser.error(f"missing {args.runner}")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     process = subprocess.Popen(
-        [str(args.runner)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        [str(args.runner), "--model", "nec-v30"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         text=True, bufsize=1,
     )
     assert process.stdin is not None and process.stdout is not None

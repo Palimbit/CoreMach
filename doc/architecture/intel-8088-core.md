@@ -120,6 +120,31 @@ V30 behavior, including NEC extensions, 8080 emulation mode, six-byte queue and
 the documented NEC timing observer, remains covered by the existing tests and
 retains its recorded authorship and GPL-2.0-or-later provenance.
 
+### Physical-vector execution
+
+`tools/run_8088_conformance.py` runs the portable Intel model against the
+external SingleStepTests/8088 V2 corpus without copying that corpus into this
+repository. The adapter accepts only the pinned metadata described above and
+starts `portable-engine-808x-vector-runner` explicitly in `intel-8088` mode.
+
+The gate executes both empty-queue and preloaded-queue vectors and compares
+defined registers, masked FLAGS and changed memory. A separate versioned
+prefetch-state contract installs the physical corpus bytes without treating the
+queue as architectural register state. Final queue contents and physical cycle
+traces are reported as not yet compared. The latter requires a neutral
+per-T-state observation contract; a flat instruction-clock total is not
+substituted for that missing evidence.
+
+Example, with the external corpus checked out at commit
+`aea84484abc79d09639d855b7b0ab32bc9e4dbeb`:
+
+```text
+python tools/run_8088_conformance.py \
+  --suite /path/to/8088/v2 \
+  --runner /path/to/portable-engine-808x-vector-runner \
+  --opcode 04 --opcode 82.0
+```
+
 ### Inferred or unknown
 
 - No complete Intel 8088 EU/BIU overlap schedule is claimed.

@@ -23,7 +23,7 @@
  */
 typedef struct bm_808x_biu {
     uint16_t prefetch_pointer;
-    uint8_t prefetch_queue[BM_808X_V30_PREFETCH_QUEUE_CAPACITY];
+    uint8_t prefetch_queue[BM_808X_MAX_PREFETCH_QUEUE_CAPACITY];
     uint8_t prefetch_head;
     uint8_t prefetch_count;
     uint8_t prefetch_capacity;
@@ -66,6 +66,13 @@ void bm_808x_biu_flush(bm_808x_biu_t *bcu, uint16_t instruction_pointer);
 uint8_t bm_808x_biu_free_bytes(const bm_808x_biu_t *bcu);
 uint8_t bm_808x_biu_queue_count(const bm_808x_biu_t *bcu);
 uint16_t bm_808x_biu_prefetch_pointer(const bm_808x_biu_t *bcu);
+void bm_808x_biu_export_queue(const bm_808x_biu_t *bcu,
+                              uint8_t *bytes, uint8_t count);
+bm_status_t bm_808x_biu_import_queue(bm_808x_biu_t *bcu,
+                                     uint16_t prefetch_pointer,
+                                     const uint8_t *bytes, uint8_t count,
+                                     uint8_t prefetch_capacity,
+                                     uint8_t fetch_width);
 
 bm_status_t bm_808x_biu_enqueue_byte(bm_808x_biu_t *bcu, uint8_t value);
 bm_status_t bm_808x_biu_enqueue_word(bm_808x_biu_t *bcu, uint16_t value);

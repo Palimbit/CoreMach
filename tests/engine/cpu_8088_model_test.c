@@ -354,6 +354,50 @@ test_interrupt_halt_queue_and_unknown_timing(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_prefetch_state_round_trip(void)
+{
+    static const uint8_t empty_program[] = { 0U };
+    cpu_808x_test_config_t config = intel_config();
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    bm_808x_prefetch_state_t prefetch = {
+        .size = sizeof(prefetch),
+        .version = BM_808X_PREFETCH_STATE_VERSION,
+        .pointer = 3U,
+        .count = 3U,
+        .capacity = BM_808X_8088_PREFETCH_QUEUE_CAPACITY,
+        .bytes = { 0x90U, 0x90U, 0xf4U }
+    };
+    bm_808x_prefetch_state_t observed;
+    bm_tick_t consumed = 0U;
+
+    cpu_808x_test_machine_create(&machine, &config, empty_program, 0U);
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+           BM_STATUS_OK);
+    assert(bm_808x_get_prefetch_state(&machine.cpu, &observed) ==
+           BM_STATUS_OK);
+    assert(observed.pointer == 3U);
+    assert(observed.count == 3U);
+    assert(observed.capacity == BM_808X_8088_PREFETCH_QUEUE_CAPACITY);
+    assert(memcmp(observed.bytes, prefetch.bytes, prefetch.count) == 0);
+
+    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
+    assert(bm_808x_get_prefetch_state(&machine.cpu, &observed) ==
+           BM_STATUS_OK);
+    assert(observed.pointer == 3U);
+    assert(observed.count == 2U);
+    assert(observed.bytes[0] == 0x90U);
+    assert(observed.bytes[1] == 0xf4U);
+
+    prefetch.capacity = BM_808X_V30_PREFETCH_QUEUE_CAPACITY;
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
 int
 main(void)
 {
@@ -361,5 +405,6 @@ main(void)
     test_positive_opcode_map_and_silicon_aliases();
     test_byte_bus_memory_io_wrap_and_escape();
     test_interrupt_halt_queue_and_unknown_timing();
+    test_prefetch_state_round_trip();
     return 0;
 }

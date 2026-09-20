@@ -102,6 +102,39 @@ bm_808x_biu_prefetch_pointer(const bm_808x_biu_t *bcu)
     return bcu->prefetch_pointer;
 }
 
+void
+bm_808x_biu_export_queue(const bm_808x_biu_t *bcu,
+                         uint8_t *bytes, uint8_t count)
+{
+    uint8_t index;
+
+    if ((bcu == NULL) || (bytes == NULL) || (count > bcu->prefetch_count))
+        return;
+    for (index = 0U; index < count; ++index) {
+        bytes[index] = bcu->prefetch_queue[
+            (bcu->prefetch_head + index) % bcu->prefetch_capacity];
+    }
+}
+
+bm_status_t
+bm_808x_biu_import_queue(bm_808x_biu_t *bcu,
+                         uint16_t prefetch_pointer,
+                         const uint8_t *bytes, uint8_t count,
+                         uint8_t prefetch_capacity, uint8_t fetch_width)
+{
+    if ((bcu == NULL) || ((bytes == NULL) && (count != 0U)) ||
+        (prefetch_capacity == 0U) ||
+        (prefetch_capacity > BM_808X_MAX_PREFETCH_QUEUE_CAPACITY) ||
+        (count > prefetch_capacity) ||
+        ((fetch_width != 1U) && (fetch_width != 2U)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    bm_808x_biu_reset(bcu, prefetch_pointer, prefetch_capacity, fetch_width);
+    if (count != 0U)
+        memcpy(bcu->prefetch_queue, bytes, count);
+    bcu->prefetch_count = count;
+    return BM_STATUS_OK;
+}
+
 bm_status_t
 bm_808x_biu_enqueue_byte(bm_808x_biu_t *bcu, uint8_t value)
 {
