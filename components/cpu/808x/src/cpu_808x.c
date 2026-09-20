@@ -90,6 +90,7 @@ typedef struct bm_808x_state {
     int boundary_execution_timeline_active;
     int boundary_execution_timeline_complete;
     int boundary_operand_timeline_supported;
+    int boundary_flush_timeline_supported;
 } bm_808x_state_t;
 
 static void
@@ -140,6 +141,17 @@ place_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
     if (status == BM_STATUS_OK)
         state->boundary_execution_clocks_placed += clocks;
     return status;
+}
+
+static bm_status_t
+place_suspended_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
+{
+    if (!state->boundary_execution_timeline_active)
+        return BM_STATUS_OK;
+    if (state->boundary_execution_clocks_placed > UINT32_MAX - clocks)
+        return BM_STATUS_INVALID_STATE;
+    state->boundary_execution_clocks_placed += clocks;
+    return BM_STATUS_OK;
 }
 
 static bm_status_t
@@ -1723,6 +1735,7 @@ cpu_reset(void *context)
     state->boundary_execution_timeline_active = 0;
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
+    state->boundary_flush_timeline_supported = 0;
     return BM_STATUS_OK;
 }
 
@@ -3712,13 +3725,24 @@ execute_one(bm_808x_state_t *state)
         }
         case 0xe8: { /* CALL rel16. */
             uint16_t displacement;
+            uint16_t return_ip;
             status = fetch_word(state, &displacement);
-            if (status == BM_STATUS_OK)
-                status = push_word(state, state->ip);
+            if (status == BM_STATUS_OK) {
+                return_ip = state->ip;
+                begin_operand_execution_timeline(state);
+            }
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 4U);
+            }
             if (status == BM_STATUS_OK) {
                 state->ip = (uint16_t) (state->ip + (int16_t) displacement);
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 3U);
             }
+            if (status == BM_STATUS_OK)
+                status = push_word(state, return_ip);
             return status;
         }
         case 0x9a: { /* CALL ptr16:16. */
@@ -3788,11 +3812,26 @@ execute_one(bm_808x_state_t *state)
             uint16_t adjustment = 0U;
             if (opcode == 0xc2U)
                 status = fetch_word(state, &adjustment);
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                if (opcode == 0xc2U)
+                    status = place_execution_clocks(state, 1U);
+            }
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &destination);
             if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
                 state->ip = destination;
+                status = place_suspended_execution_clocks(
+                    state, opcode == 0xc2U ? 2U : 1U);
+            }
+            if (status == BM_STATUS_OK) {
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(
+                    state, opcode == 0xc2U ? 3U : 2U);
+            }
+            if (status == BM_STATUS_OK) {
                 state->registers[REG_SP] =
                     (uint16_t) (state->registers[REG_SP] + adjustment);
             }
@@ -4856,11 +4895,14 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
     uint32_t maximum = 0U;
     bm_808x_execution_clock_kind_t kind;
 
-    if (!native_mode || state->bcu.boundary_prefetch_flushed)
+    if (!native_mode)
         return BM_STATUS_OK;
     if (state->boundary_execution_timeline_active) {
         bm_status_t status;
 
+        if (state->bcu.boundary_prefetch_flushed &&
+            !state->boundary_flush_timeline_supported)
+            return BM_STATUS_OK;
         if ((state->bcu.boundary_bus_transactions !=
              state->bcu.boundary_prefetch_transactions) &&
             !state->boundary_operand_timeline_supported)
@@ -4876,6 +4918,8 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
             state->boundary_execution_timeline_complete = 1;
         return status;
     }
+    if (state->bcu.boundary_prefetch_flushed)
+        return BM_STATUS_OK;
     /* Operand and I/O cycles need their position inside the instruction before
      * the BCU may compete with them. Demand and already-running prefetches are
      * the only bus work admitted by this first overlap cut. */
@@ -4983,6 +5027,7 @@ begin_boundary_observation(bm_808x_state_t *state)
     state->boundary_execution_timeline_active = 0;
     state->boundary_execution_timeline_complete = 0;
     state->boundary_operand_timeline_supported = 0;
+    state->boundary_flush_timeline_supported = 0;
 }
 
 static void
@@ -5346,6 +5391,11 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->boundary_string_valid = 0;
     state->boundary_shift_count = 0U;
     state->boundary_shift_count_valid = 0;
+    state->boundary_execution_clocks_placed = 0U;
+    state->boundary_execution_timeline_active = 0;
+    state->boundary_execution_timeline_complete = 0;
+    state->boundary_operand_timeline_supported = 0;
+    state->boundary_flush_timeline_supported = 0;
     return BM_STATUS_OK;
 }
 
