@@ -3610,6 +3610,8 @@ execute_one(bm_808x_state_t *state)
                 if (!operand.is_register)
                     status = place_execution_clocks(state, 1U);
             }
+            if ((status == BM_STATUS_OK) && (operation == 4U))
+                begin_operand_execution_timeline(state);
             if ((status == BM_STATUS_OK) && (operation == 6U))
                 begin_operand_execution_timeline(state);
             if ((status == BM_STATUS_OK) &&
@@ -3666,9 +3668,22 @@ execute_one(bm_808x_state_t *state)
                 return status;
             }
             if (operation == 4U) {
-                state->ip = value;
-                mark_prefetch_flush(state);
-                return BM_STATUS_OK;
+                /* Register targets consume one extra inherited entry state;
+                 * memory targets have already occupied that position with
+                 * their source read.  Both then suspend sequential prefetch
+                 * before committing the new instruction pointer. */
+                if (operand.is_register)
+                    status = place_execution_clocks(state, 1U);
+                if (status == BM_STATUS_OK) {
+                    bm_v30_bcu_suspend_prefetch(&state->bcu);
+                    status = place_suspended_execution_clocks(state, 1U);
+                }
+                if (status == BM_STATUS_OK) {
+                    state->ip = value;
+                    mark_prefetch_flush(state);
+                    state->boundary_flush_timeline_supported = 1;
+                }
+                return status;
             }
             if (operation == 6U) {
                 /* The inherited V30 microcode performs three internal states
