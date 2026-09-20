@@ -2,7 +2,7 @@
 
 add_library(blumach_cpu_808x STATIC
     src/cpu_808x.c
-    src/v30_bcu.c
+    src/cpu_808x_biu.c
 )
 target_include_directories(blumach_cpu_808x
     PUBLIC

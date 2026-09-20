@@ -11,8 +11,16 @@ extern "C" {
 #endif
 
 typedef enum bm_808x_model {
-    BM_808X_NEC_V30 = 0
+    BM_808X_NEC_V30 = 0,
+    BM_808X_INTEL_8088 = 1
 } bm_808x_model_t;
+
+typedef enum bm_8088_opcode_class {
+    BM_8088_OPCODE_DOCUMENTED = 0,
+    BM_8088_OPCODE_SILICON_ALIAS = 1,
+    BM_8088_OPCODE_SILICON_UNDOCUMENTED = 2,
+    BM_8088_OPCODE_UNDEFINED = 3
+} bm_8088_opcode_class_t;
 
 typedef enum bm_808x_signal {
     BM_808X_SIGNAL_INT = 0,
@@ -79,6 +87,7 @@ typedef enum bm_808x_boundary_kind {
 
 #define BM_808X_TIMING_OBSERVATION_VERSION 38U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
+#define BM_808X_8088_PREFETCH_QUEUE_CAPACITY 4U
 
 typedef enum bm_808x_execution_clock_kind {
     BM_808X_EXECUTION_CLOCKS_UNKNOWN = 0,
@@ -305,21 +314,28 @@ bm_status_t bm_808x_create(const bm_host_services_t *host,
  * It deliberately excludes bus pins, trace bookkeeping and host callbacks,
  * but includes the architecturally observable interrupt shadows and latched
  * NMI/single-step requests and the MD write gate needed for mode transitions.
- * The NEC PSW fixed bits are canonicalized in both native and 8080 emulation
- * modes. */
+ * FLAGS/PSW fixed bits are canonicalized by the selected model. */
 bm_status_t bm_808x_get_arch_state(const bm_cpu_t *cpu,
                                    bm_808x_arch_state_t *out_state);
 bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,
                                    const bm_808x_arch_state_t *state);
+
+/* Classify an original 8088 primary opcode and, for grouped instructions, the
+ * supplied ModR/M operation field. Silicon classes are intentionally distinct
+ * from Intel's published ISA; undefined forms have no invented semantics. */
+bm_8088_opcode_class_t bm_8088_classify_opcode(uint8_t opcode,
+                                                uint8_t modrm);
 
 /* Execute one architectural boundary. A pending accepted interrupt consumes
  * the boundary instead of an opcode, matching bm_cpu_ops.run with budget 1. */
 bm_status_t bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed);
 
 /* Engine callback for one cycle-reported architectural boundary. It succeeds
- * only when the V30 timing model produced one exact scalar duration. Ranged or
- * unknown boundaries return BM_STATUS_UNSUPPORTED with zero cycles, so a
- * clocked machine cannot silently turn an unresolved timing into virtual time.
+ * only when the selected model's timing data produced one exact scalar
+ * duration. Intel 8088 durations are currently deliberately unclassified;
+ * ranged or unknown boundaries return BM_STATUS_UNSUPPORTED with zero cycles,
+ * so a clocked machine cannot silently turn an unresolved timing into virtual
+ * time.
  * The context must be the context owned by a CPU created by bm_808x_create(). */
 bm_status_t bm_808x_step_clocked(void *context, bm_tick_t start_ns,
                                  uint64_t *cycles);
