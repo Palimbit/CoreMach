@@ -3999,14 +3999,35 @@ execute_one(bm_808x_state_t *state)
             uint16_t adjustment = 0U;
             if (opcode == 0xcaU)
                 status = fetch_word(state, &adjustment);
+            if (status == BM_STATUS_OK) {
+                begin_operand_execution_timeline(state);
+                /* RETF without an immediate enters the inherited far-return
+                 * micro-routine through one additional internal state. */
+                if (opcode == 0xcbU)
+                    status = place_execution_clocks(state, 1U);
+            }
+            if (status == BM_STATUS_OK)
+                status = place_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &destination);
+            if (status == BM_STATUS_OK) {
+                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                status = place_suspended_execution_clocks(state, 2U);
+            }
+            if (status == BM_STATUS_OK)
+                status = place_suspended_execution_clocks(state, 1U);
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &segment);
             if (status == BM_STATUS_OK) {
                 state->ip = destination;
                 state->segments[1] = segment;
                 mark_prefetch_flush(state);
+                state->boundary_flush_timeline_supported = 1;
+                status = place_execution_clocks(state, 2U);
+            }
+            if ((status == BM_STATUS_OK) && (opcode == 0xcaU))
+                status = place_execution_clocks(state, 1U);
+            if (status == BM_STATUS_OK) {
                 state->registers[REG_SP] =
                     (uint16_t) (state->registers[REG_SP] + adjustment);
             }

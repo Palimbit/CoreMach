@@ -1979,6 +1979,68 @@ test_indirect_near_call_has_a_complete_timeline(void)
 }
 
 static void
+test_far_returns_have_a_complete_timeline(void)
+{
+    const struct {
+        uint8_t program[3];
+        size_t size;
+        uint16_t stack;
+        uint16_t adjustment;
+        uint32_t clocks;
+        uint64_t transactions;
+    } cases[] = {
+        { { 0xcbU, 0U, 0U }, 1U, 0x0100U, 0U, 21U, 2U },
+        { { 0xcbU, 0U, 0U }, 1U, 0x0101U, 0U, 29U, 4U },
+        { { 0xcaU, 0x04U, 0x00U }, 3U, 0x0100U, 4U, 24U, 2U },
+        { { 0xcaU, 0x04U, 0x00U }, 3U, 0x0101U, 4U, 32U, 4U }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t cycles = 0U;
+        uint16_t stack = cases[index].stack;
+
+        cpu_808x_test_machine_create(&machine, &config,
+                                     cases[index].program,
+                                     cases[index].size);
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ss = 0U;
+        state.sp = stack;
+        cpu_808x_test_set_state(&machine, &state);
+        cpu_808x_test_poke(&machine, stack, 0x34U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 1U), 0x12U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 2U), 0x00U);
+        cpu_808x_test_poke(&machine, (uint16_t) (stack + 3U), 0x20U);
+
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == 0x1234U);
+        assert(state.cs == 0x2000U);
+        assert(state.sp ==
+               (uint16_t) (stack + 4U + cases[index].adjustment));
+        assert_exact_execution_clocks(&capture, cases[index].clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(capture.last.operand_transactions ==
+               cases[index].transactions);
+        assert(capture.last.prefetch_queue_flushed == 1U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == cases[index].clocks);
+        assert(cycles == capture.last.boundary_clocks_min);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_clocked_step_requires_an_exact_scalar_boundary(void)
 {
     static const uint8_t exact_program[] = { 0x90U };
@@ -3138,6 +3200,7 @@ main(void)
     test_far_pointer_loads_have_a_complete_timeline();
     test_near_call_and_return_have_a_complete_timeline();
     test_indirect_near_call_has_a_complete_timeline();
+    test_far_returns_have_a_complete_timeline();
     test_clocked_step_requires_an_exact_scalar_boundary();
     test_software_interrupt_has_a_complete_timeline();
     test_interrupt_latches_vector_before_writing_stack();
