@@ -1,0 +1,145 @@
+# Portable Intel 8088 core
+
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+
+Status: functional model boundary; Intel cycle timing remains unsupported.
+
+## Scope and component boundary
+
+`BM_808X_INTEL_8088` selects the original Intel 8088 ISA and bus traits in the
+reusable 808x component. The model owns all mutable register, interrupt,
+prefetch and bus-interface state per instance. It has an 8-bit external bus, a
+four-byte instruction queue, 20-bit physical addressing and no NEC 8080 mode.
+It is not an IBM PC 5150 definition and contains no machine, firmware, CGA or
+board-specific condition.
+
+The executor is shared only for 8086-family operations whose equivalence is
+established. Each instance points at an immutable model profile; the Intel
+profile positively selects its bus width, queue depth, FLAGS image, native-only
+mode, divide boundary and opcode decisions. NEC extensions, 8080 mode and V30
+timing are selected only by the V30 profile. Intel behavior is therefore not
+defined as a V30 interpreter with a negative list of disabled instructions.
+
+`bm_8088_classify_opcode()` is the executable 256-entry primary map. It also
+classifies every grouped ModR/M operation field as documented, silicon alias,
+silicon-undocumented or undefined. The Intel-published ISA is the documented
+baseline. Hardware/microcode evidence promotes the original-silicon aliases
+`0Fh`, `60h`-`6Fh`, `82h`, `C0h`, `C1h`, `C8h`, `C9h` and `F1h`; `D6h` is
+silicon-undocumented. Group promotions are `D0h`-`D3h /6` (`SETMO`),
+`F6h`/`F7h /1` (`TEST` aliases) and `FFh /7` (`PUSH` alias). The observed
+undefined grouped holes `8Fh /1`-`/7`, `C6h`/`C7h /1`-`/7` and `FEh /2`-`/7`
+remain unsupported. Thus `82h` is a complete alias of `80h`; the manual's
+selective instruction listings are not misread as evidence that the logic
+subfields fault on physical silicon.
+
+The BIU configuration is instance-owned. Intel word memory and I/O operations
+are emitted as ordered low-byte then high-byte transactions even at even
+addresses. Instruction fetches are one byte wide, the queue capacity is four,
+and control transfers reset the queue to the selected target. Segment-plus-
+offset addresses wrap at 20 bits.
+
+Intel timing is deliberately `UNKNOWN`. The existing execution-clock tables,
+operand placement and complete-boundary durations are NEC V30 evidence and are
+not reused for the Intel model. `bm_808x_step()` provides functional
+instruction-boundary execution; `bm_808x_step_clocked()` returns
+`BM_STATUS_UNSUPPORTED` with zero cycles for Intel 8088 boundaries. The next
+CPU phase is a separate Intel-timing implementation which combines the Intel
+instruction tables with a proven 8088 queue/EU/BIU schedule.
+
+## Evidence classification
+
+### Documented by Intel
+
+The primary source is Intel Corporation, *The 8086 Family User's Manual*,
+October 1979, order number 9800722-03:
+
+- sections 2.2-2.3, printed pages 2-5 through 2-11: common EU, four-byte 8088 queue,
+  byte prefetch, queue reset on control transfer, and 20-bit physical address
+  generation;
+- section 2.4, printed page 2-16: one byte per 8088 I/O bus cycle and ordered two-cycle
+  word transfers;
+- section 2.6, printed pages 2-24 through 2-29: interrupt acceptance, priority, vector
+  layout, saved FLAGS/CS/IP, cleared IF/TF, trap behavior and the inhibition
+  after STI, IRET, MOV to a segment register and POP of a segment register;
+- section 2.6, printed page 2-29 and table 2-4: reset to `CS=FFFFh`, `IP=0000h`, other
+  segments zero, flags clear and an empty queue; pages 2-29 through 2-30 cover
+  HALT and queue reinitialization;
+- section 2.7, printed page 2-48: HLT wake sources, WAIT/TEST behavior and ESC register
+  no-op versus discarded memory read;
+- section 2.7, printed pages 2-49 through 2-51, especially 2-50 and 2-51:
+  instruction timing assumptions, prefetch caveats and the additional four
+  clocks for every 8088 16-bit memory reference;
+- section 4.2, printed page 4-1: 8-bit data bus, four-byte queue, byte fetches and BIU
+  arbitration; table 4-13, printed pages 4-28 through 4-35: the original opcode and
+  grouped-encoding map, including `60h`-`6Fh`, `C0h`/`C1h`, `C8h`/`C9h` and
+  reserved grouped fields marked `not used`.
+
+For the stored high FLAGS nibble, Intel Corporation, *Intel 64 and IA-32
+Architectures Software Developer's Manual, Volume 3B: System Programming Guide,
+Part 2*, March 2023 revision, order number 253669-079US, section 23.17.2,
+records that bits 12 through 15 are always set on the 8086. The 1979 manual's figure 2-9 defines only the nine
+8086/8088 status and control flags; the implementation therefore exposes no
+NEC MD flag on the Intel model and canonicalizes only that documented Intel
+image. These official documents define supported Intel behavior; their `not
+used` cells are not treated as proof that original silicon rejected a byte.
+
+### Observed silicon and retained corroboration
+
+The non-published opcode decisions are not attributed to Intel documentation:
+
+- Daniel Balsom, *A Hardware-Generated CPU Test Suite for the Intel 8088*,
+  SingleStepTests/8088 version 2.0.0, generated in 2024, repository commit
+  `aea84484abc79d09639d855b7b0ab32bc9e4dbeb`, `v2/metadata.json`. The recorded
+  device is an AMD D8088, marking `60h`-`6Fh`, `82h`, `C0h`, `C1h`, `C8h` and
+  `C9h` as aliases, `D6h` as undocumented, `F1h` as a prefix, and providing the
+  grouped decisions used above. This is a physical 8088-family corpus from a
+  licensed second-source part, not an Intel manual and not silently described
+  as an Intel-marked specimen.
+- Ken Shirriff, *Undocumented 8086 instructions, explained by the microcode*,
+  July 2023, sections “Holes in the opcode table” and “Holes in two-byte
+  opcodes”. This direct Intel 8086 die/microcode analysis explains `POP CS`,
+  conditional-jump and return aliases, `F1` LOCK, `SALC`, `SETMO`, Group 3
+  `TEST`, Group 5 `PUSH`, and all `82h` ALU subfields. Applying those EU/decode
+  results to the bus-narrowed 8088 is an explicit inference, corroborated by
+  the hardware-generated D8088 corpus.
+- The pre-existing `src/cpu/808x_marty_86box.c` validation core already records
+  the same original-8086/8088 aliases. It was reviewed as retained BluMach
+  evidence only. No instruction body or timing implementation was copied from
+  it into this portable core.
+
+### Retained derived rewrite
+
+The common register executor and effective-address machinery remain the
+existing BluMach derived rewrite of the inherited BluMach/86Box Vx0 sources
+listed in `provenance/components.json`. This change adds explicit immutable
+Intel and NEC profiles plus independently sourced Intel reset, FLAGS,
+interrupt, bus, queue and opcode decisions. It does not copy or import a new
+8088 implementation from PCem, 86Box, MartyPC or another emulator.
+
+V30 behavior, including NEC extensions, 8080 emulation mode, six-byte queue and
+the documented NEC timing observer, remains covered by the existing tests and
+retains its recorded authorship and GPL-2.0-or-later provenance.
+
+### Inferred or unknown
+
+- No complete Intel 8088 EU/BIU overlap schedule is claimed.
+- No electrical pin timing, READY sampling edge or interrupt-acknowledge pin
+  waveform is modelled by the portable bus contract.
+- Grouped encodings classified `undefined` by the physical D8088 corpus remain
+  unsupported. Their actual latch-dependent effects are `UNKNOWN` rather than
+  being inherited from the NEC V30 or a later x86.
+- `SETMO` result bytes are modeled from the die/corpus decision; its undefined
+  carry, auxiliary-carry and overflow outcomes are preserved rather than
+  claimed as verified flag values.
+- Attached 8087 arithmetic is outside this CPU component. ESC exposes the
+  documented opcode/operand observation contract; a null callback models no
+  attached coprocessor, while WAIT without a TEST provider remains unsupported.
+
+## Validation boundary
+
+The independent synthetic suite covers reset and FLAGS images, the complete
+primary classification map and grouped decisions, documented ISA, physical
+aliases, absence of NEC 8080 execution, divide behavior, interrupts, HLT wake,
+20-bit wrap, ordered byte memory and I/O transactions, ESC memory traffic,
+four-byte queue capacity and flushes, and the explicit unknown clocked-step
+result. No ROM, BIOS or machine media is required.
