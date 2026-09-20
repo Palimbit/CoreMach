@@ -1208,8 +1208,17 @@ pcs86_create(bm_engine_t *engine,
     machine->ems_pages = (uint16_t) (machine->ems_size / PCS86_EMS_WINDOW_SIZE);
 
     status = bm_bus_create(host, 40, &machine->bus);
-    if (status == BM_STATUS_OK)
-        bm_bus_set_observer(machine->bus, pcs86_bus_observer, machine);
+    if (status == BM_STATUS_OK) {
+        uint32_t observed_spaces = 0U;
+
+        if (machine->io_trace != NULL)
+            observed_spaces |= BM_BUS_OBSERVE_IO;
+        if (machine->memory_trace != NULL)
+            observed_spaces |= BM_BUS_OBSERVE_MEMORY;
+        if (observed_spaces != 0U)
+            status = bm_bus_set_observer_spaces(
+                machine->bus, pcs86_bus_observer, machine, observed_spaces);
+    }
     if (status == BM_STATUS_OK)
         status = bm_bus_set_default_response(machine->bus, BM_ADDRESS_IO,
                                              &open_io_bus);

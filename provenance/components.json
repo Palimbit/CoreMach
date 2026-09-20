@@ -23,7 +23,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Host-independent address-space bus with validated debug and initiator-held lock transaction attributes plus an optional observer for deterministic external traces"
+      "local_changes": "Host-independent address-space bus with validated debug and initiator-held lock transaction attributes plus an optional address-space-filtered observer for deterministic external traces without callbacks on unrelated memory, I/O, program or data traffic"
     },
     {
       "id": "generic-linear-memory",

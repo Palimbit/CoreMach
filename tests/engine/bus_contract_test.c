@@ -237,21 +237,41 @@ test_routing_metadata_and_observer(void)
     assert(observer.last.value == transaction.value);
     assert(observer.last.wait_states == transaction.wait_states);
 
+    assert(bm_bus_set_observer_spaces(NULL, capture_observer, &observer,
+                                      BM_BUS_OBSERVE_IO) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_bus_set_observer_spaces(bus, capture_observer, &observer, 0U) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_bus_set_observer_spaces(bus, NULL, NULL,
+                                      BM_BUS_OBSERVE_IO) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_bus_set_observer_spaces(bus, capture_observer, &observer,
+                                      BM_BUS_OBSERVE_ALL << 1U) ==
+           BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_bus_set_observer_spaces(bus, capture_observer, &observer,
+                                      BM_BUS_OBSERVE_IO) == BM_STATUS_OK);
+
+    transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_READ, 0x104U, 1U);
+    assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
+    assert(observer.calls == 1U);
+
     transaction = make_transaction(BM_ADDRESS_IO, BM_BUS_FETCH, 0x100U, 1U);
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_OK);
     assert(io.calls == 1U);
     assert(transaction.value == 0x5aU);
     assert(observer.calls == 2U);
 
+    bm_bus_set_observer(bus, capture_observer, &observer);
+
     transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_WRITE, 0x10fU, 2U);
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_UNMAPPED);
-    assert(memory.calls == 1U);
+    assert(memory.calls == 2U);
     assert(observer.calls == 2U);
 
     memory.status = BM_STATUS_DEVICE_ERROR;
     transaction = make_transaction(BM_ADDRESS_MEMORY, BM_BUS_WRITE, 0x100U, 1U);
     assert(bm_bus_transact(bus, &transaction) == BM_STATUS_DEVICE_ERROR);
-    assert(memory.calls == 2U);
+    assert(memory.calls == 3U);
     assert(observer.calls == 2U);
 
     memory.status = BM_STATUS_OK;

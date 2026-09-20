@@ -467,8 +467,10 @@ The next cut adds explicit, independently testable instances of the single
 8259A interrupt controller and the 8253 timer. The PCS 86 owns its board glue:
 known registers at `60h-6Fh` and the jumper byte at `100h` are not hidden in a
 generic PC global. PIT channel 0 raises the machine's PIC IRQ0 input, while a
-bus observer can capture successful I/O transactions without coupling devices
-to a debugger or frontend.
+bus observer can capture successful transactions without coupling devices to a
+debugger or frontend. Observers declare the address spaces they need, so an
+I/O-only diagnostic does not add a callback to every memory fetch; the original
+all-space observer entry point remains available for callers that require it.
 
 The V30 subset now performs byte-oriented `IN` and `OUT` operations, including
 word forms as two consecutive 8-bit bus transfers, and supports CLI, STI and
