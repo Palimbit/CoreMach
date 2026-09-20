@@ -18,9 +18,11 @@ read-modify-write operations and odd words. ModR/M `TEST` and `XCHG` are placed
 as well. Immediate ALU groups `80h`-`83h` now read memory before consuming the
 immediate and place their optional write. Segment-register `MOV` memory forms
 and immediate-to-r/m `MOV` groups `C6h`-`C7h` are placed too. Group 3
-`F6h`-`F7h` memory operands are placed as well, while documented
-multiply and signed-divide ranges remain incomplete rather than selecting a
-value from the range. Byte and word memory `INC`/`DEC` forms in groups `FEh`
+`F6h`-`F7h` memory operands are placed as well. Unsigned `MULU` resolves its
+documented one-clock data-dependent interval with the inherited V30
+microcode's high-half condition; signed multiply and signed-divide ranges
+remain incomplete rather than selecting a value from the range. Byte and word
+memory `INC`/`DEC` forms in groups `FEh`
 and `FFh` are placed too. Single-word register, segment, flags and immediate
 stack pushes and pops are placed as well. Other operand-bearing boundaries stay
 unresolved until their EXU position is known. `STOS` and `SCAS` now place their
@@ -153,7 +155,7 @@ intermediate product; overflow is reported without changing the position.
   protocol or cycle-level placement of the bus access. Sustained mixed
   workloads with guest-visible transactions still need testing before a real
   CPU migrates.
-- The existing PCS 86 suite remains green. V30 observation version 27 advances
+- The existing PCS 86 suite remains green. V30 observation version 28 advances
   prefetch during each instruction-queue read and composes complete
   native-clock boundaries only where prefetch,
   queue-read and EXU placement is proven. Unprefixed direct and DX-addressed
@@ -177,25 +179,27 @@ intermediate product; overflow is reported without changing the position.
   clocked callback and PCS 86 machine migration are later changes. Z80
   integration must not alter the legacy V30 tick meaning.
 - The current PCS 86 firmware baseline completes 1,385,861 observed instruction
-  boundaries before its known unsupported endpoint. Of those, 1,385,859 have a
-  complete exact boundary duration and 2 remain unknown. Placing `STOSW`
+  boundaries before its known unsupported endpoint. All 1,385,861 now have a
+  complete exact boundary duration. Placing `STOSW`
   (`ABh`) and `SCASW` (`AFh`) removed 262,193 unknown boundaries without
   changing the endpoint or framebuffer CRC. Placing relative near `CALL` and
   near `RET` then removed another 1,457, and `MOVS`/`LODS` removed another 312.
   Classifying accumulator-immediate `TEST` removed another 28.
   Placing `LES`/`LDS` removed another 15, software `INT`/`IRET` removed 5, and
-  indirect near `CALL` removed 3. The two remaining boundaries are unsigned
-  byte multiplies whose documented execution time is data-dependent (27 or 28
-  clocks); they remain explicit rather than selecting an unverified endpoint.
-  This measured
+  indirect near `CALL` removed 3. The final two unsigned byte multiplies use
+  the documented 27-or-28-clock interval plus the inherited V30 microcode's
+  explicit extra-clock condition: both firmware instances multiply zero and
+  therefore take 28 execution clocks. This derived condition remains marked
+  for hardware confirmation; it is not presented as a statement found in the
+  NEC manual. This measured
   distribution sets the next
   integration order instead of opcode-table convenience.
 - The V30 now exposes a clocked-engine step callback independently of its
   optional diagnostic observer. It reports a duration only for a complete,
   exact scalar boundary; a ranged or unknown result stops with
   `BM_STATUS_UNSUPPORTED` and zero cycles. This is an intentional migration
-  guard: the PCS 86 remains on instruction ticks until every boundary reached
-  by its clocked validation path is scalar, including hardware interrupts.
+  guard: the firmware path is now scalar, but the PCS 86 remains on instruction
+  ticks until clocked hardware-interrupt boundaries are covered too.
 - Synthetic timed-source tests cover an exact 3 Hz fractional sequence,
   split execution, reset rearming, stable same-time ordering, explicit idle,
   dynamic arm/reprogram/disarm, exact CPU-boundary arming, overflow atomicity,

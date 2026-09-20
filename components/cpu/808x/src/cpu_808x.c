@@ -4891,6 +4891,17 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                             known = rm_execution_clock_range(
                                 state, 0, 21U, 22U, 27U, 28U, 0U, 0U,
                                 0U, 0U, &range_min, &range_max);
+                        /* NEC documents the one-clock range as data-dependent.
+                         * The inherited V30 microcode spends the additional
+                         * clock when the unsigned product has no high half. */
+                        if (known) {
+                            int high_half_is_zero = word ?
+                                state->registers[REG_DX] == 0U :
+                                (state->registers[REG_AX] & 0xff00U) == 0U;
+                            base = range_min +
+                                   (high_half_is_zero ? 1U : 0U);
+                            kind = BM_808X_EXECUTION_CLOCKS_EXACT;
+                        }
                     } else if (operation == 5U) {
                         if (word)
                             known = rm_execution_clock_range(
@@ -4909,7 +4920,7 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
                             state, 0, 29U, 34U, 34U, 39U, 0U, 0U,
                             0U, 0U, &range_min, &range_max);
                     }
-                    if (known) {
+                    if (known && (operation != 4U)) {
                         *minimum = range_min +
                                    (uint32_t) state->last_prefix_count * 2U;
                         *maximum = range_max +

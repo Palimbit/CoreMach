@@ -1471,12 +1471,12 @@ test_group3_memory_operands_have_a_placed_timeline(void)
         step_once(&machine, &capture);
         state = cpu_808x_test_get_state(&machine);
         assert(state.ax == 6U);
-        assert_execution_clock_range(&capture, 27U, 28U);
+        assert_exact_execution_clocks(&capture, 28U);
         assert(capture.last.boundary_clock_kind ==
-               BM_808X_EXECUTION_CLOCKS_UNKNOWN);
+               BM_808X_EXECUTION_CLOCKS_EXACT);
         assert(capture.last.operand_transactions == 1U);
-        assert(capture.last.execution_timeline_complete == 0U);
-        assert(capture.last.execution_clocks_placed == 5U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.execution_clocks_placed == 28U);
         cpu_808x_test_machine_destroy(&machine);
     }
 
@@ -1937,7 +1937,7 @@ static void
 test_clocked_step_requires_an_exact_scalar_boundary(void)
 {
     static const uint8_t exact_program[] = { 0x90U };
-    static const uint8_t ranged_program[] = { 0xf6U, 0xe0U };
+    static const uint8_t ranged_program[] = { 0xf6U, 0xe8U };
     timing_capture_t capture = { 0 };
     cpu_808x_test_config_t config = {
         .timing = capture_timing,
@@ -2195,7 +2195,6 @@ test_data_dependent_arithmetic_reports_documented_ranges(void)
         uint32_t minimum;
         uint32_t maximum;
     } cases[] = {
-        { { 0xf6U, 0xe0U }, 2U, 0U, 21U, 22U }, /* MULU AL. */
         { { 0xf6U, 0x2fU }, 2U, 0x0040U, 39U, 45U }, /* MUL [BW]. */
         { { 0xf7U, 0xf8U }, 2U, 0U, 38U, 43U }, /* DIV AW. */
         { { 0xf7U, 0x6fU }, 2U, 0x0041U, 51U, 57U }, /* MUL [BW]. */
@@ -2230,13 +2229,11 @@ test_data_dependent_arithmetic_reports_documented_ranges(void)
         step_once(&machine, &capture);
         assert_execution_clock_range(&capture, cases[index].minimum,
                                      cases[index].maximum);
-        if (index == 0U)
-            assert_boundary_clock_range(&capture, 27U, 28U);
-        else if (index == 2U)
+        if (index == 1U)
             assert_boundary_clock_range(&capture, 44U, 49U);
-        else if (index == 4U)
+        else if (index == 3U)
             assert_boundary_clock_range(&capture, 37U, 43U);
-        else if (index == 5U)
+        else if (index == 4U)
             assert_boundary_clock_range(&capture, 49U, 55U);
         else
             assert_unknown_boundary_clocks(&capture);
@@ -2631,6 +2628,53 @@ test_io_string_formula_timing(void)
 }
 
 static void
+test_unsigned_multiply_resolves_its_data_dependent_clock(void)
+{
+    const struct {
+        uint8_t program[2];
+        uint16_t ax;
+        uint16_t dx;
+        uint32_t execution_clocks;
+        int memory_operand;
+    } cases[] = {
+        { { 0xf6U, 0xe3U }, 0x0002U, 0U, 22U, 0 },
+        { { 0xf6U, 0xe3U }, 0x0080U, 0U, 21U, 0 },
+        { { 0xf6U, 0x27U }, 0x0002U, 0U, 28U, 1 },
+        { { 0xf6U, 0x27U }, 0x0080U, 0U, 27U, 1 },
+        { { 0xf7U, 0xe3U }, 0x0002U, 0U, 30U, 0 },
+        { { 0xf7U, 0xe3U }, 0x8000U, 0U, 29U, 0 }
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+
+        cpu_808x_test_machine_create(&machine, &config, cases[index].program,
+                                     sizeof(cases[index].program));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ax = cases[index].ax;
+        state.bx = cases[index].memory_operand ? 0x0100U : 2U;
+        state.dx = cases[index].dx;
+        cpu_808x_test_set_state(&machine, &state);
+        if (cases[index].memory_operand)
+            cpu_808x_test_poke(&machine, 0x0100U, 2U);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture,
+                                      cases[index].execution_clocks);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
 test_stos_scas_have_a_complete_timeline(void)
 {
     const struct {
@@ -3009,6 +3053,7 @@ main(void)
     test_single_word_stack_operations_have_a_complete_timeline();
     test_counted_and_stack_timing();
     test_data_dependent_arithmetic_reports_documented_ranges();
+    test_unsigned_multiply_resolves_its_data_dependent_clock();
     test_divide_error_does_not_claim_normal_execution_clocks();
     test_scalar_formula_and_condition_timing();
     test_nec_extension_timing();

@@ -77,7 +77,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 27U
+#define BM_808X_TIMING_OBSERVATION_VERSION 28U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -155,7 +155,7 @@ typedef enum bm_808x_prefetch_phase {
  * Version 17 places memory transfers for segment-register MOV and immediate
  * MOV groups C6h-C7h without changing their bus-free register forms.
  * Version 18 places Group 3 F6h-F7h memory reads and the TEST immediate and
- * NOT/NEG write intervals. Documented multiply ranges remain ranges.
+ * NOT/NEG write intervals. Signed multiply and divide ranges remain ranges.
  * Version 19 places byte and word FEh/FFh INC/DEC memory reads, their
  * computation interval and writes; other FFh control forms remain unresolved.
  * Version 20 places single-word register, segment, flags and immediate stack
@@ -175,6 +175,8 @@ typedef enum bm_808x_prefetch_phase {
  * suspension and the target-queue flush.
  * Version 27 places register and memory indirect near CALL operand reads and
  * stack writes around prefetch suspension and the target-queue flush.
+ * Version 28 resolves unsigned MULU's documented one-clock data-dependent
+ * interval using the inherited V30 microcode's high-half condition.
  * These fields expose arbitration resources, not yet a complete elapsed time,
  * because the executor does not expose each access's EXU-clock position. */
 typedef struct bm_808x_timing_observation {
