@@ -221,8 +221,46 @@ test_fixed_execution_clocks_and_prefix_cost(void)
         assert(capture.last.prefetch_phase == cases[index].prefetch_phase);
         assert(capture.last.prefetch_transactions == 2U);
         assert(capture.last.prefetch_phase_clocks == cases[index].bus_clocks);
+        assert(capture.last.operand_transactions == 0U);
+        assert(capture.last.operand_bus_clocks == 0U);
+        assert(capture.last.prefetch_handoff_clocks == 0U);
         cpu_808x_test_machine_destroy(&machine);
     }
+}
+
+static void
+test_operand_request_completes_inflight_prefetch(void)
+{
+    static const uint8_t program[] = {
+        0x90U,       /* NOP leaves the next prefetch at T4. */
+        0x50U,       /* PUSH AW requests the operand bus. */
+        0x90U, 0x90U
+    };
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+
+    cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
+    start_program(&machine);
+    step_once(&machine, &capture);
+    assert(capture.last.prefetch_phase == BM_808X_PREFETCH_T4);
+
+    memset(&capture, 0, sizeof(capture));
+    step_once(&machine, &capture);
+    assert_exact_execution_clocks(&capture, 8U);
+    assert_unknown_boundary_clocks(&capture);
+    assert(capture.last.logical_bus_transactions == 1U);
+    assert(capture.last.prefetch_transactions == 0U);
+    assert(capture.last.prefetch_phase_clocks == 1U);
+    assert(capture.last.operand_transactions == 1U);
+    assert(capture.last.operand_bus_clocks == 4U);
+    assert(capture.last.prefetch_handoff_clocks == 1U);
+    assert(capture.last.bus_active_clocks == 5U);
+    assert(capture.last.prefetch_queue_count == 2U);
+    cpu_808x_test_machine_destroy(&machine);
 }
 
 static void
@@ -310,6 +348,9 @@ test_bus_waits_are_reported_but_not_folded_into_execution_clocks(void)
     assert(capture.last.prefetch_transactions == 1U);
     assert(capture.last.prefetch_phase_clocks == 4U);
     assert(capture.last.prefetch_phase == BM_808X_PREFETCH_IDLE);
+    assert(capture.last.operand_transactions == 1U);
+    assert(capture.last.operand_bus_clocks == 7U);
+    assert(capture.last.prefetch_handoff_clocks == 0U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -336,6 +377,9 @@ test_memory_timing_uses_operand_form_and_alignment(void)
     assert_exact_execution_clocks(&capture, 9U);
     assert_unknown_boundary_clocks(&capture);
     assert(capture.last.logical_bus_transactions == 2U);
+    assert(capture.last.operand_transactions == 1U);
+    assert(capture.last.operand_bus_clocks == 4U);
+    assert(capture.last.prefetch_handoff_clocks == 0U);
     assert(cpu_808x_test_peek(&machine, 0x10040U) == 0x5aU);
     cpu_808x_test_machine_destroy(&machine);
 
@@ -368,6 +412,9 @@ test_memory_timing_uses_operand_form_and_alignment(void)
             assert(capture.last.demand_prefetch_transactions == 1U);
             assert(capture.last.demand_prefetch_bus_clocks == 4U);
             assert(capture.last.instruction_queue_reads == 2U);
+            assert(capture.last.operand_transactions == (odd ? 4U : 2U));
+            assert(capture.last.operand_bus_clocks == (odd ? 16U : 8U));
+            assert(capture.last.prefetch_handoff_clocks == 0U);
             assert(bus_capture.transactions[0].operation == BM_BUS_FETCH);
             assert(bus_capture.transactions[0].size == 2U);
             assert(bus_capture.transactions[0].alignment == 2U);
@@ -1123,6 +1170,7 @@ int
 main(void)
 {
     test_fixed_execution_clocks_and_prefix_cost();
+    test_operand_request_completes_inflight_prefetch();
     test_taken_branch_flushes_even_when_target_is_sequential();
     test_bus_waits_are_reported_but_not_folded_into_execution_clocks();
     test_memory_timing_uses_operand_form_and_alignment();

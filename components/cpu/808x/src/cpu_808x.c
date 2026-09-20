@@ -89,14 +89,6 @@ typedef struct bm_808x_state {
 } bm_808x_state_t;
 
 static void
-record_bus_transaction(bm_808x_state_t *state,
-                       const bm_bus_transaction_t *transaction,
-                       bm_status_t status)
-{
-    bm_v30_bcu_record_transaction(&state->bcu, transaction, status);
-}
-
-static void
 mark_prefetch_flush(bm_808x_state_t *state)
 {
     bm_v30_bcu_flush(&state->bcu, state->ip);
@@ -132,8 +124,8 @@ read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
         1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    bm_status_t status = bm_v30_bcu_transact(
+        &state->bcu, state->bus, &transaction);
     if (status == BM_STATUS_OK)
         *value = (uint8_t) transaction.value;
     return status;
@@ -189,8 +181,8 @@ write_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint8_t va
         1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    bm_status_t status = bm_v30_bcu_transact(
+        &state->bcu, state->bus, &transaction);
     return status;
 }
 
@@ -203,9 +195,9 @@ read_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t *v
             0, 2, 2, 0, BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+        bm_status_t status = bm_v30_bcu_transact(
+            &state->bcu, state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
         if (status == BM_STATUS_OK)
             *value = (uint16_t) transaction.value;
         return status;
@@ -230,9 +222,9 @@ write_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t v
             value, 2, 2, 0, BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+        bm_status_t status = bm_v30_bcu_transact(
+            &state->bcu, state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
         return status;
     }
 
@@ -1496,8 +1488,8 @@ io_read_byte(bm_808x_state_t *state, uint16_t port, uint8_t *value)
         BM_ADDRESS_IO, BM_BUS_READ, port, 0, 1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    bm_status_t status = bm_v30_bcu_transact(
+        &state->bcu, state->bus, &transaction);
     if (status == BM_STATUS_OK)
         *value = (uint8_t) transaction.value;
     return status;
@@ -1510,8 +1502,8 @@ io_write_byte(bm_808x_state_t *state, uint16_t port, uint8_t value)
         BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 1, 1, 0, BM_ENDIAN_LITTLE,
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
     };
-    bm_status_t status = bm_bus_transact(state->bus, &transaction);
-    record_bus_transaction(state, &transaction, status);
+    bm_status_t status = bm_v30_bcu_transact(
+        &state->bcu, state->bus, &transaction);
     return status;
 }
 
@@ -1524,9 +1516,9 @@ io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
             BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+        bm_status_t status = bm_v30_bcu_transact(
+            &state->bcu, state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
         if (status == BM_STATUS_OK)
             *value = (uint16_t) transaction.value;
         return status;
@@ -1551,9 +1543,9 @@ io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
             BM_ENDIAN_LITTLE,
             state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U
         };
-        bm_status_t status = bm_bus_transact(state->bus, &transaction);
+        bm_status_t status = bm_v30_bcu_transact(
+            &state->bcu, state->bus, &transaction);
 
-        record_bus_transaction(state, &transaction, status);
         return status;
     }
 
@@ -4703,7 +4695,11 @@ emit_boundary_observation(bm_808x_state_t *state,
             state->bcu.boundary_instruction_queue_reads : 0U,
         .prefetch_phase = observed_prefetch_phase(&state->bcu),
         .prefetch_transactions = state->bcu.boundary_prefetch_transactions,
-        .prefetch_phase_clocks = state->bcu.boundary_prefetch_phase_clocks
+        .prefetch_phase_clocks = state->bcu.boundary_prefetch_phase_clocks,
+        .operand_transactions = state->bcu.boundary_operand_transactions,
+        .operand_bus_clocks = state->bcu.boundary_operand_bus_clocks,
+        .prefetch_handoff_clocks =
+            state->bcu.boundary_prefetch_handoff_clocks
     };
 
     if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)

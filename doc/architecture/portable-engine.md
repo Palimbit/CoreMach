@@ -240,7 +240,7 @@ into the instruction formula. `POLL` and all 8080-mode timings remain
 unclassified.
 Successful transactions through the portable memory and I/O bus are counted
 separately, including wait states reported by mapped devices, without calling
-their sum the elapsed instruction time. Timing-observation version 6 reports
+their sum the elapsed instruction time. Timing-observation version 7 reports
 bus occupancy, the subset spent on demand prefetch, one queue-read clock per
 consumed instruction byte, successful prefetch transactions, BCU phase clocks
 and the next prefetch phase. It also exposes a separately classified complete
@@ -258,17 +258,25 @@ now live in one private, instance-owned BCU component rather than as scattered
 interpreter fields. Its direct tests cover queue wrap, flush and boundary
 accounting. Demand fills now execute explicit T1/T2/T3/Tw/T4 phases, perform
 the portable bus access in T3 and publish fetched bytes to the queue in T4.
+An in-flight speculative fetch whose queue is empty when the next instruction
+needs a byte is reclassified as demand for its remaining phases, including
+when its T3 transaction completed in the preceding boundary.
 For native instructions whose NEC execution time is exact, which do not flush
 the queue and which perform no operand or I/O transfer, those phases progress
 concurrently for the documented EXU clocks and persist across instruction
 boundaries. Aligned V30 word memory
 operands, stack/vector transfers and word I/O at an even port use one
 little-endian 16-bit bus transaction; an odd memory word or I/O port still uses
-the two byte cycles required by the hardware. Instructions with operand bus
+the two byte cycles required by the hardware. Every memory and I/O transaction
+now acquires that same BCU instead of calling the portable bus directly. If a
+prefetch is already in T1-T4, it completes before the operand begins its own
+T1/T2/T3/Tw/T4 transfer. Version 7 reports operand transaction clocks and the
+prefetch clocks spent handing over the bus separately. The executor still does
+not publish each operand's EXU-clock offset, so instructions with operand bus
 traffic, documented timing ranges or unknown timing deliberately suspend this
-first overlap model until their individual accesses can be placed. The
-observer therefore still labels the transaction aggregate as logical rather
-than claiming a complete external-bus trace. Instruction demand fetch uses a real
+first overlap model until their individual accesses can be placed. The observer
+therefore still labels these as resource measurements rather than claiming a
+complete external-bus trace or elapsed duration. Instruction demand fetch uses a real
 six-byte queue and
 per-instance PFP. An even PFP fetches one little-endian word in a single bus
 transaction; an odd PFP fetches one byte before the pointer returns to an even
@@ -280,9 +288,10 @@ every boundary, rather than inferring queue state only when a flush occurs.
 
 This establishes the first scheduler-ready boundary measurements without
 claiming a complete timing model or exposing a clocked CPU callback prematurely.
-Contention with operand cycles, exact realised clocks inside data-dependent
-ranges, DMA/bus arbitration and scheduler consumption of the observations
-remain explicit subsequent work. The limited uncontended overlap is
+The shared BCU now establishes real prefetch-versus-operand ownership, but
+placing the request on the EXU timeline, exact realised clocks inside
+data-dependent ranges, DMA arbitration and scheduler consumption of the
+observations remain explicit subsequent work. The limited uncontended overlap is
 cycle-phased, but the processor as a whole is not yet described as cycle
 accurate.
 `POLL` also requires a semantic
@@ -291,7 +300,7 @@ sample instead of keeping the documented polling loop inside one instruction.
 That provisional retry discards the queue because it restores architectural IP;
 it does not claim the queue or five-clock sampling behavior of real hardware.
 NEC's tables also state that execution clocks exclude prefetch, pre-decode and
-bus waits. Version 6 combines those quantities only for the uncontended cases
+bus waits. Version 7 combines those quantities only for the uncontended cases
 where their placement and overlap are known; every other boundary remains
 explicitly unknown rather than receiving a misleading sum.
 
