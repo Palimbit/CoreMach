@@ -362,15 +362,31 @@ static bm_status_t
 io_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pvga1a_t *video = context;
+    uint32_t index;
 
-    if ((transaction == NULL) || (transaction->size != 1U) ||
+    if ((transaction == NULL) || (transaction->size == 0U) ||
+        (transaction->size > sizeof(transaction->value)) ||
         (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
-    if (transaction->operation == BM_BUS_READ)
-        transaction->value = read_port(video, (uint16_t) transaction->address);
-    else
-        write_port(video, (uint16_t) transaction->address,
-                   (uint8_t) transaction->value);
+    if (transaction->operation == BM_BUS_READ) {
+        transaction->value = 0U;
+        for (index = 0U; index < transaction->size; ++index) {
+            uint32_t shift = transaction->endianness == BM_ENDIAN_LITTLE
+                                 ? index * 8U
+                                 : (transaction->size - index - 1U) * 8U;
+            transaction->value |=
+                (uint64_t) read_port(
+                    video, (uint16_t) (transaction->address + index)) << shift;
+        }
+        return BM_STATUS_OK;
+    }
+    for (index = 0U; index < transaction->size; ++index) {
+        uint32_t shift = transaction->endianness == BM_ENDIAN_LITTLE
+                             ? index * 8U
+                             : (transaction->size - index - 1U) * 8U;
+        write_port(video, (uint16_t) (transaction->address + index),
+                   (uint8_t) (transaction->value >> shift));
+    }
     return BM_STATUS_OK;
 }
 

@@ -194,11 +194,16 @@ intermediate product; overflow is reported without changing the position.
   explicit extra-clock condition: both firmware instances multiply zero and
   therefore take 28 execution clocks. This derived condition remains marked
   for hardware confirmation; it is not presented as a statement found in the
-  NEC manual. The clocked run reaches the same `F000:85F9` unsupported endpoint
-  with the same instruction and I/O counts. Its deterministic framebuffer CRC
-  is now `cd3694c5` rather than the instruction-tick baseline `e8bbbd1f`, because
-  cursor/blink rendering receives the new elapsed nanosecond timestamp; CRTC
-  state and the endpoint are unchanged. This measured
+  NEC manual. The initial clocked migration reached the same `F000:85F9`
+  unsupported endpoint with the same instruction and I/O counts. Its
+  deterministic framebuffer CRC was `cd3694c5` rather than the
+  instruction-tick baseline `e8bbbd1f`, because cursor/blink rendering receives
+  the new elapsed nanosecond timestamp; CRTC state and the endpoint were
+  unchanged. Accepting one V30 word-I/O transaction across the indexed VGA
+  `3D4h/3D5h` pair then removes that component-boundary limitation: the same
+  BIOS proceeds through timer programming and IRQ0. With the preserved System
+  Disk mounted read-only, it reaches 5.778816 seconds and identifies the next
+  strict timing guard at `RETF imm16`, after activating FDC IRQ6. This measured
   distribution sets the next
   integration order instead of opcode-table convenience.
 - The V30 now exposes a clocked-engine step callback independently of its
@@ -206,7 +211,8 @@ intermediate product; overflow is reported without changing the position.
   exact scalar boundary; a ranged or unknown result stops with
   `BM_STATUS_UNSUPPORTED` and zero cycles. This is an intentional migration
   guard: the firmware path plus accepted NMI, maskable INT and immediately
-  ready `POLL` are scalar. The PCS 86 now uses nanosecond virtual time with its
+  ready `POLL` are scalar up to the first unresolved far-return timeline. The
+  PCS 86 now uses nanosecond virtual time with its
   V30, PIT and RTC registered as independent exact-rate participants;
   single-step, synchronous-fault and busy-`POLL` paths still stop explicitly if
   reached before their timing is completed.

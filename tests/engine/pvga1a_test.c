@@ -28,6 +28,29 @@ io_read(bm_bus_t *bus, uint16_t port, uint8_t *value)
 }
 
 static bm_status_t
+io_write_word(bm_bus_t *bus, uint16_t port, uint16_t value)
+{
+    bm_bus_transaction_t transaction = {
+        BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 2, 2, 0,
+        BM_ENDIAN_LITTLE, 0
+    };
+    return bm_bus_transact(bus, &transaction);
+}
+
+static bm_status_t
+io_read_word(bm_bus_t *bus, uint16_t port, uint16_t *value)
+{
+    bm_bus_transaction_t transaction = {
+        BM_ADDRESS_IO, BM_BUS_READ, port, 0, 2, 2, 0,
+        BM_ENDIAN_LITTLE, 0
+    };
+    bm_status_t status = bm_bus_transact(bus, &transaction);
+    if (status == BM_STATUS_OK)
+        *value = (uint16_t) transaction.value;
+    return status;
+}
+
+static bm_status_t
 memory_write(bm_bus_t *bus, uint32_t address, uint8_t value)
 {
     bm_bus_transaction_t transaction = {
@@ -86,6 +109,7 @@ main(void)
     bm_pvga1a_t *video = NULL;
     bm_pvga1a_config_t config = { BM_PVGA1A_VRAM_SIZE };
     uint8_t value = 0;
+    uint16_t word = 0;
     unsigned int plane;
     bm_video_geometry_t geometry;
     uint32_t pixels[64];
@@ -100,6 +124,15 @@ main(void)
 
     assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
     assert(bm_pvga1a_create(&host, bus, &config, &video) == BM_STATUS_OK);
+
+    /* V30 word I/O to an indexed VGA pair writes the low byte to the index
+     * port and the high byte to the adjacent data port. Reads preserve the
+     * same ascending-port, little-endian order. */
+    assert(io_write_word(bus, 0x03d4U, 0x5a0eU) == BM_STATUS_OK);
+    assert(bm_pvga1a_inspect_register(video, BM_PVGA1A_CRTC, 0x0eU,
+                                      &value) == BM_STATUS_OK && value == 0x5aU);
+    assert(io_read_word(bus, 0x03d4U, &word) == BM_STATUS_OK);
+    assert(word == 0x5a0eU);
 
     /* Paradise extended graphics registers remain locked until 0Fh = 05h. */
     assert(io_write(bus, 0x03ceU, 0x09U) == BM_STATUS_OK);
