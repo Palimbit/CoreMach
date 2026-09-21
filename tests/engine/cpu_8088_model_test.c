@@ -19,6 +19,11 @@ typedef struct phase_capture {
     size_t count;
 } phase_capture_t;
 
+typedef struct queue_capture {
+    bm_8088_queue_event_t events[16];
+    size_t count;
+} queue_capture_t;
+
 static void
 capture_bus(void *context, const bm_bus_transaction_t *transaction)
 {
@@ -45,6 +50,17 @@ capture_phase(void *context,
 
     assert(capture->count < 8U);
     capture->observations[capture->count++] = *observation;
+}
+
+static void
+capture_queue(void *context, const bm_8088_queue_event_t *event)
+{
+    queue_capture_t *capture = context;
+
+    assert(event->size == sizeof(*event));
+    assert(event->version == BM_8088_QUEUE_EVENT_VERSION);
+    assert(capture->count < 16U);
+    capture->events[capture->count++] = *event;
 }
 
 static bm_status_t
@@ -452,6 +468,83 @@ test_public_bus_phase_observer_survives_state_install(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_intel_queue_events_are_logical_not_clocked(void)
+{
+    static const uint8_t prefixed_mov[] = {
+        0x2eU, 0xb8U, 0x34U, 0x12U
+    };
+    static const uint8_t short_jump[] = { 0xebU, 0x00U };
+    cpu_808x_test_config_t config = intel_config();
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    bm_808x_prefetch_state_t prefetch = {
+        .size = sizeof(prefetch),
+        .version = BM_808X_PREFETCH_STATE_VERSION,
+        .pointer = 4U,
+        .count = 4U,
+        .capacity = BM_808X_8088_PREFETCH_QUEUE_CAPACITY,
+        .bytes = { 0xebU, 0x00U, 0x90U, 0x90U }
+    };
+    queue_capture_t capture = { 0 };
+    bm_tick_t consumed = 0U;
+
+    config.intel_queue_event = capture_queue;
+    config.intel_queue_event_context = &capture;
+    cpu_808x_test_machine_create(&machine, &config, prefixed_mov,
+                                 sizeof(prefixed_mov));
+    assert(capture.count == 0U); /* Host reset is not a guest queue event. */
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(capture.count == 0U);
+    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
+    assert(capture.count == 4U);
+    assert(capture.events[0].kind == BM_8088_QUEUE_READ_FIRST);
+    assert(capture.events[1].kind == BM_8088_QUEUE_READ_FIRST);
+    assert(capture.events[2].kind == BM_8088_QUEUE_READ_SUBSEQUENT);
+    assert(capture.events[3].kind == BM_8088_QUEUE_READ_SUBSEQUENT);
+    assert(capture.events[0].value == 0x2eU);
+    assert(capture.events[1].value == 0xb8U);
+    assert(capture.events[2].value == 0x34U);
+    assert(capture.events[3].value == 0x12U);
+    assert(capture.events[0].cs == 0xf000U);
+    assert(capture.events[0].ip == 0U);
+    assert(capture.events[3].ip == 3U);
+    assert(capture.events[0].count_before == 1U);
+    assert(capture.events[0].count_after == 0U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    cpu_808x_test_machine_create(&machine, &config, short_jump,
+                                 sizeof(short_jump));
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+           BM_STATUS_OK);
+    assert(capture.count == 0U); /* Import is host setup, not a queue read. */
+    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
+    assert(capture.count == 3U);
+    assert(capture.events[0].kind == BM_8088_QUEUE_READ_FIRST);
+    assert(capture.events[1].kind == BM_8088_QUEUE_READ_SUBSEQUENT);
+    assert(capture.events[2].kind == BM_8088_QUEUE_FLUSH);
+    assert(capture.events[2].ip == 2U);
+    assert(capture.events[0].count_before == 4U);
+    assert(capture.events[0].count_after == 3U);
+    assert(capture.events[2].count_before == 2U);
+    assert(capture.events[2].count_after == 0U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&capture, 0, sizeof(capture));
+    config.model = BM_808X_NEC_V30;
+    cpu_808x_test_machine_create(&machine, &config, prefixed_mov,
+                                 sizeof(prefixed_mov));
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(cpu_808x_test_step(&machine, &consumed) == BM_STATUS_OK);
+    assert(capture.count == 0U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
 int
 main(void)
 {
@@ -461,5 +554,6 @@ main(void)
     test_interrupt_halt_queue_and_unknown_timing();
     test_prefetch_state_round_trip();
     test_public_bus_phase_observer_survives_state_install();
+    test_intel_queue_events_are_logical_not_clocked();
     return 0;
 }

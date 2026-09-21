@@ -77,6 +77,8 @@ typedef struct bm_808x_state {
     void *timing_context;
     bm_808x_bus_phase_fn bus_phase;
     void *bus_phase_context;
+    bm_8088_queue_event_fn intel_queue_event;
+    void *intel_queue_event_context;
     int boundary_rm_valid;
     int boundary_rm_memory;
     uint16_t boundary_rm_offset;
@@ -167,9 +169,36 @@ model_profile(bm_808x_model_t model)
 }
 
 static void
+observe_intel_queue(bm_808x_state_t *state, bm_8088_queue_event_kind_t kind,
+                    uint16_t ip, uint8_t value, uint8_t count_before)
+{
+    bm_8088_queue_event_t event;
+
+    if ((state->model != BM_808X_INTEL_8088) ||
+        (state->intel_queue_event == NULL))
+        return;
+    event = (bm_8088_queue_event_t) {
+        .size = sizeof(event),
+        .version = BM_8088_QUEUE_EVENT_VERSION,
+        .kind = kind,
+        .cs = state->segments[1],
+        .ip = ip,
+        .value = value,
+        .count_before = count_before,
+        .count_after = bm_808x_biu_queue_count(&state->bcu),
+        .reserved = 0U
+    };
+    state->intel_queue_event(state->intel_queue_event_context, &event);
+}
+
+static void
 mark_prefetch_flush(bm_808x_state_t *state)
 {
+    uint8_t count_before = bm_808x_biu_queue_count(&state->bcu);
+
     bm_808x_biu_flush(&state->bcu, state->ip);
+    observe_intel_queue(state, BM_8088_QUEUE_FLUSH, state->ip, 0U,
+                        count_before);
 }
 
 static int
@@ -281,16 +310,20 @@ fill_prefetch_queue(bm_808x_state_t *state)
 }
 
 static bm_status_t
-fetch_byte(bm_808x_state_t *state, uint8_t *value)
+fetch_byte_as(bm_808x_state_t *state, uint8_t *value,
+              bm_8088_queue_event_kind_t kind)
 {
     bm_status_t status = BM_STATUS_OK;
+    uint8_t count_before;
+    uint16_t ip_before = state->ip;
 
     if (bm_808x_biu_queue_count(&state->bcu) == 0U)
         status = fill_prefetch_queue(state);
-    if (status == BM_STATUS_OK) {
+    count_before = bm_808x_biu_queue_count(&state->bcu);
+    if (status == BM_STATUS_OK)
         status = bm_808x_biu_dequeue_byte(&state->bcu, value);
-    }
     if (status == BM_STATUS_OK) {
+        observe_intel_queue(state, kind, ip_before, *value, count_before);
         if (state->last_instruction_length < 8U)
             state->last_instruction_bytes |=
                 (uint64_t) *value << (state->last_instruction_length * 8U);
@@ -307,6 +340,18 @@ fetch_byte(bm_808x_state_t *state, uint8_t *value)
                 &state->bcu, state->bus, state->segments[1], 0U, 1U);
     }
     return status;
+}
+
+static bm_status_t
+fetch_byte(bm_808x_state_t *state, uint8_t *value)
+{
+    return fetch_byte_as(state, value, BM_8088_QUEUE_READ_SUBSEQUENT);
+}
+
+static bm_status_t
+fetch_first_byte(bm_808x_state_t *state, uint8_t *value)
+{
+    return fetch_byte_as(state, value, BM_8088_QUEUE_READ_FIRST);
 }
 
 static bm_status_t
@@ -2592,7 +2637,7 @@ execute_one(bm_808x_state_t *state)
 
     state->last_instruction_bytes = 0U;
     state->last_instruction_length = 0U;
-    status = fetch_byte(state, &opcode);
+    status = fetch_first_byte(state, &opcode);
 
     if (status != BM_STATUS_OK)
         return status;
@@ -2640,7 +2685,7 @@ execute_one(bm_808x_state_t *state)
         status = place_execution_clocks(state, 2U);
         if (status != BM_STATUS_OK)
             return status;
-        status = fetch_byte(state, &opcode);
+        status = fetch_first_byte(state, &opcode);
         if (status != BM_STATUS_OK)
             return status;
     }
@@ -5817,6 +5862,8 @@ bm_808x_create(const bm_host_services_t *host,
     state->timing_context = config->timing_context;
     state->bus_phase = config->bus_phase;
     state->bus_phase_context = config->bus_phase_context;
+    state->intel_queue_event = config->intel_queue_event;
+    state->intel_queue_event_context = config->intel_queue_event_context;
     *out_cpu = (bm_cpu_t) {
         profile->name,
         state,

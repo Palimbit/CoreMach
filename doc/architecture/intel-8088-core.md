@@ -146,6 +146,23 @@ not synthesize EU-only idle (`Ti`) clocks, queue-status pins, READY sampling
 edges or instruction-boundary durations. Physical cycle traces therefore
 remain not yet compared.
 
+The separate `bm_8088_queue_event_t` observer records logical queue reads:
+`READ_FIRST` for each prefix and the effective opcode, `READ_SUBSEQUENT` for
+ModR/M, displacement and immediate bytes, and `FLUSH` on a guest control-flow
+queue invalidation. Its CS:IP and queue counts make event order testable with
+both empty and preloaded queues. Host reset and explicit test-state import do
+not emit guest queue events. These callbacks are deliberately not Intel QS pin
+samples: in the physical corpus QS reports the preceding cycle's operation,
+whereas this observer has no cycle position or `Ti` states. Nor is logical
+`FLUSH` assumed to be identical to every physical `E` status.
+
+For the pinned AMD D8088 corpus, `04`, `82.0` and `90` were each run through
+10,000 vectors. Architectural registers and changed RAM matched in all
+30,000, including 15,000 initially preloaded queues. The logical `F`/`S`
+read-kind and byte sequences also matched all 30,000 with
+`--require-queue-reads`. Raw final queues matched 14,324/30,000, but this
+number is not a fidelity score because the compared boundaries differ.
+
 Example, with the external corpus checked out at commit
 `aea84484abc79d09639d855b7b0ab32bc9e4dbeb`:
 
