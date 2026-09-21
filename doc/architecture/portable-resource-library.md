@@ -130,3 +130,20 @@ not content hashes after use.
 
 Keep the local test folder outside Git. Its M15 tutorial image has unknown
 distribution rights; the feature must work without shipping that image.
+
+## Useful precedents, not dependencies
+
+- [MAME software lists](https://docs.mamedev.org/contributing/softlist.html)
+  separate identified media from the emulated machine and retain hashes and
+  provenance. Its [asset-search behavior](https://docs.mamedev.org/usingmame/assetsearch.html)
+  distinguishes missing system ROMs from optional software media. BluMach
+  should adopt the clarity of those diagnostics without importing MAME's ROM
+  directory rules or archive format.
+- [Libretro's core documentation pattern](https://docs.libretro.com/meta/core-template/)
+  states required and optional firmware in a frontend-owned system directory.
+  BluMach should likewise keep folder selection in the application layer, not
+  in CPU or machine timing code.
+- Qt 6 offers the necessary desktop primitives:
+  [folder selection](https://doc.qt.io/qt-6/qfiledialog.html),
+  [opening a local directory](https://doc.qt.io/qt-6/qdesktopservices.html) and
+  [SHA-256 hashing](https://doc.qt.io/qt-6/qcryptographichash.html).
