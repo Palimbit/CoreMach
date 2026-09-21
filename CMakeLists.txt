@@ -78,7 +78,7 @@ endif()
 
 # The portable engine is the next product generation and evolves independently
 # from the legacy product while both coexist in this repository.
-set(BLUMACH_PORTABLE_VERSION "0.0.1-dev.1")
+set(BLUMACH_PORTABLE_VERSION "0.0.1-dev.2")
 set(BLUMACH_PORTABLE_VERSION_NUMERIC "0.0.1")
 
 if (BLUMACH_BUILD_LEGACY AND NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
@@ -345,7 +345,7 @@ if(BLUMACH_BUILD_ENGINE AND NOT BLUMACH_BUILD_LEGACY)
         set(CPACK_GENERATOR TGZ)
     endif()
     install(FILES COPYING FORK-NOTICE.md AUTHORS DESTINATION .)
-    install(FILES doc/releases/portable-0.0.1-dev.1.md
+    install(FILES doc/releases/portable-0.0.1-dev.2.md
         DESTINATION . RENAME README-Portable.md)
 endif()
 

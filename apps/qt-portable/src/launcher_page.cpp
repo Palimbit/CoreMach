@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPixmap>
 #include <QPushButton>
 #include <QSplitter>
@@ -49,8 +50,11 @@ bool canLaunch(const PortableCatalogMachine &machine)
 LauncherPage::LauncherPage(const PortableCatalog &catalog,
                            const QString &catalogError,
                            std::function<void(const QString &)> launch,
+                           std::function<void(const QString &)> openSaved,
                            QWidget *parent)
     : QWidget(parent), catalog_(catalog), launch_(std::move(launch)),
+      openSaved_(std::move(openSaved)), saved_(new QListWidget),
+      openSavedButton_(new QPushButton(tr("Abrir máquina guardada"))),
       search_(new QLineEdit), tree_(new QTreeWidget), image_(new QLabel),
       title_(new QLabel), availability_(new QLabel),
       details_(new QTextBrowser), technical_(new QTextBrowser),
@@ -71,6 +75,14 @@ LauncherPage::LauncherPage(const PortableCatalog &catalog,
     auto *splitter = new QSplitter(Qt::Horizontal);
     auto *navigation = new QWidget;
     auto *navigationLayout = new QVBoxLayout(navigation);
+    navigationLayout->addWidget(new QLabel(tr("Mis máquinas")));
+    saved_->setObjectName(QStringLiteral("saved-machines"));
+    saved_->setMaximumHeight(125);
+    navigationLayout->addWidget(saved_);
+    openSavedButton_->setObjectName(QStringLiteral("open-saved-machine"));
+    openSavedButton_->setEnabled(false);
+    navigationLayout->addWidget(openSavedButton_);
+    navigationLayout->addWidget(new QLabel(tr("Catálogo histórico")));
     search_->setObjectName(QStringLiteral("catalog-search"));
     search_->setPlaceholderText(tr("Buscar fabricante, familia o máquina…"));
     navigationLayout->addWidget(search_);
@@ -193,6 +205,21 @@ LauncherPage::LauncherPage(const PortableCatalog &catalog,
             });
     connect(search_, &QLineEdit::textChanged, this,
             [this](const QString &query) { filter(query); });
+    connect(saved_, &QListWidget::currentItemChanged, this,
+            [this](QListWidgetItem *item) {
+                openSavedButton_->setEnabled(item != nullptr &&
+                    item->flags().testFlag(Qt::ItemIsEnabled));
+            });
+    connect(openSavedButton_, &QPushButton::clicked, this,
+            [this] {
+                if (saved_->currentItem() != nullptr)
+                    openSaved_(saved_->currentItem()->data(Qt::UserRole).toString());
+            });
+    connect(saved_, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem *item) {
+                if (item->flags().testFlag(Qt::ItemIsEnabled))
+                    openSaved_(item->data(Qt::UserRole).toString());
+            });
     connect(launchButton_, &QPushButton::clicked, this,
             [this] {
                 const auto *machine = catalog_.product(selectedProductId_);
@@ -206,6 +233,30 @@ LauncherPage::LauncherPage(const PortableCatalog &catalog,
         if (manufacturer->childCount() != 0 && manufacturer->child(0)->childCount() != 0)
             tree_->setCurrentItem(manufacturer->child(0)->child(0));
     }
+}
+
+void LauncherPage::setProfiles(const QVector<PortableMachineProfile> &profiles)
+{
+    const QString selected = saved_->currentItem() != nullptr ?
+        saved_->currentItem()->data(Qt::UserRole).toString() : QString();
+    saved_->clear();
+    for (const PortableMachineProfile &profile : profiles) {
+        const auto *product = catalog_.product(profile.productId);
+        const bool available = product != nullptr &&
+            product->adapterId == profile.adapterId && canLaunch(*product);
+        auto *item = new QListWidgetItem(
+            QStringLiteral("%1 — %2").arg(profile.name,
+                product != nullptr ? product->name : profile.productId), saved_);
+        item->setData(Qt::UserRole, profile.id);
+        if (!available) {
+            item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            item->setToolTip(tr("Este modelo ya no está disponible en el motor portable"));
+        }
+        if (profile.id == selected)
+            saved_->setCurrentItem(item);
+    }
+    openSavedButton_->setEnabled(saved_->currentItem() != nullptr &&
+        saved_->currentItem()->flags().testFlag(Qt::ItemIsEnabled));
 }
 
 void LauncherPage::selectProduct(const QString &productId)

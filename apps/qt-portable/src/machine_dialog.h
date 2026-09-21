@@ -10,6 +10,7 @@
 
 class PortableCatalog;
 class QComboBox;
+class QCheckBox;
 class QFormLayout;
 class QLineEdit;
 
@@ -19,10 +20,15 @@ public:
                            QWidget *parent = nullptr);
 
     const bm_frontend_adapter_t *adapter() const;
+    QString productId() const;
+    QString profileName() const;
+    bool saveProfile() const;
     QHash<QString, QString> paths() const;
     void selectMachine(const QString &machineId);
     void selectProduct(const QString &productId);
     void setPaths(const QHash<QString, QString> &paths);
+    void setProfileName(const QString &name);
+    void setEditingExistingProfile(bool editing);
 
 protected:
     void accept() override;
@@ -32,8 +38,11 @@ private:
     QString requirementText(const bm_frontend_asset_requirement_t &asset) const;
 
     QComboBox *machines_;
+    QLineEdit *name_;
+    QCheckBox *save_;
     QFormLayout *assetsLayout_;
     QHash<QString, QLineEdit *> editors_;
+    QString defaultName_;
 };
 
 #endif

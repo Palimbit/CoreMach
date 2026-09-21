@@ -10,6 +10,8 @@ add_executable(blumach_portable_qt WIN32
     src/display_widget.h
     src/machine_dialog.cpp
     src/machine_dialog.h
+    src/machine_profile_store.cpp
+    src/machine_profile_store.h
     src/launcher_page.cpp
     src/launcher_page.h
     src/main.cpp
@@ -303,6 +305,22 @@ if(BUILD_TESTING)
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         )
     endif()
+
+    add_executable(blumach_portable_machine_profile_test
+        src/machine_profile_store.cpp
+        tests/machine_profile_store_test.cpp
+    )
+    target_include_directories(blumach_portable_machine_profile_test PRIVATE src)
+    target_link_libraries(blumach_portable_machine_profile_test PRIVATE Qt6::Core)
+    target_compile_features(blumach_portable_machine_profile_test PRIVATE cxx_std_17)
+    if(MSVC)
+        target_compile_options(blumach_portable_machine_profile_test PRIVATE /W4 /WX /UNDEBUG)
+    else()
+        target_compile_options(blumach_portable_machine_profile_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+    endif()
+    add_test(NAME portable-qt.machine-profile
+        COMMAND blumach_portable_machine_profile_test)
 endif()
 
 if(WIN32)

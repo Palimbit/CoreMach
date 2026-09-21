@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPushButton>
 #include <QTextBrowser>
 #include <QTreeWidget>
@@ -43,9 +44,25 @@ main(int argc, char **argv)
     })";
     PortableCatalog catalog;
     QString launched;
+    QString openedSaved;
     assert(catalog.parse(json, locale));
     LauncherPage page(catalog, QString(),
-                      [&launched](const QString &id) { launched = id; });
+                      [&launched](const QString &id) { launched = id; },
+                      [&openedSaved](const QString &id) { openedSaved = id; });
+    PortableMachineProfile saved;
+    saved.id = QStringLiteral("profile-one");
+    saved.name = QStringLiteral("My M15");
+    saved.productId = QStringLiteral("olivetti-m15");
+    saved.adapterId = QStringLiteral("olivetti-m15");
+    page.setProfiles({ saved });
+    auto *savedList = page.findChild<QListWidget *>(QStringLiteral("saved-machines"));
+    assert(savedList != nullptr && savedList->count() == 1);
+    savedList->setCurrentRow(0);
+    auto *openSaved = page.findChild<QPushButton *>(
+        QStringLiteral("open-saved-machine"));
+    assert(openSaved != nullptr && openSaved->isEnabled());
+    openSaved->click();
+    assert(openedSaved == QStringLiteral("profile-one"));
     auto *tree = page.findChild<QTreeWidget *>(QStringLiteral("catalog-tree"));
     assert(tree != nullptr && tree->topLevelItemCount() == 1);
     const auto findProduct = [tree](const QString &id) {
@@ -94,7 +111,8 @@ main(int argc, char **argv)
     assert(bundled.product(QStringLiteral("olivetti-pcs86")) != nullptr);
     const auto *m15 = bundled.product(QStringLiteral("olivetti-m15"));
     assert(m15 != nullptr && !m15->history.isEmpty());
-    LauncherPage realPage(bundled, QString(), [](const QString &) {});
+    LauncherPage realPage(bundled, QString(), [](const QString &) {},
+                          [](const QString &) {});
     auto *realTree = realPage.findChild<QTreeWidget *>(QStringLiteral("catalog-tree"));
     assert(realTree != nullptr && bundled.machines().size() >= 30);
     return 0;

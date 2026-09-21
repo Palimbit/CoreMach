@@ -3,6 +3,7 @@
 #define BLUMACH_PORTABLE_LAUNCHER_PAGE_H
 
 #include "portable_catalog.h"
+#include "machine_profile_store.h"
 
 #include <QWidget>
 
@@ -10,6 +11,7 @@
 
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QPushButton;
 class QTextBrowser;
 class QTreeWidget;
@@ -18,7 +20,9 @@ class LauncherPage final : public QWidget {
 public:
     LauncherPage(const PortableCatalog &catalog, const QString &catalogError,
                  std::function<void(const QString &)> launch,
+                 std::function<void(const QString &)> openSaved,
                  QWidget *parent = nullptr);
+    void setProfiles(const QVector<PortableMachineProfile> &profiles);
 
 private:
     void filter(const QString &query);
@@ -27,6 +31,9 @@ private:
 
     const PortableCatalog &catalog_;
     std::function<void(const QString &)> launch_;
+    std::function<void(const QString &)> openSaved_;
+    QListWidget *saved_;
+    QPushButton *openSavedButton_;
     QLineEdit *search_;
     QTreeWidget *tree_;
     QLabel *image_;

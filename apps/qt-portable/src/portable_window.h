@@ -3,6 +3,7 @@
 #define BLUMACH_PORTABLE_WINDOW_H
 
 #include "display_widget.h"
+#include "machine_profile_store.h"
 #include "portable_catalog.h"
 #include "session_worker.h"
 #include "snapshot_mailbox.h"
@@ -56,9 +57,13 @@ private:
     };
 
     void chooseMachine(const QString &productId = QString());
+    void chooseSavedMachine(const QString &profileId);
+    void refreshProfiles();
     void showLauncher();
     bool openMachine(const bm_frontend_adapter_t *adapter,
-                     const QHash<QString, QString> &paths);
+                     const QHash<QString, QString> &paths,
+                     const QString &stateId = QString(),
+                     const QString &displayName = QString());
     void closeMachine();
     void togglePause();
     void resetMachine();
@@ -105,6 +110,8 @@ private:
     QActionGroup *rendererGroup_;
     QActionGroup *effectGroup_;
     bm_host_services_t host_;
+    MachineProfileStore profileStore_;
+    QVector<PortableMachineProfile> profiles_;
     PortableCatalog catalog_;
     QString catalogError_;
     bm_frontend_machine_t *machine_ = nullptr;
@@ -120,6 +127,8 @@ private:
     bool lifecyclePending_ = false;
     bool wasMaximizedBeforeFullscreen_ = false;
     QString activeMachineId_;
+    QString activeStateId_;
+    QString activeDisplayName_;
     bm_video_geometry_t videoGeometry_ {};
     QElapsedTimer frameRateTimer_;
     unsigned int presentedFrames_ = 0U;
