@@ -18,6 +18,18 @@ typedef struct queue_capture {
     int overflow;
 } queue_capture_t;
 
+typedef struct operand_transfer {
+    char kind;
+    uint32_t address;
+    uint8_t value;
+} operand_transfer_t;
+
+typedef struct operand_capture {
+    operand_transfer_t transfers[2048];
+    size_t count;
+    int overflow;
+} operand_capture_t;
+
 static void
 capture_queue(void *context, const bm_8088_queue_event_t *event)
 {
@@ -28,6 +40,34 @@ capture_queue(void *context, const bm_8088_queue_event_t *event)
         return;
     }
     capture->events[capture->count++] = *event;
+}
+
+static void
+capture_operand(void *context,
+                const bm_808x_bus_phase_observation_t *observation)
+{
+    operand_capture_t *capture = context;
+    const bm_bus_transaction_t *transaction = &observation->transaction;
+    char kind;
+
+    if (observation->phase != BM_808X_BUS_PHASE_T3 ||
+        !observation->response_valid ||
+        transaction->operation == BM_BUS_FETCH)
+        return;
+    if (transaction->space == BM_ADDRESS_MEMORY)
+        kind = transaction->operation == BM_BUS_READ ? 'R' : 'W';
+    else if (transaction->space == BM_ADDRESS_IO)
+        kind = transaction->operation == BM_BUS_READ ? 'I' : 'O';
+    else
+        return;
+    if (capture->count == sizeof(capture->transfers) /
+                          sizeof(capture->transfers[0])) {
+        capture->overflow = 1;
+        return;
+    }
+    capture->transfers[capture->count++] = (operand_transfer_t) {
+        kind, (uint32_t) transaction->address, (uint8_t) transaction->value
+    };
 }
 
 static int
@@ -101,6 +141,7 @@ main(int argc, char **argv)
     bm_808x_arch_state_t state;
     static const uint8_t empty_program[] = { 0U };
     queue_capture_t queue_capture = { 0 };
+    operand_capture_t operand_capture = { 0 };
     char command;
 
     if (!read_model(argc, argv, &config.model))
@@ -108,6 +149,8 @@ main(int argc, char **argv)
     if (config.model == BM_808X_INTEL_8088) {
         config.intel_queue_event = capture_queue;
         config.intel_queue_event_context = &queue_capture;
+        config.bus_phase = capture_operand;
+        config.bus_phase_context = &operand_capture;
     }
     cpu_808x_test_machine_create(&machine, &config, empty_program, 0U);
     state = cpu_808x_test_get_state(&machine);
@@ -166,8 +209,10 @@ main(int argc, char **argv)
         }
         queue_capture.count = 0U;
         queue_capture.overflow = 0;
+        operand_capture.count = 0U;
+        operand_capture.overflow = 0;
         status = cpu_808x_test_step(&machine, &consumed);
-        if (queue_capture.overflow)
+        if (queue_capture.overflow || operand_capture.overflow)
             return 2;
         state = cpu_808x_test_get_state(&machine);
         printf("%c %d %" PRIu64, command == 'H' ? 'H' : 'R',
@@ -197,6 +242,13 @@ main(int argc, char **argv)
                     'F' : event->kind == BM_8088_QUEUE_READ_SUBSEQUENT ?
                     'S' : 'E';
                 printf(" %c %02" PRIx8, kind, event->value);
+            }
+            printf(" %zu", operand_capture.count);
+            for (index = 0U; index < operand_capture.count; ++index) {
+                const operand_transfer_t *transfer =
+                    &operand_capture.transfers[index];
+                printf(" %c %05" PRIx32 " %02" PRIx8, transfer->kind,
+                       transfer->address, transfer->value);
             }
         }
         putchar('\n');

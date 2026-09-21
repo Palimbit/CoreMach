@@ -163,6 +163,17 @@ read-kind and byte sequences also matched all 30,000 with
 `--require-queue-reads`. Raw final queues matched 14,324/30,000, but this
 number is not a fidelity score because the compared boundaries differ.
 
+The bus-phase observer now also feeds an operand-transfer comparison in the
+external test runner. For the same 30,000 vectors, the ordered non-CODE
+transfers matched 30,000/30,000 by operation, 20-bit physical address and
+data byte with `--require-operand-bus`; 7,552 of those vectors actually
+contain an operand transfer. The hardware adapter latches the
+address at `T1` and takes data at `T3` (or the final `Tw`); a transfer already
+visible at `T3` remains included when the capture stops before `T4`. This is
+not a comparison of prefetch timing, `Ti`, READY edges, QS pin placement or
+the complete CPU-cycle trace. The corpus still terminates at a different
+instruction boundary from the portable step.
+
 Example, with the external corpus checked out at commit
 `aea84484abc79d09639d855b7b0ab32bc9e4dbeb`:
 
@@ -170,7 +181,8 @@ Example, with the external corpus checked out at commit
 python tools/run_8088_conformance.py \
   --suite /path/to/8088/v2 \
   --runner /path/to/portable-engine-808x-vector-runner \
-  --opcode 04 --opcode 82.0
+  --opcode 04 --opcode 82.0 --opcode 90 \
+  --require-queue-reads --require-operand-bus
 ```
 
 ### Inferred or unknown
