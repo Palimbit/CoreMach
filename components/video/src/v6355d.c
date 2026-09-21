@@ -16,6 +16,7 @@
 #define VRAM_FIRST UINT64_C(0x000b0000)
 #define VRAM_LAST  UINT64_C(0x000bffff)
 #define FRAME_NS UINT64_C(16666667)
+#define TEXT_SCANLINES 8U
 
 struct bm_v6355d {
     bm_host_services_t host;
@@ -208,7 +209,10 @@ text_pixel(const bm_v6355d_t *video, uint32_t x, uint32_t y,
            uint32_t width, bm_tick_t time)
 {
     uint32_t cell_width = (video->mode & 1U) != 0U ? 8U : 16U;
-    uint32_t row_height = (video->crtc[9] & 31U) + 1U;
+    /* The V6355D uses fixed eight-scanline text rows. The M15 BIOS leaves
+     * CRTC register 9 at zero; treating it as row height hides every glyph
+     * whose first scanline is empty, including its Resident Diagnostics. */
+    uint32_t row_height = TEXT_SCANLINES;
     uint32_t row = y / row_height;
     uint32_t scan = y % row_height;
     uint32_t columns = width / cell_width;
@@ -216,7 +220,7 @@ text_pixel(const bm_v6355d_t *video, uint32_t x, uint32_t y,
     uint16_t cell = (uint16_t) (start + row * columns + x / cell_width);
     uint8_t ch = video->vram[(2U * cell) & 0x3fffU];
     uint8_t attr = video->vram[(2U * cell + 1U) & 0x3fffU];
-    uint8_t glyph = video->font[8U * ch + (scan & 7U)];
+    uint8_t glyph = video->font[TEXT_SCANLINES * ch + scan];
     uint32_t bit = (x % cell_width) / (cell_width / 8U);
     uint8_t fg = attr & 15U;
     uint8_t bg = (video->mode & 0x20U) != 0U ? (attr >> 4U) & 7U : attr >> 4U;

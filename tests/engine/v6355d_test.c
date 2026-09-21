@@ -3,6 +3,9 @@
 #include <blumach/components/v6355d.h>
 #include <blumach/platforms/null_host.h>
 
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <string.h>
 
@@ -62,6 +65,7 @@ main(void)
     bm_v6355d_config_t config = { font, sizeof(font), test_time, &time };
 
     font[8U * 'A'] = 0x80U;
+    font[8U * 'R' + 1U] = 0x80U;
     assert(bm_bus_create(&host, 3U, &bus) == BM_STATUS_OK);
     assert(bm_v6355d_create(&host, bus, &config, &video) == BM_STATUS_OK);
     assert(bm_v6355d_geometry(video, &geometry) == BM_STATUS_OK);
@@ -89,6 +93,19 @@ main(void)
                                     sizeof(pixels), 640U) == BM_STATUS_OK);
     assert(pixels[0] == 15U && pixels[1] == 1U);
     assert(pixels[640U] == 1U);
+
+    /* The M15 BIOS writes POST text but leaves CRTC 9 at zero. Its glyphs
+     * often have a blank first scanline, so text must still use eight rows. */
+    write_byte(bus, BM_ADDRESS_MEMORY, 0x000b8002U, 'R');
+    write_byte(bus, BM_ADDRESS_MEMORY, 0x000b8003U, 0x07U);
+    crtc(bus, 9U, 0U);
+    write_byte(bus, BM_ADDRESS_IO, 0x03d8U, 0x29U);
+    assert(read_byte(bus, BM_ADDRESS_IO, 0x03d5U) == 0U);
+    assert(bm_v6355d_render_indices(video, 0U, pixels,
+                                    sizeof(pixels), 640U) == BM_STATUS_OK);
+    assert(pixels[8U] == 0U);
+    assert(pixels[640U + 8U] == 7U);
+    assert(pixels[8U * 640U + 8U] == 0U);
 
     /* Indexed extended registers auto-increment; 65h selects 512 x 204. */
     write_byte(bus, BM_ADDRESS_IO, 0x03ddU, 0x65U);
