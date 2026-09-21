@@ -858,6 +858,113 @@ test_intel_clocked_direct_accumulator_memory_reads(void)
     }
 }
 
+static void
+test_intel_provisional_clocked_cold_reset_and_control_flow(void)
+{
+    static const uint8_t program[] = {
+        0xb0U, 0x12U,             /* MOV AL,12h. */
+        0xa2U, 0x40U, 0x00U,      /* MOV [0040h],AL. */
+        0xe4U, 0x20U,             /* IN AL,20h. */
+        0xebU, 0x02U,             /* JMP over HLT and NOP. */
+        0xf4U, 0x90U,
+        0xcdU, 0x20U,             /* INT 20h. */
+        0xf4U                      /* HLT after IRET. */
+    };
+    static const uint16_t expected_ip[] = {
+        0U, 2U, 5U, 7U, 11U, 0x0100U, 13U, 14U
+    };
+    cpu_808x_test_config_t config = intel_config();
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    timing_capture_t timing = { 0 };
+    uint64_t cycles = 0U;
+
+    config.bus_capacity = 2U;
+    config.timing = capture_timing;
+    config.timing_context = &timing;
+    cpu_808x_test_machine_create(&machine, &config, program,
+                                 sizeof(program));
+    assert(bm_bus_map(machine.bus, BM_ADDRESS_IO, 0x20U, 0x20U,
+                      io_fixture, NULL) == BM_STATUS_OK);
+    /* IVT 20h -> F000:0100; the handler is a single IRET. */
+    cpu_808x_test_poke(&machine, 0x80U, 0x00U);
+    cpu_808x_test_poke(&machine, 0x81U, 0x01U);
+    cpu_808x_test_poke(&machine, 0x82U, 0x00U);
+    cpu_808x_test_poke(&machine, 0x83U, 0xf0U);
+    cpu_808x_test_poke(&machine, 0xf0100U, 0xcfU);
+    state = cpu_808x_test_get_state(&machine);
+    state.ss = 0x2000U;
+    state.sp = 0x0100U;
+    cpu_808x_test_set_state(&machine, &state);
+
+    /* The strict path must still reject reset's empty queue unchanged. */
+    assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(cycles == 0U);
+    state = cpu_808x_test_get_state(&machine);
+    assert(state.cs == 0xffffU && state.ip == 0U);
+
+    for (size_t step = 0U; step < sizeof(expected_ip) /
+                                  sizeof(expected_ip[0]); ++step) {
+        assert(bm_808x_step_clocked_provisional(
+                   machine.cpu.context, 0U, &cycles) == BM_STATUS_OK);
+        assert(cycles >= 4U);
+        assert(timing.count == step + 1U);
+        assert(timing.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_PROVISIONAL);
+        assert(timing.last.boundary_clocks_min == cycles);
+        assert(timing.last.boundary_clocks_max == cycles);
+        assert(cycles == timing.last.prefetch_phase_clocks +
+                         timing.last.operand_bus_clocks + 4U);
+        assert(timing.last.execution_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_UNKNOWN);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == expected_ip[step]);
+        if (step == 2U)
+            assert(cpu_808x_test_peek(&machine, 0x40U) == 0x12U);
+        if (step == 3U)
+            assert((state.ax & 0xffU) == 0x34U);
+        if (step == 5U)
+            assert(state.cs == 0xf000U && state.sp == 0x00faU);
+        if (step == 6U)
+            assert(state.cs == 0xf000U && state.sp == 0x0100U);
+    }
+    assert(state.halted == 1U);
+    assert(bm_808x_step_clocked_provisional(
+               machine.cpu.context, 0U, &cycles) == BM_STATUS_IDLE);
+    assert(cycles == 0U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
+static void
+test_intel_provisional_clocked_engine_integration(void)
+{
+    static const uint8_t program[] = {
+        0xb0U, 0x12U, /* MOV AL,12h. */
+        0xf4U         /* HLT. */
+    };
+    cpu_808x_test_config_t config = intel_config();
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    timing_capture_t timing = { 0 };
+
+    config.provisional_clocked = 1;
+    config.timing = capture_timing;
+    config.timing_context = &timing;
+    cpu_808x_test_machine_create(&machine, &config, program,
+                                 sizeof(program));
+    assert(bm_engine_run_for(machine.engine, 50000U) == BM_STATUS_OK);
+    state = cpu_808x_test_get_state(&machine);
+    assert(state.cs == 0xf000U && state.ip == 3U);
+    assert((state.ax & 0xffU) == 0x12U);
+    assert(state.halted == 1U);
+    assert(timing.count == 3U);
+    assert(timing.last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_PROVISIONAL);
+    assert(bm_engine_now(machine.engine) == 50000U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
 int
 main(void)
 {
@@ -871,5 +978,7 @@ main(void)
     test_intel_clocked_prefetched_baseline();
     test_intel_clocked_nop_stream_keeps_prefetch_in_flight();
     test_intel_clocked_direct_accumulator_memory_reads();
+    test_intel_provisional_clocked_cold_reset_and_control_flow();
+    test_intel_provisional_clocked_engine_integration();
     return 0;
 }

@@ -85,7 +85,7 @@ typedef enum bm_808x_boundary_kind {
     BM_808X_BOUNDARY_INTERRUPT = 1
 } bm_808x_boundary_kind_t;
 
-#define BM_808X_TIMING_OBSERVATION_VERSION 38U
+#define BM_808X_TIMING_OBSERVATION_VERSION 39U
 #define BM_808X_MAX_PREFETCH_QUEUE_CAPACITY 6U
 #define BM_808X_V30_PREFETCH_QUEUE_CAPACITY BM_808X_MAX_PREFETCH_QUEUE_CAPACITY
 #define BM_808X_8088_PREFETCH_QUEUE_CAPACITY 4U
@@ -93,7 +93,8 @@ typedef enum bm_808x_boundary_kind {
 typedef enum bm_808x_execution_clock_kind {
     BM_808X_EXECUTION_CLOCKS_UNKNOWN = 0,
     BM_808X_EXECUTION_CLOCKS_EXACT = 1,
-    BM_808X_EXECUTION_CLOCKS_RANGE = 2
+    BM_808X_EXECUTION_CLOCKS_RANGE = 2,
+    BM_808X_EXECUTION_CLOCKS_PROVISIONAL = 3
 } bm_808x_execution_clock_kind_t;
 
 typedef enum bm_808x_prefetch_phase {
@@ -117,6 +118,9 @@ typedef enum bm_808x_prefetch_phase {
  * preserves a documented data-dependent interval without pretending that the
  * realised value is known. UNKNOWN is an explicit unimplemented timing
  * classification, never a zero-cycle claim.
+ * PROVISIONAL on a boundary is an explicit bring-up scheduling choice, not
+ * a measured or documented physical duration; its equal min/max values are
+ * the selected virtual-time increment, not an assertion of exactness.
  * prefetch_pointer and prefetch_queue_count expose the real per-CPU instruction
  * queue after the boundary. The pointer is always known from version 3.
  * logical_bus_transactions describe successful portable-bus accesses at T3.
@@ -437,6 +441,17 @@ bm_status_t bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed);
  * The context must be the context owned by a CPU created by bm_808x_create(). */
 bm_status_t bm_808x_step_clocked(void *context, bm_tick_t start_ns,
                                  uint64_t *cycles);
+
+/* Bring-up callback for an Intel 8088 machine when complete cycle placement
+ * is not yet available. Unlike the strict callback, it can execute from an
+ * empty queue and across operands, branches and interrupts. Its deterministic
+ * cycle count is provisional: observed synchronous bus-phase occupancy plus
+ * a fixed four-clock internal scheduling quantum per boundary. It does not
+ * model EU/BIU overlap or claim real 8088 instruction timing. Consumers must
+ * expose this limitation and must not use it for timing-conformance claims. */
+bm_status_t bm_808x_step_clocked_provisional(void *context,
+                                              bm_tick_t start_ns,
+                                              uint64_t *cycles);
 
 #ifdef __cplusplus
 }

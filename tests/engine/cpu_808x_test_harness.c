@@ -46,8 +46,12 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
     assert(bm_linear_memory_create(&machine->host, machine->bus,
                                    &memory_config, &machine->memory) ==
            BM_STATUS_OK);
-    assert(bm_engine_create(&machine->host, &engine_config, &machine->engine) ==
-           BM_STATUS_OK);
+    if ((config != NULL) && config->provisional_clocked)
+        assert(bm_engine_create_clocked(&machine->host, &engine_config,
+                                        &machine->engine) == BM_STATUS_OK);
+    else
+        assert(bm_engine_create(&machine->host, &engine_config,
+                                &machine->engine) == BM_STATUS_OK);
     cpu_config = (bm_808x_config_t) {
         .model = config != NULL ? config->model : BM_808X_NEC_V30,
         .frequency_hz = (config != NULL &&
@@ -74,8 +78,17 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
     };
     assert(bm_808x_create(&machine->host, &cpu_config, &machine->cpu) ==
            BM_STATUS_OK);
-    assert(bm_engine_add_cpu(machine->engine, &machine->cpu, NULL) ==
-           BM_STATUS_OK);
+    if ((config != NULL) && config->provisional_clocked) {
+        bm_clock_rate_t rate = { 4772727U, 1U };
+
+        assert(config->model == BM_808X_INTEL_8088);
+        assert(bm_engine_add_clocked_cpu(
+                   machine->engine, &machine->cpu,
+                   bm_808x_step_clocked_provisional, &rate, NULL) ==
+               BM_STATUS_OK);
+    } else
+        assert(bm_engine_add_cpu(machine->engine, &machine->cpu, NULL) ==
+               BM_STATUS_OK);
     assert(bm_engine_reset(machine->engine) == BM_STATUS_OK);
 }
 
