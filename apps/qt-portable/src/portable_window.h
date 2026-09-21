@@ -25,6 +25,8 @@ class QActionGroup;
 class QCloseEvent;
 class QKeyEvent;
 class QLabel;
+class LauncherPage;
+class QStackedWidget;
 class QToolBar;
 
 class PortableWindow final : public QMainWindow {
@@ -53,7 +55,8 @@ private:
         bool retain = true;
     };
 
-    void chooseMachine();
+    void chooseMachine(const QString &productId = QString());
+    void showLauncher();
     bool openMachine(const bm_frontend_adapter_t *adapter,
                      const QHash<QString, QString> &paths);
     void closeMachine();
@@ -80,6 +83,8 @@ private:
     void updateActions();
     void showStatus(const QString &detail = QString());
     DisplayWidget *display_;
+    QStackedWidget *pages_;
+    LauncherPage *launcher_ = nullptr;
     QLabel *status_;
     QLabel *storageStatus_;
     QLabel *keyboardStatus_;
@@ -95,6 +100,7 @@ private:
     QAction *statusBarAction_;
     QAction *copyFrameAction_;
     QAction *saveFrameAction_;
+    QAction *catalogAction_;
     QActionGroup *scaleGroup_;
     QActionGroup *rendererGroup_;
     QActionGroup *effectGroup_;

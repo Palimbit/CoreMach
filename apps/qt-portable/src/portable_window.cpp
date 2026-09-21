@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "portable_window.h"
+#include "launcher_page.h"
 #include "machine_dialog.h"
 #include "qt_key_map.h"
 #include "latency_trace.h"
@@ -24,6 +25,7 @@
 #include <QMetaObject>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QStringList>
@@ -52,7 +54,8 @@ PortableWindow::AssetStorage::~AssetStorage()
 }
 
 PortableWindow::PortableWindow(QWidget *parent)
-    : QMainWindow(parent), display_(new DisplayWidget), status_(new QLabel),
+    : QMainWindow(parent), display_(new DisplayWidget),
+      pages_(new QStackedWidget), status_(new QLabel),
       storageStatus_(new QLabel), keyboardStatus_(new QLabel),
       machineToolbar_(addToolBar(tr("Machine"))),
       pauseAction_(new QAction(tr("Pause"), this)),
@@ -66,6 +69,7 @@ PortableWindow::PortableWindow(QWidget *parent)
       statusBarAction_(new QAction(tr("Status bar"), this)),
       copyFrameAction_(new QAction(tr("Copy frame"), this)),
       saveFrameAction_(new QAction(tr("Save frame as…"), this)),
+      catalogAction_(new QAction(tr("Machine catalogue"), this)),
       scaleGroup_(new QActionGroup(this)),
       rendererGroup_(new QActionGroup(this)),
       effectGroup_(new QActionGroup(this)),
@@ -89,6 +93,7 @@ PortableWindow::PortableWindow(QWidget *parent)
     saveFrameAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_S));
 
     machineToolbar_->setObjectName(QStringLiteral("machine-toolbar"));
+    machineToolbar_->addAction(catalogAction_);
     machineToolbar_->addAction(openAction);
     machineToolbar_->addSeparator();
     machineToolbar_->addAction(pauseAction_);
@@ -99,6 +104,7 @@ PortableWindow::PortableWindow(QWidget *parent)
     machineToolbar_->addAction(ejectFloppyAction_);
 
     auto *machineMenu = menuBar()->addMenu(tr("Machine"));
+    machineMenu->addAction(catalogAction_);
     machineMenu->addAction(openAction);
     machineMenu->addSeparator();
     machineMenu->addAction(pauseAction_);
@@ -169,7 +175,7 @@ PortableWindow::PortableWindow(QWidget *parent)
     captureMenu->addAction(saveFrameAction_);
 
     setWindowTitle(tr("BluMach Portable"));
-    setCentralWidget(display_);
+    setCentralWidget(pages_);
     statusBar()->addPermanentWidget(status_, 1);
     keyboardStatus_->setTextFormat(Qt::RichText);
     keyboardStatus_->setVisible(false);
@@ -179,6 +185,8 @@ PortableWindow::PortableWindow(QWidget *parent)
     statusBarAction_->setChecked(true);
     connect(openAction, &QAction::triggered, this,
             [this] { chooseMachine(); });
+    connect(catalogAction_, &QAction::triggered, this,
+            [this] { showLauncher(); });
     connect(quitAction, &QAction::triggered, this, &QWidget::close);
     connect(pauseAction_, &QAction::triggered, this,
             [this] { togglePause(); });
@@ -233,6 +241,11 @@ PortableWindow::PortableWindow(QWidget *parent)
     display_->setKeyHandler(
         [this](QKeyEvent *event, bool pressed) { sendKey(event, pressed); });
     (void) catalog_.load(&catalogError_);
+    launcher_ = new LauncherPage(catalog_, catalogError_,
+        [this](const QString &productId) { chooseMachine(productId); });
+    pages_->addWidget(launcher_);
+    pages_->addWidget(display_);
+    pages_->setCurrentWidget(launcher_);
     resize(960, 600);
     readSettings();
     updateActions();
@@ -270,15 +283,32 @@ PortableWindow::openInitialProduct(const QString &productId,
 }
 
 void
-PortableWindow::chooseMachine()
+PortableWindow::chooseMachine(const QString &productId)
 {
     if (!catalogError_.isEmpty()) {
         QMessageBox::critical(this, tr("Catalogue unavailable"), catalogError_);
         return;
     }
     MachineDialog dialog(catalog_, this);
+    if (!productId.isEmpty())
+        dialog.selectProduct(productId);
     if (dialog.exec() == QDialog::Accepted)
         (void) openMachine(dialog.adapter(), dialog.paths());
+}
+
+void
+PortableWindow::showLauncher()
+{
+    if (worker_ != nullptr &&
+        (worker_->state() == BM_SESSION_RUNNING ||
+         worker_->state() == BM_SESSION_PAUSED) &&
+        QMessageBox::question(this, tr("Close machine"),
+            tr("Stop the current machine and return to the catalogue?")) !=
+            QMessageBox::Yes)
+        return;
+    closeMachine();
+    pages_->setCurrentWidget(launcher_);
+    showStatus(tr("Choose a machine to begin"));
 }
 
 bool
@@ -445,6 +475,7 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
                                     !paths.value(role).isEmpty();
     }
     display_->setFocus();
+    pages_->setCurrentWidget(display_);
     updateActions();
     showStatus();
     return true;

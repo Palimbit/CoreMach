@@ -14,6 +14,7 @@ on:
       - tests/engine/**
       - provenance/**
       - doc/validation/**
+      - doc/releases/portable-*.md
       - tools/provenance_audit.py
       - tools/portable_package_audit.py
       - tools/validate-pcs86-portable.ps1
@@ -33,6 +34,7 @@ on:
       - tests/engine/**
       - provenance/**
       - doc/validation/**
+      - doc/releases/portable-*.md
       - tools/provenance_audit.py
       - tools/portable_package_audit.py
       - tools/validate-pcs86-portable.ps1
@@ -139,13 +141,13 @@ jobs:
       - name: Test
         run: ctest --test-dir build/portable-package --output-on-failure
       - name: Install
-        run: cmake --install build/portable-package --prefix "$PWD/build/portable-install"
+        run: cmake --install build/portable-package --prefix "$(cygpath -m "$PWD/build/portable-install")"
       - name: Audit installed package
         run: >-
           python -B tools/portable_package_audit.py
           --root build/portable-install
           --platform windows
-          --version 0.2.0-dev
+          --version 0.0.1-dev.1
           --max-size-mib 100
       - name: Create archive
         run: >-
