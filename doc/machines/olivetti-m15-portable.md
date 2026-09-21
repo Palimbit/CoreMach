@@ -13,8 +13,10 @@ floppy is opened read-only; no firmware or media are bundled with BluMach.
 The BIOS performs a lengthy memory test before reading A:, and performance
 of this implementation is currently below real time on the tested host.
 The status bar reports emulated seconds and floppy read operations so a blank
-early frame can be distinguished from a stopped session. Qt6 visual output
-after POST still needs direct user confirmation.
+early frame can be distinguished from a stopped session. In a local Qt6 trial,
+the user confirmed that the tutorial became visible and could be navigated.
+The early black frame and its difference from the inherited pilot remain
+unexplained; do not treat eventual boot as a correction of that behavior.
 
 ## Implemented and tested
 
