@@ -52,6 +52,8 @@ typedef struct bm_808x_biu {
     bm_bus_transaction_t pending_prefetch;
     uint32_t pending_wait_clocks;
     uint64_t total_phase_clocks;
+    uint64_t clocked_cpu_cycles;
+    int clocked_timeline_enabled;
     int pending_prefetch_valid;
     int pending_prefetch_demand;
     bm_808x_bus_phase_fn phase_observer;
@@ -63,6 +65,8 @@ void bm_808x_biu_reset(bm_808x_biu_t *bcu, uint16_t instruction_pointer,
 void bm_808x_biu_set_phase_observer(bm_808x_biu_t *bcu,
                                     bm_808x_bus_phase_fn observer,
                                     void *context);
+void bm_808x_biu_set_clocked_timeline(bm_808x_biu_t *bcu, int enabled);
+void bm_808x_biu_advance_idle(bm_808x_biu_t *bcu, uint32_t clocks);
 void bm_808x_biu_begin_boundary(bm_808x_biu_t *bcu);
 /* Stop an in-flight prefetch without discarding already queued bytes. */
 void bm_808x_biu_suspend_prefetch(bm_808x_biu_t *bcu);
@@ -83,7 +87,7 @@ bm_status_t bm_808x_biu_enqueue_byte(bm_808x_biu_t *bcu, uint8_t value);
 bm_status_t bm_808x_biu_enqueue_word(bm_808x_biu_t *bcu, uint16_t value);
 bm_status_t bm_808x_biu_dequeue_byte(bm_808x_biu_t *bcu, uint8_t *value);
 
-/* Advance the prefetch state machine by one V30 clock. IDLE is returned only
+/* Advance the prefetch state machine by one active bus clock. IDLE is returned only
  * when the queue has insufficient room to begin the fetch selected by PFP. */
 bm_status_t bm_808x_biu_step_prefetch(
     bm_808x_biu_t *bcu,

@@ -2,7 +2,8 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: functional model boundary; Intel cycle timing remains unsupported.
+Status: functional model with a narrowly verified Intel clocked baseline;
+general Intel cycle timing remains unsupported.
 
 ## Scope and component boundary
 
@@ -38,13 +39,18 @@ addresses. Instruction fetches are one byte wide, the queue capacity is four,
 and control transfers reset the queue to the selected target. Segment-plus-
 offset addresses wrap at 20 bits.
 
-Intel timing is deliberately `UNKNOWN`. The existing execution-clock tables,
-operand placement and complete-boundary durations are NEC V30 evidence and are
-not reused for the Intel model. `bm_808x_step()` provides functional
-instruction-boundary execution; `bm_808x_step_clocked()` returns
-`BM_STATUS_UNSUPPORTED` with zero cycles for Intel 8088 boundaries. The next
-CPU phase is a separate Intel-timing implementation which combines the Intel
-instruction tables with a proven 8088 queue/EU/BIU schedule.
+The existing execution-clock tables, operand placement and complete-boundary
+durations are NEC V30 evidence and are not reused for the Intel model.
+`bm_808x_step()` remains the general functional instruction-boundary path.
+`bm_808x_step_clocked()` now handles only unprefixed `90h` (NOP) and `04h`
+(ADD AL,imm8) when all four instruction-queue bytes are already present and
+no bus transfer is in flight. It returns the Intel-documented 3 and 4 clocks
+respectively, with two initial `Ti` clocks and then one or two overlapping
+CODE fetch phases. The bus-phase observer reports their CPU-clock positions
+(2 for `T1`, 3 for `T2`) only in this explicitly clocked path. Other Intel
+boundaries are rejected as unsupported **before** execution, with zero cycles;
+they do not fall back to NEC timing. This is a first vertical slice, not a
+general Intel EU/BIU scheduler.
 
 ## Evidence classification
 
@@ -183,6 +189,15 @@ This checks active operand-bus sequencing, **not** full CPU-cycle placement:
 the trace can begin partway through a CODE fetch and stops after the next
 instruction queue read, while the functional step has no Intel `Ti` schedule.
 
+The clocked baseline is separately tested against the pinned physical
+captures. Among the 30,000 selected vectors, 2,544 are full-queue unprefixed
+NOP and 2,527 are full-queue unprefixed ADD AL,imm8. All 5,071 match the
+Intel manual's 3/4-clock duration and the capture's absolute CODE-phase
+positions with `--require-clocked-baseline`. Functional registers, memory and
+queue-read order remain tested independently for all 30,000 vectors. These
+clocked results do not establish empty-queue stalls, prefixed instructions,
+operand contention, interrupts or continuous multi-instruction timing.
+
 Example, with the external corpus checked out at commit
 `aea84484abc79d09639d855b7b0ab32bc9e4dbeb`:
 
@@ -191,12 +206,14 @@ python tools/run_8088_conformance.py \
   --suite /path/to/8088/v2 \
   --runner /path/to/portable-engine-808x-vector-runner \
   --opcode 04 --opcode 82.0 --opcode 90 \
-  --require-queue-reads --require-operand-bus --require-operand-phases
+  --require-queue-reads --require-operand-bus --require-operand-phases \
+  --require-clocked-baseline
 ```
 
 ### Inferred or unknown
 
-- No complete Intel 8088 EU/BIU overlap schedule is claimed.
+- No complete Intel 8088 EU/BIU overlap schedule is claimed. The two narrow
+  full-queue, bus-free forms above are the only exact clocked boundaries.
 - The active bus-phase observer is not electrical pin timing. READY sampling,
   queue-status pins, EU-only clocks and interrupt-acknowledge waveforms remain
   unmodelled.

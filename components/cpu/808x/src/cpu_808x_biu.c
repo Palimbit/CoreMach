@@ -56,7 +56,11 @@ observe_phase(bm_808x_biu_t *bcu, bm_808x_bus_phase_t phase,
         .phase = phase,
         .response_valid = (uint8_t) !!response_valid,
         .reserved = { 0U, 0U, 0U },
-        .transaction = *transaction
+        .transaction = *transaction,
+        .cpu_clock_index = bcu->clocked_timeline_enabled ?
+                           bcu->clocked_cpu_cycles - 1U : 0U,
+        .cpu_clock_known = (uint8_t) !!bcu->clocked_timeline_enabled,
+        .reserved_v2 = { 0U }
     };
     bcu->phase_observer(bcu->phase_observer_context, &observation);
 }
@@ -80,6 +84,20 @@ bm_808x_biu_set_phase_observer(bm_808x_biu_t *bcu,
         return;
     bcu->phase_observer = observer;
     bcu->phase_observer_context = context;
+}
+
+void
+bm_808x_biu_set_clocked_timeline(bm_808x_biu_t *bcu, int enabled)
+{
+    if (bcu != NULL)
+        bcu->clocked_timeline_enabled = !!enabled;
+}
+
+void
+bm_808x_biu_advance_idle(bm_808x_biu_t *bcu, uint32_t clocks)
+{
+    if ((bcu != NULL) && bcu->clocked_timeline_enabled)
+        bcu->clocked_cpu_cycles += clocks;
 }
 
 void
@@ -249,6 +267,8 @@ bm_808x_biu_step_prefetch(bm_808x_biu_t *bcu,
     ++bcu->total_phase_clocks;
     ++bcu->boundary_bus_active_clocks;
     ++bcu->boundary_prefetch_phase_clocks;
+    if (bcu->clocked_timeline_enabled)
+        ++bcu->clocked_cpu_cycles;
     if (bcu->pending_prefetch_demand)
         ++bcu->boundary_demand_prefetch_bus_clocks;
     switch (bcu->prefetch_phase) {

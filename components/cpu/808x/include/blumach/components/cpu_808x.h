@@ -106,8 +106,11 @@ typedef enum bm_808x_prefetch_phase {
 } bm_808x_prefetch_phase_t;
 
 /* Host-neutral timing observation for one completed architectural boundary.
- * execution_clocks_min/max are NEC execution-unit clocks and deliberately
- * exclude prefetch, pre-decode and bus waits. EXACT means min == max. RANGE
+ * NEC execution_clocks_min/max are execution-unit clocks and deliberately
+ * exclude prefetch, pre-decode and bus waits. The Intel 8088 currently has
+ * exact execution and boundary clocks only for the independently checked
+ * full-queue 90h/04h baseline; other Intel forms remain UNKNOWN. EXACT means
+ * min == max. RANGE
  * preserves a documented data-dependent interval without pretending that the
  * realised value is known. UNKNOWN is an explicit unimplemented timing
  * classification, never a zero-cycle claim.
@@ -249,7 +252,7 @@ typedef struct bm_808x_timing_observation {
 typedef void (*bm_808x_timing_fn)(
     void *context, const bm_808x_timing_observation_t *observation);
 
-#define BM_808X_BUS_PHASE_OBSERVATION_VERSION 1U
+#define BM_808X_BUS_PHASE_OBSERVATION_VERSION 2U
 
 typedef enum bm_808x_bus_phase {
     BM_808X_BUS_PHASE_T1 = 0,
@@ -260,7 +263,9 @@ typedef enum bm_808x_bus_phase {
 } bm_808x_bus_phase_t;
 
 /* One active external-bus T-state. This deliberately excludes EU-only idle
- * clocks: it is a bus-phase observation, not an instruction duration. The
+ * clocks: it is a bus-phase observation, not an instruction duration. For
+ * explicitly clocked Intel boundaries, cpu_clock_index includes preceding
+ * idle clocks; otherwise only bus_active_clock_index is meaningful. The
  * transaction is the logical transfer occupying the bus. The device response
  * (including read/fetch data and wait_states) becomes valid from a successful
  * T3 through the end of the cycle. */
@@ -272,6 +277,11 @@ typedef struct bm_808x_bus_phase_observation {
     uint8_t response_valid;
     uint8_t reserved[3];
     bm_bus_transaction_t transaction;
+    /* Valid only for explicitly clocked Intel boundaries. Other execution
+     * modes expose bus-active order, not a CPU-clock position. */
+    uint64_t cpu_clock_index;
+    uint8_t cpu_clock_known;
+    uint8_t reserved_v2[7];
 } bm_808x_bus_phase_observation_t;
 
 typedef void (*bm_808x_bus_phase_fn)(

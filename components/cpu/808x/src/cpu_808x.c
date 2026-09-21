@@ -79,6 +79,9 @@ typedef struct bm_808x_state {
     void *bus_phase_context;
     bm_8088_queue_event_fn intel_queue_event;
     void *intel_queue_event_context;
+    int intel_clocked_mode;
+    uint8_t boundary_initial_queue_count;
+    uint32_t boundary_intel_exact_clocks;
     int boundary_rm_valid;
     int boundary_rm_memory;
     uint16_t boundary_rm_offset;
@@ -2004,6 +2007,9 @@ cpu_reset(void *context)
     state->last_boundary_clocks_min = 0U;
     state->last_boundary_clocks_max = 0U;
     state->last_boundary_observed = 0;
+    state->intel_clocked_mode = 0;
+    state->boundary_initial_queue_count = 0U;
+    state->boundary_intel_exact_clocks = 0U;
     return BM_STATUS_OK;
 }
 
@@ -5462,6 +5468,39 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
 
     if (!native_mode)
         return BM_STATUS_OK;
+    if (state->model == BM_808X_INTEL_8088) {
+        uint32_t clocks;
+        bm_status_t status;
+
+        if (!state->intel_clocked_mode ||
+            state->boundary_initial_queue_count !=
+                BM_808X_8088_PREFETCH_QUEUE_CAPACITY ||
+            state->last_prefix_count != 0U ||
+            state->bcu.boundary_demand_prefetch_bus_clocks != 0U ||
+            state->bcu.boundary_operand_transactions != 0U ||
+            state->bcu.boundary_prefetch_flushed ||
+            state->bcu.prefetch_phase != BM_808X_BIU_PHASE_IDLE)
+            return BM_STATUS_OK;
+        if (state->last_opcode == 0x90U)
+            clocks = 3U;
+        else if (state->last_opcode == 0x04U)
+            clocks = 4U;
+        else
+            return BM_STATUS_OK;
+
+        /* The full initial queue provides both decoded bytes. The physical
+         * D8088 traces and Intel's 3/4-clock table agree on two bus-idle
+         * clocks before the next CODE T1. No NEC queue-read clock is added. */
+        bm_808x_biu_advance_idle(&state->bcu, 2U);
+        status = bm_808x_biu_advance_prefetch(
+            &state->bcu, state->bus, state->segments[1], 0U, clocks - 2U);
+        if (status == BM_STATUS_OK) {
+            state->boundary_execution_clocks_placed = clocks;
+            state->boundary_execution_timeline_complete = 1;
+            state->boundary_intel_exact_clocks = clocks;
+        }
+        return status;
+    }
     if (state->boundary_execution_timeline_active) {
         bm_status_t status;
 
@@ -5521,6 +5560,20 @@ compose_boundary_clocks(const bm_808x_state_t *state, int native_mode,
     uint64_t fixed_clocks;
 
     observation->boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+    if (state->model == BM_808X_INTEL_8088) {
+        if (native_mode &&
+            observation->kind == BM_808X_BOUNDARY_INSTRUCTION &&
+            state->boundary_execution_timeline_complete &&
+            state->boundary_intel_exact_clocks != 0U) {
+            observation->boundary_clock_kind =
+                BM_808X_EXECUTION_CLOCKS_EXACT;
+            observation->boundary_clocks_min =
+                state->boundary_intel_exact_clocks;
+            observation->boundary_clocks_max =
+                state->boundary_intel_exact_clocks;
+        }
+        return;
+    }
     if (((observation->kind != BM_808X_BOUNDARY_INSTRUCTION) &&
          (observation->kind != BM_808X_BOUNDARY_INTERRUPT)) || !native_mode ||
         (observation->execution_clock_kind ==
@@ -5576,6 +5629,9 @@ static void
 begin_boundary_observation(bm_808x_state_t *state)
 {
     bm_808x_biu_begin_boundary(&state->bcu);
+    state->boundary_initial_queue_count =
+        bm_808x_biu_queue_count(&state->bcu);
+    state->boundary_intel_exact_clocks = 0U;
     state->boundary_rm_valid = 0;
     state->boundary_rm_memory = 0;
     state->boundary_rm_offset = 0U;
@@ -5653,7 +5709,13 @@ emit_boundary_observation(bm_808x_state_t *state,
         .operand_wait_states = operand_wait_states
     };
 
-    if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)
+    if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode &&
+        (state->model == BM_808X_INTEL_8088) &&
+        (state->boundary_intel_exact_clocks != 0U)) {
+        observation.execution_clock_kind = BM_808X_EXECUTION_CLOCKS_EXACT;
+        observation.execution_clocks_min = state->boundary_intel_exact_clocks;
+        observation.execution_clocks_max = state->boundary_intel_exact_clocks;
+    } else if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)
         observation.execution_clock_kind =
             documented_native_execution_clocks(
                 state, &observation.execution_clocks_min,
@@ -6060,13 +6122,30 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
     bm_808x_state_t *state = context;
     bm_tick_t consumed = 0U;
     bm_status_t status;
+    uint8_t queued_bytes[2];
 
     (void) start_ns;
     if ((state == NULL) || (cycles == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     *cycles = 0U;
     state->last_boundary_observed = 0;
+    if (state->model == BM_808X_INTEL_8088) {
+        if (state->halted)
+            return BM_STATUS_IDLE;
+        if (boundary_interrupt_ready(state) ||
+            bm_808x_biu_queue_count(&state->bcu) !=
+                BM_808X_8088_PREFETCH_QUEUE_CAPACITY ||
+            state->bcu.prefetch_phase != BM_808X_BIU_PHASE_IDLE)
+            return BM_STATUS_UNSUPPORTED;
+        bm_808x_biu_export_queue(&state->bcu, queued_bytes, 2U);
+        if ((queued_bytes[0] != 0x90U) && (queued_bytes[0] != 0x04U))
+            return BM_STATUS_UNSUPPORTED;
+        state->intel_clocked_mode = 1;
+        bm_808x_biu_set_clocked_timeline(&state->bcu, 1);
+    }
     status = cpu_run(state, 1U, &consumed);
+    bm_808x_biu_set_clocked_timeline(&state->bcu, 0);
+    state->intel_clocked_mode = 0;
     if ((status == BM_STATUS_IDLE) && (consumed == 0U))
         return BM_STATUS_IDLE;
     if ((status != BM_STATUS_OK) && (status != BM_STATUS_IDLE))
