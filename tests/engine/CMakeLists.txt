@@ -493,6 +493,12 @@ target_link_libraries(portable-engine-pcs86-firmware-probe
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
 )
 
+# Manual M15 diagnostic: the firmware is passed by path and never bundled.
+add_executable(portable-engine-m15-firmware-probe m15_firmware_probe.c)
+target_link_libraries(portable-engine-m15-firmware-probe
+    PRIVATE blumach_system_olivetti_m15 blumach_platform_null
+)
+
 add_executable(portable-engine-legacy-io legacy_io_test.c)
 target_link_libraries(portable-engine-legacy-io
     PRIVATE blumach_pc_components blumach_platform_null
@@ -510,10 +516,14 @@ endforeach()
 
 target_compile_features(portable-engine-pcs86-firmware-probe PRIVATE c_std_11)
 set_target_properties(portable-engine-pcs86-firmware-probe PROPERTIES C_EXTENSIONS OFF)
+target_compile_features(portable-engine-m15-firmware-probe PRIVATE c_std_11)
+set_target_properties(portable-engine-m15-firmware-probe PROPERTIES C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(portable-engine-pcs86-firmware-probe PRIVATE /W4 /WX)
+    target_compile_options(portable-engine-m15-firmware-probe PRIVATE /W4 /WX)
 else()
     target_compile_options(portable-engine-pcs86-firmware-probe PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(portable-engine-m15-firmware-probe PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 add_test(NAME portable-engine.linear-memory COMMAND portable-engine-memory)
