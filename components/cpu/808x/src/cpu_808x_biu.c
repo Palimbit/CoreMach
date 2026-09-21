@@ -65,6 +65,19 @@ observe_phase(bm_808x_biu_t *bcu, bm_808x_bus_phase_t phase,
     bcu->phase_observer(bcu->phase_observer_context, &observation);
 }
 
+static void
+observe_operand_phase(bm_808x_biu_t *bcu, bm_808x_bus_phase_t phase,
+                      const bm_bus_transaction_t *transaction,
+                      int response_valid)
+{
+    ++bcu->total_phase_clocks;
+    ++bcu->boundary_bus_active_clocks;
+    ++bcu->boundary_operand_bus_clocks;
+    if (bcu->clocked_timeline_enabled)
+        ++bcu->clocked_cpu_cycles;
+    observe_phase(bcu, phase, transaction, response_valid);
+}
+
 void
 bm_808x_biu_reset(bm_808x_biu_t *bcu, uint16_t instruction_pointer,
                   uint8_t prefetch_capacity, uint8_t fetch_width)
@@ -405,17 +418,14 @@ bm_808x_biu_transact(bm_808x_biu_t *bcu,
         bcu->boundary_prefetch_phase_clocks - handoff_start;
 
     /* T1 and T2 precede the portable access, which occurs at T3. */
+    observe_operand_phase(bcu, BM_808X_BUS_PHASE_T1, transaction, 0);
+    observe_operand_phase(bcu, BM_808X_BUS_PHASE_T2, transaction, 0);
+    /* The portable device response is sampled during T3. */
     ++bcu->total_phase_clocks;
     ++bcu->boundary_bus_active_clocks;
     ++bcu->boundary_operand_bus_clocks;
-    observe_phase(bcu, BM_808X_BUS_PHASE_T1, transaction, 0);
-    ++bcu->total_phase_clocks;
-    ++bcu->boundary_bus_active_clocks;
-    ++bcu->boundary_operand_bus_clocks;
-    observe_phase(bcu, BM_808X_BUS_PHASE_T2, transaction, 0);
-    ++bcu->total_phase_clocks;
-    ++bcu->boundary_bus_active_clocks;
-    ++bcu->boundary_operand_bus_clocks;
+    if (bcu->clocked_timeline_enabled)
+        ++bcu->clocked_cpu_cycles;
     status = bm_bus_transact(bus, transaction);
     if (status != BM_STATUS_OK) {
         observe_phase(bcu, BM_808X_BUS_PHASE_T3, transaction, 0);
@@ -426,14 +436,8 @@ bm_808x_biu_transact(bm_808x_biu_t *bcu,
     ++bcu->boundary_operand_transactions;
     bcu->boundary_wait_states += transaction->wait_states;
     for (clocks = 0U; clocks < transaction->wait_states; ++clocks) {
-        ++bcu->total_phase_clocks;
-        ++bcu->boundary_bus_active_clocks;
-        ++bcu->boundary_operand_bus_clocks;
-        observe_phase(bcu, BM_808X_BUS_PHASE_TW, transaction, 1);
+        observe_operand_phase(bcu, BM_808X_BUS_PHASE_TW, transaction, 1);
     }
-    ++bcu->total_phase_clocks;
-    ++bcu->boundary_bus_active_clocks;
-    ++bcu->boundary_operand_bus_clocks;
-    observe_phase(bcu, BM_808X_BUS_PHASE_T4, transaction, 1);
+    observe_operand_phase(bcu, BM_808X_BUS_PHASE_T4, transaction, 1);
     return BM_STATUS_OK;
 }
