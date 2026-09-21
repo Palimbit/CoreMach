@@ -5473,6 +5473,16 @@ intel_prefetched_baseline_clocks(uint8_t opcode)
     return 0U;
 }
 
+static uint8_t
+intel_prefetched_baseline_length(uint8_t opcode)
+{
+    if (opcode == 0x90U)
+        return 1U;
+    if (intel_prefetched_baseline_clocks(opcode) == 4U)
+        return (uint8_t) (2U + (opcode & 1U));
+    return 0U;
+}
+
 static bm_status_t
 advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
 {
@@ -5487,28 +5497,34 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
         bm_status_t status;
 
         if (!state->intel_clocked_mode ||
-            state->boundary_initial_queue_count !=
-                BM_808X_8088_PREFETCH_QUEUE_CAPACITY ||
+            state->boundary_initial_queue_count <
+                intel_prefetched_baseline_length(state->last_opcode) ||
             state->last_prefix_count != 0U ||
             state->bcu.boundary_demand_prefetch_bus_clocks != 0U ||
             state->bcu.boundary_operand_transactions != 0U ||
-            state->bcu.boundary_prefetch_flushed ||
-            state->bcu.prefetch_phase != BM_808X_BIU_PHASE_IDLE)
+            state->bcu.boundary_prefetch_flushed)
             return BM_STATUS_OK;
         clocks = intel_prefetched_baseline_clocks(state->last_opcode);
         if (clocks == 0U)
             return BM_STATUS_OK;
 
-        /* The full initial queue provides all decoded bytes. The physical
-         * D8088 traces and Intel's 3/4-clock table agree on two bus-idle
-         * clocks before the next CODE T1. No NEC queue-read clock is added. */
-        bm_808x_biu_advance_idle(&state->bcu, 2U);
+        /* A full queue has to release the BIU after the first queue read:
+         * D8088 sees two Ti clocks before CODE T1. Otherwise the BIU may
+         * continue a transaction from the previous boundary or begin the
+         * next prefetch immediately. Queue reads cost no NEC-only clock. */
+        if (state->boundary_initial_queue_count ==
+            BM_808X_8088_PREFETCH_QUEUE_CAPACITY) {
+            bm_808x_biu_advance_idle(&state->bcu, 2U);
+            clocks -= 2U;
+        }
         status = bm_808x_biu_advance_prefetch(
-            &state->bcu, state->bus, state->segments[1], 0U, clocks - 2U);
+            &state->bcu, state->bus, state->segments[1], 0U, clocks);
         if (status == BM_STATUS_OK) {
-            state->boundary_execution_clocks_placed = clocks;
+            state->boundary_execution_clocks_placed =
+                intel_prefetched_baseline_clocks(state->last_opcode);
             state->boundary_execution_timeline_complete = 1;
-            state->boundary_intel_exact_clocks = clocks;
+            state->boundary_intel_exact_clocks =
+                intel_prefetched_baseline_clocks(state->last_opcode);
         }
         return status;
     }
@@ -6133,7 +6149,9 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
     bm_808x_state_t *state = context;
     bm_tick_t consumed = 0U;
     bm_status_t status;
-    uint8_t queued_bytes[2];
+    uint8_t queued_opcode;
+    uint8_t queue_count;
+    uint8_t baseline_length;
 
     (void) start_ns;
     if ((state == NULL) || (cycles == NULL))
@@ -6143,13 +6161,14 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
     if (state->model == BM_808X_INTEL_8088) {
         if (state->halted)
             return BM_STATUS_IDLE;
-        if (boundary_interrupt_ready(state) ||
-            bm_808x_biu_queue_count(&state->bcu) !=
-                BM_808X_8088_PREFETCH_QUEUE_CAPACITY ||
-            state->bcu.prefetch_phase != BM_808X_BIU_PHASE_IDLE)
+        queue_count = bm_808x_biu_queue_count(&state->bcu);
+        if (boundary_interrupt_ready(state) || queue_count == 0U ||
+            (queue_count == BM_808X_8088_PREFETCH_QUEUE_CAPACITY &&
+             state->bcu.prefetch_phase != BM_808X_BIU_PHASE_IDLE))
             return BM_STATUS_UNSUPPORTED;
-        bm_808x_biu_export_queue(&state->bcu, queued_bytes, 2U);
-        if (intel_prefetched_baseline_clocks(queued_bytes[0]) == 0U)
+        bm_808x_biu_export_queue(&state->bcu, &queued_opcode, 1U);
+        baseline_length = intel_prefetched_baseline_length(queued_opcode);
+        if ((baseline_length == 0U) || (queue_count < baseline_length))
             return BM_STATUS_UNSUPPORTED;
         state->intel_clocked_mode = 1;
         bm_808x_biu_set_clocked_timeline(&state->bcu, 1);
