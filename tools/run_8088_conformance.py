@@ -17,7 +17,8 @@ The non-CODE active T-state projection compares phase order; only the final
 T4 may be absent when physical capture stops just after a completed T3.
 The optional clocked baseline gate additionally checks only full-queue,
 unprefixed NOP and the sixteen accumulator/immediate ALU forms against
-Intel's 3/4 clocks and the physical CODE phase positions. It is not a general
+Intel's 3/4 clocks, plus direct accumulator-memory reads A0h/A1h against
+their 10/14-clock traces and physical CODE phase positions. It is not a general
 cycle-trace comparison.
 
 Expected corpus:
@@ -50,6 +51,8 @@ EXPECTED_CORPUS = {
 }
 CLOCKED_BASELINE_OPCODES = {
     "90": 0x90,
+    "A0": 0xA0,
+    "A1": 0xA1,
     **{f"{value:02X}": value for value in range(0x04, 0x3E)
        if (value & 0x06) == 0x04},
 }
@@ -154,6 +157,26 @@ def hardware_operand_phases(test: dict) -> list[tuple[str, str]]:
     return result
 
 
+def hardware_phase_positions(test: dict, selected_kind: str
+                             ) -> list[tuple[str, str, int]]:
+    """Position complete bus cycles from their T1, not later PASV labels."""
+    kinds = {"MEMR": "R", "MEMW": "W", "IOR": "I", "IOW": "O",
+             "CODE": "C"}
+    phases = {"T1": "1", "T2": "2", "T3": "3", "Tw": "w", "T4": "4"}
+    result: list[tuple[str, str, int]] = []
+    current: str | None = None
+    for index, cycle in enumerate(test.get("cycles", [])):
+        phase = cycle[8]
+        if phase == "T1":
+            current = kinds.get(cycle[7])
+        if current is not None and phase in phases and (
+                selected_kind == "all" or current == selected_kind):
+            result.append((current, phases[phase], index))
+        if phase == "T4":
+            current = None
+    return result
+
+
 def clocked_baseline_eligible(test: dict, opcode: str) -> bool:
     """Only independently sourced full-queue register ALU cases are timed."""
     expected = CLOCKED_BASELINE_OPCODES.get(opcode.upper())
@@ -169,7 +192,9 @@ def compare_clocked_baseline(test: dict, response: str,
         return [f"invalid clocked response: {response!r}"]
     status = int(fields[1], 10)
     cycles = int(fields[2], 10)
-    expected_cycles = 3 if opcode.upper() == "90" else 4
+    expected_cycles = {"90": 3, "A0": 10, "A1": 14}.get(
+        opcode.upper(), 4,
+    )
     errors: list[str] = []
     if status != 0 or cycles != expected_cycles:
         errors.append(f"clocked_status={status}, cycles={cycles}, "
@@ -204,22 +229,37 @@ def compare_clocked_baseline(test: dict, response: str,
     if len(fields) <= code_pos:
         return errors + [f"truncated clocked response: {response!r}"]
     code_count = int(fields[code_pos], 10)
-    code_fields = fields[code_pos + 1:]
-    if len(code_fields) != 2 * code_count:
+    code_end = code_pos + 1 + 2 * code_count
+    code_fields = fields[code_pos + 1:code_end]
+    if len(code_fields) != 2 * code_count or len(fields) <= code_end:
         return errors + [f"invalid CODE phase response: {response!r}"]
     actual_code_phases = [
         (code_fields[index], int(code_fields[index + 1], 10))
         for index in range(0, len(code_fields), 2)
     ]
-    phase_codes = {"T1": "1", "T2": "2", "T3": "3", "Tw": "w", "T4": "4"}
     expected_code_phases = [
-        (phase_codes[cycle[8]], index)
-        for index, cycle in enumerate(test["cycles"])
-        if cycle[8] in phase_codes
+        (phase, index) for _, phase, index in
+        hardware_phase_positions(test, "C")
     ]
     if actual_code_phases != expected_code_phases:
         errors.append(f"CODE_phases={actual_code_phases}, "
                       f"expected={expected_code_phases}")
+    operand_clock_count = int(fields[code_end], 10)
+    operand_clock_fields = fields[code_end + 1:]
+    if len(operand_clock_fields) != 3 * operand_clock_count:
+        return errors + [f"invalid operand clock response: {response!r}"]
+    actual_operand_phases = [
+        (operand_clock_fields[index], operand_clock_fields[index + 1],
+         int(operand_clock_fields[index + 2], 10))
+        for index in range(0, len(operand_clock_fields), 3)
+    ]
+    expected_operand_phases = [
+        (kind, phase, index) for kind, phase, index in
+        hardware_phase_positions(test, "all") if kind != "C"
+    ]
+    if actual_operand_phases != expected_operand_phases:
+        errors.append(f"operand_clock_phases={actual_operand_phases}, "
+                      f"expected={expected_operand_phases}")
     return errors
 
 
@@ -377,7 +417,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--require-clocked-baseline", action="store_true",
-        help="Check full-queue unprefixed NOP and accumulator/immediate ALU steps",
+        help="Check full-queue unprefixed NOP, ALU and A0h/A1h steps",
     )
     args = parser.parse_args()
 
