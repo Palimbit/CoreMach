@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-add_library(blumach_video STATIC src/pvga1a.c)
+add_library(blumach_video STATIC src/pvga1a.c src/v6355d.c)
 target_include_directories(blumach_video
     PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"

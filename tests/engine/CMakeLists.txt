@@ -271,6 +271,13 @@ target_link_libraries(portable-engine-pvga1a
     PRIVATE blumach_video blumach_platform_null
 )
 
+add_executable(portable-engine-v6355d v6355d_test.c)
+target_link_libraries(portable-engine-v6355d
+    PRIVATE blumach_video blumach_platform_null
+)
+add_test(NAME portable-engine.v6355d-registers-video
+         COMMAND portable-engine-v6355d)
+
 add_executable(portable-engine-808x-biu cpu_808x_biu_test.c)
 target_include_directories(portable-engine-808x-biu
     PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/808x/src"

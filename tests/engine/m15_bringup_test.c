@@ -101,6 +101,7 @@ main(void)
         0xf4
     };
     uint8_t firmware[BM_M15_FIRMWARE_SIZE];
+    static uint32_t framebuffer_pixels[640U * 204U];
     bm_host_services_t host = bm_null_host_services();
     bm_m15_config_t config = { 0 };
     bm_machine_config_t machine;
@@ -129,6 +130,18 @@ main(void)
     assert(bm_session_create(&host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
     assert(bm_session_start(session) == BM_STATUS_OK);
+    {
+        bm_video_geometry_t geometry;
+        bm_video_framebuffer_t framebuffer = {
+            framebuffer_pixels, 640U * 204U, 640U, { 0 }
+        };
+
+        assert(bm_session_video_geometry(session, &geometry) == BM_STATUS_OK);
+        assert(geometry.width == 640U && geometry.height == 200U);
+        assert(bm_session_render_video(session, &framebuffer) == BM_STATUS_OK);
+        assert(framebuffer.geometry.width == 640U);
+        assert(framebuffer_pixels[0] == UINT32_C(0xff000000));
+    }
     assert(inspect_cpu(session, "cs") == 0xffffU);
     assert(inspect_cpu(session, "ip") == 0U);
     for (elapsed = 0U; elapsed < UINT64_C(10000000); elapsed += 100U) {

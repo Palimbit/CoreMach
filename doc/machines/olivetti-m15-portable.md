@@ -10,7 +10,8 @@ must not imply that the new engine has reached parity.
 - A typed, session-owned M15 configuration with 256/512 KiB RAM, a caller-owned
   64 KiB firmware blob and two internal 720 KiB floppy-drive definitions.
 - Intel 8088 interpreted execution at a nominal 4.77 MHz, ROM at F0000h,
-  16 KiB writable video RAM at B8000h, PIC, PIT, DMA, FDC and a separate
+  an instance-owned V6355D with mirrored 16 KiB VRAM at B0000h–BFFFFh,
+  PIC, PIT, DMA, FDC and a separate
   MSM6242 register-calendar component at ports 100h–10Fh.
 - M15-specific startup display and memory switches at ports 60h/62h, Port B
   control, and the BIOS keyboard-probe command 05h/response 82h.
@@ -19,6 +20,14 @@ must not imply that the new engine has reached parity.
   BCD/calendar rollover, leap day, 12/24-hour display, HOLD/STOP, 30-second
   adjustment, state injection and two simultaneous instances. These tests
   contain no proprietary firmware.
+- V6355D CRTC/mode/extended-register ports, 3Bxh compatibility alias, indexed
+  register auto-increment, 40/80-column text and CGA-compatible 320/640-pixel
+  raster paths. The controller emits RGBI indices; the M15 presentation maps
+  those to four green levels in a host-neutral framebuffer. The lower 128
+  glyphs come from the caller-supplied M15 firmware blob; the upper 128 remain
+  unresolved, currently blank. Synthetic tests cover register access, memory
+  mirrors, glyph and graphics pixels, virtual status, geometry and a session
+  framebuffer without reading or executing the locally preserved BIOS.
 
 The Intel 8088 implementation is an approximation for the documented 80C88;
 its CMOS-specific behavior and timings have not been verified. The PIT ratio
@@ -32,8 +41,10 @@ the frontend does not yet persist that state.
 
 ## Required before a usable M15
 
-1. Port and test the Yamaha V6355D register and framebuffer behavior, keeping
-   the four-level green LCD presentation separate from controller state.
+1. Compare the V6355D output with the inherited pilot and locally approved
+   firmware. The current status timing is a deterministic approximation, not
+   a measured scan clock. MDA attributes, the hardware pointer, composite
+   output, undocumented 16-colour modes and upper glyphs remain unresolved.
 2. Complete live keyboard input, status and IRQ behavior; the current model
    only supports the BIOS identification probe.
 3. Compare POST, interrupt and port traces with the validated legacy pilot

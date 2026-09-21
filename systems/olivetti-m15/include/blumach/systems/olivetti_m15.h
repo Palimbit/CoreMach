@@ -15,7 +15,7 @@ extern "C" {
 #define BM_M15_CONFIG_VERSION 2U
 
 /* This is an internal, non-catalogued platform bring-up contract. It does not
- * yet provide the V6355D display or live keyboard input. */
+ * yet provide live keyboard input or validated real-firmware POST. */
 typedef struct bm_m15_config {
     bm_blob_view_t firmware;
     uint32_t ram_kib;

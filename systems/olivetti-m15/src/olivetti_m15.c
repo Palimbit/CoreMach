@@ -20,19 +20,21 @@
 #include <blumach/components/pit8253.h>
 #include <blumach/components/pit8253_clock.h>
 #include <blumach/components/rtc_msm6242.h>
+#include <blumach/components/v6355d.h>
 
 #include <string.h>
 
 #define M15_ROM_BASE UINT64_C(0x000f0000)
-#define M15_VIDEO_RAM_BASE UINT64_C(0x000b8000)
-#define M15_VIDEO_RAM_SIZE 16384U
+#define M15_BIOS_FONT_OFFSET 0xfa6eU
+#define M15_LCD_PIXELS (640U * 204U)
 
 typedef struct bm_m15_machine {
     bm_host_services_t host;
     bm_engine_t *engine;
     bm_bus_t *bus;
     bm_linear_memory_t *ram;
-    bm_linear_memory_t *video_ram;
+    bm_v6355d_t *video;
+    uint8_t *video_indices;
     bm_linear_memory_t *rom;
     bm_dma8237_t *dma;
     bm_dma_page_registers_t *dma_pages;
@@ -133,6 +135,14 @@ m15_rtc_second(bm_engine_t *engine, void *context,
     return bm_msm6242_advance_second(machine->rtc);
 }
 
+static bm_tick_t
+m15_video_time(void *context)
+{
+    const bm_m15_machine_t *machine = context;
+
+    return bm_engine_now(machine->engine);
+}
+
 static uint8_t
 m15_memory_switch_x(const bm_m15_machine_t *machine)
 {
@@ -224,7 +234,9 @@ m15_destroy(void *context)
     bm_dma_page_registers_destroy(machine->dma_pages);
     bm_dma8237_destroy(machine->dma);
     bm_linear_memory_destroy(machine->rom);
-    bm_linear_memory_destroy(machine->video_ram);
+    bm_v6355d_destroy(machine->video);
+    if (machine->video_indices != NULL)
+        machine->host.release(machine->host.context, machine->video_indices);
     bm_linear_memory_destroy(machine->ram);
     bm_bus_destroy(machine->bus);
     machine->host.release(machine->host.context, machine);
@@ -278,12 +290,21 @@ m15_create(bm_engine_t *engine, const bm_host_services_t *host,
                                          &machine->ram);
     }
     if (status == BM_STATUS_OK) {
-        const bm_linear_memory_config_t memory = {
-            BM_ADDRESS_MEMORY, M15_VIDEO_RAM_BASE, M15_VIDEO_RAM_SIZE,
-            BM_LINEAR_MEMORY_WRITABLE, NULL, 0U
+        uint8_t font[BM_V6355D_FONT_SIZE] = { 0 };
+        bm_v6355d_config_t video_config = {
+            font, sizeof(font), m15_video_time, machine
         };
-        status = bm_linear_memory_create(host, machine->bus, &memory,
-                                         &machine->video_ram);
+
+        /* The inspected 1.08 M15 ROM has 128 eight-byte glyphs at FA6Eh.
+         * Upper glyphs remain explicitly unresolved, not borrowed from IBM. */
+        memcpy(font, config->firmware.data + M15_BIOS_FONT_OFFSET, 1024U);
+        status = bm_v6355d_create(host, machine->bus, &video_config,
+                                  &machine->video);
+    }
+    if (status == BM_STATUS_OK) {
+        machine->video_indices = host->allocate(host->context, M15_LCD_PIXELS);
+        if (machine->video_indices == NULL)
+            status = BM_STATUS_OUT_OF_MEMORY;
     }
     if (status == BM_STATUS_OK) {
         const bm_linear_memory_config_t memory = {
@@ -396,6 +417,7 @@ m15_reset(void *context)
     bm_dma_page_registers_reset(machine->dma_pages);
     bm_pic8259_reset(machine->pic);
     bm_pit8253_reset(machine->pit);
+    bm_v6355d_reset(machine->video);
     bm_fdc765_reset(machine->fdc);
     bm_floppy_drive_reset(machine->floppy[0]);
     bm_floppy_drive_reset(machine->floppy[1]);
@@ -430,6 +452,57 @@ m15_inspect(const void *context, const char *name, uint64_t *value)
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+m15_video_geometry(const void *context, bm_video_geometry_t *geometry)
+{
+    const bm_m15_machine_t *machine = context;
+
+    if (machine == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    return bm_v6355d_geometry(machine->video, geometry);
+}
+
+static bm_status_t
+m15_video_render(const void *context, bm_tick_t emulated_time,
+                 bm_video_framebuffer_t *framebuffer)
+{
+    static const uint8_t green[4] = { 0x00U, 0x19U, 0x43U, 0x78U };
+    bm_m15_machine_t *machine = (bm_m15_machine_t *) context;
+    bm_video_geometry_t geometry;
+    bm_status_t status;
+    uint32_t x, y;
+
+    if ((machine == NULL) || (framebuffer == NULL) ||
+        (framebuffer->pixels == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    status = bm_v6355d_geometry(machine->video, &geometry);
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((framebuffer->stride < geometry.width) ||
+        (framebuffer->pixel_capacity / framebuffer->stride < geometry.height))
+        return BM_STATUS_INVALID_ARGUMENT;
+    status = bm_v6355d_render_indices(machine->video, emulated_time,
+                                      machine->video_indices, M15_LCD_PIXELS,
+                                      geometry.width);
+    if (status != BM_STATUS_OK)
+        return status;
+    for (y = 0U; y < geometry.height; ++y) {
+        for (x = 0U; x < geometry.width; ++x) {
+            uint8_t index = machine->video_indices[(size_t) y * geometry.width + x];
+            unsigned int luminance = ((index & 4U) != 0U ? 3U : 0U) +
+                                     ((index & 2U) != 0U ? 6U : 0U) +
+                                     ((index & 1U) != 0U ? 1U : 0U) +
+                                     ((index & 8U) != 0U ? 3U : 0U);
+            unsigned int level = (luminance * 3U + 6U) / 13U;
+
+            framebuffer->pixels[(size_t) y * framebuffer->stride + x] =
+                UINT32_C(0xff000000) | ((uint32_t) green[level] << 8U);
+        }
+    }
+    framebuffer->geometry = geometry;
+    return BM_STATUS_OK;
+}
+
 static const bm_machine_definition_t m15_definition = {
     .id = "olivetti-m15",
     .scheduler_ticks_per_second = BM_MACHINE_CLOCKED_TICKS_PER_SECOND,
@@ -442,7 +515,9 @@ static const bm_machine_definition_t m15_definition = {
         .create = m15_create,
         .destroy = m15_destroy,
         .reset = m15_reset,
-        .inspect = m15_inspect
+        .inspect = m15_inspect,
+        .video_geometry = m15_video_geometry,
+        .video_render = m15_video_render
     },
     .engine = { 1U, 8U, 2U }
 };
