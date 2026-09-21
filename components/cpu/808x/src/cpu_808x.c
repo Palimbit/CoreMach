@@ -5459,6 +5459,20 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
     return kind;
 }
 
+static uint32_t
+intel_prefetched_baseline_clocks(uint8_t opcode)
+{
+    /* Intel 8086 Family User's Manual (Oct. 1979), table 2-21: NOP is three
+     * clocks and the accumulator/immediate ALU forms are four. The pinned
+     * D8088 corpus independently confirms the CODE T-state positions for
+     * these unprefixed, initially full-queue byte and word forms. */
+    if (opcode == 0x90U)
+        return 3U;
+    if ((opcode <= 0x3dU) && ((opcode & 0x06U) == 0x04U))
+        return 4U;
+    return 0U;
+}
+
 static bm_status_t
 advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
 {
@@ -5481,14 +5495,11 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
             state->bcu.boundary_prefetch_flushed ||
             state->bcu.prefetch_phase != BM_808X_BIU_PHASE_IDLE)
             return BM_STATUS_OK;
-        if (state->last_opcode == 0x90U)
-            clocks = 3U;
-        else if (state->last_opcode == 0x04U)
-            clocks = 4U;
-        else
+        clocks = intel_prefetched_baseline_clocks(state->last_opcode);
+        if (clocks == 0U)
             return BM_STATUS_OK;
 
-        /* The full initial queue provides both decoded bytes. The physical
+        /* The full initial queue provides all decoded bytes. The physical
          * D8088 traces and Intel's 3/4-clock table agree on two bus-idle
          * clocks before the next CODE T1. No NEC queue-read clock is added. */
         bm_808x_biu_advance_idle(&state->bcu, 2U);
@@ -6138,7 +6149,7 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
             state->bcu.prefetch_phase != BM_808X_BIU_PHASE_IDLE)
             return BM_STATUS_UNSUPPORTED;
         bm_808x_biu_export_queue(&state->bcu, queued_bytes, 2U);
-        if ((queued_bytes[0] != 0x90U) && (queued_bytes[0] != 0x04U))
+        if (intel_prefetched_baseline_clocks(queued_bytes[0]) == 0U)
             return BM_STATUS_UNSUPPORTED;
         state->intel_clocked_mode = 1;
         bm_808x_biu_set_clocked_timeline(&state->bcu, 1);

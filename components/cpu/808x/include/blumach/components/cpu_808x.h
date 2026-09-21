@@ -109,7 +109,8 @@ typedef enum bm_808x_prefetch_phase {
  * NEC execution_clocks_min/max are execution-unit clocks and deliberately
  * exclude prefetch, pre-decode and bus waits. The Intel 8088 currently has
  * exact execution and boundary clocks only for the independently checked
- * full-queue 90h/04h baseline; other Intel forms remain UNKNOWN. EXACT means
+ * full-queue 90h and accumulator/immediate ALU baseline; other Intel
+ * forms remain UNKNOWN. EXACT means
  * min == max. RANGE
  * preserves a documented data-dependent interval without pretending that the
  * realised value is known. UNKNOWN is an explicit unimplemented timing
@@ -424,7 +425,8 @@ bm_status_t bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed);
 
 /* Engine callback for one cycle-reported architectural boundary. It succeeds
  * only when the selected model's timing data produced one exact scalar
- * duration. Intel 8088 durations are currently deliberately unclassified;
+ * duration. Intel 8088 durations are classified only for the full-queue,
+ * unprefixed baseline described above;
  * ranged or unknown boundaries return BM_STATUS_UNSUPPORTED with zero cycles,
  * so a clocked machine cannot silently turn an unresolved timing into virtual
  * time.

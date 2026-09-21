@@ -219,6 +219,12 @@ class Intel8088ConformanceTests(unittest.TestCase):
         }
         self.assertTrue(conformance.clocked_baseline_eligible(test, "90"))
         self.assertFalse(conformance.clocked_baseline_eligible(test, "04"))
+        for opcode in conformance.CLOCKED_BASELINE_OPCODES.values():
+            test["initial"]["queue"][0] = opcode
+            self.assertTrue(conformance.clocked_baseline_eligible(
+                test, f"{opcode:02X}",
+            ))
+        test["initial"]["queue"][0] = 0x90
         response = (
             "T 0 3 0001 0002 0003 0004 0100 0005 0006 0007 "
             "0008 0009 000a 000b 000d f002 0 3 90 90 90 "
