@@ -274,12 +274,12 @@
       "id": "olivetti-m15-portable-system",
       "destination": ["systems/olivetti-m15/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
-      "origin_commit": "7e967b9ffc0eb960074552d3402abe66c019d1f7",
-      "origin_paths": ["src/machine/m_xt.c", "src/device/kbc_xt.c"],
+      "origin_commit": "aa4631cf8c95a118d962e38b06a074c50789705f",
+      "origin_paths": ["src/machine/m_xt.c", "src/device/kbc_xt.c", "systems/olivetti-pcs86/src/olivetti_pcs86.c"],
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
-      "copyright_holders": ["Sarah Walker", "Miran Grca", "Fred N. van Kempen", "EngiNerd", "Jasmine Iwanek", "BluMach contributors"],
-      "local_changes": "Internal M15 bring-up system with instance-owned board-switch and keyboard-probe state, typed firmware, floppy and RTC configuration, rational-clock Intel 8088, memory, PIC, PIT, DMA, FDC and a deterministic MSM6242 calendar. The M15-specific switch behavior derives from the legacy implementation; generic components are independently linked. No BIOS, ROM or media are included. V6355D and live keyboard remain unavailable."
+      "copyright_holders": ["Sarah Walker", "Miran Grca", "Fred N. van Kempen", "EngiNerd", "Jasmine Iwanek", "rtzor", "BluMach contributors"],
+      "local_changes": "Internal M15 bring-up system with instance-owned board-switch and keyboard state, typed firmware, floppy and RTC configuration, rational-clock Intel 8088, memory, PIC, PIT, DMA, FDC, V6355D presentation and deterministic MSM6242 calendar. The M15-specific switch, 05h-to-82h identification and XT-compatible Port B strobe behavior derive from the inherited pilot; normalized-key to guest-byte mapping is adapted from the portable PCS86. A bounded per-instance scan queue, virtual-millisecond delivery, IRQ1 and explicit Port B acknowledgement replace inherited globals and polling fallback. This is a compatibility stream, not a validated physical M15 keyboard protocol. Generic components are independently linked. No BIOS, ROM or media are included."
     },
     {
       "id": "olivetti-pcs86-portable-system",

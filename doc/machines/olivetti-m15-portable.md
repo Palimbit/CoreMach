@@ -14,7 +14,12 @@ must not imply that the new engine has reached parity.
   PIC, PIT, DMA, FDC and a separate
   MSM6242 register-calendar component at ports 100h–10Fh.
 - M15-specific startup display and memory switches at ports 60h/62h, Port B
-  control, and the BIOS keyboard-probe command 05h/response 82h.
+  control, and the BIOS keyboard-probe command 05h/response 82h. A bounded,
+  instance-owned keyboard queue accepts normalized physical-key events and
+  delivers the supported main keys as XT-compatible guest bytes through 60h,
+  status bit 0 at 64h and IRQ1 on a deterministic virtual-millisecond cadence.
+  The guest acknowledges the data strobe via Port B bit 7; enabling its clock
+  via bit 6 produces the inherited AA self-test byte.
 - Synthetic reset-vector and I/O probes for both RAM sizes, reset, RTC virtual
   seconds and allocation-failure cleanup. The RTC has independent tests for
   BCD/calendar rollover, leap day, 12/24-hour display, HOLD/STOP, 30-second
@@ -28,6 +33,9 @@ must not imply that the new engine has reached parity.
   unresolved, currently blank. Synthetic tests cover register access, memory
   mirrors, glyph and graphics pixels, virtual status, geometry and a session
   framebuffer without reading or executing the locally preserved BIOS.
+- A synthetic firmware test exercises the AA startup byte, Enter make/break,
+  status polling, Port B acknowledgement, IRQ1 request, reset, unsupported
+  keys and queue-full behavior. It does not validate a real M15 keyboard.
 
 The Intel 8088 implementation is an approximation for the documented 80C88;
 its CMOS-specific behavior and timings have not been verified. The PIT ratio
@@ -45,8 +53,12 @@ the frontend does not yet persist that state.
    firmware. The current status timing is a deterministic approximation, not
    a measured scan clock. MDA attributes, the hardware pointer, composite
    output, undocumented 16-colour modes and upper glyphs remain unresolved.
-2. Complete live keyboard input, status and IRQ behavior; the current model
-   only supports the BIOS identification probe.
+2. Determine the physical M15 detachable-keyboard serial protocol and the
+   codes of national/extended keys. The current XT-compatible byte stream is
+   an inherited pilot approximation, not a claim that the M15 keyboard is IBM
+   XT. Right-side modifiers, navigation keys and special sequences are
+   deliberately unsupported pending evidence. No timeout silently releases
+   an unacknowledged byte; a guest that never acknowledges Port B will stall.
 3. Compare POST, interrupt and port traces with the validated legacy pilot
    using locally approved firmware. Do not package firmware or media.
 4. Validate floppy boot and reset in the portable engine, then expose M15 via

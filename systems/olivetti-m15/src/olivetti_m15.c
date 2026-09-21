@@ -4,6 +4,7 @@
  * Copyright 2017-2025 Fred N. van Kempen
  * Copyright 2020 EngiNerd
  * Copyright 2025 Jasmine Iwanek
+ * Copyright 2026 rtzor
  * Copyright 2026 BluMach contributors
  *
  * Selective, instance-owned rewrite of the BluMach M15 board-switch path.
@@ -27,6 +28,7 @@
 #define M15_ROM_BASE UINT64_C(0x000f0000)
 #define M15_BIOS_FONT_OFFSET 0xfa6eU
 #define M15_LCD_PIXELS (640U * 204U)
+#define M15_KEY_QUEUE_SIZE 16U
 
 typedef struct bm_m15_machine {
     bm_host_services_t host;
@@ -49,6 +51,13 @@ typedef struct bm_m15_machine {
     uint8_t port_b;
     uint8_t keyboard_response;
     int keyboard_response_pending;
+    uint8_t key_queue[M15_KEY_QUEUE_SIZE];
+    uint8_t key_queue_head;
+    uint8_t key_queue_tail;
+    uint8_t key_latch;
+    int key_latch_full;
+    bm_timed_source_id_t keyboard_timer_id;
+    int keyboard_timer_armed;
     int cpu_ready;
 } bm_m15_machine_t;
 
@@ -143,6 +152,130 @@ m15_video_time(void *context)
     return bm_engine_now(machine->engine);
 }
 
+static bm_status_t
+m15_key_enqueue(bm_m15_machine_t *machine, uint8_t value)
+{
+    uint8_t next = (uint8_t) ((machine->key_queue_tail + 1U) &
+                              (M15_KEY_QUEUE_SIZE - 1U));
+
+    if (next == machine->key_queue_head)
+        return BM_STATUS_CAPACITY_EXCEEDED;
+    machine->key_queue[machine->key_queue_tail] = value;
+    machine->key_queue_tail = next;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+m15_keyboard_schedule(bm_m15_machine_t *machine)
+{
+    bm_status_t status;
+
+    if (machine->keyboard_timer_armed || machine->key_latch_full ||
+        (machine->port_b & 0x40U) == 0U ||
+        machine->key_queue_head == machine->key_queue_tail)
+        return BM_STATUS_OK;
+    status = bm_engine_arm_timed_source(machine->engine,
+                                        machine->keyboard_timer_id, 1U);
+    if (status == BM_STATUS_OK)
+        machine->keyboard_timer_armed = 1;
+    return status;
+}
+
+static bm_status_t
+m15_keyboard_clock(bm_engine_t *engine, void *context,
+                   const bm_time_point_t *when, uint64_t *cycles_until_next)
+{
+    bm_m15_machine_t *machine = context;
+
+    (void) engine;
+    (void) when;
+    *cycles_until_next = 0U;
+    machine->keyboard_timer_armed = 0;
+    if ((machine->port_b & 0x40U) == 0U || machine->key_latch_full ||
+        machine->key_queue_head == machine->key_queue_tail)
+        return BM_STATUS_IDLE;
+    machine->key_latch = machine->key_queue[machine->key_queue_head];
+    machine->key_queue_head = (uint8_t) ((machine->key_queue_head + 1U) &
+                                         (M15_KEY_QUEUE_SIZE - 1U));
+    machine->key_latch_full = 1;
+    if (bm_pic8259_set_irq(machine->pic, 1U, 1) != BM_STATUS_OK)
+        return BM_STATUS_DEVICE_ERROR;
+    return BM_STATUS_IDLE;
+}
+
+/* XT-compatible guest byte stream used by the inherited pilot. The M15 has
+ * its own detachable keyboard; this is not a claim about its wire protocol or
+ * about nationally-specific and extended key positions. */
+static bm_status_t
+m15_key_to_guest_byte(bm_key_code_t key, uint8_t *scan)
+{
+    static const uint8_t letter_scan[26] = {
+        0x1eU, 0x30U, 0x2eU, 0x20U, 0x12U, 0x21U, 0x22U,
+        0x23U, 0x17U, 0x24U, 0x25U, 0x26U, 0x32U, 0x31U,
+        0x18U, 0x19U, 0x10U, 0x13U, 0x1fU, 0x14U, 0x16U,
+        0x2fU, 0x11U, 0x2dU, 0x15U, 0x2cU
+    };
+
+    if ((key >= BM_KEY_A) && (key <= BM_KEY_Z)) {
+        *scan = letter_scan[key - BM_KEY_A];
+        return BM_STATUS_OK;
+    }
+    if ((key >= BM_KEY_1) && (key <= BM_KEY_9)) {
+        *scan = (uint8_t) (2U + key - BM_KEY_1);
+        return BM_STATUS_OK;
+    }
+    if ((key >= BM_KEY_F1) && (key <= BM_KEY_F10)) {
+        *scan = (uint8_t) (0x3bU + key - BM_KEY_F1);
+        return BM_STATUS_OK;
+    }
+    switch (key) {
+        case BM_KEY_0: *scan = 0x0bU; break;
+        case BM_KEY_ENTER: *scan = 0x1cU; break;
+        case BM_KEY_ESCAPE: *scan = 0x01U; break;
+        case BM_KEY_BACKSPACE: *scan = 0x0eU; break;
+        case BM_KEY_TAB: *scan = 0x0fU; break;
+        case BM_KEY_SPACE: *scan = 0x39U; break;
+        case BM_KEY_MINUS: *scan = 0x0cU; break;
+        case BM_KEY_EQUAL: *scan = 0x0dU; break;
+        case BM_KEY_LEFT_BRACKET: *scan = 0x1aU; break;
+        case BM_KEY_RIGHT_BRACKET: *scan = 0x1bU; break;
+        case BM_KEY_BACKSLASH: *scan = 0x2bU; break;
+        case BM_KEY_SEMICOLON: *scan = 0x27U; break;
+        case BM_KEY_APOSTROPHE: *scan = 0x28U; break;
+        case BM_KEY_GRAVE: *scan = 0x29U; break;
+        case BM_KEY_COMMA: *scan = 0x33U; break;
+        case BM_KEY_PERIOD: *scan = 0x34U; break;
+        case BM_KEY_SLASH: *scan = 0x35U; break;
+        case BM_KEY_CAPS_LOCK: *scan = 0x3aU; break;
+        case BM_KEY_SCROLL_LOCK: *scan = 0x46U; break;
+        case BM_KEY_LEFT_CONTROL: *scan = 0x1dU; break;
+        case BM_KEY_LEFT_SHIFT: *scan = 0x2aU; break;
+        case BM_KEY_RIGHT_SHIFT: *scan = 0x36U; break;
+        case BM_KEY_LEFT_ALT: *scan = 0x38U; break;
+        default: return BM_STATUS_UNSUPPORTED;
+    }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+m15_input(void *context, const bm_input_event_t *event)
+{
+    bm_m15_machine_t *machine = context;
+    uint8_t scan;
+    bm_status_t status;
+
+    if ((machine == NULL) || (event == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (event->kind != BM_INPUT_KEY)
+        return BM_STATUS_UNSUPPORTED;
+    status = m15_key_to_guest_byte(event->key, &scan);
+    if (status != BM_STATUS_OK)
+        return status;
+    status = m15_key_enqueue(machine, event->pressed ? scan :
+                             (uint8_t) (scan | 0x80U));
+    return status == BM_STATUS_OK ? m15_keyboard_schedule(machine) : status;
+}
+
 static uint8_t
 m15_memory_switch_x(const bm_m15_machine_t *machine)
 {
@@ -178,9 +311,25 @@ m15_board_access(void *context, bm_bus_transaction_t *transaction)
             return BM_STATUS_OK;
         }
         if (port == 0x61U) {
+            uint8_t previous = machine->port_b;
+            bm_status_t status;
+
+            if ((previous & 0x40U) == 0U && (value & 0x40U) != 0U) {
+                /* Inherited XT-compatible keyboard reset handshake. */
+                machine->key_queue_head = machine->key_queue_tail = 0U;
+                machine->key_latch_full = 0;
+                (void) bm_pic8259_set_irq(machine->pic, 1U, 0);
+                (void) m15_key_enqueue(machine, 0xaaU);
+            }
+            if ((value & 0x80U) != 0U) {
+                machine->key_latch_full = 0;
+                (void) bm_pic8259_set_irq(machine->pic, 1U, 0);
+            }
             machine->port_b = value;
-            return bm_pit8253_set_gate(machine->pit, 2U,
-                                       (value & 1U) != 0U);
+            status = bm_pit8253_set_gate(machine->pit, 2U,
+                                         (value & 1U) != 0U);
+            return status == BM_STATUS_OK ?
+                m15_keyboard_schedule(machine) : status;
         }
         return BM_STATUS_OK;
     }
@@ -195,7 +344,7 @@ m15_board_access(void *context, bm_bus_transaction_t *transaction)
             } else if ((machine->port_b & 0x80U) != 0U) {
                 transaction->value = m15_board_switches(machine);
             } else {
-                transaction->value = 0U;
+                transaction->value = machine->key_latch;
             }
             return BM_STATUS_OK;
         case 0x61U:
@@ -207,7 +356,8 @@ m15_board_access(void *context, bm_bus_transaction_t *transaction)
                 (m15_memory_switch_x(machine) >> 4U);
             return BM_STATUS_OK;
         case 0x64U:
-            transaction->value = machine->keyboard_response_pending ? 1U : 0U;
+            transaction->value = (machine->keyboard_response_pending ||
+                                  machine->key_latch_full) ? 1U : 0U;
             return BM_STATUS_OK;
         case 0x63U:
             transaction->value = 0xffU; /* No M15 board register is modeled. */
@@ -252,6 +402,7 @@ m15_create(bm_engine_t *engine, const bm_host_services_t *host,
     static const bm_clock_rate_t cpu_rate = { UINT64_C(14318180), 3U };
     static const bm_clock_rate_t pit_rate = { UINT64_C(14318180), 9U };
     static const bm_clock_rate_t rtc_rate = { 1U, 1U };
+    static const bm_clock_rate_t keyboard_rate = { 1000U, 1U };
     const bm_m15_config_t *config;
     bm_m15_machine_t *machine;
     bm_status_t status;
@@ -375,6 +526,10 @@ m15_create(bm_engine_t *engine, const bm_host_services_t *host,
     if (status == BM_STATUS_OK)
         status = bm_engine_add_timed_source(engine, m15_rtc_second, machine,
                                              &rtc_rate, 1U, NULL);
+    if (status == BM_STATUS_OK)
+        status = bm_engine_add_timed_source(engine, m15_keyboard_clock,
+                                             machine, &keyboard_rate, 0U,
+                                             &machine->keyboard_timer_id);
     if (status == BM_STATUS_OK) {
         bm_808x_config_t cpu_config = {
             .model = BM_808X_INTEL_8088,
@@ -424,6 +579,10 @@ m15_reset(void *context)
     machine->port_b = 0U;
     machine->keyboard_response = 0U;
     machine->keyboard_response_pending = 0;
+    machine->key_queue_head = machine->key_queue_tail = 0U;
+    machine->key_latch = 0U;
+    machine->key_latch_full = 0;
+    machine->keyboard_timer_armed = 0;
     return BM_STATUS_OK;
 }
 
@@ -440,6 +599,21 @@ m15_inspect(const void *context, const char *name, uint64_t *value)
         *value = machine->port_b;
     else if (strcmp(name, "keyboard_response_pending") == 0)
         *value = (uint64_t) machine->keyboard_response_pending;
+    else if (strcmp(name, "keyboard_latch") == 0)
+        *value = machine->key_latch;
+    else if (strcmp(name, "keyboard_latch_full") == 0)
+        *value = (uint64_t) machine->key_latch_full;
+    else if (strcmp(name, "keyboard_timer_armed") == 0)
+        *value = (uint64_t) machine->keyboard_timer_armed;
+    else if (strcmp(name, "keyboard_queue_depth") == 0)
+        *value = (uint8_t) ((machine->key_queue_tail - machine->key_queue_head) &
+                           (M15_KEY_QUEUE_SIZE - 1U));
+    else if (strcmp(name, "pic_irq_requests") == 0) {
+        bm_pic8259_state_t state;
+        if (bm_pic8259_state(machine->pic, &state) != BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = state.interrupt_requests;
+    }
     else if (strcmp(name, "rtc_seconds") == 0) {
         uint8_t state[BM_MSM6242_STATE_SIZE];
         if (bm_msm6242_save_state(machine->rtc, state, sizeof(state)) !=
@@ -516,10 +690,11 @@ static const bm_machine_definition_t m15_definition = {
         .destroy = m15_destroy,
         .reset = m15_reset,
         .inspect = m15_inspect,
+        .input = m15_input,
         .video_geometry = m15_video_geometry,
         .video_render = m15_video_render
     },
-    .engine = { 1U, 8U, 2U }
+    .engine = { 1U, 8U, 3U }
 };
 
 const bm_machine_definition_t *

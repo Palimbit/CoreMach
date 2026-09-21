@@ -164,6 +164,12 @@ target_link_libraries(portable-engine-m15-bringup
             portable-failure-injection-host
 )
 
+add_executable(portable-engine-m15-keyboard m15_keyboard_test.c)
+target_link_libraries(portable-engine-m15-keyboard
+    PRIVATE blumach_system_olivetti_m15 blumach_platform_null
+)
+add_test(NAME portable-engine.m15-keyboard COMMAND portable-engine-m15-keyboard)
+
 add_executable(portable-engine-pcs86-user-io pcs86_user_io_test.c)
 target_link_libraries(portable-engine-pcs86-user-io
     PRIVATE blumach_system_olivetti_pcs86 blumach_platform_null
