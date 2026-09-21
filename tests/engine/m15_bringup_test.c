@@ -145,10 +145,14 @@ main(void)
     assert(inspect_machine(session, "port_b") == 0x04U);
     assert(inspect_machine(session, "keyboard_response_pending") == 0U);
     assert(inspect_machine(session, "ram_kib") == 256U);
+    assert(inspect_machine(session, "rtc_seconds") == 0U);
+    assert(bm_session_run_for(session, UINT64_C(1000000000)) == BM_STATUS_OK);
+    assert(inspect_machine(session, "rtc_seconds") == 1U);
     assert(bm_session_reset(session) == BM_STATUS_OK);
     assert(inspect_cpu(session, "cs") == 0xffffU);
     assert(inspect_cpu(session, "ip") == 0U);
     assert(inspect_machine(session, "port_b") == 0U);
+    assert(inspect_machine(session, "rtc_seconds") == 1U);
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
 
@@ -169,6 +173,13 @@ main(void)
     assert(trace.memory_switches == 0x0fU);
     bm_session_destroy(session);
     config.ram_kib = 640U;
+    session = NULL;
+    assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_INVALID_ARGUMENT);
+    bm_session_destroy(session);
+    config.ram_kib = 256U;
+    config.rtc_initial_state = firmware;
+    config.rtc_initial_state_size = 1U;
     session = NULL;
     assert(bm_session_create(&host, &session) == BM_STATUS_OK);
     assert(bm_session_configure(session, &machine) == BM_STATUS_INVALID_ARGUMENT);

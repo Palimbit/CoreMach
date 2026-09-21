@@ -19,6 +19,7 @@
 #include <blumach/components/pic8259.h>
 #include <blumach/components/pit8253.h>
 #include <blumach/components/pit8253_clock.h>
+#include <blumach/components/rtc_msm6242.h>
 
 #include <string.h>
 
@@ -37,6 +38,7 @@ typedef struct bm_m15_machine {
     bm_dma_page_registers_t *dma_pages;
     bm_pic8259_t *pic;
     bm_pit8253_t *pit;
+    bm_msm6242_t *rtc;
     bm_floppy_drive_t *floppy[2];
     bm_fdc765_t *fdc;
     bm_cpu_id_t cpu_id;
@@ -64,7 +66,11 @@ m15_validate(const bm_configuration_view_t *view)
         (config->firmware.size != BM_M15_FIRMWARE_SIZE) ||
         ((config->ram_kib != 256U) && (config->ram_kib != 512U)) ||
         ((config->startup_display_switches != 0x10U) &&
-         (config->startup_display_switches != 0x20U)))
+         (config->startup_display_switches != 0x20U)) ||
+        ((config->rtc_initial_state == NULL) &&
+         (config->rtc_initial_state_size != 0U)) ||
+        ((config->rtc_initial_state != NULL) &&
+         (config->rtc_initial_state_size != BM_MSM6242_STATE_SIZE)))
         return BM_STATUS_INVALID_ARGUMENT;
     for (index = 0U; index < 2U; ++index) {
         const bm_floppy_drive_config_t *floppy = &config->floppy[index];
@@ -113,6 +119,18 @@ m15_interrupt_acknowledge(void *context, uint8_t *vector)
     bm_m15_machine_t *machine = context;
 
     return bm_pic8259_acknowledge(machine->pic, vector);
+}
+
+static bm_status_t
+m15_rtc_second(bm_engine_t *engine, void *context,
+               const bm_time_point_t *when, uint64_t *cycles_until_next)
+{
+    bm_m15_machine_t *machine = context;
+
+    (void) engine;
+    (void) when;
+    *cycles_until_next = 1U;
+    return bm_msm6242_advance_second(machine->rtc);
 }
 
 static uint8_t
@@ -201,6 +219,7 @@ m15_destroy(void *context)
     for (index = 0U; index < 2U; ++index)
         bm_floppy_drive_destroy(machine->floppy[index]);
     bm_pit8253_destroy(machine->pit);
+    bm_msm6242_destroy(machine->rtc);
     bm_pic8259_destroy(machine->pic);
     bm_dma_page_registers_destroy(machine->dma_pages);
     bm_dma8237_destroy(machine->dma);
@@ -220,6 +239,7 @@ m15_create(bm_engine_t *engine, const bm_host_services_t *host,
     };
     static const bm_clock_rate_t cpu_rate = { UINT64_C(14318180), 3U };
     static const bm_clock_rate_t pit_rate = { UINT64_C(14318180), 9U };
+    static const bm_clock_rate_t rtc_rate = { 1U, 1U };
     const bm_m15_config_t *config;
     bm_m15_machine_t *machine;
     bm_status_t status;
@@ -302,6 +322,15 @@ m15_create(bm_engine_t *engine, const bm_host_services_t *host,
         status = bm_pit8253_create(host, machine->bus, &pit_config,
                                    &machine->pit);
     }
+    if (status == BM_STATUS_OK) {
+        bm_msm6242_config_t rtc_config = {
+            .io_base = 0x0100U,
+            .initial_state = config->rtc_initial_state,
+            .initial_state_size = config->rtc_initial_state_size
+        };
+        status = bm_msm6242_create(host, machine->bus, &rtc_config,
+                                   &machine->rtc);
+    }
     for (index = 0U; (status == BM_STATUS_OK) && (index < 2U); ++index)
         status = bm_floppy_drive_create(host, &config->floppy[index],
                                         &machine->floppy[index]);
@@ -322,6 +351,9 @@ m15_create(bm_engine_t *engine, const bm_host_services_t *host,
     if (status == BM_STATUS_OK)
         status = bm_pit8253_attach_clock(engine, machine->pit, &pit_rate,
                                          NULL);
+    if (status == BM_STATUS_OK)
+        status = bm_engine_add_timed_source(engine, m15_rtc_second, machine,
+                                             &rtc_rate, 1U, NULL);
     if (status == BM_STATUS_OK) {
         bm_808x_config_t cpu_config = {
             .model = BM_808X_INTEL_8088,
@@ -386,6 +418,13 @@ m15_inspect(const void *context, const char *name, uint64_t *value)
         *value = machine->port_b;
     else if (strcmp(name, "keyboard_response_pending") == 0)
         *value = (uint64_t) machine->keyboard_response_pending;
+    else if (strcmp(name, "rtc_seconds") == 0) {
+        uint8_t state[BM_MSM6242_STATE_SIZE];
+        if (bm_msm6242_save_state(machine->rtc, state, sizeof(state)) !=
+            BM_STATUS_OK)
+            return BM_STATUS_DEVICE_ERROR;
+        *value = state[0] + 10U * state[1];
+    }
     else
         return BM_STATUS_UNSUPPORTED;
     return BM_STATUS_OK;

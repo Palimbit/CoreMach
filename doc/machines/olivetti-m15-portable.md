@@ -10,29 +10,43 @@ must not imply that the new engine has reached parity.
 - A typed, session-owned M15 configuration with 256/512 KiB RAM, a caller-owned
   64 KiB firmware blob and two internal 720 KiB floppy-drive definitions.
 - Intel 8088 interpreted execution at a nominal 4.77 MHz, ROM at F0000h,
-  16 KiB writable video RAM at B8000h, PIC, PIT, DMA, and FDC.
+  16 KiB writable video RAM at B8000h, PIC, PIT, DMA, FDC and a separate
+  MSM6242 register-calendar component at ports 100h–10Fh.
 - M15-specific startup display and memory switches at ports 60h/62h, Port B
   control, and the BIOS keyboard-probe command 05h/response 82h.
-- Synthetic reset-vector and I/O probes for both RAM sizes, reset, and
-  allocation-failure cleanup. These tests contain no proprietary firmware.
+- Synthetic reset-vector and I/O probes for both RAM sizes, reset, RTC virtual
+  seconds and allocation-failure cleanup. The RTC has independent tests for
+  BCD/calendar rollover, leap day, 12/24-hour display, HOLD/STOP, 30-second
+  adjustment, state injection and two simultaneous instances. These tests
+  contain no proprietary firmware.
 
 The Intel 8088 implementation is an approximation for the documented 80C88;
 its CMOS-specific behavior and timings have not been verified. The PIT ratio
 of CPU/3 is inferred from earlier BIOS diagnostics, not a measured board clock.
+The RTC implementation uses the inherited M15 register placement and the OKI
+MSM6242B functional data sheet as a guide; the exact photographed M15 chip
+revision and its board wiring remain unverified. BUSY timing, interrupt/pulse
+output and TEST mode are intentionally absent. Its date starts from a
+deterministic 1980-01-01 unless the caller supplies battery-backed state;
+the frontend does not yet persist that state.
 
 ## Required before a usable M15
 
 1. Port and test the Yamaha V6355D register and framebuffer behavior, keeping
    the four-level green LCD presentation separate from controller state.
-2. Port and test the OKI MSM6242 RTC without using host-global state.
-3. Complete live keyboard input, status and IRQ behavior; the current model
+2. Complete live keyboard input, status and IRQ behavior; the current model
    only supports the BIOS identification probe.
-4. Compare POST, interrupt and port traces with the validated legacy pilot
+3. Compare POST, interrupt and port traces with the validated legacy pilot
    using locally approved firmware. Do not package firmware or media.
-5. Validate floppy boot and reset in the portable engine, then expose M15 via
+4. Validate floppy boot and reset in the portable engine, then expose M15 via
    the runtime registry and optional frontends. Only then consider the
    catalogue entry available for the new engine.
+5. Test whether the M15 BIOS actually uses MSM6242 IRQ/pulse, BUSY or TEST;
+   implement those only where evidence makes them necessary.
 
 The canonical custody and historical evidence remain under
 `Z:\library\olivetti\m15`; the matching workspace library directory is a
 working replica, not an additional source of truth.
+
+Chip reference: OKI, *MSM6242B Direct Bus Connected CMOS Real Time
+Clock/Calendar*, [register and control description](https://manuals.plus/m/1d812496264b12c09a1ccadd0d0ff3b202ee7aa0bfb3f5fb25b99b8fcd4861bc).

@@ -9,6 +9,7 @@ add_library(blumach_pc_components STATIC
     src/pit8253.c
     src/pit8253_exact.c
     src/rtc_mm58167.c
+    src/rtc_msm6242.c
     src/uart16450.c
     src/xta.c
 )

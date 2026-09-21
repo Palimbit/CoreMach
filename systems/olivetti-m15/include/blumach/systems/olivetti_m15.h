@@ -12,14 +12,17 @@ extern "C" {
 
 #define BM_M15_FIRMWARE_SIZE 65536U
 #define BM_M15_CONFIG_TYPE "blumach.system.olivetti-m15.config"
-#define BM_M15_CONFIG_VERSION 1U
+#define BM_M15_CONFIG_VERSION 2U
 
 /* This is an internal, non-catalogued platform bring-up contract. It does not
- * yet provide the V6355D display, the MSM6242 clock or live keyboard input. */
+ * yet provide the V6355D display or live keyboard input. */
 typedef struct bm_m15_config {
     bm_blob_view_t firmware;
     uint32_t ram_kib;
     uint8_t startup_display_switches; /* 10h: 40 columns; 20h: 80 columns. */
+    /* Optional caller-owned 16-nibble battery-backed RTC state. */
+    const uint8_t *rtc_initial_state;
+    size_t rtc_initial_state_size;
     bm_floppy_drive_config_t floppy[2];
     bm_808x_trace_fn trace;
     void *trace_context;

@@ -249,6 +249,17 @@
       "local_changes": "Machine-selected timed-source adapter for deferred XTA DMA service; remains disarmed while idle, retries a pending transfer at the declared functional interval and makes no claim about mechanical disk timing"
     },
     {
+      "id": "portable-msm6242",
+      "destination": ["components/pc/include/blumach/components/rtc_msm6242.h", "components/pc/src/rtc_msm6242.c"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "7e967b9ffc0eb960074552d3402abe66c019d1f7",
+      "origin_paths": ["src/device/isartc.c"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Fred N. van Kempen", "BluMach contributors"],
+      "local_changes": "Isolated the M15 MSM6242 register calendar behind a typed, instance-owned I/O device. Caller-owned initial state and explicit virtual-second advancement replace global host-time and NVR state. Models 12/24-hour BCD calendar, HOLD, STOP, REST and 30-second adjustment; BUSY timing, IRQ pulse output and TEST mode remain unsupported. The source retains the inherited BSD terms in full."
+    },
+    {
       "id": "olivetti-m15-portable-system",
       "destination": ["systems/olivetti-m15/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
@@ -257,7 +268,7 @@
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Sarah Walker", "Miran Grca", "Fred N. van Kempen", "EngiNerd", "Jasmine Iwanek", "BluMach contributors"],
-      "local_changes": "Internal M15 bring-up system with instance-owned board-switch and keyboard-probe state, typed firmware and floppy configuration, rational-clock Intel 8088, memory, PIC, PIT, DMA and FDC. The M15-specific switch behavior derives from the legacy implementation; generic components are independently linked. No BIOS, ROM or media are included. V6355D, MSM6242 and live keyboard remain unavailable."
+      "local_changes": "Internal M15 bring-up system with instance-owned board-switch and keyboard-probe state, typed firmware, floppy and RTC configuration, rational-clock Intel 8088, memory, PIC, PIT, DMA, FDC and a deterministic MSM6242 calendar. The M15-specific switch behavior derives from the legacy implementation; generic components are independently linked. No BIOS, ROM or media are included. V6355D and live keyboard remain unavailable."
     },
     {
       "id": "olivetti-pcs86-portable-system",
