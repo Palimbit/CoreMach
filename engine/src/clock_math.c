@@ -78,6 +78,19 @@ multiply_divide(uint64_t left, uint64_t right, uint64_t denominator,
         return BM_STATUS_OK;
     }
 
+    /* Instruction-sized advances usually fit in one native multiplication.
+     * Keep the general overflow-safe path for genuinely large operands. */
+    if (residual <= (UINT64_MAX / right)) {
+        uint64_t product = residual * right;
+        uint64_t residual_whole = product / denominator;
+
+        if (whole > (UINT64_MAX - residual_whole))
+            return BM_STATUS_CAPACITY_EXCEEDED;
+        *quotient = whole + residual_whole;
+        *remainder = product % denominator;
+        return BM_STATUS_OK;
+    }
+
     for (bit = 64U; bit-- > 0U;) {
         uint64_t carry = 0U;
 

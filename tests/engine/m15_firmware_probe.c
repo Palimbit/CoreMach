@@ -160,6 +160,8 @@ main(int argc, char **argv)
     bm_session_t *session = NULL;
     bm_status_t status;
     probe_trace_t probe = { 0 };
+    const char *no_trace = getenv("BLUMACH_M15_PROBE_NO_TRACE");
+    int trace_enabled = (no_trace == NULL) || (strcmp(no_trace, "1") != 0);
     uint64_t duration = UINT64_C(100000000);
     size_t index;
 
@@ -207,8 +209,10 @@ main(int argc, char **argv)
     }
     config.ram_kib = (argc >= 4 && strcmp(argv[3], "256") == 0) ? 256U : 512U;
     config.startup_display_switches = 0x20U;
-    config.trace = capture_instruction;
-    config.trace_context = &probe;
+    /* The traced probe is for BIOS landmarks. Opt out when measuring raw
+     * engine throughput so an instruction callback does not skew the result. */
+    config.trace = trace_enabled ? capture_instruction : NULL;
+    config.trace_context = trace_enabled ? &probe : NULL;
     for (index = 0U; index < 2U; ++index) {
         config.floppy[index] = (bm_floppy_drive_config_t) {
             .installed = 1, .geometry = { 80U, 2U, 9U, 512U }
@@ -315,6 +319,7 @@ main(int argc, char **argv)
         printf("floppy_bytes=%zu read_only=%u reads=%" PRIu64 "\n",
                disk.size, disk.bytes != NULL ? 1U : 0U,
                disk.read_operations);
+        printf("trace_enabled=%d\n", trace_enabled);
         if ((argc >= 6) && (video_status != BM_STATUS_OK) &&
             (status == BM_STATUS_OK))
             status = video_status;
