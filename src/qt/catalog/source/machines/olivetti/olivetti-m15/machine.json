@@ -110,6 +110,7 @@
   "platform": {
     "id": "olivetti-m15-platform",
     "emulator_machine_id": "olivetti_m15",
+    "portable_adapter_id": "olivetti-m15",
     "architecture": "80C88"
   }
 }

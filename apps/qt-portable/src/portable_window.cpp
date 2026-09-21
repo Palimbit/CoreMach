@@ -969,8 +969,17 @@ PortableWindow::showStatus(const QString &detail)
         case BM_SESSION_NEW: state = "new"; break;
     }
     QString text = tr("%1").arg(QString::fromLatin1(state));
+    const bm_machine_config_t *config = machine_ != nullptr ?
+        bm_frontend_machine_config(machine_) : nullptr;
+    if ((config != nullptr) && (config->definition != nullptr) &&
+        (config->definition->scheduler_ticks_per_second != 0U)) {
+        const double guestSeconds = static_cast<double>(worker_->ticks()) /
+            static_cast<double>(config->definition->scheduler_ticks_per_second);
+        text += tr(" — guest %1 s").arg(
+            QLocale().toString(guestSeconds, 'f', 1));
+    }
     if (hasVideoGeometry_) {
-        QString refresh = tr("unknown");
+        QString refresh;
         if ((videoGeometry_.refresh_numerator != 0U) &&
             (videoGeometry_.refresh_denominator != 0U)) {
             const double hz = static_cast<double>(
@@ -979,10 +988,11 @@ PortableWindow::showStatus(const QString &detail)
             refresh = QLocale().toString(hz, 'f', 1);
         }
         const QSize output = display_->outputPixelSize();
-        text += tr(" — %1×%2 @ %3 Hz")
+        text += tr(" — %1×%2")
                     .arg(videoGeometry_.width)
-                    .arg(videoGeometry_.height)
-                    .arg(refresh);
+                    .arg(videoGeometry_.height);
+        if (!refresh.isEmpty())
+            text += tr(" @ %1 Hz").arg(refresh);
         if (!output.isEmpty())
             text += tr(" → %1×%2").arg(output.width()).arg(output.height());
         if (presentationFps_ > 0.0)

@@ -27,6 +27,7 @@ struct bm_frontend_machine {
 };
 
 extern const bm_frontend_adapter_t bm_frontend_pcs86_adapter;
+extern const bm_frontend_adapter_t bm_frontend_m15_adapter;
 
 const bm_frontend_asset_binding_t *bm_frontend_binding_find(
     const bm_frontend_asset_binding_t *bindings, size_t binding_count,

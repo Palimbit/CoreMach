@@ -1,9 +1,20 @@
 # Olivetti M15: portable-engine bring-up
 
-This is an internal system target, not a selectable or bootable machine. It is
-separate from the legacy `olivetti_m15` pilot and does not read legacy VM
-configuration. The public M15 catalogue sheet still describes that pilot; it
-must not imply that the new engine has reached parity.
+This is an **experimental** portable-engine machine, selectable in the Qt6
+portable frontend. It is separate from the legacy `olivetti_m15` pilot and
+does not read legacy VM configuration. It has booted a locally supplied
+720 KiB M15 Starter Kit disk to its language selector and tutorial in a
+manual probe; this is not parity with the older pilot or a validated release.
+
+For a local Qt6 trial, open `BluMach-portable` and select Olivetti M15. Supply
+the 64 KiB local system BIOS and, optionally, a 720 KiB floppy image for A:.
+The frontend starts with 512 KiB RAM and 80-column display switches. The
+floppy is opened read-only; no firmware or media are bundled with BluMach.
+The BIOS performs a lengthy memory test before reading A:, and performance
+of this implementation is currently below real time on the tested host.
+The status bar reports emulated seconds and floppy read operations so a blank
+early frame can be distinguished from a stopped session. Qt6 visual output
+after POST still needs direct user confirmation.
 
 ## Implemented and tested
 
@@ -33,6 +44,10 @@ must not imply that the new engine has reached parity.
   unresolved, currently blank. Synthetic tests cover register access, memory
   mirrors, glyph and graphics pixels, virtual status, geometry and a session
   framebuffer without reading or executing the locally preserved BIOS.
+- A manual, local-firmware probe passes the BIOS PIT test and boots the
+  720 KiB Starter Kit disk to the language selector with 256 and 512 KiB;
+  F1 advances to the logo/tutorial. A frontend adapter now registers M15,
+  reports both internal floppies and supports read-only media replacement.
 - A synthetic firmware test exercises the AA startup byte, Enter make/break,
   status polling, Port B acknowledgement, IRQ1 request, reset, unsupported
   keys and queue-full behavior. It does not validate a real M15 keyboard.
@@ -47,7 +62,7 @@ output and TEST mode are intentionally absent. Its date starts from a
 deterministic 1980-01-01 unless the caller supplies battery-backed state;
 the frontend does not yet persist that state.
 
-## Required before a usable M15
+## Required before calling the portable M15 validated
 
 1. Compare the V6355D output with the inherited pilot and locally approved
    firmware. The current status timing is a deterministic approximation, not
@@ -61,9 +76,10 @@ the frontend does not yet persist that state.
    an unacknowledged byte; a guest that never acknowledges Port B will stall.
 3. Compare POST, interrupt and port traces with the validated legacy pilot
    using locally approved firmware. Do not package firmware or media.
-4. Validate floppy boot and reset in the portable engine, then expose M15 via
-   the runtime registry and optional frontends. Only then consider the
-   catalogue entry available for the new engine.
+4. Confirm Qt6 rendering, keyboard, pause/reset/stop, media eject/insert and
+   a second boot using the local disk. Diagnose why the early screen appears
+   much later than in the legacy pilot, and profile the Intel 8088 path against
+   the existing V30 path before changing timing or skipping BIOS work.
 5. Test whether the M15 BIOS actually uses MSM6242 IRQ/pulse, BUSY or TEST;
    implement those only where evidence makes them necessary.
 

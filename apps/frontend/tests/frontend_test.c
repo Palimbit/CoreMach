@@ -97,8 +97,8 @@ main(void)
     size_t persistent_state_count = 0U;
     debug_observation_t observation = { 0 };
 
-    assert(bm_frontend_adapter_count() == 1U);
-    assert(bm_frontend_adapter_at(1U) == NULL);
+    assert(bm_frontend_adapter_count() == 2U);
+    assert(bm_frontend_adapter_at(2U) == NULL);
     adapter = bm_frontend_adapter_find("olivetti-pcs86");
     assert(adapter != NULL);
     assert(bm_frontend_adapter_find("not-a-machine") == NULL);
@@ -141,7 +141,7 @@ main(void)
     assert(bm_machine_registry_create(&host, bm_frontend_adapter_count(),
                                       &registry) == BM_STATUS_OK);
     assert(bm_frontend_register_machines(registry) == BM_STATUS_OK);
-    assert(bm_machine_registry_count(registry) == 1U);
+    assert(bm_machine_registry_count(registry) == 2U);
     bm_machine_registry_destroy(registry);
 
     assert(bm_frontend_machine_open(adapter, NULL, 0U, &machine) ==
@@ -273,5 +273,52 @@ main(void)
            BM_STATUS_OK);
     assert(diagnostics.read_only_media_bytes == 0U);
     bm_frontend_machine_close(machine);
+
+    {
+        static uint8_t synthetic_m15_firmware[65536];
+        const bm_frontend_adapter_t *m15 =
+            bm_frontend_adapter_find("olivetti-m15");
+        const bm_frontend_asset_binding_t m15_bindings[] = {
+            { "firmware", BM_FRONTEND_ASSET_BLOB,
+              { .blob = { "synthetic-test", synthetic_m15_firmware,
+                          sizeof(synthetic_m15_firmware), NULL } } },
+            { "floppy-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+              { .media = { NULL, 1440U, 512U, 1,
+                           read_zero_blocks, NULL } } }
+        };
+        size_t m15_asset_count = 0U;
+        const bm_frontend_asset_requirement_t *m15_assets;
+        size_t device_count = 0U;
+        bm_storage_device_status_t device;
+        const bm_storage_media_change_t eject = { 0 };
+
+        assert(m15 != NULL);
+        assert(strcmp(bm_frontend_adapter_definition(m15)->id,
+                      "olivetti-m15") == 0);
+        m15_assets = bm_frontend_adapter_assets(m15, &m15_asset_count);
+        assert(m15_asset_count == 2U);
+        assert(m15_assets[1].replaceable);
+        assert(bm_frontend_machine_open(m15, m15_bindings, 2U,
+                                        &machine) == BM_STATUS_OK);
+        assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+        assert(bm_session_configure(
+                   session, bm_frontend_machine_config(machine)) == BM_STATUS_OK);
+        assert(bm_session_start(session) == BM_STATUS_OK);
+        assert(bm_session_storage_device_count(session, &device_count) ==
+               BM_STATUS_OK);
+        assert(device_count == 2U);
+        assert(bm_session_storage_device_status(session, 0U, &device) ==
+               BM_STATUS_OK);
+        assert(device.media_present && device.write_protected);
+        assert(bm_session_replace_storage_media(
+                   session, BM_STORAGE_DEVICE_FLOPPY, 0U,
+                   &eject) == BM_STATUS_OK);
+        assert(bm_session_storage_device_status(session, 0U, &device) ==
+               BM_STATUS_OK);
+        assert(!device.media_present);
+        assert(bm_session_reset(session) == BM_STATUS_OK);
+        bm_session_destroy(session);
+        bm_frontend_machine_close(machine);
+    }
     return 0;
 }

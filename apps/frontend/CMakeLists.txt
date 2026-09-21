@@ -3,11 +3,13 @@
 add_library(blumach_frontend STATIC
     src/frontend.c
     src/pcs86_adapter.c
+    src/m15_adapter.c
 )
 target_include_directories(blumach_frontend PUBLIC include PRIVATE src)
 target_link_libraries(blumach_frontend PUBLIC
     blumach_runtime
     PRIVATE blumach_system_olivetti_pcs86
+            blumach_system_olivetti_m15
 )
 target_compile_features(blumach_frontend PUBLIC c_std_11)
 set_target_properties(blumach_frontend PROPERTIES C_EXTENSIONS OFF)
