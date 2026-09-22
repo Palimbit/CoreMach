@@ -16,8 +16,9 @@ address and data, without claiming their placement in the CPU timeline.
 The non-CODE active T-state projection compares phase order; only the final
 T4 may be absent when physical capture stops just after a completed T3.
 The optional clocked baseline gate additionally checks only full-queue,
-unprefixed NOP and ADD AL,imm8 against Intel's 3/4 clocks and the physical
-CODE phase positions. It is not a general cycle-trace comparison.
+unprefixed NOP and the sixteen accumulator/immediate ALU forms against
+Intel's 3/4 clocks and the physical CODE phase positions. It is not a general
+cycle-trace comparison.
 
 Expected corpus:
   repository: https://github.com/SingleStepTests/8088
@@ -46,6 +47,11 @@ EXPECTED_CORPUS = {
     "cpu": "8088",
     "cpu_detail": "AMD D8088 8441DMA (C)1982",
     "generator": "arduino8088",
+}
+CLOCKED_BASELINE_OPCODES = {
+    "90": 0x90,
+    **{f"{value:02X}": value for value in range(0x04, 0x3E)
+       if (value & 0x06) == 0x04},
 }
 
 
@@ -149,8 +155,8 @@ def hardware_operand_phases(test: dict) -> list[tuple[str, str]]:
 
 
 def clocked_baseline_eligible(test: dict, opcode: str) -> bool:
-    """Only the independently sourced full-queue 90h/04h cases are timed."""
-    expected = {"90": 0x90, "04": 0x04}.get(opcode.upper())
+    """Only independently sourced full-queue register ALU cases are timed."""
+    expected = CLOCKED_BASELINE_OPCODES.get(opcode.upper())
     queue = test["initial"].get("queue", [])
     return expected is not None and len(queue) == 4 and queue[0] == expected
 
@@ -163,7 +169,7 @@ def compare_clocked_baseline(test: dict, response: str,
         return [f"invalid clocked response: {response!r}"]
     status = int(fields[1], 10)
     cycles = int(fields[2], 10)
-    expected_cycles = {"90": 3, "04": 4}[opcode.upper()]
+    expected_cycles = 3 if opcode.upper() == "90" else 4
     errors: list[str] = []
     if status != 0 or cycles != expected_cycles:
         errors.append(f"clocked_status={status}, cycles={cycles}, "
@@ -371,7 +377,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--require-clocked-baseline", action="store_true",
-        help="Check full-queue unprefixed NOP and ADD AL,imm8 clocked steps",
+        help="Check full-queue unprefixed NOP and accumulator/immediate ALU steps",
     )
     args = parser.parse_args()
 

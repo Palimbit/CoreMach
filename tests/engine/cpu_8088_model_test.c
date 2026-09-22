@@ -618,6 +618,42 @@ test_intel_clocked_prefetched_baseline(void)
     assert(phases.observations[1].cpu_clock_index == 3U);
     cpu_808x_test_machine_destroy(&machine);
 
+    /* All sixteen byte/word accumulator-immediate ALU forms share the
+     * documented four-clock full-queue case and CODE T1/T2 positions. */
+    for (unsigned int operation = 0U; operation < 16U; ++operation) {
+        uint8_t immediate_alu[] = {
+            (uint8_t) (0x04U + (operation / 2U) * 8U + operation % 2U),
+            0x2dU, 0x12U
+        };
+        uint16_t expected_ip = (uint16_t) (2U + (operation % 2U));
+
+        memset(&timing, 0, sizeof(timing));
+        memset(&phases, 0, sizeof(phases));
+        prefetch.bytes[0] = immediate_alu[0];
+        prefetch.bytes[1] = immediate_alu[1];
+        prefetch.bytes[2] = immediate_alu[2];
+        cpu_808x_test_machine_create(&machine, &config, immediate_alu,
+                                     sizeof(immediate_alu));
+        state = execution_state(&machine);
+        state.ax = 2U;
+        cpu_808x_test_set_state(&machine, &state);
+        assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+               BM_STATUS_OK);
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        assert(cycles == 4U);
+        assert(cpu_808x_test_get_state(&machine).ip == expected_ip);
+        assert(timing.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(timing.last.boundary_clocks_min == 4U);
+        assert(phases.count == 2U);
+        assert(phases.observations[0].phase == BM_808X_BUS_PHASE_T1);
+        assert(phases.observations[0].cpu_clock_index == 2U);
+        assert(phases.observations[1].phase == BM_808X_BUS_PHASE_T2);
+        assert(phases.observations[1].cpu_clock_index == 3U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
     /* Clocked mode rejects unproven instructions before changing state. */
     prefetch.bytes[0] = 0xebU;
     prefetch.bytes[1] = 0x00U;
