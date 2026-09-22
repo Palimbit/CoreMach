@@ -66,7 +66,11 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
         .timing_context = config != NULL ? config->timing_context : NULL,
         .bus_phase = config != NULL ? config->bus_phase : NULL,
         .bus_phase_context = config != NULL ?
-            config->bus_phase_context : NULL
+            config->bus_phase_context : NULL,
+        .intel_queue_event = config != NULL ?
+            config->intel_queue_event : NULL,
+        .intel_queue_event_context = config != NULL ?
+            config->intel_queue_event_context : NULL
     };
     assert(bm_808x_create(&machine->host, &cpu_config, &machine->cpu) ==
            BM_STATUS_OK);

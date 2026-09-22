@@ -12,6 +12,24 @@
 #    define BM_SCANF scanf
 #endif
 
+typedef struct queue_capture {
+    bm_8088_queue_event_t events[256];
+    size_t count;
+    int overflow;
+} queue_capture_t;
+
+static void
+capture_queue(void *context, const bm_8088_queue_event_t *event)
+{
+    queue_capture_t *capture = context;
+
+    if (capture->count == sizeof(capture->events) / sizeof(capture->events[0])) {
+        capture->overflow = 1;
+        return;
+    }
+    capture->events[capture->count++] = *event;
+}
+
 static int
 read_command(char *command)
 {
@@ -82,10 +100,15 @@ main(int argc, char **argv)
     cpu_808x_test_config_t config = { 0 };
     bm_808x_arch_state_t state;
     static const uint8_t empty_program[] = { 0U };
+    queue_capture_t queue_capture = { 0 };
     char command;
 
     if (!read_model(argc, argv, &config.model))
         return 2;
+    if (config.model == BM_808X_INTEL_8088) {
+        config.intel_queue_event = capture_queue;
+        config.intel_queue_event_context = &queue_capture;
+    }
     cpu_808x_test_machine_create(&machine, &config, empty_program, 0U);
     state = cpu_808x_test_get_state(&machine);
     while (read_command(&command)) {
@@ -141,7 +164,11 @@ main(int argc, char **argv)
             if (status != BM_STATUS_OK)
                 return 2;
         }
+        queue_capture.count = 0U;
+        queue_capture.overflow = 0;
         status = cpu_808x_test_step(&machine, &consumed);
+        if (queue_capture.overflow)
+            return 2;
         state = cpu_808x_test_get_state(&machine);
         printf("%c %d %" PRIu64, command == 'H' ? 'H' : 'R',
                (int) status, (uint64_t) consumed);
@@ -162,6 +189,15 @@ main(int argc, char **argv)
             for (index = 0U; index < prefetch.count; ++index)
                 printf(" %02" PRIx8, prefetch.bytes[index]);
             printf(" %04" PRIx16, prefetch.pointer);
+            printf(" %zu", queue_capture.count);
+            for (index = 0U; index < queue_capture.count; ++index) {
+                const bm_8088_queue_event_t *event =
+                    &queue_capture.events[index];
+                const char kind = event->kind == BM_8088_QUEUE_READ_FIRST ?
+                    'F' : event->kind == BM_8088_QUEUE_READ_SUBSEQUENT ?
+                    'S' : 'E';
+                printf(" %c %02" PRIx8, kind, event->value);
+            }
         }
         putchar('\n');
         fflush(stdout);

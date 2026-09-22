@@ -277,6 +277,33 @@ typedef struct bm_808x_bus_phase_observation {
 typedef void (*bm_808x_bus_phase_fn)(
     void *context, const bm_808x_bus_phase_observation_t *observation);
 
+#define BM_8088_QUEUE_EVENT_VERSION 1U
+
+typedef enum bm_8088_queue_event_kind {
+    BM_8088_QUEUE_READ_FIRST = 0,
+    BM_8088_QUEUE_READ_SUBSEQUENT,
+    BM_8088_QUEUE_FLUSH
+} bm_8088_queue_event_kind_t;
+
+/* Logical Intel 8088 instruction-queue operation, in callback order. FIRST
+ * includes each prefix and the effective opcode. A flush carries no byte.
+ * These are not QS0/QS1 pin samples: the electrical status is delayed and a
+ * CPU-clock position requires an independently validated EU/BIU schedule. */
+typedef struct bm_8088_queue_event {
+    uint32_t size;
+    uint32_t version;
+    bm_8088_queue_event_kind_t kind;
+    uint16_t cs;
+    uint16_t ip;
+    uint8_t value;
+    uint8_t count_before;
+    uint8_t count_after;
+    uint8_t reserved;
+} bm_8088_queue_event_t;
+
+typedef void (*bm_8088_queue_event_fn)(
+    void *context, const bm_8088_queue_event_t *event);
+
 typedef struct bm_808x_config {
     bm_808x_model_t model;
     uint32_t frequency_hz;
@@ -299,6 +326,9 @@ typedef struct bm_808x_config {
     /* Optional read-only observer for active T1/T2/T3/Tw/T4 bus phases. */
     bm_808x_bus_phase_fn bus_phase;
     void *bus_phase_context;
+    /* Optional logical queue observer, called only for the Intel 8088 model. */
+    bm_8088_queue_event_fn intel_queue_event;
+    void *intel_queue_event_context;
 } bm_808x_config_t;
 
 #define BM_808X_ARCH_STATE_VERSION 4U
