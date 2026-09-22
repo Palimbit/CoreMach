@@ -86,7 +86,8 @@ typedef enum bm_808x_boundary_kind {
 } bm_808x_boundary_kind_t;
 
 #define BM_808X_TIMING_OBSERVATION_VERSION 38U
-#define BM_808X_V30_PREFETCH_QUEUE_CAPACITY 6U
+#define BM_808X_MAX_PREFETCH_QUEUE_CAPACITY 6U
+#define BM_808X_V30_PREFETCH_QUEUE_CAPACITY BM_808X_MAX_PREFETCH_QUEUE_CAPACITY
 #define BM_808X_8088_PREFETCH_QUEUE_CAPACITY 4U
 
 typedef enum bm_808x_execution_clock_kind {
@@ -306,6 +307,22 @@ typedef struct bm_808x_arch_state {
     uint8_t md_write_enabled;
 } bm_808x_arch_state_t;
 
+#define BM_808X_PREFETCH_STATE_VERSION 1U
+
+/* Versioned microarchitectural queue state for deterministic conformance and
+ * save-state tooling. Bytes are stored in consumption order. The prefetch
+ * pointer names the next bus address after the queued bytes; it is independent
+ * of architectural IP. Import is valid only at an architectural boundary and
+ * discards any partially completed fetch. */
+typedef struct bm_808x_prefetch_state {
+    uint32_t size;
+    uint32_t version;
+    uint16_t pointer;
+    uint8_t count;
+    uint8_t capacity;
+    uint8_t bytes[BM_808X_MAX_PREFETCH_QUEUE_CAPACITY];
+} bm_808x_prefetch_state_t;
+
 bm_status_t bm_808x_create(const bm_host_services_t *host,
                            const bm_808x_config_t *config,
                            bm_cpu_t *out_cpu);
@@ -319,6 +336,10 @@ bm_status_t bm_808x_get_arch_state(const bm_cpu_t *cpu,
                                    bm_808x_arch_state_t *out_state);
 bm_status_t bm_808x_set_arch_state(bm_cpu_t *cpu,
                                    const bm_808x_arch_state_t *state);
+bm_status_t bm_808x_get_prefetch_state(
+    const bm_cpu_t *cpu, bm_808x_prefetch_state_t *out_state);
+bm_status_t bm_808x_set_prefetch_state(
+    bm_cpu_t *cpu, const bm_808x_prefetch_state_t *state);
 
 /* Classify an original 8088 primary opcode and, for grouped instructions, the
  * supplied ModR/M operation field. Silicon classes are intentionally distinct

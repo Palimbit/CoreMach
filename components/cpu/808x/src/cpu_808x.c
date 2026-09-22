@@ -5945,6 +5945,48 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
 }
 
 bm_status_t
+bm_808x_get_prefetch_state(const bm_cpu_t *cpu,
+                           bm_808x_prefetch_state_t *out_state)
+{
+    const bm_808x_state_t *state;
+
+    if (!is_808x_cpu(cpu) || (out_state == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    state = cpu->context;
+    *out_state = (bm_808x_prefetch_state_t) {
+        .size = sizeof(*out_state),
+        .version = BM_808X_PREFETCH_STATE_VERSION,
+        .pointer = bm_808x_biu_prefetch_pointer(&state->bcu),
+        .count = bm_808x_biu_queue_count(&state->bcu),
+        .capacity = state->profile->prefetch_capacity,
+        .bytes = { 0U }
+    };
+    bm_808x_biu_export_queue(&state->bcu, out_state->bytes,
+                             out_state->count);
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_808x_set_prefetch_state(bm_cpu_t *cpu,
+                           const bm_808x_prefetch_state_t *state_image)
+{
+    bm_808x_state_t *state;
+
+    if (!is_808x_cpu(cpu) || (state_image == NULL) ||
+        (state_image->size != sizeof(*state_image)) ||
+        (state_image->version != BM_808X_PREFETCH_STATE_VERSION))
+        return BM_STATUS_INVALID_ARGUMENT;
+    state = cpu->context;
+    if ((state_image->capacity != state->profile->prefetch_capacity) ||
+        (state_image->count > state_image->capacity))
+        return BM_STATUS_INVALID_ARGUMENT;
+    return bm_808x_biu_import_queue(
+        &state->bcu, state_image->pointer, state_image->bytes,
+        state_image->count, state->profile->prefetch_capacity,
+        (uint8_t) (state->profile->external_bus_width / 8U));
+}
+
+bm_status_t
 bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed)
 {
     if (!is_808x_cpu(cpu))
