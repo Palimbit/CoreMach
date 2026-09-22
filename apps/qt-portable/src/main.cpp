@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "portable_window.h"
 
+#include <blumach/engine/version.h>
+
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -12,6 +14,8 @@ int
 main(int argc, char **argv)
 {
     QApplication application(argc, argv);
+    QApplication::setApplicationName(QStringLiteral("BluMach Portable"));
+    QApplication::setApplicationVersion(QStringLiteral(BM_ENGINE_VERSION));
     QCommandLineParser parser;
     const QCommandLineOption machineOption(
         QStringList { QStringLiteral("machine") }, QStringLiteral("Machine ID"),
@@ -25,6 +29,7 @@ main(int argc, char **argv)
         QStringLiteral("role=path"));
     parser.setApplicationDescription(QStringLiteral("BluMach portable Qt frontend"));
     parser.addHelpOption();
+    parser.addVersionOption();
     parser.addOption(machineOption);
     parser.addOption(productOption);
     parser.addOption(assetOption);
