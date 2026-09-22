@@ -54,10 +54,15 @@ typedef struct bm_808x_biu {
     uint64_t total_phase_clocks;
     int pending_prefetch_valid;
     int pending_prefetch_demand;
+    bm_808x_bus_phase_fn phase_observer;
+    void *phase_observer_context;
 } bm_808x_biu_t;
 
 void bm_808x_biu_reset(bm_808x_biu_t *bcu, uint16_t instruction_pointer,
                        uint8_t prefetch_capacity, uint8_t fetch_width);
+void bm_808x_biu_set_phase_observer(bm_808x_biu_t *bcu,
+                                    bm_808x_bus_phase_fn observer,
+                                    void *context);
 void bm_808x_biu_begin_boundary(bm_808x_biu_t *bcu);
 /* Stop an in-flight prefetch without discarding already queued bytes. */
 void bm_808x_biu_suspend_prefetch(bm_808x_biu_t *bcu);

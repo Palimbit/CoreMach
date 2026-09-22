@@ -41,6 +41,26 @@ abort_pending_prefetch(bm_808x_biu_t *bcu)
     bcu->pending_prefetch_demand = 0;
 }
 
+static void
+observe_phase(bm_808x_biu_t *bcu, bm_808x_bus_phase_t phase,
+              const bm_bus_transaction_t *transaction, int response_valid)
+{
+    bm_808x_bus_phase_observation_t observation;
+
+    if (bcu->phase_observer == NULL)
+        return;
+    observation = (bm_808x_bus_phase_observation_t) {
+        .size = sizeof(observation),
+        .version = BM_808X_BUS_PHASE_OBSERVATION_VERSION,
+        .bus_active_clock_index = bcu->total_phase_clocks - 1U,
+        .phase = phase,
+        .response_valid = (uint8_t) !!response_valid,
+        .reserved = { 0U, 0U, 0U },
+        .transaction = *transaction
+    };
+    bcu->phase_observer(bcu->phase_observer_context, &observation);
+}
+
 void
 bm_808x_biu_reset(bm_808x_biu_t *bcu, uint16_t instruction_pointer,
                   uint8_t prefetch_capacity, uint8_t fetch_width)
@@ -49,6 +69,17 @@ bm_808x_biu_reset(bm_808x_biu_t *bcu, uint16_t instruction_pointer,
     bcu->prefetch_pointer = instruction_pointer;
     bcu->prefetch_capacity = prefetch_capacity;
     bcu->fetch_width = fetch_width;
+}
+
+void
+bm_808x_biu_set_phase_observer(bm_808x_biu_t *bcu,
+                               bm_808x_bus_phase_fn observer,
+                               void *context)
+{
+    if (bcu == NULL)
+        return;
+    bcu->phase_observer = observer;
+    bcu->phase_observer_context = context;
 }
 
 void
@@ -222,14 +253,20 @@ bm_808x_biu_step_prefetch(bm_808x_biu_t *bcu,
         ++bcu->boundary_demand_prefetch_bus_clocks;
     switch (bcu->prefetch_phase) {
         case BM_808X_BIU_PHASE_T1:
+            observe_phase(bcu, BM_808X_BUS_PHASE_T1,
+                          &bcu->pending_prefetch, 0);
             bcu->prefetch_phase = BM_808X_BIU_PHASE_T2;
             break;
         case BM_808X_BIU_PHASE_T2:
+            observe_phase(bcu, BM_808X_BUS_PHASE_T2,
+                          &bcu->pending_prefetch, 0);
             bcu->prefetch_phase = BM_808X_BIU_PHASE_T3;
             break;
         case BM_808X_BIU_PHASE_T3:
             status = bm_bus_transact(bus, &bcu->pending_prefetch);
             if (status != BM_STATUS_OK) {
+                observe_phase(bcu, BM_808X_BUS_PHASE_T3,
+                              &bcu->pending_prefetch, 0);
                 abort_pending_prefetch(bcu);
                 return status;
             }
@@ -242,15 +279,21 @@ bm_808x_biu_step_prefetch(bm_808x_biu_t *bcu,
                 bcu->pending_prefetch.wait_states;
             if (bcu->pending_prefetch_demand)
                 ++bcu->boundary_demand_prefetch_transactions;
+            observe_phase(bcu, BM_808X_BUS_PHASE_T3,
+                          &bcu->pending_prefetch, 1);
             bcu->prefetch_phase = bcu->pending_wait_clocks != 0U ?
                 BM_808X_BIU_PHASE_TW : BM_808X_BIU_PHASE_T4;
             break;
         case BM_808X_BIU_PHASE_TW:
+            observe_phase(bcu, BM_808X_BUS_PHASE_TW,
+                          &bcu->pending_prefetch, 1);
             --bcu->pending_wait_clocks;
             if (bcu->pending_wait_clocks == 0U)
                 bcu->prefetch_phase = BM_808X_BIU_PHASE_T4;
             break;
         case BM_808X_BIU_PHASE_T4:
+            observe_phase(bcu, BM_808X_BUS_PHASE_T4,
+                          &bcu->pending_prefetch, 1);
             if (!bcu->pending_prefetch_valid) {
                 abort_pending_prefetch(bcu);
                 return BM_STATUS_INVALID_STATE;
@@ -341,21 +384,36 @@ bm_808x_biu_transact(bm_808x_biu_t *bcu,
     bcu->boundary_prefetch_handoff_clocks +=
         bcu->boundary_prefetch_phase_clocks - handoff_start;
 
-    /* T1 and T2 precede the portable access, which occurs at T3. Tw clocks
-     * reported by the mapped device follow T3, then T4 closes the cycle. */
-    bcu->total_phase_clocks += 3U;
-    bcu->boundary_bus_active_clocks += 3U;
-    bcu->boundary_operand_bus_clocks += 3U;
+    /* T1 and T2 precede the portable access, which occurs at T3. */
+    ++bcu->total_phase_clocks;
+    ++bcu->boundary_bus_active_clocks;
+    ++bcu->boundary_operand_bus_clocks;
+    observe_phase(bcu, BM_808X_BUS_PHASE_T1, transaction, 0);
+    ++bcu->total_phase_clocks;
+    ++bcu->boundary_bus_active_clocks;
+    ++bcu->boundary_operand_bus_clocks;
+    observe_phase(bcu, BM_808X_BUS_PHASE_T2, transaction, 0);
+    ++bcu->total_phase_clocks;
+    ++bcu->boundary_bus_active_clocks;
+    ++bcu->boundary_operand_bus_clocks;
     status = bm_bus_transact(bus, transaction);
-    if (status != BM_STATUS_OK)
+    if (status != BM_STATUS_OK) {
+        observe_phase(bcu, BM_808X_BUS_PHASE_T3, transaction, 0);
         return status;
-
-    clocks = 4U + (uint64_t) transaction->wait_states;
+    }
+    observe_phase(bcu, BM_808X_BUS_PHASE_T3, transaction, 1);
     ++bcu->boundary_bus_transactions;
     ++bcu->boundary_operand_transactions;
     bcu->boundary_wait_states += transaction->wait_states;
-    bcu->total_phase_clocks += clocks - 3U;
-    bcu->boundary_bus_active_clocks += clocks - 3U;
-    bcu->boundary_operand_bus_clocks += clocks - 3U;
+    for (clocks = 0U; clocks < transaction->wait_states; ++clocks) {
+        ++bcu->total_phase_clocks;
+        ++bcu->boundary_bus_active_clocks;
+        ++bcu->boundary_operand_bus_clocks;
+        observe_phase(bcu, BM_808X_BUS_PHASE_TW, transaction, 1);
+    }
+    ++bcu->total_phase_clocks;
+    ++bcu->boundary_bus_active_clocks;
+    ++bcu->boundary_operand_bus_clocks;
+    observe_phase(bcu, BM_808X_BUS_PHASE_T4, transaction, 1);
     return BM_STATUS_OK;
 }

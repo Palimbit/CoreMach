@@ -4,9 +4,11 @@
 The hardware corpus remains outside BluMach.  Check out the exact revision
 documented below and pass its ``v2`` directory explicitly. This first gate
 checks architectural register and memory results with both empty and preloaded
-prefetch queues. Final queue state and cycle traces remain reported as
-deliberately unverified until the portable core exposes the corresponding
-per-T-state conformance boundary.
+prefetch queues. The raw final queue is measured for diagnostics, but the
+corpus ends on the next instruction's first-byte queue event while the runner
+returns at the current instruction boundary. Physical cycle traces therefore
+remain deliberately unverified until the active bus-phase observations are
+joined with an Intel EU/BIU schedule and a boundary-aligned trace adapter.
 
 Expected corpus:
   repository: https://github.com/SingleStepTests/8088
@@ -84,10 +86,11 @@ def encode_case(test: dict) -> tuple[str, list[list[int]]]:
 
 
 def compare_case(test: dict, response: str, expected_ram: list[list[int]],
-                 flags_mask: int) -> list[str]:
+                 flags_mask: int, require_raw_final_queue: bool = False
+                 ) -> tuple[list[str], bool]:
     fields = response.split()
-    if len(fields) < 18 or fields[0] != "R":
-        return [f"invalid runner response: {response!r}"]
+    if len(fields) < 20 or fields[0] != "H":
+        return [f"invalid runner response: {response!r}"], False
     status = int(fields[1], 10)
     consumed = int(fields[2], 10)
     actual = {
@@ -95,7 +98,16 @@ def compare_case(test: dict, response: str, expected_ram: list[list[int]],
         for name, value in zip(REGISTER_ORDER, fields[3:17], strict=True)
     }
     query_count = int(fields[17], 10)
-    actual_ram = [int(value, 16) for value in fields[18:]]
+    ram_end = 18 + query_count
+    if len(fields) < ram_end + 2:
+        return [f"truncated runner response: {response!r}"], False
+    actual_ram = [int(value, 16) for value in fields[18:ram_end]]
+    queue_count = int(fields[ram_end], 10)
+    queue_end = ram_end + 1 + queue_count
+    if len(fields) != queue_end + 1:
+        return [f"invalid queue response: {response!r}"], False
+    actual_queue = [int(value, 16) for value in fields[ram_end + 1:queue_end]]
+    actual_prefetch_pointer = int(fields[queue_end], 16)
     errors: list[str] = []
     if status != 0:
         errors.append(f"status={status}")
@@ -131,7 +143,14 @@ def compare_case(test: dict, response: str, expected_ram: list[list[int]],
                 break
     if not ram_matches:
         errors.append(f"ram={actual_ram}, expected={expected_ram_values}")
-    return errors
+    expected_queue = test["final"].get("queue", [])
+    queue_matches = actual_queue == expected_queue
+    if require_raw_final_queue and not queue_matches:
+        errors.append(
+            f"queue={actual_queue}, expected={expected_queue}, "
+            f"prefetch_pointer={actual_prefetch_pointer:04X}"
+        )
+    return errors, queue_matches
 
 
 def main() -> int:
@@ -145,6 +164,11 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0,
                         help="Maximum eligible vectors per opcode; zero means all")
     parser.add_argument("--max-failures", type=int, default=20)
+    parser.add_argument(
+        "--require-raw-final-queue", action="store_true",
+        help=("Fail raw final-queue differences despite the known "
+              "core/corpus instruction-boundary mismatch"),
+    )
     args = parser.parse_args()
 
     metadata_path = args.suite / "metadata.json"
@@ -166,6 +190,7 @@ def main() -> int:
     assert process.stdin is not None and process.stdout is not None
     total = 0
     prefetched = 0
+    queue_matches = 0
     failures = 0
     try:
         for opcode in args.opcode:
@@ -189,8 +214,12 @@ def main() -> int:
                 response = process.stdout.readline()
                 if not response:
                     raise RuntimeError("vector runner terminated unexpectedly")
-                errors = compare_case(test, response, expected_ram, flags_mask)
+                errors, queue_match = compare_case(
+                    test, response, expected_ram, flags_mask,
+                    args.require_raw_final_queue,
+                )
                 total += 1
+                queue_matches += int(queue_match)
                 if errors:
                     failures += 1
                     opcode_failures += 1
@@ -213,7 +242,7 @@ def main() -> int:
         return_code = process.wait()
     print(
         f"SUMMARY vectors={total} failures={failures} "
-        f"prefetched={prefetched} final_queues=not-yet-compared "
+        f"prefetched={prefetched} raw_queue_matches={queue_matches}/{total} "
         "cycle_traces=not-yet-compared"
     )
     if return_code != 0:

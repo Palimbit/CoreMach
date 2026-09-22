@@ -143,7 +143,8 @@ main(int argc, char **argv)
         }
         status = cpu_808x_test_step(&machine, &consumed);
         state = cpu_808x_test_get_state(&machine);
-        printf("R %d %" PRIu64, (int) status, (uint64_t) consumed);
+        printf("%c %d %" PRIu64, command == 'H' ? 'H' : 'R',
+               (int) status, (uint64_t) consumed);
         write_state(&state);
         printf(" %u", query_count);
         for (index = 0U; index < query_count; ++index) {
@@ -152,6 +153,15 @@ main(int argc, char **argv)
                 address >= CPU_808X_TEST_IMAGE_SIZE)
                 return 2;
             printf(" %02" PRIx8, cpu_808x_test_peek(&machine, address));
+        }
+        if (command == 'H') {
+            if (bm_808x_get_prefetch_state(&machine.cpu, &prefetch) !=
+                BM_STATUS_OK)
+                return 2;
+            printf(" %u", (unsigned int) prefetch.count);
+            for (index = 0U; index < prefetch.count; ++index)
+                printf(" %02" PRIx8, prefetch.bytes[index]);
+            printf(" %04" PRIx16, prefetch.pointer);
         }
         putchar('\n');
         fflush(stdout);

@@ -130,10 +130,21 @@ starts `portable-engine-808x-vector-runner` explicitly in `intel-8088` mode.
 The gate executes both empty-queue and preloaded-queue vectors and compares
 defined registers, masked FLAGS and changed memory. A separate versioned
 prefetch-state contract installs the physical corpus bytes without treating the
-queue as architectural register state. Final queue contents and physical cycle
-traces are reported as not yet compared. The latter requires a neutral
-per-T-state observation contract; a flat instruction-clock total is not
-substituted for that missing evidence.
+queue as architectural register state. Raw final queue contents are now
+measured and reported separately. This is not yet a fidelity percentage: the
+hardware corpus ends when the first byte of the following instruction is read
+from the queue, whereas `bm_808x_step()` returns after the current instruction.
+The raw comparison is diagnostic while those boundaries differ; the deliberately
+named `--require-raw-final-queue` option exists only for focused local work.
+
+The component also exposes a versioned, read-only observation for each active
+external-bus phase: `T1`, `T2`, `T3`, zero or more `Tw`, and `T4`. It reports
+the logical transaction and the point at which the device response becomes
+available. This is evidence plumbing, not an assertion of complete CPU timing:
+it observes fetch and operand transfers already performed by the BIU, but does
+not synthesize EU-only idle (`Ti`) clocks, queue-status pins, READY sampling
+edges or instruction-boundary durations. Physical cycle traces therefore
+remain not yet compared.
 
 Example, with the external corpus checked out at commit
 `aea84484abc79d09639d855b7b0ab32bc9e4dbeb`:
@@ -148,8 +159,9 @@ python tools/run_8088_conformance.py \
 ### Inferred or unknown
 
 - No complete Intel 8088 EU/BIU overlap schedule is claimed.
-- No electrical pin timing, READY sampling edge or interrupt-acknowledge pin
-  waveform is modelled by the portable bus contract.
+- The active bus-phase observer is not electrical pin timing. READY sampling,
+  queue-status pins, EU-only clocks and interrupt-acknowledge waveforms remain
+  unmodelled.
 - Grouped encodings classified `undefined` by the physical D8088 corpus remain
   unsupported. Their actual latch-dependent effects are `UNKNOWN` rather than
   being inherited from the NEC V30 or a later x86.

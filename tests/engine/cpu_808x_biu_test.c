@@ -19,6 +19,23 @@ typedef struct prefetch_fixture {
     bm_bus_transaction_t last;
 } prefetch_fixture_t;
 
+typedef struct phase_capture {
+    bm_808x_bus_phase_observation_t observations[16];
+    size_t count;
+} phase_capture_t;
+
+static void
+capture_phase(void *context,
+              const bm_808x_bus_phase_observation_t *observation)
+{
+    phase_capture_t *capture = context;
+
+    assert(capture != NULL);
+    assert(observation != NULL);
+    assert(capture->count < 16U);
+    capture->observations[capture->count++] = *observation;
+}
+
 static bm_status_t
 prefetch_access(void *context, bm_bus_transaction_t *transaction)
 {
@@ -119,6 +136,7 @@ test_prefetch_phases_and_waits(void)
     prefetch_fixture_t fixture = {
         BM_STATUS_OK, 0x2211U, 2U, 0U, { 0 }
     };
+    phase_capture_t capture = { 0 };
     uint8_t value = 0U;
 
     assert(bm_bus_create(&host, 1U, &bus) == BM_STATUS_OK);
@@ -126,6 +144,7 @@ test_prefetch_phases_and_waits(void)
                       prefetch_access, &fixture) == BM_STATUS_OK);
     bm_808x_biu_reset(&bcu, 0U,
                       BM_808X_V30_PREFETCH_QUEUE_CAPACITY, 2U);
+    bm_808x_biu_set_phase_observer(&bcu, capture_phase, &capture);
     bm_808x_biu_begin_boundary(&bcu);
 
     assert(bm_808x_biu_step_prefetch(&bcu, bus, 0xffffU, 0U, 1) ==
@@ -161,6 +180,22 @@ test_prefetch_phases_and_waits(void)
     assert(bcu.boundary_operand_transactions == 0U);
     assert(bcu.boundary_operand_bus_clocks == 0U);
     assert(bcu.boundary_prefetch_handoff_clocks == 0U);
+    assert(capture.count == 6U);
+    assert(capture.observations[0].phase == BM_808X_BUS_PHASE_T1);
+    assert(capture.observations[1].phase == BM_808X_BUS_PHASE_T2);
+    assert(capture.observations[2].phase == BM_808X_BUS_PHASE_T3);
+    assert(capture.observations[3].phase == BM_808X_BUS_PHASE_TW);
+    assert(capture.observations[4].phase == BM_808X_BUS_PHASE_TW);
+    assert(capture.observations[5].phase == BM_808X_BUS_PHASE_T4);
+    assert(capture.observations[0].bus_active_clock_index == 0U);
+    assert(capture.observations[5].bus_active_clock_index == 5U);
+    assert(capture.observations[1].response_valid == 0U);
+    assert(capture.observations[2].response_valid == 1U);
+    assert(capture.observations[5].response_valid == 1U);
+    assert(capture.observations[2].transaction.operation == BM_BUS_FETCH);
+    assert(capture.observations[2].transaction.address == 0xffff0U);
+    assert(capture.observations[2].transaction.value == 0x2211U);
+    assert(capture.observations[2].transaction.wait_states == 2U);
     assert(bm_808x_biu_dequeue_byte(&bcu, &value) == BM_STATUS_OK);
     assert(value == 0x11U);
     assert(bm_808x_biu_dequeue_byte(&bcu, &value) == BM_STATUS_OK);
@@ -280,12 +315,14 @@ test_prefetch_abort_and_bus_error(void)
     prefetch_fixture_t fixture = {
         BM_STATUS_UNMAPPED, 0U, 0U, 0U, { 0 }
     };
+    phase_capture_t capture = { 0 };
 
     assert(bm_bus_create(&host, 1U, &bus) == BM_STATUS_OK);
     assert(bm_bus_map(bus, BM_ADDRESS_MEMORY, 0U, 0xfffffU,
                       prefetch_access, &fixture) == BM_STATUS_OK);
     bm_808x_biu_reset(&bcu, 0U,
                       BM_808X_V30_PREFETCH_QUEUE_CAPACITY, 2U);
+    bm_808x_biu_set_phase_observer(&bcu, capture_phase, &capture);
     assert(bm_808x_biu_step_prefetch(&bcu, bus, 0U, 0U, 0) ==
            BM_STATUS_OK);
     assert(bm_808x_biu_step_prefetch(&bcu, bus, 0U, 0U, 0) ==
@@ -296,6 +333,9 @@ test_prefetch_abort_and_bus_error(void)
     assert(bcu.prefetch_phase == BM_808X_BIU_PHASE_IDLE);
     assert(bm_808x_biu_queue_count(&bcu) == 0U);
     assert(bcu.boundary_bus_transactions == 0U);
+    assert(capture.count == 3U);
+    assert(capture.observations[2].phase == BM_808X_BUS_PHASE_T3);
+    assert(capture.observations[2].response_valid == 0U);
 
     fixture.status = BM_STATUS_OK;
     assert(bm_808x_biu_step_prefetch(&bcu, bus, 0U, 0U, 0) ==

@@ -49,12 +49,23 @@ class Intel8088ConformanceTests(unittest.TestCase):
         request, expected_ram = conformance.encode_case(test)
         self.assertTrue(request.startswith("H "))
         response = (
-            "R 0 1 0001 0002 0003 0004 0100 0005 0006 0007 "
-            "0008 0009 000a 000b 000d f002 0"
+            "H 0 1 0001 0002 0003 0004 0100 0005 0006 0007 "
+            "0008 0009 000a 000b 000d f002 0 0 000d"
         )
-        self.assertEqual(
-            conformance.compare_case(test, response, expected_ram, 0xFFEF), []
+        errors, queue_matches = conformance.compare_case(
+            test, response, expected_ram, 0xFFEF
         )
+        self.assertEqual(errors, [])
+        self.assertTrue(queue_matches)
+
+        changed = copy.deepcopy(test)
+        changed["final"]["queue"] = [0x90]
+        errors, queue_matches = conformance.compare_case(
+            changed, response, expected_ram, 0xFFEF,
+            require_raw_final_queue=True,
+        )
+        self.assertFalse(queue_matches)
+        self.assertTrue(any(error.startswith("queue=") for error in errors))
 
 
 if __name__ == "__main__":
