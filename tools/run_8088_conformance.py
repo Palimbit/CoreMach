@@ -15,6 +15,9 @@ Observed operand bus transfers can likewise be compared for ordering,
 address and data, without claiming their placement in the CPU timeline.
 The non-CODE active T-state projection compares phase order; only the final
 T4 may be absent when physical capture stops just after a completed T3.
+The optional clocked baseline gate additionally checks only full-queue,
+unprefixed NOP and ADD AL,imm8 against Intel's 3/4 clocks and the physical
+CODE phase positions. It is not a general cycle-trace comparison.
 
 Expected corpus:
   repository: https://github.com/SingleStepTests/8088
@@ -143,6 +146,75 @@ def hardware_operand_phases(test: dict) -> list[tuple[str, str]]:
         if phase == "T4":
             kind = None
     return result
+
+
+def clocked_baseline_eligible(test: dict, opcode: str) -> bool:
+    """Only the independently sourced full-queue 90h/04h cases are timed."""
+    expected = {"90": 0x90, "04": 0x04}.get(opcode.upper())
+    queue = test["initial"].get("queue", [])
+    return expected is not None and len(queue) == 4 and queue[0] == expected
+
+
+def compare_clocked_baseline(test: dict, response: str,
+                             opcode: str, flags_mask: int) -> list[str]:
+    """Compare the narrow clocked step to Intel clocks and physical phases."""
+    fields = response.split()
+    if len(fields) < 23 or fields[0] != "T":
+        return [f"invalid clocked response: {response!r}"]
+    status = int(fields[1], 10)
+    cycles = int(fields[2], 10)
+    expected_cycles = {"90": 3, "04": 4}[opcode.upper()]
+    errors: list[str] = []
+    if status != 0 or cycles != expected_cycles:
+        errors.append(f"clocked_status={status}, cycles={cycles}, "
+                      f"expected_cycles={expected_cycles}")
+    expected = expected_registers(test)
+    for name, value in zip(REGISTER_ORDER, fields[3:17], strict=True):
+        mask = flags_mask if name == "flags" else 0xffff
+        if (int(value, 16) & mask) != (expected[name] & mask):
+            errors.append(f"clocked_{name}={value}, "
+                          f"expected={expected[name]:04x}")
+    if len(test["cycles"]) != expected_cycles:
+        errors.append(f"physical_cycles={len(test['cycles'])}, "
+                      f"expected={expected_cycles}")
+    query_count = int(fields[17], 10)
+    queue_pos = 18 + query_count
+    if len(fields) <= queue_pos:
+        return errors + [f"truncated clocked response: {response!r}"]
+    queue_count = int(fields[queue_pos], 10)
+    event_pos = queue_pos + 2 + queue_count
+    if len(fields) <= event_pos:
+        return errors + [f"truncated clocked response: {response!r}"]
+    event_count = int(fields[event_pos], 10)
+    transfer_pos = event_pos + 1 + 2 * event_count
+    if len(fields) <= transfer_pos:
+        return errors + [f"truncated clocked response: {response!r}"]
+    transfer_count = int(fields[transfer_pos], 10)
+    phase_pos = transfer_pos + 1 + 3 * transfer_count
+    if len(fields) <= phase_pos:
+        return errors + [f"truncated clocked response: {response!r}"]
+    phase_count = int(fields[phase_pos], 10)
+    code_pos = phase_pos + 1 + 2 * phase_count
+    if len(fields) <= code_pos:
+        return errors + [f"truncated clocked response: {response!r}"]
+    code_count = int(fields[code_pos], 10)
+    code_fields = fields[code_pos + 1:]
+    if len(code_fields) != 2 * code_count:
+        return errors + [f"invalid CODE phase response: {response!r}"]
+    actual_code_phases = [
+        (code_fields[index], int(code_fields[index + 1], 10))
+        for index in range(0, len(code_fields), 2)
+    ]
+    phase_codes = {"T1": "1", "T2": "2", "T3": "3", "Tw": "w", "T4": "4"}
+    expected_code_phases = [
+        (phase_codes[cycle[8]], index)
+        for index, cycle in enumerate(test["cycles"])
+        if cycle[8] in phase_codes
+    ]
+    if actual_code_phases != expected_code_phases:
+        errors.append(f"CODE_phases={actual_code_phases}, "
+                      f"expected={expected_code_phases}")
+    return errors
 
 
 def compare_case(test: dict, response: str, expected_ram: list[list[int]],
@@ -297,6 +369,10 @@ def main() -> int:
         "--require-operand-phases", action="store_true",
         help="Fail when non-CODE T-state sequence differs from hardware traces",
     )
+    parser.add_argument(
+        "--require-clocked-baseline", action="store_true",
+        help="Check full-queue unprefixed NOP and ADD AL,imm8 clocked steps",
+    )
     args = parser.parse_args()
 
     metadata_path = args.suite / "metadata.json"
@@ -316,6 +392,15 @@ def main() -> int:
         text=True, bufsize=1,
     )
     assert process.stdin is not None and process.stdout is not None
+    clock_process = None
+    if args.require_clocked_baseline:
+        clock_process = subprocess.Popen(
+            [str(args.runner), "--model", "intel-8088"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            text=True, bufsize=1,
+        )
+        assert clock_process.stdin is not None
+        assert clock_process.stdout is not None
     total = 0
     prefetched = 0
     queue_matches = 0
@@ -323,6 +408,8 @@ def main() -> int:
     operand_bus_matches = 0
     operand_bus_cases = 0
     operand_phase_matches = 0
+    clocked_baseline_cases = 0
+    clocked_baseline_matches = 0
     failures = 0
     try:
         for opcode in args.opcode:
@@ -368,6 +455,25 @@ def main() -> int:
                             f"{test.get('name', '')}: {'; '.join(errors)}",
                             file=sys.stderr,
                         )
+                if clock_process is not None and clocked_baseline_eligible(
+                        test, opcode):
+                    clock_process.stdin.write("T" + request[1:])
+                    clock_process.stdin.flush()
+                    clock_response = clock_process.stdout.readline()
+                    if not clock_response:
+                        raise RuntimeError("clocked runner terminated unexpectedly")
+                    clock_errors = compare_clocked_baseline(
+                        test, clock_response, opcode, flags_mask)
+                    clocked_baseline_cases += 1
+                    clocked_baseline_matches += not clock_errors
+                    if clock_errors:
+                        failures += 1
+                        opcode_failures += 1
+                        if failures <= args.max_failures:
+                            print(
+                                f"FAIL clocked {opcode} #{test.get('idx', '?')}: "
+                                + "; ".join(clock_errors), file=sys.stderr,
+                            )
             print(
                 f"{opcode.upper()}: vectors={len(vectors)} "
                 f"failures={opcode_failures} flags_mask={flags_mask:04X}"
@@ -379,6 +485,15 @@ def main() -> int:
         process.stdin.close()
         process.stdout.close()
         return_code = process.wait()
+        if clock_process is not None:
+            if clock_process.poll() is None:
+                clock_process.stdin.write("Q\n")
+                clock_process.stdin.flush()
+            clock_process.stdin.close()
+            clock_process.stdout.close()
+            clock_return_code = clock_process.wait()
+        else:
+            clock_return_code = 0
     print(
         f"SUMMARY vectors={total} failures={failures} "
         f"prefetched={prefetched} raw_queue_matches={queue_matches}/{total} "
@@ -386,10 +501,12 @@ def main() -> int:
         f"operand_bus_matches={operand_bus_matches}/{total} "
         f"operand_bus_cases={operand_bus_cases} "
         f"operand_phase_matches={operand_phase_matches}/{total} "
-        "cycle_traces=not-yet-compared"
+        f"clocked_baseline_matches={clocked_baseline_matches}/"
+        f"{clocked_baseline_cases} "
+        "full_cycle_traces=not-yet-compared"
     )
-    if return_code != 0:
-        print(f"runner exit={return_code}", file=sys.stderr)
+    if return_code != 0 or clock_return_code != 0:
+        print(f"runner exits={return_code},{clock_return_code}", file=sys.stderr)
         return 2
     return 1 if failures else 0
 

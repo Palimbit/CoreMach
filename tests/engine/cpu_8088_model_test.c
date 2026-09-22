@@ -465,6 +465,7 @@ test_public_bus_phase_observer_survives_state_install(void)
     assert(capture.observations[2].transaction.address == 0xf0000U);
     assert(capture.observations[2].transaction.value == 0x90U);
     assert(capture.observations[2].response_valid == 1U);
+    assert(capture.observations[2].cpu_clock_known == 0U);
     cpu_808x_test_machine_destroy(&machine);
 }
 
@@ -545,6 +546,107 @@ test_intel_queue_events_are_logical_not_clocked(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_intel_clocked_prefetched_baseline(void)
+{
+    static const uint8_t nop[] = { 0x90U };
+    static const uint8_t add_al[] = { 0x04U, 0x2dU };
+    static const uint8_t jump[] = { 0xebU, 0x00U };
+    cpu_808x_test_config_t config = intel_config();
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    bm_808x_prefetch_state_t prefetch = {
+        .size = sizeof(prefetch),
+        .version = BM_808X_PREFETCH_STATE_VERSION,
+        .pointer = 4U,
+        .count = 4U,
+        .capacity = BM_808X_8088_PREFETCH_QUEUE_CAPACITY,
+        .bytes = { 0x90U, 0x90U, 0x90U, 0x90U }
+    };
+    timing_capture_t timing = { 0 };
+    phase_capture_t phases = { 0 };
+    uint64_t cycles = 0U;
+
+    config.timing = capture_timing;
+    config.timing_context = &timing;
+    config.bus_phase = capture_phase;
+    config.bus_phase_context = &phases;
+    cpu_808x_test_machine_create(&machine, &config, nop, sizeof(nop));
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+           BM_STATUS_OK);
+    assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 3U);
+    assert(cpu_808x_test_get_state(&machine).ip == 1U);
+    assert(timing.count == 1U);
+    assert(timing.last.execution_clock_kind == BM_808X_EXECUTION_CLOCKS_EXACT);
+    assert(timing.last.boundary_clock_kind == BM_808X_EXECUTION_CLOCKS_EXACT);
+    assert(timing.last.boundary_clocks_min == 3U);
+    assert(timing.last.bus_active_clocks == 1U); /* Two Ti, then CODE T1. */
+    assert(phases.count == 1U);
+    assert(phases.observations[0].phase == BM_808X_BUS_PHASE_T1);
+    assert(phases.observations[0].transaction.operation == BM_BUS_FETCH);
+    assert(phases.observations[0].cpu_clock_known == 1U);
+    assert(phases.observations[0].cpu_clock_index == 2U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&timing, 0, sizeof(timing));
+    memset(&phases, 0, sizeof(phases));
+    prefetch.bytes[0] = 0x04U;
+    prefetch.bytes[1] = 0x2dU;
+    cpu_808x_test_machine_create(&machine, &config, add_al, sizeof(add_al));
+    state = execution_state(&machine);
+    state.ax = 2U;
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+           BM_STATUS_OK);
+    assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+           BM_STATUS_OK);
+    assert(cycles == 4U);
+    state = cpu_808x_test_get_state(&machine);
+    assert(state.ip == 2U);
+    assert((state.ax & 0xffU) == 0x2fU);
+    assert(timing.last.boundary_clocks_min == 4U);
+    assert(timing.last.bus_active_clocks == 2U);
+    assert(phases.count == 2U);
+    assert(phases.observations[0].phase == BM_808X_BUS_PHASE_T1);
+    assert(phases.observations[1].phase == BM_808X_BUS_PHASE_T2);
+    assert(phases.observations[0].cpu_clock_known == 1U);
+    assert(phases.observations[0].cpu_clock_index == 2U);
+    assert(phases.observations[1].cpu_clock_index == 3U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    /* Clocked mode rejects unproven instructions before changing state. */
+    prefetch.bytes[0] = 0xebU;
+    prefetch.bytes[1] = 0x00U;
+    cpu_808x_test_machine_create(&machine, &config, jump, sizeof(jump));
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+           BM_STATUS_OK);
+    cycles = 99U;
+    assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(cycles == 0U);
+    assert(cpu_808x_test_get_state(&machine).ip == 0U);
+    cpu_808x_test_machine_destroy(&machine);
+
+    memset(&timing, 0, sizeof(timing));
+    memset(&phases, 0, sizeof(phases));
+    cpu_808x_test_machine_create(&machine, &config, nop, sizeof(nop));
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+           BM_STATUS_UNSUPPORTED);
+    assert(cycles == 0U);
+    assert(cpu_808x_test_get_state(&machine).ip == 0U);
+    assert(timing.count == 0U);
+    assert(phases.count == 0U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
 int
 main(void)
 {
@@ -555,5 +657,6 @@ main(void)
     test_prefetch_state_round_trip();
     test_public_bus_phase_observer_survives_state_install();
     test_intel_queue_events_are_logical_not_clocked();
+    test_intel_clocked_prefetched_baseline();
     return 0;
 }

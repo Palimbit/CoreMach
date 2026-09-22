@@ -202,6 +202,37 @@ class Intel8088ConformanceTests(unittest.TestCase):
         self.assertFalse(phases_match)
         self.assertTrue(any(error.startswith("operand_phases=") for error in errors))
 
+    def test_clocked_baseline_requires_full_queue_and_physical_code_phase(self) -> None:
+        test = {
+            "initial": {"regs": {
+                "ax": 1, "cx": 2, "dx": 3, "bx": 4,
+                "sp": 0x100, "bp": 5, "si": 6, "di": 7,
+                "es": 8, "cs": 9, "ss": 10, "ds": 11,
+                "ip": 12, "flags": 0xF002,
+            }, "ram": [], "queue": [0x90] * 4},
+            "final": {"regs": {"ip": 13}, "ram": [], "queue": []},
+            "cycles": [
+                [0, 0, "--", "---", "---", 0, 0, "PASV", "Ti", "F", 0x90],
+                [0, 0, "--", "---", "---", 0, 0, "PASV", "Ti", "-", 0],
+                [1, 0, "--", "---", "---", 0, 0, "CODE", "T1", "-", 0],
+            ],
+        }
+        self.assertTrue(conformance.clocked_baseline_eligible(test, "90"))
+        self.assertFalse(conformance.clocked_baseline_eligible(test, "04"))
+        response = (
+            "T 0 3 0001 0002 0003 0004 0100 0005 0006 0007 "
+            "0008 0009 000a 000b 000d f002 0 3 90 90 90 "
+            "0010 1 F 90 0 0 1 1 2"
+        )
+        self.assertEqual(
+            conformance.compare_clocked_baseline(test, response, "90", 0xffff),
+            [],
+        )
+        errors = conformance.compare_clocked_baseline(
+            test, response[:-1] + "1", "90", 0xffff,
+        )
+        self.assertTrue(any(error.startswith("CODE_phases=") for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
