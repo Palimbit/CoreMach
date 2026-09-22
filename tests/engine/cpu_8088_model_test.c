@@ -683,6 +683,121 @@ test_intel_clocked_prefetched_baseline(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_intel_clocked_nop_stream_keeps_prefetch_in_flight(void)
+{
+    static const uint8_t program[] = {
+        0x90U, 0x90U, 0x90U, 0x90U, 0x90U, 0x90U, 0x90U, 0x90U
+    };
+    static const bm_808x_bus_phase_t expected_phases[][3] = {
+        { BM_808X_BUS_PHASE_T1 },
+        { BM_808X_BUS_PHASE_T2, BM_808X_BUS_PHASE_T3,
+          BM_808X_BUS_PHASE_T4 },
+        { BM_808X_BUS_PHASE_T1, BM_808X_BUS_PHASE_T2,
+          BM_808X_BUS_PHASE_T3 },
+        { BM_808X_BUS_PHASE_T4, BM_808X_BUS_PHASE_T1,
+          BM_808X_BUS_PHASE_T2 }
+    };
+    static const size_t expected_phase_counts[] = { 1U, 3U, 3U, 3U };
+    cpu_808x_test_config_t config = intel_config();
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    bm_808x_prefetch_state_t prefetch = {
+        .size = sizeof(prefetch),
+        .version = BM_808X_PREFETCH_STATE_VERSION,
+        .pointer = 4U,
+        .count = 4U,
+        .capacity = BM_808X_8088_PREFETCH_QUEUE_CAPACITY,
+        .bytes = { 0x90U, 0x90U, 0x90U, 0x90U }
+    };
+    timing_capture_t timing = { 0 };
+    phase_capture_t phases = { 0 };
+    uint64_t cycles = 0U;
+
+    config.timing = capture_timing;
+    config.timing_context = &timing;
+    config.bus_phase = capture_phase;
+    config.bus_phase_context = &phases;
+    cpu_808x_test_machine_create(&machine, &config, program,
+                                 sizeof(program));
+    state = execution_state(&machine);
+    cpu_808x_test_set_state(&machine, &state);
+    assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) == BM_STATUS_OK);
+    for (size_t step = 0U; step < 4U; ++step) {
+        memset(&timing, 0, sizeof(timing));
+        memset(&phases, 0, sizeof(phases));
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        assert(cycles == 3U);
+        assert(cpu_808x_test_get_state(&machine).ip == step + 1U);
+        assert(timing.count == 1U);
+        assert(timing.last.boundary_clock_kind == BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(timing.last.boundary_clocks_min == 3U);
+        assert(phases.count == expected_phase_counts[step]);
+        for (size_t index = 0U; index < phases.count; ++index) {
+            assert(phases.observations[index].phase ==
+                   expected_phases[step][index]);
+            assert(phases.observations[index].cpu_clock_known == 1U);
+            assert(phases.observations[index].cpu_clock_index ==
+                   step * 3U + (step == 0U ? index + 2U : index));
+        }
+    }
+    cpu_808x_test_machine_destroy(&machine);
+
+    /* A three-byte accumulator operand may consume the remaining queue
+     * while a CODE transfer started by the preceding NOP is still in flight. */
+    {
+        static const uint8_t mixed_program[] = {
+            0x90U, 0x05U, 0x2dU, 0x12U, 0x90U, 0x90U
+        };
+
+        prefetch.bytes[0] = 0x90U;
+        prefetch.bytes[1] = 0x05U;
+        prefetch.bytes[2] = 0x2dU;
+        prefetch.bytes[3] = 0x12U;
+        cpu_808x_test_machine_create(&machine, &config, mixed_program,
+                                     sizeof(mixed_program));
+        state = execution_state(&machine);
+        state.ax = 2U;
+        cpu_808x_test_set_state(&machine, &state);
+        assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+               BM_STATUS_OK);
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        assert(cycles == 3U);
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        assert(cycles == 4U);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == 4U);
+        assert(state.ax == 0x122fU);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+
+    /* An immediate not yet present in the queue still needs a separately
+     * validated demand-prefetch schedule; reject it before changing IP. */
+    {
+        static const uint8_t incomplete_program[] = {
+            0x05U, 0x2dU, 0x12U
+        };
+
+        prefetch.pointer = 1U;
+        prefetch.count = 1U;
+        prefetch.bytes[0] = 0x05U;
+        cpu_808x_test_machine_create(&machine, &config, incomplete_program,
+                                     sizeof(incomplete_program));
+        state = execution_state(&machine);
+        cpu_808x_test_set_state(&machine, &state);
+        assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+               BM_STATUS_OK);
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_UNSUPPORTED);
+        assert(cycles == 0U);
+        assert(cpu_808x_test_get_state(&machine).ip == 0U);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
 int
 main(void)
 {
@@ -694,5 +809,6 @@ main(void)
     test_public_bus_phase_observer_survives_state_install();
     test_intel_queue_events_are_logical_not_clocked();
     test_intel_clocked_prefetched_baseline();
+    test_intel_clocked_nop_stream_keeps_prefetch_in_flight();
     return 0;
 }
