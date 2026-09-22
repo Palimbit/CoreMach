@@ -49,8 +49,10 @@ cpu_808x_test_machine_create(cpu_808x_test_machine_t *machine,
     assert(bm_engine_create(&machine->host, &engine_config, &machine->engine) ==
            BM_STATUS_OK);
     cpu_config = (bm_808x_config_t) {
-        .model = BM_808X_NEC_V30,
-        .frequency_hz = 10000000U,
+        .model = config != NULL ? config->model : BM_808X_NEC_V30,
+        .frequency_hz = (config != NULL &&
+                         config->model == BM_808X_INTEL_8088) ?
+                        4772727U : 10000000U,
         .bus = machine->bus,
         .trace = config != NULL ? config->trace : NULL,
         .trace_context = config != NULL ? config->trace_context : NULL,

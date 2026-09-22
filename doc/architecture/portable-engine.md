@@ -68,6 +68,16 @@ stage supplies firmware as a caller-owned blob, establishes reset execution and
 memory transactions, and records instruction checkpoints without adding ROMs
 or machine media to Git.
 
+## Reusable Intel 8088 boundary
+
+The 808x component also exposes an explicit Intel 8088 model independently of
+any machine composition. It selects the original Intel ISA, canonical FLAGS,
+an 8-bit external bus and a four-byte instruction queue while preserving the
+NEC V30 model and its extensions. Intel instruction timing is intentionally
+unclassified, so the functional model cannot be registered as an exact clocked
+CPU. The evidence, provenance boundary and exact next timing step are recorded
+in [Portable Intel 8088 core](intel-8088-core.md).
+
 ### PCS86-1 bring-up status
 
 The first real-machine cut now models the documented NEC V30 at 10 MHz, 640 KiB

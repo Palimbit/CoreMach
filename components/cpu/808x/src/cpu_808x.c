@@ -3,12 +3,13 @@
  *
  * Derived rewrite of the inherited 808x/Vx0 interpreter. The original work
  * includes Copyright 2015-2020 Andrew Jenner and Copyright 2016-2020 Miran
- * Grca. This file implements a portable functional NEC V30 core whose
- * remaining timing limitations are reported explicitly.
+ * Grca. This file implements portable functional 8086-family semantics with
+ * explicit NEC V30 and Intel 8088 model boundaries. Remaining timing
+ * limitations are reported explicitly.
  */
 #include <blumach/components/cpu_808x.h>
 
-#include "v30_bcu.h"
+#include "cpu_808x_biu.h"
 
 #include <string.h>
 
@@ -43,10 +44,11 @@ typedef struct bm_808x_state {
     bm_bus_t *bus;
     bm_808x_model_t model;
     uint32_t frequency_hz;
+    const struct bm_808x_model_profile *profile;
     uint16_t registers[8];
     uint16_t segments[4];
     uint16_t ip;
-    bm_v30_bcu_t bcu;
+    bm_808x_biu_t bcu;
     uint16_t flags;
     uint32_t last_fetch;
     uint8_t last_opcode;
@@ -99,15 +101,86 @@ typedef struct bm_808x_state {
     int last_boundary_observed;
 } bm_808x_state_t;
 
+typedef struct bm_808x_model_profile {
+    bm_808x_model_t model;
+    const char *name;
+    uint8_t external_bus_width;
+    uint8_t prefetch_capacity;
+    uint8_t has_nec_extensions;
+    uint8_t has_80186_extensions;
+    uint8_t has_8080_mode;
+    uint8_t byte_idiv_rejects_minus_128;
+} bm_808x_model_profile_t;
+
+static const bm_808x_model_profile_t model_profiles[] = {
+    {
+        BM_808X_NEC_V30, "nec-v30-bring-up", 16U,
+        BM_808X_V30_PREFETCH_QUEUE_CAPACITY, 1U, 1U, 1U, 1U
+    },
+    {
+        BM_808X_INTEL_8088, "intel-8088", 8U,
+        BM_808X_8088_PREFETCH_QUEUE_CAPACITY, 0U, 0U, 0U, 0U
+    }
+};
+
+#define D BM_8088_OPCODE_DOCUMENTED
+#define A BM_8088_OPCODE_SILICON_ALIAS
+#define U BM_8088_OPCODE_SILICON_UNDOCUMENTED
+
+/* Intel's published map is the baseline. Entries marked A or U are promoted
+ * only by the retained 8088 silicon evidence listed in intel-8088-core.md. */
+static const bm_8088_opcode_class_t intel_8088_primary_opcode_map[256] = {
+    /* 0x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,A,
+    /* 1x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* 2x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* 3x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* 4x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* 5x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* 6x */ A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,
+    /* 7x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* 8x */ D,D,A,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* 9x */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* Ax */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* Bx */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* Cx */ A,A,D,D,D,D,D,D,A,A,D,D,D,D,D,D,
+    /* Dx */ D,D,D,D,D,D,U,D,D,D,D,D,D,D,D,D,
+    /* Ex */ D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,
+    /* Fx */ D,A,D,D,D,D,D,D,D,D,D,D,D,D,D,D
+};
+
+#undef D
+#undef A
+#undef U
+
+static const bm_808x_model_profile_t *
+model_profile(bm_808x_model_t model)
+{
+    size_t index;
+    for (index = 0U; index < sizeof(model_profiles) / sizeof(model_profiles[0]);
+         ++index) {
+        if (model_profiles[index].model == model)
+            return &model_profiles[index];
+    }
+    return NULL;
+}
+
 static void
 mark_prefetch_flush(bm_808x_state_t *state)
 {
-    bm_v30_bcu_flush(&state->bcu, state->ip);
+    bm_808x_biu_flush(&state->bcu, state->ip);
+}
+
+static int
+native_mode(const bm_808x_state_t *state)
+{
+    return !state->profile->has_8080_mode || ((state->flags & FLAG_MD) != 0U);
 }
 
 static uint16_t
-psw_image(uint16_t value)
+psw_image(const bm_808x_state_t *state, uint16_t value)
 {
+    if (state->model == BM_808X_INTEL_8088)
+        return (uint16_t) ((value & (PSW_WRITABLE & ~FLAG_MD)) | 0xf002U);
     return (uint16_t) ((value & PSW_WRITABLE) | PSW_FIXED_ONE);
 }
 
@@ -115,8 +188,8 @@ static void
 restore_psw(bm_808x_state_t *state, uint16_t value)
 {
     uint16_t mode = state->flags & FLAG_MD;
-    state->flags = psw_image(value);
-    if (!state->md_write_enabled)
+    state->flags = psw_image(state, value);
+    if (state->profile->has_8080_mode && !state->md_write_enabled)
         state->flags = (uint16_t) ((state->flags & ~FLAG_MD) | mode);
 }
 
@@ -138,11 +211,13 @@ place_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
 {
     bm_status_t status;
 
+    if (state->model != BM_808X_NEC_V30)
+        return BM_STATUS_OK;
     if (!state->boundary_execution_timeline_active)
         return BM_STATUS_OK;
     if (state->boundary_execution_clocks_placed > UINT32_MAX - clocks)
         return BM_STATUS_INVALID_STATE;
-    status = bm_v30_bcu_advance_prefetch(
+    status = bm_808x_biu_advance_prefetch(
         &state->bcu, state->bus, state->segments[1], 0U, clocks);
     if (status == BM_STATUS_OK)
         state->boundary_execution_clocks_placed += clocks;
@@ -152,6 +227,8 @@ place_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
 static bm_status_t
 place_suspended_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
 {
+    if (state->model != BM_808X_NEC_V30)
+        return BM_STATUS_OK;
     if (!state->boundary_execution_timeline_active)
         return BM_STATUS_OK;
     if (state->boundary_execution_clocks_placed > UINT32_MAX - clocks)
@@ -164,12 +241,13 @@ static bm_status_t
 transact_operand(bm_808x_state_t *state,
                  bm_bus_transaction_t *transaction)
 {
-    bm_status_t status = bm_v30_bcu_transact(
+    bm_status_t status = bm_808x_biu_transact(
         &state->bcu, state->bus, transaction);
 
     /* NEC's documented execution interval includes the four base clocks of
      * each external operand transfer, but not device wait states. */
     if ((status == BM_STATUS_OK) &&
+        (state->model == BM_808X_NEC_V30) &&
         state->boundary_operand_timeline_supported) {
         if (state->boundary_execution_clocks_placed > UINT32_MAX - 4U)
             return BM_STATUS_INVALID_STATE;
@@ -196,7 +274,7 @@ read_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset,
 static bm_status_t
 fill_prefetch_queue(bm_808x_state_t *state)
 {
-    return bm_v30_bcu_fill_on_demand(
+    return bm_808x_biu_fill_on_demand(
         &state->bcu, state->bus, state->segments[1], 0U);
 }
 
@@ -205,10 +283,10 @@ fetch_byte(bm_808x_state_t *state, uint8_t *value)
 {
     bm_status_t status = BM_STATUS_OK;
 
-    if (bm_v30_bcu_queue_count(&state->bcu) == 0U)
+    if (bm_808x_biu_queue_count(&state->bcu) == 0U)
         status = fill_prefetch_queue(state);
     if (status == BM_STATUS_OK) {
-        status = bm_v30_bcu_dequeue_byte(&state->bcu, value);
+        status = bm_808x_biu_dequeue_byte(&state->bcu, value);
     }
     if (status == BM_STATUS_OK) {
         if (state->last_instruction_length < 8U)
@@ -222,8 +300,9 @@ fetch_byte(bm_808x_state_t *state, uint8_t *value)
          * so an idle queue may start a speculative fetch and an in-flight
          * fetch advances by one phase.  Keep the dequeue visible before the
          * BCU step: the freed byte is what can make room for that fetch. */
-        status = bm_v30_bcu_advance_prefetch(
-            &state->bcu, state->bus, state->segments[1], 0U, 1U);
+        if (state->model == BM_808X_NEC_V30)
+            status = bm_808x_biu_advance_prefetch(
+                &state->bcu, state->bus, state->segments[1], 0U, 1U);
     }
     return status;
 }
@@ -256,7 +335,7 @@ write_byte(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint8_t va
 static bm_status_t
 read_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t *value)
 {
-    if ((offset & 1U) == 0U) {
+    if ((state->profile->external_bus_width != 8U) && ((offset & 1U) == 0U)) {
         bm_bus_transaction_t transaction = {
             BM_ADDRESS_MEMORY, BM_BUS_READ, physical_address(segment, offset),
             0, 2, 2, 0, BM_ENDIAN_LITTLE,
@@ -282,7 +361,7 @@ read_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t *v
 static bm_status_t
 write_word(bm_808x_state_t *state, uint16_t segment, uint16_t offset, uint16_t value)
 {
-    if ((offset & 1U) == 0U) {
+    if ((state->profile->external_bus_width != 8U) && ((offset & 1U) == 0U)) {
         bm_bus_transaction_t transaction = {
             BM_ADDRESS_MEMORY, BM_BUS_WRITE, physical_address(segment, offset),
             value, 2, 2, 0, BM_ENDIAN_LITTLE,
@@ -492,8 +571,36 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
     uint16_t new_cs = 0;
     uint16_t old_ip = state->ip;
     uint16_t old_cs = state->segments[1];
-    uint16_t old_flags = psw_image(state->flags);
+    uint16_t old_flags = psw_image(state, state->flags);
     bm_status_t status;
+
+    if (state->model == BM_808X_INTEL_8088) {
+        /* Intel, 8086 Family User's Manual (Oct. 1979), pp. 2-26--2-28:
+         * push FLAGS, CS and IP; clear IF/TF; load the type*4 pointer. */
+        status = push_word(state, old_flags);
+        if (status == BM_STATUS_OK)
+            status = push_word(state, old_cs);
+        if (status == BM_STATUS_OK)
+            status = push_word(state, old_ip);
+        if (status == BM_STATUS_OK)
+            state->flags = (uint16_t) (old_flags & ~(FLAG_IF | FLAG_TF));
+        if (status == BM_STATUS_OK)
+            status = read_word(state, 0,
+                               (uint16_t) ((uint16_t) vector * 4U), &new_ip);
+        if (status == BM_STATUS_OK)
+            status = read_word(state, 0,
+                               (uint16_t) ((uint16_t) vector * 4U + 2U),
+                               &new_cs);
+        if (status == BM_STATUS_OK) {
+            state->ip = new_ip;
+            state->segments[1] = new_cs;
+            mark_prefetch_flush(state);
+            state->halted = 0;
+            state->trap_pending = 0;
+            state->interrupt_entered = 1;
+        }
+        return status;
+    }
 
     /* Preserve the V30 microcode order.  The vector is latched before the
      * interrupt frame can overwrite memory, then prefetch is suspended while
@@ -509,14 +616,15 @@ enter_interrupt(bm_808x_state_t *state, uint8_t vector)
                            (uint16_t) ((uint16_t) vector * 4U + 2U),
                            &new_cs);
     if (status == BM_STATUS_OK) {
-        bm_v30_bcu_suspend_prefetch(&state->bcu);
+        bm_808x_biu_suspend_prefetch(&state->bcu);
         status = place_suspended_execution_clocks(state, 2U);
     }
     if (status == BM_STATUS_OK)
         status = push_word(state, old_flags);
     if (status == BM_STATUS_OK) {
-        state->flags = (uint16_t) ((old_flags | FLAG_MD) &
-                                   ~(FLAG_IF | FLAG_TF));
+        state->flags = (uint16_t) (old_flags & ~(FLAG_IF | FLAG_TF));
+        if (state->profile->has_8080_mode)
+            state->flags |= FLAG_MD;
         status = place_suspended_execution_clocks(state, 4U);
     }
     if (status == BM_STATUS_OK)
@@ -617,6 +725,16 @@ service_boundary_interrupt(bm_808x_state_t *state)
     uint32_t acceptance_clocks;
     uint32_t expected_clocks;
 
+    if (state->model == BM_808X_INTEL_8088) {
+        begin_operand_execution_timeline(state);
+        bm_808x_biu_suspend_prefetch(&state->bcu);
+        if (nmi_ready(state))
+            return service_nmi(state);
+        if (maskable_interrupt_ready(state))
+            return service_interrupt(state);
+        return enter_interrupt(state, 1U);
+    }
+
     if (nmi_ready(state))
         acceptance_clocks = 2U;
     else if (maskable_interrupt_ready(state))
@@ -627,7 +745,7 @@ service_boundary_interrupt(bm_808x_state_t *state)
     expected_clocks = (acceptance_clocks == 2U ? 38U : 49U) +
                       ((state->boundary_initial_sp & 1U) != 0U ? 12U : 0U);
     begin_operand_execution_timeline(state);
-    bm_v30_bcu_suspend_prefetch(&state->bcu);
+    bm_808x_biu_suspend_prefetch(&state->bcu);
     status = place_suspended_execution_clocks(state, acceptance_clocks);
     if (status == BM_STATUS_OK)
         status = acceptance_clocks == 2U ?
@@ -1146,13 +1264,13 @@ enter_emulation(bm_808x_state_t *state, uint8_t vector)
                            (uint16_t) ((uint16_t) vector * 4U + 2U),
                            &new_cs);
     if (status == BM_STATUS_OK)
-        status = push_word(state, psw_image(state->flags));
+        status = push_word(state, psw_image(state, state->flags));
     if (status == BM_STATUS_OK)
         status = push_word(state, state->segments[1]);
     if (status == BM_STATUS_OK)
         status = push_word(state, state->ip);
     if (status == BM_STATUS_OK) {
-        state->flags = (uint16_t) (psw_image(state->flags) & ~FLAG_MD);
+        state->flags = (uint16_t) (psw_image(state, state->flags) & ~FLAG_MD);
         state->md_write_enabled = 1;
         state->segments[1] = new_cs;
         state->ip = new_ip;
@@ -1179,7 +1297,7 @@ return_from_emulation(bm_808x_state_t *state)
         state->ip = new_ip;
         state->segments[1] = new_cs;
         mark_prefetch_flush(state);
-        state->flags = (uint16_t) (psw_image(new_flags) | FLAG_MD);
+        state->flags = (uint16_t) (psw_image(state, new_flags) | FLAG_MD);
         state->md_write_enabled = 0;
         state->halted = 0;
         state->trap_pending = 0;
@@ -1332,8 +1450,15 @@ rotate_shift8(bm_808x_state_t *state, uint8_t value,
     uint8_t original = value;
     uint16_t original_flags = state->flags;
     unsigned int index;
+    if ((operation == 6U) && (state->model == BM_808X_INTEL_8088)) {
+        uint16_t preserved = original_flags & (FLAG_CF | FLAG_AF | FLAG_OF);
+        set_logic_flags(state, 0xffU, 8U);
+        state->flags = (uint16_t) ((state->flags &
+                                   ~(FLAG_CF | FLAG_AF | FLAG_OF)) | preserved);
+        return 0xffU;
+    }
     if (operation == 6U)
-        operation = 4U; /* Undocumented SAL alias on the V30/8086 family. */
+        operation = 4U; /* Retained V30 SAL alias. */
     for (index = 0; index < count; ++index) {
         unsigned int old_carry = (state->flags & FLAG_CF) != 0U;
         unsigned int carry;
@@ -1396,6 +1521,13 @@ rotate_shift16(bm_808x_state_t *state, uint16_t value,
     uint16_t original = value;
     uint16_t original_flags = state->flags;
     unsigned int index;
+    if ((operation == 6U) && (state->model == BM_808X_INTEL_8088)) {
+        uint16_t preserved = original_flags & (FLAG_CF | FLAG_AF | FLAG_OF);
+        set_logic_flags(state, 0xffffU, 16U);
+        state->flags = (uint16_t) ((state->flags &
+                                   ~(FLAG_CF | FLAG_AF | FLAG_OF)) | preserved);
+        return 0xffffU;
+    }
     if (operation == 6U)
         operation = 4U;
     for (index = 0; index < count; ++index) {
@@ -1669,7 +1801,7 @@ io_write_byte(bm_808x_state_t *state, uint16_t port, uint8_t value)
 static bm_status_t
 io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
 {
-    if ((port & 1U) == 0U) {
+    if ((state->profile->external_bus_width != 8U) && ((port & 1U) == 0U)) {
         bm_bus_transaction_t transaction = {
             BM_ADDRESS_IO, BM_BUS_READ, port, 0, 2, 2, 0,
             BM_ENDIAN_LITTLE,
@@ -1695,7 +1827,7 @@ io_read_word(bm_808x_state_t *state, uint16_t port, uint16_t *value)
 static bm_status_t
 io_write_word(bm_808x_state_t *state, uint16_t port, uint16_t value)
 {
-    if ((port & 1U) == 0U) {
+    if ((state->profile->external_bus_width != 8U) && ((port & 1U) == 0U)) {
         bm_bus_transaction_t transaction = {
             BM_ADDRESS_IO, BM_BUS_WRITE, port, value, 2, 2, 0,
             BM_ENDIAN_LITTLE,
@@ -1781,7 +1913,8 @@ cpu_reset(void *context)
     memset(state->segments, 0, sizeof(state->segments));
     state->segments[1] = 0xffffU; /* CS:IP resolves to physical FFFF0h. */
     state->ip = 0;
-    bm_v30_bcu_reset(&state->bcu, state->ip);
+    bm_808x_biu_reset(&state->bcu, state->ip, state->profile->prefetch_capacity,
+                      (uint8_t) (state->profile->external_bus_width / 8U));
     state->flags = 0xf002U;
     state->last_fetch = 0xffff0U;
     state->last_opcode = 0;
@@ -2072,7 +2205,7 @@ execute_8080_one(bm_808x_state_t *state)
             .bp = state->registers[REG_BP],
             .si = state->registers[REG_SI],
             .di = state->registers[REG_DI],
-            .flags = psw_image(state->flags),
+            .flags = psw_image(state, state->flags),
             .physical_address = state->last_fetch,
             .opcode = opcode,
             .effective_opcode = opcode,
@@ -2394,6 +2527,49 @@ execute_8080_one(bm_808x_state_t *state)
     }
 }
 
+bm_8088_opcode_class_t
+bm_8088_classify_opcode(uint8_t opcode, uint8_t modrm)
+{
+    unsigned int operation = (modrm >> 3U) & 7U;
+
+    if ((opcode == 0x8fU) || (opcode == 0xc6U) || (opcode == 0xc7U))
+        return operation == 0U ? BM_8088_OPCODE_DOCUMENTED :
+                                 BM_8088_OPCODE_UNDEFINED;
+    if ((opcode >= 0xd0U) && (opcode <= 0xd3U) && (operation == 6U))
+        return BM_8088_OPCODE_SILICON_UNDOCUMENTED;
+    if (((opcode == 0xf6U) || (opcode == 0xf7U)) && (operation == 1U))
+        return BM_8088_OPCODE_SILICON_ALIAS;
+    if ((opcode == 0xfeU) && (operation > 1U))
+        return BM_8088_OPCODE_UNDEFINED;
+    if ((opcode == 0xffU) && (operation == 7U))
+        return BM_8088_OPCODE_SILICON_ALIAS;
+    return intel_8088_primary_opcode_map[opcode];
+}
+
+static uint8_t
+intel_8088_canonical_opcode(uint8_t opcode)
+{
+    if ((opcode >= 0x60U) && (opcode <= 0x6fU))
+        return (uint8_t) (opcode + 0x10U);
+    if (opcode == 0xc0U)
+        return 0xc2U;
+    if (opcode == 0xc1U)
+        return 0xc3U;
+    if (opcode == 0xc8U)
+        return 0xcaU;
+    if (opcode == 0xc9U)
+        return 0xcbU;
+    return opcode;
+}
+
+static int
+opcode_available(const bm_808x_state_t *state, uint8_t opcode)
+{
+    if (state->model == BM_808X_NEC_V30)
+        return 1;
+    return bm_8088_classify_opcode(opcode, 0U) != BM_8088_OPCODE_UNDEFINED;
+}
+
 static bm_status_t
 execute_one(bm_808x_state_t *state)
 {
@@ -2407,7 +2583,7 @@ execute_one(bm_808x_state_t *state)
     bm_status_t status;
     uint16_t repeat_ip;
 
-    if ((state->flags & FLAG_MD) == 0U)
+    if (!native_mode(state))
         return execute_8080_one(state);
 
     state->last_instruction_bytes = 0U;
@@ -2427,15 +2603,28 @@ execute_one(bm_808x_state_t *state)
             case 0x2e: prefix_segment = 1; break; /* CS: */
             case 0x36: prefix_segment = 2; break; /* SS: */
             case 0x3e: prefix_segment = 3; break; /* DS: */
-            case 0x64: repeat = 4; break;          /* REPNC */
-            case 0x65: repeat = 3; break;          /* REPC */
-            case 0xf0: bus_lock = 1; break;        /* BUSLOCK */
+            case 0x64:
+                if (state->profile->has_nec_extensions)
+                    repeat = 4;                    /* REPNC */
+                break;
+            case 0x65:
+                if (state->profile->has_nec_extensions)
+                    repeat = 3;                    /* REPC */
+                break;
+            case 0xf0: bus_lock = 1; break;        /* LOCK */
+            case 0xf1:
+                if (state->model == BM_808X_INTEL_8088)
+                    bus_lock = 1;                  /* Silicon LOCK alias. */
+                break;
             case 0xf2: repeat = 2; break;          /* REPNE */
             case 0xf3: repeat = 1; break;          /* REP/REPE */
             default: break;
         }
-        if ((prefix_segment < 0) && (opcode != 0x64U) &&
-            (opcode != 0x65U) && (opcode != 0xf0U) &&
+        if ((prefix_segment < 0) &&
+            (!state->profile->has_nec_extensions ||
+             ((opcode != 0x64U) && (opcode != 0x65U))) &&
+            (opcode != 0xf0U) &&
+            ((opcode != 0xf1U) || (state->model != BM_808X_INTEL_8088)) &&
             (opcode != 0xf2U) && (opcode != 0xf3U))
             break;
         if (prefix_segment >= 0)
@@ -2454,6 +2643,8 @@ execute_one(bm_808x_state_t *state)
 
     state->last_effective_opcode = opcode;
     state->last_prefix_count = prefix_count;
+    if (!opcode_available(state, opcode))
+        return BM_STATUS_UNSUPPORTED;
     repeat_ip = (uint16_t) (instruction_ip +
                  (prefix_count > 3U ? prefix_count - 3U : 0U));
     if (state->trace != NULL) {
@@ -2471,7 +2662,7 @@ execute_one(bm_808x_state_t *state)
             .bp = state->registers[REG_BP],
             .si = state->registers[REG_SI],
             .di = state->registers[REG_DI],
-            .flags = psw_image(state->flags),
+            .flags = psw_image(state, state->flags),
             .physical_address = state->last_fetch,
             .opcode = first_opcode,
             .effective_opcode = opcode,
@@ -2483,6 +2674,8 @@ execute_one(bm_808x_state_t *state)
         (opcode != 0xa6U) && (opcode != 0xa7U) &&
         (opcode != 0xaeU) && (opcode != 0xafU))
         return BM_STATUS_UNSUPPORTED;
+    if (state->model == BM_808X_INTEL_8088)
+        opcode = intel_8088_canonical_opcode(opcode);
 
     if ((opcode >= 0xb8U) && (opcode <= 0xbfU)) {
         uint16_t immediate;
@@ -2530,8 +2723,8 @@ execute_one(bm_808x_state_t *state)
 
         begin_operand_execution_timeline(state);
         status = place_execution_clocks(state, 3U);
-        /* V30 stack semantics decrement SP before the source is observed.
-         * This matters only for the SP encoding itself. */
+        /* The original 8086-family behavior observes SP after the implicit
+         * decrement. */
         if ((status == BM_STATUS_OK) && (index == REG_SP))
             value = (uint16_t) (state->registers[REG_SP] - 2U);
         if (status == BM_STATUS_OK)
@@ -2699,7 +2892,18 @@ execute_one(bm_808x_state_t *state)
         case 0x6f: /* OUTSW. */
             return execute_io_string(state, opcode, repeat, segment_override,
                                      repeat_ip);
-        case 0x0f: /* NEC V30 native extension map. */
+        case 0x0f: /* Intel silicon POP CS / NEC native extension map. */
+            if (state->model == BM_808X_INTEL_8088) {
+                uint16_t value;
+                begin_operand_execution_timeline(state);
+                status = pop_word(state, &value);
+                if (status == BM_STATUS_OK) {
+                    state->segments[1] = value;
+                    state->interrupt_inhibit = 2U;
+                    state->boundary_inhibit = 2U;
+                }
+                return status;
+            }
             return execute_nec_extension(state, segment_override);
         case 0x05: /* ADD AX,imm16. */
         case 0x0d: /* OR AX,imm16. */
@@ -2805,7 +3009,7 @@ execute_one(bm_808x_state_t *state)
         case 0x3f: /* AAS */
             ascii_adjust(state, 1);
             return BM_STATUS_OK;
-        case 0xd4: { /* AAM imm8 (NEC V20/V30 measured semantics). */
+        case 0xd4: { /* AAM imm8. */
             uint8_t base = 0U;
             uint8_t value;
             status = fetch_byte(state, &base);
@@ -2813,8 +3017,12 @@ execute_one(bm_808x_state_t *state)
                 return status;
             value = get_register_byte(state, 0U);
             if (base == 0U) {
-                /* V20 hardware produces FF:AL instead of interrupt zero. */
-                set_register_byte(state, 4U, 0xffU);
+                if (state->model == BM_808X_NEC_V30) {
+                    /* V20 hardware produces FF:AL instead of interrupt zero. */
+                    set_register_byte(state, 4U, 0xffU);
+                } else {
+                    return enter_interrupt(state, 0U);
+                }
             } else {
                 set_register_byte(state, 4U, (uint8_t) (value / base));
                 set_register_byte(state, 0U, (uint8_t) (value % base));
@@ -2822,19 +3030,26 @@ execute_one(bm_808x_state_t *state)
             set_logic_flags(state, get_register_byte(state, 0U), 8U);
             return BM_STATUS_OK;
         }
-        case 0xd5: { /* AAD imm8; NEC V20/V30 always uses decimal base 10. */
+        case 0xd5: { /* AAD imm8. */
             uint8_t encoded_base = 0U;
             uint8_t value;
             status = fetch_byte(state, &encoded_base);
             if (status != BM_STATUS_OK)
                 return status;
-            (void) encoded_base;
+            if (state->model == BM_808X_NEC_V30)
+                encoded_base = 10U;
             value = (uint8_t) (get_register_byte(state, 0U) +
-                               get_register_byte(state, 4U) * 10U);
+                               get_register_byte(state, 4U) * encoded_base);
             state->registers[REG_AX] = value;
             set_logic_flags(state, value, 8U);
             return BM_STATUS_OK;
         }
+        case 0xd6: /* Intel silicon SALC; undefined on the NEC V30. */
+            if (state->model != BM_808X_INTEL_8088)
+                return BM_STATUS_UNSUPPORTED;
+            set_register_byte(state, 0U,
+                              (state->flags & FLAG_CF) != 0U ? 0xffU : 0U);
+            return BM_STATUS_OK;
         case 0x9e: { /* SAHF */
             uint16_t mask = FLAG_SF | FLAG_ZF | FLAG_AF | FLAG_PF | FLAG_CF;
             uint16_t ah = get_register_byte(state, 4U);
@@ -2850,7 +3065,7 @@ execute_one(bm_808x_state_t *state)
             begin_operand_execution_timeline(state);
             status = place_execution_clocks(state, 3U);
             if (status == BM_STATUS_OK)
-                status = push_word(state, psw_image(state->flags));
+                status = push_word(state, psw_image(state, state->flags));
             return status;
         case 0x9d: { /* POPF */
             uint16_t value;
@@ -3396,6 +3611,10 @@ execute_one(bm_808x_state_t *state)
             if (status != BM_STATUS_OK)
                 return status;
             operation = (modrm >> 3U) & 7U;
+            if ((state->model == BM_808X_INTEL_8088) &&
+                ((operation == 1U) || (operation == 4U) ||
+                 (operation == 6U)))
+                return BM_STATUS_UNSUPPORTED;
             if ((operation != 0U) && (operation != 1U) &&
                 (operation != 2U) && (operation != 3U) &&
                 (operation != 4U) && (operation != 5U) &&
@@ -3493,9 +3712,11 @@ execute_one(bm_808x_state_t *state)
             }
             if (status == BM_STATUS_OK) {
                 status = write_operand_word(state, &operand, state->segments[segment]);
-                if (status == BM_STATUS_OK)
+                if ((status == BM_STATUS_OK) &&
+                    (state->model == BM_808X_NEC_V30))
                     state->interrupt_inhibit = 2U;
-                if (status == BM_STATUS_OK)
+                if ((status == BM_STATUS_OK) &&
+                    (state->model == BM_808X_NEC_V30))
                     state->boundary_inhibit = 2U;
             }
             return status;
@@ -3619,7 +3840,9 @@ execute_one(bm_808x_state_t *state)
             if ((operation != 0U) && (operation != 1U) &&
                 (operation != 2U) && (operation != 3U) &&
                 (operation != 4U) && (operation != 5U) &&
-                (operation != 6U))
+                (operation != 6U) &&
+                !((operation == 7U) &&
+                  (state->model == BM_808X_INTEL_8088)))
                 return BM_STATUS_UNSUPPORTED;
             status = decode_rm_operand(state, modrm, segment_override, &operand);
             if ((status == BM_STATUS_OK) && (operation <= 1U) &&
@@ -3646,7 +3869,7 @@ execute_one(bm_808x_state_t *state)
                 if (status == BM_STATUS_OK)
                     status = place_execution_clocks(state, 1U);
                 if ((status == BM_STATUS_OK) && (operation == 5U)) {
-                    bm_v30_bcu_suspend_prefetch(&state->bcu);
+                    bm_808x_biu_suspend_prefetch(&state->bcu);
                     status = place_suspended_execution_clocks(state, 1U);
                 }
                 if (status == BM_STATUS_OK)
@@ -3658,7 +3881,7 @@ execute_one(bm_808x_state_t *state)
 
                     status = place_execution_clocks(state, 1U);
                     if (status == BM_STATUS_OK) {
-                        bm_v30_bcu_suspend_prefetch(&state->bcu);
+                        bm_808x_biu_suspend_prefetch(&state->bcu);
                         status = place_suspended_execution_clocks(state, 4U);
                     }
                     if (status == BM_STATUS_OK)
@@ -3706,7 +3929,7 @@ execute_one(bm_808x_state_t *state)
             }
             if (operation == 2U) {
                 uint16_t return_ip = state->ip;
-                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                bm_808x_biu_suspend_prefetch(&state->bcu);
                 status = place_suspended_execution_clocks(state, 4U);
                 if (status == BM_STATUS_OK) {
                     state->ip = value;
@@ -3726,7 +3949,7 @@ execute_one(bm_808x_state_t *state)
                 if (operand.is_register)
                     status = place_execution_clocks(state, 1U);
                 if (status == BM_STATUS_OK) {
-                    bm_v30_bcu_suspend_prefetch(&state->bcu);
+                    bm_808x_biu_suspend_prefetch(&state->bcu);
                     status = place_suspended_execution_clocks(state, 1U);
                 }
                 if (status == BM_STATUS_OK) {
@@ -3816,8 +4039,9 @@ execute_one(bm_808x_state_t *state)
                     return enter_interrupt(state, 0U);
                 quotient = dividend / divisor;
                 remainder = dividend % divisor;
-                /* Hardware V20 vectors report divide error for -128 too. */
-                if ((quotient <= -128) || (quotient > 127))
+                if ((quotient < -128) || (quotient > 127) ||
+                    (state->profile->byte_idiv_rejects_minus_128 &&
+                     (quotient == -128)))
                     return enter_interrupt(state, 0U);
                 set_register_byte(state, 0U, (uint8_t) quotient);
                 set_register_byte(state, 4U, (uint8_t) remainder);
@@ -3901,7 +4125,7 @@ execute_one(bm_808x_state_t *state)
                 begin_operand_execution_timeline(state);
             }
             if (status == BM_STATUS_OK) {
-                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                bm_808x_biu_suspend_prefetch(&state->bcu);
                 status = place_suspended_execution_clocks(state, 4U);
             }
             if (status == BM_STATUS_OK) {
@@ -3929,7 +4153,7 @@ execute_one(bm_808x_state_t *state)
                 status = place_execution_clocks(state, 1U);
             }
             if (status == BM_STATUS_OK) {
-                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                bm_808x_biu_suspend_prefetch(&state->bcu);
                 status = place_suspended_execution_clocks(state, 4U);
             }
             if (status == BM_STATUS_OK)
@@ -4008,7 +4232,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &destination);
             if (status == BM_STATUS_OK) {
-                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                bm_808x_biu_suspend_prefetch(&state->bcu);
                 state->ip = destination;
                 status = place_suspended_execution_clocks(
                     state, opcode == 0xc2U ? 2U : 1U);
@@ -4048,8 +4272,10 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK) {
                 state->registers[(modrm >> 3U) & 7U] = offset;
                 state->segments[opcode == 0xc4U ? 0U : 3U] = segment;
-                state->interrupt_inhibit = 2U;
-                state->boundary_inhibit = 2U;
+                if (state->model == BM_808X_NEC_V30) {
+                    state->interrupt_inhibit = 2U;
+                    state->boundary_inhibit = 2U;
+                }
             }
             return status;
         }
@@ -4116,7 +4342,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &destination);
             if (status == BM_STATUS_OK) {
-                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                bm_808x_biu_suspend_prefetch(&state->bcu);
                 status = place_suspended_execution_clocks(state, 2U);
             }
             if (status == BM_STATUS_OK)
@@ -4163,7 +4389,7 @@ execute_one(bm_808x_state_t *state)
             if (status == BM_STATUS_OK)
                 status = pop_word(state, &new_ip);
             if (status == BM_STATUS_OK) {
-                bm_v30_bcu_suspend_prefetch(&state->bcu);
+                bm_808x_biu_suspend_prefetch(&state->bcu);
                 status = place_suspended_execution_clocks(state, 2U);
             }
             if (status == BM_STATUS_OK)
@@ -4181,6 +4407,9 @@ execute_one(bm_808x_state_t *state)
                 status = pop_word(state, &new_flags);
             if (status == BM_STATUS_OK) {
                 restore_psw(state, new_flags);
+                if ((state->model == BM_808X_INTEL_8088) &&
+                    ((state->flags & FLAG_IF) != 0U))
+                    state->interrupt_inhibit = 2U;
                 status = place_execution_clocks(state, 1U);
             }
             return status;
@@ -4700,6 +4929,11 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
     int known = 1;
     bm_808x_execution_clock_kind_t kind = BM_808X_EXECUTION_CLOCKS_EXACT;
 
+    /* The currently encoded tables and placement rules are NEC V30 evidence.
+     * Never relabel them as Intel 8088 timing. */
+    if (state->model != BM_808X_NEC_V30)
+        return BM_808X_EXECUTION_CLOCKS_UNKNOWN;
+
     if ((opcode >= 0x40U) && (opcode <= 0x4fU))
         base = 2U; /* INC/DEC reg16. */
     else if ((opcode >= 0x50U) && (opcode <= 0x57U))
@@ -5211,22 +5445,22 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
     kind = documented_native_execution_clocks(state, &minimum, &maximum);
     if ((kind != BM_808X_EXECUTION_CLOCKS_EXACT) || (minimum != maximum))
         return BM_STATUS_OK;
-    return bm_v30_bcu_advance_prefetch(
+    return bm_808x_biu_advance_prefetch(
         &state->bcu, state->bus, state->segments[1],
         state->bus_lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U,
         minimum);
 }
 
 static bm_808x_prefetch_phase_t
-observed_prefetch_phase(const bm_v30_bcu_t *bcu)
+observed_prefetch_phase(const bm_808x_biu_t *bcu)
 {
     switch (bcu->prefetch_phase) {
-        case BM_V30_BCU_PHASE_IDLE: return BM_808X_PREFETCH_IDLE;
-        case BM_V30_BCU_PHASE_T1: return BM_808X_PREFETCH_T1;
-        case BM_V30_BCU_PHASE_T2: return BM_808X_PREFETCH_T2;
-        case BM_V30_BCU_PHASE_T3: return BM_808X_PREFETCH_T3;
-        case BM_V30_BCU_PHASE_TW: return BM_808X_PREFETCH_TW;
-        case BM_V30_BCU_PHASE_T4: return BM_808X_PREFETCH_T4;
+        case BM_808X_BIU_PHASE_IDLE: return BM_808X_PREFETCH_IDLE;
+        case BM_808X_BIU_PHASE_T1: return BM_808X_PREFETCH_T1;
+        case BM_808X_BIU_PHASE_T2: return BM_808X_PREFETCH_T2;
+        case BM_808X_BIU_PHASE_T3: return BM_808X_PREFETCH_T3;
+        case BM_808X_BIU_PHASE_TW: return BM_808X_PREFETCH_TW;
+        case BM_808X_BIU_PHASE_T4: return BM_808X_PREFETCH_T4;
         default: return BM_808X_PREFETCH_IDLE;
     }
 }
@@ -5292,7 +5526,7 @@ compose_boundary_clocks(const bm_808x_state_t *state, int native_mode,
 static void
 begin_boundary_observation(bm_808x_state_t *state)
 {
-    bm_v30_bcu_begin_boundary(&state->bcu);
+    bm_808x_biu_begin_boundary(&state->bcu);
     state->boundary_rm_valid = 0;
     state->boundary_rm_memory = 0;
     state->boundary_rm_offset = 0U;
@@ -5344,9 +5578,9 @@ emit_boundary_observation(bm_808x_state_t *state,
         .prefetch_queue_flushed =
             (uint8_t) !!state->bcu.boundary_prefetch_flushed,
         .prefetch_pointer_known = 1U,
-        .prefetch_queue_capacity = BM_808X_V30_PREFETCH_QUEUE_CAPACITY,
-        .prefetch_queue_count = bm_v30_bcu_queue_count(&state->bcu),
-        .prefetch_pointer = bm_v30_bcu_prefetch_pointer(&state->bcu),
+        .prefetch_queue_capacity = state->profile->prefetch_capacity,
+        .prefetch_queue_count = bm_808x_biu_queue_count(&state->bcu),
+        .prefetch_pointer = bm_808x_biu_prefetch_pointer(&state->bcu),
         .logical_bus_transactions = state->bcu.boundary_bus_transactions,
         .reported_wait_states = state->bcu.boundary_wait_states,
         .bus_active_clocks = state->bcu.boundary_bus_active_clocks,
@@ -5376,6 +5610,7 @@ emit_boundary_observation(bm_808x_state_t *state,
                 state, &observation.execution_clocks_min,
                 &observation.execution_clocks_max);
     else if ((kind == BM_808X_BOUNDARY_INTERRUPT) && native_mode &&
+             (state->model == BM_808X_NEC_V30) &&
              (state->boundary_interrupt_execution_clocks != 0U)) {
         observation.execution_clock_kind = BM_808X_EXECUTION_CLOCKS_EXACT;
         observation.execution_clocks_min =
@@ -5403,7 +5638,7 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
     *consumed = 0;
     while (*consumed < budget) {
         int trap_was_enabled;
-        int native_mode;
+        int was_native;
 
         if (boundary_interrupt_ready(state)) {
             begin_boundary_observation(state);
@@ -5417,7 +5652,7 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
         if (state->halted)
             return BM_STATUS_IDLE;
         trap_was_enabled = (state->flags & FLAG_TF) != 0U;
-        native_mode = (state->flags & FLAG_MD) != 0U;
+        was_native = native_mode(state);
         state->interrupt_entered = 0;
         begin_boundary_observation(state);
         status = execute_one(state);
@@ -5431,11 +5666,11 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
         if (trap_was_enabled && !state->interrupt_entered &&
             (state->boundary_inhibit == 0U))
             state->trap_pending = 1;
-        status = advance_uncontended_prefetch(state, native_mode);
+        status = advance_uncontended_prefetch(state, was_native);
         if (status != BM_STATUS_OK)
             return status;
         emit_boundary_observation(state, BM_808X_BOUNDARY_INSTRUCTION,
-                                  native_mode);
+                                  was_native);
         ++*consumed;
         if (state->halted) {
             if (boundary_interrupt_ready(state)) {
@@ -5444,7 +5679,7 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
             }
             /* In emulation mode an asserted INT also releases HLT when IE is
              * clear; execution resumes without entering an interrupt. */
-            if (((state->flags & FLAG_MD) == 0U) &&
+            if (!native_mode(state) &&
                 state->interrupt_asserted) {
                 state->halted = 0;
                 continue;
@@ -5463,7 +5698,7 @@ cpu_signal(void *context, uint32_t line, int asserted)
         state->interrupt_asserted = !!asserted;
         if (asserted && (maskable_interrupt_ready(state) ||
                          (state->halted &&
-                          ((state->flags & FLAG_MD) == 0U))))
+                          !native_mode(state))))
             state->halted = 0;
         return BM_STATUS_OK;
     }
@@ -5511,11 +5746,11 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
     else if (strcmp(name, "ip") == 0)
         *value = state->ip;
     else if (strcmp(name, "prefetch_pointer") == 0)
-        *value = bm_v30_bcu_prefetch_pointer(&state->bcu);
+        *value = bm_808x_biu_prefetch_pointer(&state->bcu);
     else if (strcmp(name, "prefetch_queue_count") == 0)
-        *value = bm_v30_bcu_queue_count(&state->bcu);
+        *value = bm_808x_biu_queue_count(&state->bcu);
     else if (strcmp(name, "flags") == 0)
-        *value = psw_image(state->flags);
+        *value = psw_image(state, state->flags);
     else if (strcmp(name, "md_write_enabled") == 0)
         *value = (uint64_t) state->md_write_enabled;
     else if (strcmp(name, "halted") == 0)
@@ -5550,10 +5785,12 @@ bm_808x_create(const bm_host_services_t *host,
                bm_cpu_t *out_cpu)
 {
     bm_808x_state_t *state;
+    const bm_808x_model_profile_t *profile;
 
+    profile = config != NULL ? model_profile(config->model) : NULL;
     if ((bm_host_services_validate(host) != BM_STATUS_OK) || (config == NULL) ||
-        (out_cpu == NULL) || (config->bus == NULL) ||
-        (config->model != BM_808X_NEC_V30) || (config->frequency_hz == 0))
+        (out_cpu == NULL) || (config->bus == NULL) || (profile == NULL) ||
+        (config->frequency_hz == 0))
         return BM_STATUS_INVALID_ARGUMENT;
     memset(out_cpu, 0, sizeof(*out_cpu));
     state = host->allocate(host->context, sizeof(*state));
@@ -5563,6 +5800,7 @@ bm_808x_create(const bm_host_services_t *host,
     state->host = *host;
     state->bus = config->bus;
     state->model = config->model;
+    state->profile = profile;
     state->frequency_hz = config->frequency_hz;
     state->trace = config->trace;
     state->trace_context = config->trace_context;
@@ -5574,7 +5812,7 @@ bm_808x_create(const bm_host_services_t *host,
     state->timing = config->timing;
     state->timing_context = config->timing_context;
     *out_cpu = (bm_cpu_t) {
-        "nec-v30-bring-up",
+        profile->name,
         state,
         { cpu_reset, cpu_run, cpu_signal, cpu_inspect, cpu_destroy }
     };
@@ -5616,7 +5854,7 @@ bm_808x_get_arch_state(const bm_cpu_t *cpu, bm_808x_arch_state_t *out_state)
         .ss = state->segments[2],
         .ds = state->segments[3],
         .ip = state->ip,
-        .flags = psw_image(state->flags),
+        .flags = psw_image(state, state->flags),
         .halted = (uint8_t) !!state->halted,
         .interrupt_inhibit = state->interrupt_inhibit,
         .boundary_inhibit = state->boundary_inhibit,
@@ -5635,7 +5873,7 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     if (!is_808x_cpu(cpu) || (state_image == NULL) ||
         (state_image->size != sizeof(*state_image)) ||
         (state_image->version != BM_808X_ARCH_STATE_VERSION) ||
-        (state_image->model != BM_808X_NEC_V30) ||
+        (state_image->model != ((bm_808x_state_t *) cpu->context)->model) ||
         (state_image->halted > 1U) ||
         (state_image->interrupt_inhibit > 1U) ||
         (state_image->boundary_inhibit > 1U) ||
@@ -5643,10 +5881,12 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
         (state_image->trap_pending > 1U) ||
         (state_image->md_write_enabled > 1U))
         return BM_STATUS_INVALID_ARGUMENT;
-    if (((state_image->flags & FLAG_MD) == 0U) &&
+    state = cpu->context;
+    if (state->profile->has_8080_mode && ((state_image->flags & FLAG_MD) == 0U) &&
         !state_image->md_write_enabled)
         return BM_STATUS_INVALID_ARGUMENT;
-    state = cpu->context;
+    if (!state->profile->has_8080_mode && state_image->md_write_enabled)
+        return BM_STATUS_INVALID_ARGUMENT;
     state->registers[REG_AX] = state_image->ax;
     state->registers[REG_CX] = state_image->cx;
     state->registers[REG_DX] = state_image->dx;
@@ -5660,8 +5900,10 @@ bm_808x_set_arch_state(bm_cpu_t *cpu, const bm_808x_arch_state_t *state_image)
     state->segments[2] = state_image->ss;
     state->segments[3] = state_image->ds;
     state->ip = state_image->ip;
-    bm_v30_bcu_reset(&state->bcu, state_image->ip);
-    state->flags = psw_image(state_image->flags);
+    bm_808x_biu_reset(&state->bcu, state_image->ip,
+                      state->profile->prefetch_capacity,
+                      (uint8_t) (state->profile->external_bus_width / 8U));
+    state->flags = psw_image(state, state_image->flags);
     state->halted = state_image->halted;
     state->interrupt_inhibit = state_image->interrupt_inhibit;
     state->boundary_inhibit = state_image->boundary_inhibit;
