@@ -24,9 +24,16 @@ typedef struct operand_transfer {
     uint8_t value;
 } operand_transfer_t;
 
+typedef struct operand_phase {
+    char kind;
+    char phase;
+} operand_phase_t;
+
 typedef struct operand_capture {
     operand_transfer_t transfers[2048];
+    operand_phase_t phases[8192];
     size_t count;
+    size_t phase_count;
     int overflow;
 } operand_capture_t;
 
@@ -50,15 +57,27 @@ capture_operand(void *context,
     const bm_bus_transaction_t *transaction = &observation->transaction;
     char kind;
 
-    if (observation->phase != BM_808X_BUS_PHASE_T3 ||
-        !observation->response_valid ||
-        transaction->operation == BM_BUS_FETCH)
+    if (transaction->operation == BM_BUS_FETCH)
         return;
     if (transaction->space == BM_ADDRESS_MEMORY)
         kind = transaction->operation == BM_BUS_READ ? 'R' : 'W';
     else if (transaction->space == BM_ADDRESS_IO)
         kind = transaction->operation == BM_BUS_READ ? 'I' : 'O';
     else
+        return;
+    if (capture->phase_count == sizeof(capture->phases) /
+                                sizeof(capture->phases[0])) {
+        capture->overflow = 1;
+        return;
+    }
+    capture->phases[capture->phase_count++] = (operand_phase_t) {
+        kind, observation->phase == BM_808X_BUS_PHASE_T1 ? '1' :
+              observation->phase == BM_808X_BUS_PHASE_T2 ? '2' :
+              observation->phase == BM_808X_BUS_PHASE_T3 ? '3' :
+              observation->phase == BM_808X_BUS_PHASE_TW ? 'w' : '4'
+    };
+    if (observation->phase != BM_808X_BUS_PHASE_T3 ||
+        !observation->response_valid)
         return;
     if (capture->count == sizeof(capture->transfers) /
                           sizeof(capture->transfers[0])) {
@@ -210,6 +229,7 @@ main(int argc, char **argv)
         queue_capture.count = 0U;
         queue_capture.overflow = 0;
         operand_capture.count = 0U;
+        operand_capture.phase_count = 0U;
         operand_capture.overflow = 0;
         status = cpu_808x_test_step(&machine, &consumed);
         if (queue_capture.overflow || operand_capture.overflow)
@@ -249,6 +269,11 @@ main(int argc, char **argv)
                     &operand_capture.transfers[index];
                 printf(" %c %05" PRIx32 " %02" PRIx8, transfer->kind,
                        transfer->address, transfer->value);
+            }
+            printf(" %zu", operand_capture.phase_count);
+            for (index = 0U; index < operand_capture.phase_count; ++index) {
+                const operand_phase_t *phase = &operand_capture.phases[index];
+                printf(" %c %c", phase->kind, phase->phase);
             }
         }
         putchar('\n');

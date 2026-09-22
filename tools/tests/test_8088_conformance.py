@@ -50,25 +50,27 @@ class Intel8088ConformanceTests(unittest.TestCase):
         self.assertTrue(request.startswith("H "))
         response = (
             "H 0 1 0001 0002 0003 0004 0100 0005 0006 0007 "
-            "0008 0009 000a 000b 000d f002 0 0 000d 0 0"
+            "0008 0009 000a 000b 000d f002 0 0 000d 0 0 0"
         )
-        errors, queue_matches, read_matches, bus_matches = conformance.compare_case(
+        errors, queue_matches, read_matches, bus_matches, phase_matches = conformance.compare_case(
             test, response, expected_ram, 0xFFEF
         )
         self.assertEqual(errors, [])
         self.assertTrue(queue_matches)
         self.assertTrue(read_matches)
         self.assertTrue(bus_matches)
+        self.assertTrue(phase_matches)
 
         changed = copy.deepcopy(test)
         changed["final"]["queue"] = [0x90]
-        errors, queue_matches, read_matches, bus_matches = conformance.compare_case(
+        errors, queue_matches, read_matches, bus_matches, phase_matches = conformance.compare_case(
             changed, response, expected_ram, 0xFFEF,
             require_raw_final_queue=True,
         )
         self.assertFalse(queue_matches)
         self.assertTrue(read_matches)
         self.assertTrue(bus_matches)
+        self.assertTrue(phase_matches)
         self.assertTrue(any(error.startswith("queue=") for error in errors))
 
     def test_queue_reads_use_hardware_f_and_s_without_electrical_timing(self) -> None:
@@ -90,16 +92,16 @@ class Intel8088ConformanceTests(unittest.TestCase):
                          [("F", 0x90), ("S", 0x34)])
         response = (
             "H 0 1 0001 0002 0003 0004 0100 0005 0006 0007 "
-            "0008 0009 000a 000b 000e f002 0 0 000e 2 F 90 S 34 0"
+            "0008 0009 000a 000b 000e f002 0 0 000e 2 F 90 S 34 0 0"
         )
-        errors, _, reads_match, _ = conformance.compare_case(
+        errors, _, reads_match, _, _ = conformance.compare_case(
             test, response, [], 0xFFFF, require_queue_reads=True
         )
         self.assertEqual(errors, [])
         self.assertTrue(reads_match)
 
         wrong = response.replace("S 34", "S 35")
-        errors, _, reads_match, _ = conformance.compare_case(
+        errors, _, reads_match, _, _ = conformance.compare_case(
             test, wrong, [], 0xFFFF, require_queue_reads=True
         )
         self.assertFalse(reads_match)
@@ -152,19 +154,53 @@ class Intel8088ConformanceTests(unittest.TestCase):
         }
         response = (
             "H 0 1 0001 0002 0003 0004 0100 0005 0006 0007 "
-            "0008 0009 000a 000b 000d f002 0 0 000d 0 1 R 23456 ab"
+            "0008 0009 000a 000b 000d f002 0 0 000d 0 1 R 23456 ab 2 R 1 R 2"
         )
-        errors, _, _, bus_match = conformance.compare_case(
+        errors, _, _, bus_match, _ = conformance.compare_case(
             test, response, [], 0xffff, require_operand_bus=True
         )
         self.assertEqual(errors, [])
         self.assertTrue(bus_match)
-        errors, _, _, bus_match = conformance.compare_case(
+        errors, _, _, bus_match, _ = conformance.compare_case(
             test, response.replace("23456 ab", "23456 ac"), [], 0xffff,
             require_operand_bus=True,
         )
         self.assertFalse(bus_match)
         self.assertTrue(any(error.startswith("operand_bus=") for error in errors))
+
+    def test_operand_phase_gate_allows_only_final_t4_boundary_cut(self) -> None:
+        test = {
+            "initial": {"regs": {
+                "ax": 1, "cx": 2, "dx": 3, "bx": 4,
+                "sp": 0x100, "bp": 5, "si": 6, "di": 7,
+                "es": 8, "cs": 9, "ss": 10, "ds": 11,
+                "ip": 12, "flags": 0xF002,
+            }, "ram": [], "queue": []},
+            "final": {"regs": {"ip": 13}, "ram": [], "queue": []},
+            "cycles": [
+                [1, 0x23456, "DS", "---", "---", 0, 0, "MEMR", "T1", "-", 0],
+                [0, 0, "DS", "R--", "---", 0, 0, "MEMR", "T2", "-", 0],
+                [0, 0, "DS", "R--", "---", 0, 0xab, "PASV", "T3", "-", 0],
+            ],
+        }
+        self.assertEqual(conformance.hardware_operand_phases(test),
+                         [("R", "1"), ("R", "2"), ("R", "3")])
+        response = (
+            "H 0 1 0001 0002 0003 0004 0100 0005 0006 0007 "
+            "0008 0009 000a 000b 000d f002 0 0 000d 0 "
+            "1 R 23456 ab 4 R 1 R 2 R 3 R 4"
+        )
+        errors, _, _, _, phases_match = conformance.compare_case(
+            test, response, [], 0xffff, require_operand_phases=True
+        )
+        self.assertEqual(errors, [])
+        self.assertTrue(phases_match)
+        errors, _, _, _, phases_match = conformance.compare_case(
+            test, response.replace("R 2 R 3", "R 3 R 2"), [], 0xffff,
+            require_operand_phases=True,
+        )
+        self.assertFalse(phases_match)
+        self.assertTrue(any(error.startswith("operand_phases=") for error in errors))
 
 
 if __name__ == "__main__":

@@ -174,6 +174,15 @@ not a comparison of prefetch timing, `Ti`, READY edges, QS pin placement or
 the complete CPU-cycle trace. The corpus still terminates at a different
 instruction boundary from the portable step.
 
+The next projection compares the observed `T1`/`T2`/`T3`/`Tw`/`T4` phase
+order for non-CODE transfers. It matches all 30,000 sampled vectors (7,552
+with operand traffic) using `--require-operand-phases`. The sole permitted
+boundary normalization is an omitted final `T4` if the hardware capture ends
+at `T3` after the data transfer; arbitrary phase mismatches are failures.
+This checks active operand-bus sequencing, **not** full CPU-cycle placement:
+the trace can begin partway through a CODE fetch and stops after the next
+instruction queue read, while the functional step has no Intel `Ti` schedule.
+
 Example, with the external corpus checked out at commit
 `aea84484abc79d09639d855b7b0ab32bc9e4dbeb`:
 
@@ -182,7 +191,7 @@ python tools/run_8088_conformance.py \
   --suite /path/to/8088/v2 \
   --runner /path/to/portable-engine-808x-vector-runner \
   --opcode 04 --opcode 82.0 --opcode 90 \
-  --require-queue-reads --require-operand-bus
+  --require-queue-reads --require-operand-bus --require-operand-phases
 ```
 
 ### Inferred or unknown

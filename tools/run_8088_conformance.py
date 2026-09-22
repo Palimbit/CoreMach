@@ -13,6 +13,8 @@ Logical F/S queue-read order can already be compared without inferring a
 CPU-cycle position from those events.
 Observed operand bus transfers can likewise be compared for ordering,
 address and data, without claiming their placement in the CPU timeline.
+The non-CODE active T-state projection compares phase order; only the final
+T4 may be absent when physical capture stops just after a completed T3.
 
 Expected corpus:
   repository: https://github.com/SingleStepTests/8088
@@ -126,14 +128,32 @@ def hardware_operand_transfers(test: dict) -> list[tuple[str, int, int]]:
     return result
 
 
+def hardware_operand_phases(test: dict) -> list[tuple[str, str]]:
+    """Project physically sampled T-states onto non-CODE bus cycles only."""
+    kinds = {"MEMR": "R", "MEMW": "W", "IOR": "I", "IOW": "O"}
+    phases = {"T1": "1", "T2": "2", "T3": "3", "Tw": "w", "T4": "4"}
+    result: list[tuple[str, str]] = []
+    kind: str | None = None
+    for cycle in test.get("cycles", []):
+        phase = cycle[8]
+        if phase == "T1":
+            kind = kinds.get(cycle[7])
+        if kind is not None and phase in phases:
+            result.append((kind, phases[phase]))
+        if phase == "T4":
+            kind = None
+    return result
+
+
 def compare_case(test: dict, response: str, expected_ram: list[list[int]],
                  flags_mask: int, require_raw_final_queue: bool = False,
                  require_queue_reads: bool = False,
-                 require_operand_bus: bool = False
-                 ) -> tuple[list[str], bool, bool, bool]:
+                 require_operand_bus: bool = False,
+                 require_operand_phases: bool = False
+                 ) -> tuple[list[str], bool, bool, bool, bool]:
     fields = response.split()
     if len(fields) < 20 or fields[0] != "H":
-        return [f"invalid runner response: {response!r}"], False, False, False
+        return [f"invalid runner response: {response!r}"], False, False, False, False
     status = int(fields[1], 10)
     consumed = int(fields[2], 10)
     actual = {
@@ -143,36 +163,49 @@ def compare_case(test: dict, response: str, expected_ram: list[list[int]],
     query_count = int(fields[17], 10)
     ram_end = 18 + query_count
     if len(fields) < ram_end + 2:
-        return [f"truncated runner response: {response!r}"], False, False, False
+        return [f"truncated runner response: {response!r}"], False, False, False, False
     actual_ram = [int(value, 16) for value in fields[18:ram_end]]
     queue_count = int(fields[ram_end], 10)
     queue_end = ram_end + 1 + queue_count
     if len(fields) < queue_end + 2:
-        return [f"invalid queue response: {response!r}"], False, False, False
+        return [f"invalid queue response: {response!r}"], False, False, False, False
     actual_queue = [int(value, 16) for value in fields[ram_end + 1:queue_end]]
     actual_prefetch_pointer = int(fields[queue_end], 16)
     event_count = int(fields[queue_end + 1], 10)
     event_end = queue_end + 2 + 2 * event_count
     event_fields = fields[queue_end + 2:event_end]
     if len(fields) < event_end + 1:
-        return [f"invalid queue event response: {response!r}"], False, False, False
+        return [f"invalid queue event response: {response!r}"], False, False, False, False
     actual_events = [
         (event_fields[index], int(event_fields[index + 1], 16))
         for index in range(0, len(event_fields), 2)
     ]
     if any(kind not in ("F", "S", "E") for kind, _ in actual_events):
-        return [f"unknown queue event in: {response!r}"], False, False, False
+        return [f"unknown queue event in: {response!r}"], False, False, False, False
     transfer_count = int(fields[event_end], 10)
-    transfer_fields = fields[event_end + 1:]
-    if len(transfer_fields) != 3 * transfer_count:
-        return [f"invalid bus transfer response: {response!r}"], False, False, False
+    transfer_end = event_end + 1 + 3 * transfer_count
+    transfer_fields = fields[event_end + 1:transfer_end]
+    if len(fields) < transfer_end + 1:
+        return [f"invalid bus transfer response: {response!r}"], False, False, False, False
     actual_transfers = [
         (transfer_fields[index], int(transfer_fields[index + 1], 16),
          int(transfer_fields[index + 2], 16))
         for index in range(0, len(transfer_fields), 3)
     ]
     if any(kind not in ("R", "W", "I", "O") for kind, _, _ in actual_transfers):
-        return [f"unknown bus transfer in: {response!r}"], False, False, False
+        return [f"unknown bus transfer in: {response!r}"], False, False, False, False
+    phase_count = int(fields[transfer_end], 10)
+    phase_fields = fields[transfer_end + 1:]
+    if len(phase_fields) != 2 * phase_count:
+        return [f"invalid operand phase response: {response!r}"], False, False, False, False
+    actual_phases = [
+        (phase_fields[index], phase_fields[index + 1])
+        for index in range(0, len(phase_fields), 2)
+    ]
+    if any(kind not in ("R", "W", "I", "O") or
+           phase not in ("1", "2", "3", "w", "4")
+           for kind, phase in actual_phases):
+        return [f"unknown operand phase in: {response!r}"], False, False, False, False
     errors: list[str] = []
     if status != 0:
         errors.append(f"status={status}")
@@ -226,7 +259,14 @@ def compare_case(test: dict, response: str, expected_ram: list[list[int]],
         errors.append(
             f"operand_bus={actual_transfers}, expected={expected_transfers}"
         )
-    return errors, queue_matches, reads_match, transfers_match
+    expected_phases = hardware_operand_phases(test)
+    phases_match = actual_phases == expected_phases or (
+        bool(actual_phases) and actual_phases[-1][1] == "4" and
+        actual_phases[:-1] == expected_phases
+    )
+    if require_operand_phases and not phases_match:
+        errors.append(f"operand_phases={actual_phases}, expected={expected_phases}")
+    return errors, queue_matches, reads_match, transfers_match, phases_match
 
 
 def main() -> int:
@@ -253,6 +293,10 @@ def main() -> int:
         "--require-operand-bus", action="store_true",
         help="Fail when observed operand transfers differ from hardware traces",
     )
+    parser.add_argument(
+        "--require-operand-phases", action="store_true",
+        help="Fail when non-CODE T-state sequence differs from hardware traces",
+    )
     args = parser.parse_args()
 
     metadata_path = args.suite / "metadata.json"
@@ -278,6 +322,7 @@ def main() -> int:
     queue_read_matches = 0
     operand_bus_matches = 0
     operand_bus_cases = 0
+    operand_phase_matches = 0
     failures = 0
     try:
         for opcode in args.opcode:
@@ -301,16 +346,18 @@ def main() -> int:
                 response = process.stdout.readline()
                 if not response:
                     raise RuntimeError("vector runner terminated unexpectedly")
-                errors, queue_match, read_match, bus_match = compare_case(
+                errors, queue_match, read_match, bus_match, phase_match = compare_case(
                     test, response, expected_ram, flags_mask,
                     args.require_raw_final_queue,
                     args.require_queue_reads,
                     args.require_operand_bus,
+                    args.require_operand_phases,
                 )
                 total += 1
                 queue_matches += int(queue_match)
                 queue_read_matches += int(read_match)
                 operand_bus_matches += int(bus_match)
+                operand_phase_matches += int(phase_match)
                 operand_bus_cases += bool(hardware_operand_transfers(test))
                 if errors:
                     failures += 1
@@ -338,6 +385,7 @@ def main() -> int:
         f"queue_read_matches={queue_read_matches}/{total} "
         f"operand_bus_matches={operand_bus_matches}/{total} "
         f"operand_bus_cases={operand_bus_cases} "
+        f"operand_phase_matches={operand_phase_matches}/{total} "
         "cycle_traces=not-yet-compared"
     )
     if return_code != 0:
