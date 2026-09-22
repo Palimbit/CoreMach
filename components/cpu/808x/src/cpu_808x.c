@@ -80,6 +80,7 @@ typedef struct bm_808x_state {
     bm_8088_queue_event_fn intel_queue_event;
     void *intel_queue_event_context;
     int intel_clocked_mode;
+    int intel_provisional_mode;
     uint8_t boundary_initial_queue_count;
     uint32_t boundary_intel_exact_clocks;
     int boundary_rm_valid;
@@ -2042,6 +2043,7 @@ cpu_reset(void *context)
     state->last_boundary_clocks_max = 0U;
     state->last_boundary_observed = 0;
     state->intel_clocked_mode = 0;
+    state->intel_provisional_mode = 0;
     state->boundary_initial_queue_count = 0U;
     state->boundary_intel_exact_clocks = 0U;
     return BM_STATUS_OK;
@@ -5622,6 +5624,27 @@ compose_boundary_clocks(const bm_808x_state_t *state, int native_mode,
 
     observation->boundary_clock_kind = BM_808X_EXECUTION_CLOCKS_UNKNOWN;
     if (state->model == BM_808X_INTEL_8088) {
+        if (native_mode && state->intel_provisional_mode) {
+            uint64_t bus_clocks = state->bcu.boundary_prefetch_phase_clocks;
+
+            /* Bring-up policy, not an Intel timing claim: charge actual
+             * synchronous bus occupancy (including waits), then one fixed
+             * internal scheduling quantum. The CPU's EU/BIU overlap and
+             * instruction-specific internal time remain uncalibrated. */
+            if (bus_clocks <= UINT64_MAX -
+                              state->bcu.boundary_operand_bus_clocks &&
+                bus_clocks + state->bcu.boundary_operand_bus_clocks <=
+                    UINT64_MAX - 4U) {
+                uint64_t scheduled = bus_clocks +
+                    state->bcu.boundary_operand_bus_clocks + 4U;
+
+                observation->boundary_clock_kind =
+                    BM_808X_EXECUTION_CLOCKS_PROVISIONAL;
+                observation->boundary_clocks_min = scheduled;
+                observation->boundary_clocks_max = scheduled;
+            }
+            return;
+        }
         if (native_mode &&
             observation->kind == BM_808X_BOUNDARY_INSTRUCTION &&
             state->boundary_execution_timeline_complete &&
@@ -6223,6 +6246,38 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
         (state->last_boundary_clocks_min == 0U) ||
         (state->last_boundary_clocks_min != state->last_boundary_clocks_max))
         return BM_STATUS_UNSUPPORTED;
+    *cycles = state->last_boundary_clocks_min;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_808x_step_clocked_provisional(void *context, bm_tick_t start_ns,
+                                uint64_t *cycles)
+{
+    bm_808x_state_t *state = context;
+    bm_tick_t consumed = 0U;
+    bm_status_t status;
+
+    (void) start_ns;
+    if ((state == NULL) || (cycles == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *cycles = 0U;
+    if (state->model != BM_808X_INTEL_8088)
+        return BM_STATUS_INVALID_ARGUMENT;
+    state->last_boundary_observed = 0;
+    state->intel_provisional_mode = 1;
+    status = cpu_run(state, 1U, &consumed);
+    state->intel_provisional_mode = 0;
+    if ((status == BM_STATUS_IDLE) && (consumed == 0U))
+        return BM_STATUS_IDLE;
+    if ((status != BM_STATUS_OK) && (status != BM_STATUS_IDLE))
+        return status;
+    if ((consumed != 1U) || !state->last_boundary_observed ||
+        (state->last_boundary_clock_kind !=
+         BM_808X_EXECUTION_CLOCKS_PROVISIONAL) ||
+        (state->last_boundary_clocks_min == 0U) ||
+        (state->last_boundary_clocks_min != state->last_boundary_clocks_max))
+        return BM_STATUS_DEVICE_ERROR;
     *cycles = state->last_boundary_clocks_min;
     return BM_STATUS_OK;
 }

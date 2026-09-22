@@ -14,6 +14,7 @@
 typedef struct cpu_808x_test_config {
     size_t bus_capacity;
     bm_808x_model_t model;
+    int provisional_clocked;
     bm_808x_trace_fn trace;
     void *trace_context;
     bm_808x_interrupt_ack_fn interrupt_ack;
