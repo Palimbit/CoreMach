@@ -231,6 +231,7 @@ test_operand_waits_for_inflight_prefetch(void)
     prefetch_fixture_t fixture = {
         BM_STATUS_OK, 0x2211U, 1U, 0U, { 0 }
     };
+    phase_capture_t capture = { 0 };
     bm_bus_transaction_t operand = {
         BM_ADDRESS_MEMORY, BM_BUS_READ, 0x0040U, 0U,
         1U, 1U, 0U, BM_ENDIAN_LITTLE, 0U
@@ -241,6 +242,8 @@ test_operand_waits_for_inflight_prefetch(void)
                       prefetch_access, &fixture) == BM_STATUS_OK);
     bm_808x_biu_reset(&bcu, 0U,
                       BM_808X_V30_PREFETCH_QUEUE_CAPACITY, 2U);
+    bm_808x_biu_set_phase_observer(&bcu, capture_phase, &capture);
+    bm_808x_biu_set_clocked_timeline(&bcu, 1);
     bm_808x_biu_begin_boundary(&bcu);
 
     /* The operand request arrives after T1 of a word prefetch. It must let
@@ -266,6 +269,17 @@ test_operand_waits_for_inflight_prefetch(void)
     assert(bcu.boundary_operand_transactions == 1U);
     assert(bcu.boundary_operand_bus_clocks == 5U);
     assert(bcu.boundary_prefetch_handoff_clocks == 4U);
+    assert(bcu.clocked_cpu_cycles == 10U);
+    assert(capture.count == 10U);
+    for (size_t index = 0U; index < capture.count; ++index) {
+        assert(capture.observations[index].cpu_clock_known == 1U);
+        assert(capture.observations[index].cpu_clock_index == index);
+    }
+    assert(capture.observations[5].phase == BM_808X_BUS_PHASE_T1);
+    assert(capture.observations[6].phase == BM_808X_BUS_PHASE_T2);
+    assert(capture.observations[7].phase == BM_808X_BUS_PHASE_T3);
+    assert(capture.observations[8].phase == BM_808X_BUS_PHASE_TW);
+    assert(capture.observations[9].phase == BM_808X_BUS_PHASE_T4);
 
     bm_bus_destroy(bus);
 }
