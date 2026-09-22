@@ -202,6 +202,29 @@ class Intel8088ConformanceTests(unittest.TestCase):
         self.assertFalse(phases_match)
         self.assertTrue(any(error.startswith("operand_phases=") for error in errors))
 
+    def test_clocked_positions_keep_pasv_tails_with_their_t1_owner(self) -> None:
+        test = {"cycles": [
+            [0, 0, "--", "---", "---", 0, 0, "CODE", "T1", "-", 0],
+            [0, 0, "--", "---", "---", 0, 0, "CODE", "T2", "-", 0],
+            [0, 0, "--", "---", "---", 0, 0, "PASV", "T3", "-", 0],
+            [0, 0, "--", "---", "---", 0, 0, "PASV", "T4", "-", 0],
+            [0, 0, "--", "---", "---", 0, 0, "MEMR", "T1", "-", 0],
+            [0, 0, "--", "---", "---", 0, 0, "MEMR", "T2", "-", 0],
+            [0, 0, "--", "---", "---", 0, 0, "PASV", "T3", "-", 0],
+            [0, 0, "--", "---", "---", 0, 0, "PASV", "T4", "-", 0],
+        ]}
+        self.assertEqual(conformance.hardware_phase_positions(test, "C"), [
+            ("C", "1", 0), ("C", "2", 1),
+            ("C", "3", 2), ("C", "4", 3),
+        ])
+        self.assertEqual(
+            [entry for entry in conformance.hardware_phase_positions(
+                test, "all",
+            ) if entry[0] != "C"],
+            [("R", "1", 4), ("R", "2", 5),
+             ("R", "3", 6), ("R", "4", 7)],
+        )
+
     def test_clocked_baseline_requires_full_queue_and_physical_code_phase(self) -> None:
         test = {
             "initial": {"regs": {
@@ -228,14 +251,14 @@ class Intel8088ConformanceTests(unittest.TestCase):
         response = (
             "T 0 3 0001 0002 0003 0004 0100 0005 0006 0007 "
             "0008 0009 000a 000b 000d f002 0 3 90 90 90 "
-            "0010 1 F 90 0 0 1 1 2"
+            "0010 1 F 90 0 0 1 1 2 0"
         )
         self.assertEqual(
             conformance.compare_clocked_baseline(test, response, "90", 0xffff),
             [],
         )
         errors = conformance.compare_clocked_baseline(
-            test, response[:-1] + "1", "90", 0xffff,
+            test, response.replace(" 1 1 2 0", " 1 1 1 0"), "90", 0xffff,
         )
         self.assertTrue(any(error.startswith("CODE_phases=") for error in errors))
 

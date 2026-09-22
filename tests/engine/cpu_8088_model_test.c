@@ -15,7 +15,7 @@ typedef struct timing_capture {
 } timing_capture_t;
 
 typedef struct phase_capture {
-    bm_808x_bus_phase_observation_t observations[8];
+    bm_808x_bus_phase_observation_t observations[16];
     size_t count;
 } phase_capture_t;
 
@@ -48,7 +48,7 @@ capture_phase(void *context,
 {
     phase_capture_t *capture = context;
 
-    assert(capture->count < 8U);
+    assert(capture->count < 16U);
     capture->observations[capture->count++] = *observation;
 }
 
@@ -798,6 +798,66 @@ test_intel_clocked_nop_stream_keeps_prefetch_in_flight(void)
     }
 }
 
+static void
+test_intel_clocked_direct_accumulator_memory_reads(void)
+{
+    cpu_808x_test_config_t config = intel_config();
+    timing_capture_t timing = { 0 };
+    phase_capture_t phases = { 0 };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    bm_808x_prefetch_state_t prefetch = {
+        .size = sizeof(prefetch),
+        .version = BM_808X_PREFETCH_STATE_VERSION,
+        .pointer = 4U,
+        .count = 4U,
+        .capacity = BM_808X_8088_PREFETCH_QUEUE_CAPACITY,
+        .bytes = { 0xa0U, 0x40U, 0x00U, 0x90U }
+    };
+    uint64_t cycles = 0U;
+
+    config.timing = capture_timing;
+    config.timing_context = &timing;
+    config.bus_phase = capture_phase;
+    config.bus_phase_context = &phases;
+    for (unsigned int word = 0U; word < 2U; ++word) {
+        uint8_t program[] = {
+            (uint8_t) (0xa0U + word), 0x40U, 0x00U, 0x90U, 0x90U
+        };
+
+        memset(&timing, 0, sizeof(timing));
+        memset(&phases, 0, sizeof(phases));
+        prefetch.bytes[0] = program[0];
+        cpu_808x_test_machine_create(&machine, &config, program,
+                                     sizeof(program));
+        cpu_808x_test_poke(&machine, 0x40U, 0x12U);
+        cpu_808x_test_poke(&machine, 0x41U, 0x34U);
+        state = execution_state(&machine);
+        cpu_808x_test_set_state(&machine, &state);
+        assert(bm_808x_set_prefetch_state(&machine.cpu, &prefetch) ==
+               BM_STATUS_OK);
+        assert(bm_808x_step_clocked(machine.cpu.context, 0U, &cycles) ==
+               BM_STATUS_OK);
+        assert(cycles == (word ? 14U : 10U));
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.ip == 3U);
+        assert((state.ax & (word ? 0xffffU : 0xffU)) ==
+               (word ? 0x3412U : 0x12U));
+        assert(timing.count == 1U);
+        assert(timing.last.boundary_clock_kind == BM_808X_EXECUTION_CLOCKS_EXACT);
+        assert(timing.last.boundary_clocks_min == cycles);
+        assert(timing.last.operand_transactions == (word ? 2U : 1U));
+        assert(phases.count == (word ? 12U : 8U));
+        for (size_t index = 0U; index < phases.count; ++index) {
+            assert(phases.observations[index].cpu_clock_known == 1U);
+            assert(phases.observations[index].cpu_clock_index == index + 2U);
+            assert(phases.observations[index].transaction.operation ==
+                   (index < 4U ? BM_BUS_FETCH : BM_BUS_READ));
+        }
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
 int
 main(void)
 {
@@ -810,5 +870,6 @@ main(void)
     test_intel_queue_events_are_logical_not_clocked();
     test_intel_clocked_prefetched_baseline();
     test_intel_clocked_nop_stream_keeps_prefetch_in_flight();
+    test_intel_clocked_direct_accumulator_memory_reads();
     return 0;
 }

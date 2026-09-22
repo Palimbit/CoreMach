@@ -27,6 +27,8 @@ typedef struct operand_transfer {
 typedef struct operand_phase {
     char kind;
     char phase;
+    uint64_t cpu_clock_index;
+    uint8_t cpu_clock_known;
 } operand_phase_t;
 
 typedef struct operand_capture {
@@ -96,7 +98,8 @@ capture_operand(void *context,
         kind, observation->phase == BM_808X_BUS_PHASE_T1 ? '1' :
               observation->phase == BM_808X_BUS_PHASE_T2 ? '2' :
               observation->phase == BM_808X_BUS_PHASE_T3 ? '3' :
-              observation->phase == BM_808X_BUS_PHASE_TW ? 'w' : '4'
+              observation->phase == BM_808X_BUS_PHASE_TW ? 'w' : '4',
+        observation->cpu_clock_index, observation->cpu_clock_known
     };
     if (observation->phase != BM_808X_BUS_PHASE_T3 ||
         !observation->response_valid)
@@ -315,6 +318,15 @@ main(int argc, char **argv)
                     printf(" %c %" PRIu64,
                            operand_capture.code_phases[index],
                            operand_capture.code_clock_indices[index]);
+                printf(" %zu", operand_capture.phase_count);
+                for (index = 0U; index < operand_capture.phase_count; ++index) {
+                    const operand_phase_t *phase =
+                        &operand_capture.phases[index];
+                    if (!phase->cpu_clock_known)
+                        return 2;
+                    printf(" %c %c %" PRIu64, phase->kind,
+                           phase->phase, phase->cpu_clock_index);
+                }
             }
         }
         putchar('\n');

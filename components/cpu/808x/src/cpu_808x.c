@@ -271,12 +271,46 @@ place_suspended_execution_clocks(bm_808x_state_t *state, uint32_t clocks)
     return BM_STATUS_OK;
 }
 
+static int
+intel_clocked_direct_memory_read(const bm_808x_state_t *state)
+{
+    return state->model == BM_808X_INTEL_8088 && state->intel_clocked_mode &&
+           state->boundary_initial_queue_count ==
+               BM_808X_8088_PREFETCH_QUEUE_CAPACITY &&
+           state->last_prefix_count == 0U &&
+           (state->last_opcode == 0xa0U || state->last_opcode == 0xa1U);
+}
+
 static bm_status_t
 transact_operand(bm_808x_state_t *state,
                  bm_bus_transaction_t *transaction)
 {
-    bm_status_t status = bm_808x_biu_transact(
-        &state->bcu, state->bus, transaction);
+    bm_status_t status;
+
+    if (intel_clocked_direct_memory_read(state) &&
+        state->bcu.boundary_operand_transactions == 0U) {
+        /* D8088 full-queue A0h/A1h: two Ti, CODE T1..T4, then the first
+         * operand MEMR T1. The word form makes a second byte transfer. */
+        bm_808x_biu_advance_idle(&state->bcu, 2U);
+        status = bm_808x_biu_advance_prefetch(
+            &state->bcu, state->bus, state->segments[1], 0U, 4U);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    status = bm_808x_biu_transact(&state->bcu, state->bus, transaction);
+
+    if ((status == BM_STATUS_OK) && intel_clocked_direct_memory_read(state) &&
+        state->bcu.boundary_operand_transactions ==
+            (state->last_opcode == 0xa0U ? 1U : 2U)) {
+        uint64_t clocks = 2U + state->bcu.boundary_prefetch_phase_clocks +
+                          state->bcu.boundary_operand_bus_clocks;
+
+        if (clocks > UINT32_MAX)
+            return BM_STATUS_INVALID_STATE;
+        state->boundary_execution_clocks_placed = (uint32_t) clocks;
+        state->boundary_execution_timeline_complete = 1;
+        state->boundary_intel_exact_clocks = (uint32_t) clocks;
+    }
 
     /* NEC's documented execution interval includes the four base clocks of
      * each external operand transfer, but not device wait states. */
@@ -6168,7 +6202,10 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
             return BM_STATUS_UNSUPPORTED;
         bm_808x_biu_export_queue(&state->bcu, &queued_opcode, 1U);
         baseline_length = intel_prefetched_baseline_length(queued_opcode);
-        if ((baseline_length == 0U) || (queue_count < baseline_length))
+        if (!(((baseline_length != 0U) &&
+               (queue_count >= baseline_length)) ||
+              ((queue_count == BM_808X_8088_PREFETCH_QUEUE_CAPACITY) &&
+               ((queued_opcode == 0xa0U) || (queued_opcode == 0xa1U)))))
             return BM_STATUS_UNSUPPORTED;
         state->intel_clocked_mode = 1;
         bm_808x_biu_set_clocked_timeline(&state->bcu, 1);
