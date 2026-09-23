@@ -5,7 +5,7 @@
  * rewrite references at BluMach 87c3fb4876eaad086921bc3444569da026286c36:
  * src/cpu/x86.c, src/cpu/386.c, src/cpu/386_ops.h, src/cpu/x86seg.c,
  * src/cpu/x86_ops_pmode.h, src/cpu/x86_ops_rep_286_2386.h,
- * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h,
+ * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h, src/cpu/x86_ops_xchg.h,
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h, src/cpu/x86_ops_shift.h,
  * src/cpu/x86_ops_misc.h, src/cpu/x86_ops_mul.h, src/cpu/x86_ops_bcd.h,
  * src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h, src/cpu/x86_ops_string.h,
@@ -61,6 +61,7 @@ typedef struct bm_286_private {
     uint8_t hold_line;
     uint8_t hold_acknowledged;
     uint8_t stopped;
+    uint8_t lock_active;
     /* Decoded repetition survives only uninterrupted execution/HOLD. Public
      * arch import and interrupt entry discard it; architectural IP points
      * at the first prefix while incomplete. Not a cycle-exact prefetch. */
@@ -281,6 +282,7 @@ typedef struct decoded_286 {
     uint8_t software_interrupt; /* Completed INT/INT3/taken INTO, not INTA. */
     uint8_t software_vector;
     uint8_t divide_error; /* Completed synchronous #DE entry, not INT 0. */
+    uint8_t lock_prefix; /* Bounded RMW subset, not the full 286 LOCK space. */
 } decoded_286_t;
 
 typedef struct operand_286 {
@@ -417,6 +419,14 @@ static bm_status_t decode_operand(decoded_286_t *decode,
     return BM_STATUS_OK;
 }
 
+static void end_bus_lock(bm_286_private_t *state)
+{
+    if (state->lock_active) {
+        state->lock_active = 0U;
+        state->config.bus_lock(state->config.pin_context, 0);
+    }
+}
+
 static bm_status_t data_access(decoded_286_t *decode,
                                const bm_286_segment_state_t *segment,
                                uint16_t offset, unsigned size, int write,
@@ -433,6 +443,7 @@ static bm_status_t data_access(decoded_286_t *decode,
     transfer.space = BM_ADDRESS_DATA;
     transfer.operation = write ? BM_BUS_WRITE : BM_BUS_READ;
     transfer.endianness = BM_ENDIAN_LITTLE;
+    transfer.attributes = decode->state->lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U;
     if (size == 1U || (address & 1U) == 0U) {
         transfer.address = address;
         transfer.size = size;
@@ -474,6 +485,17 @@ static bm_status_t read_operand(decoded_286_t *decode,
                                 const operand_286_t *operand,
                                 unsigned size, uint16_t *value)
 {
+    if (decode->lock_prefix && !decode->state->lock_active) {
+        bm_286_private_t *state = decode->state;
+        /* A pin adapter is required even for a single-master test host:
+         * transaction flags alone cannot delimit a multi-transfer window. */
+        if (!operand->memory || state->config.bus_lock == NULL ||
+            !operand->segment->valid ||
+            (uint32_t) operand->offset + size - 1U > operand->segment->limit)
+            return BM_STATUS_UNSUPPORTED;
+        state->lock_active = 1U;
+        state->config.bus_lock(state->config.pin_context, 1);
+    }
     if (operand->memory)
         return data_access(decode, operand->segment, operand->offset,
                            size, 0, value);
@@ -1425,6 +1447,11 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
         status = decode_operand(decode, &operand);
         if (status != BM_STATUS_OK)
             return status;
+        if (decode->lock_prefix && (!operand.memory ||
+            ((opcode == 0x80U || opcode == 0x81U || opcode == 0x83U) && operand.reg_field == 7U) ||
+            ((opcode == 0xf6U || opcode == 0xf7U) && operand.reg_field != 2U && operand.reg_field != 3U) ||
+            ((opcode == 0xfeU || opcode == 0xffU) && operand.reg_field > 1U)))
+            return BM_STATUS_UNSUPPORTED; /* Not yet a supported LOCK form; not guest #UD. */
         if (opcode == 0xffU && operand.reg_field > 1U)
             return execute_ff_control(decode, &operand);
         size = (opcode == 0x80U || opcode == 0x84U ||
@@ -1795,7 +1822,7 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             ? 2U : 1U;
         if (opcode == 0x86U || opcode == 0x87U) {
             if (operand.memory)
-                return BM_STATUS_UNSUPPORTED; /* Requires implicit LOCK. */
+                decode->lock_prefix = 1U; /* XCHG asserts LOCK without F0. */
             status = read_operand(decode, &operand, size, &value);
             if (status != BM_STATUS_OK)
                 return status;
@@ -1895,7 +1922,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         return BM_STATUS_IDLE;
     }
     decode = (decoded_286_t) {state, state->arch.ip, 0U, 0U, -1,
-                             BM_286_SHADOW_NONE, 0U, 0U, 0U};
+                             BM_286_SHADOW_NONE, 0U, 0U, 0U, 0U};
     if (!state->arch.shutdown && state->arch.trap_pending &&
         state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD)
         event = 1U;
@@ -1947,11 +1974,23 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
             repeat = opcode; /* Last repeat prefix wins, within length bound. */
             continue;
         }
+        if (opcode == 0xf0U) {
+            if (state->config.bus_lock == NULL) {
+                status = BM_STATUS_UNSUPPORTED;
+                break;
+            }
+            decode.lock_prefix = 1U;
+            continue;
+        }
         break;
     }
     if (status == BM_STATUS_OK) {
-        if (opcode == 0xf0U)
-            status = BM_STATUS_UNSUPPORTED; /* LOCK remains separate. */
+        if (decode.lock_prefix && (repeat ||
+            !((opcode <= 0x31U && (opcode & 7U) <= 1U) ||
+              opcode == 0x80U || opcode == 0x81U || opcode == 0x83U ||
+              opcode == 0x86U || opcode == 0x87U || opcode == 0xf6U ||
+              opcode == 0xf7U || opcode == 0xfeU || opcode == 0xffU)))
+            status = BM_STATUS_UNSUPPORTED; /* Other 286 LOCK forms remain pending. */
         else if (repeat) {
             if (!((opcode >= 0x6cU && opcode <= 0x6fU) ||
                   (opcode >= 0xa4U && opcode <= 0xa7U) ||
@@ -1972,6 +2011,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     }
     if (status != BM_STATUS_OK) {
         state->stopped = 1U;
+        end_bus_lock(state);
         return status;
     }
     state->rep_active = repeat_more;
@@ -2004,6 +2044,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock
      * claim. The strict clocked entry point never schedules this boundary. */
     boundary.cpu_cycles = decode.waits;
+    end_bus_lock(state); /* Includes all odd fragments and architectural commit. */
     *out_boundary = boundary;
     if (state->config.trace != NULL)
         state->config.trace(state->config.trace_context, &boundary);

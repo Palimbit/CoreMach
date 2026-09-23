@@ -2,7 +2,54 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode string I/O
+## Latest tranche: memory XCHG and bounded LOCK RMW
+
+Memory XCHG 86/87 now asserts a private bus-lock window automatically, including
+odd-word fragments. Explicit F0 is supported for memory-destination
+ADD/OR/ADC/SBB/AND/SUB/XOR (register/immediate sources), INC/DEC/NOT/NEG and XCHG.
+This is a bounded implementation, **not the 386 legal-LOCK table applied to a
+286**. Other 286 LOCK forms, particularly MOV, shifts/rotates, repeated strings
+and automatic interrupt/descriptor locking, remain pending. Unsupported
+combinations produce a host stop, not invented guest #UD.
+
+The existing `bus_lock` callback must be supplied for memory XCHG or LOCK RMW;
+NULL refuses before operand access. A synchronous adapter must establish the
+exclusion window, not merely observe it. LOCK is asserted before the first
+operand read, remains active through all writes and architectural commit, and
+is released before the boundary trace. Operand transactions carry LOCKED;
+instruction fetches do not. Host failures latch a stop and release LOCK while
+preserving already-completed writes; no rollback/retry. Unsupported segment
+limits are preflighted without asserting LOCK, not delivered as guest faults.
+Pin callbacks may signal events, but may not re-enter reset/import/execution.
+
+Evidence: [Intel 80286 PRM, section 3.1.1](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=57)
+documents automatic memory-XCHG locking; [Intel hardware reference, table 3-5](https://www.bitsavers.org/components/intel/80286/210760-002_80286_Hardware_Reference_Manual_1987.pdf)
+also lists locked MOV, rotates and repeated transfers, establishing why the
+broader 286 scope cannot be rejected as illegal. No table timing is adopted.
+Pinned inherited `x86_ops_xchg.h`, `x86_ops_misc.h` and the existing arithmetic
+handlers were consulted at `87c3fb4876eaad086921bc3444569da026286c36`.
+The new XCHG source path is recorded as derived-rewrite; author notices remain.
+
+`cpu286_lock.c` connects the actual CPU and AT arbiter with authored RAM.
+320 XCHG cases cover every byte/word register, source overrides, alignment and
+implicit/explicit LOCK; competing DMA-requester reads are refused during the
+window and permitted only after release/HOLD/HLDA. This is a synthetic master,
+not a DMA chip implementation. Another 430 cases compare supported locked RMW
+forms with their already-oracle-tested unlocked forms. Tests verify exact
+LOCKED attributes, unmarked fetches, balanced pin edges, commit before release,
+IRQ deferral, segment/refused-form preflight and every transfer failure before
+and after effects for odd-word XCHG/ADD/NOT. Reset recovers without a leaked lock.
+
+GCC UCRT64/MSVC Debug/Release pass 102 ordinary tests, with two Headland/AT DMA
+skips. GCC Debug adds the unchanged optional SST selection, not new lock/bus
+capture evidence. Thirty Python tests, catalogue and provenance pass (36
+components / 198 files). No public ABI, AT arbitration code, scheduler or
+other CPU changed. Physical timing remains UNKNOWN; no BIOS/POST claim.
+
+Next: complete the remaining 286-specific LOCK scopes, especially LOCK REP and
+automatic interrupt locking, before presenting LOCK as fully implemented.
+
+## Previous tranche: real-mode string I/O
 
 INSB/INSW and OUTSB/OUTSW (6C-6F) now transfer one element per step, with
 optional F2/F3 count-only repetition through the existing continuation path.
@@ -399,7 +446,8 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 
 ### Remaining CPU work (not motherboard work)
 
-- Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
+- Complete broader 286 LOCK scopes, including MOV, shifts/rotates, REP and
+  automatic interrupt/descriptor windows; XCHG and bounded RMW LOCK now work.
 - Decimal/multiply/divide edge cases still need expanded hardware-capture
   comparison; functional instruction implementations are present.
 - Memory strings and INS/OUTS now support interruptible REP. Combined
@@ -409,11 +457,10 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is memory XCHG/LOCK with explicit atomic bus ownership.
+The next bounded block extends the 286-specific LOCK scopes beyond RMW.
 The ordered CPU roadmap then covers remaining real-mode faults and 80287 interface,
 protected segmentation/system instructions, gates/tasks, and calibrated timing.
-Memory XCHG stays separate until
-the implicit LOCK/bus contract is implemented and tested. Completing real-mode
+Memory XCHG now uses the tested implicit LOCK/bus contract. Completing real-mode
 instructions does not certify a full 286 or eliminate the PCS286 chipset gates.
 
 ## Previous tranche: software interrupts and FLAGS
@@ -556,8 +603,8 @@ generic catch-all or NOP is not coverage.
 
 | Family / encodings | Required semantics and representative tests | Classic candidate | Portable / timing |
 |---|---|---|---|
-| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch, 10-byte-bounded segment/REP decode and real-mode #DE implemented; LOCK and other fault delivery missing; timing unknown |
-| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register XCHG implemented; MOV SS has SS-load inhibition; memory XCHG and protection missing; timing unknown |
+| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch, bounded segment/REP/F0 decode and #DE implemented; LOCK RMW subset only, other fault delivery missing; timing unknown |
+| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c`, `x86_ops_xchg.h` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register/memory XCHG implemented; memory XCHG needs bus_lock adapter; MOV SS has SS-load inhibition; protection missing, timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode functional forms implemented, including #DE for division and AAM zero; general fault escalation and expanded hardware captures pending; timings unknown |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |

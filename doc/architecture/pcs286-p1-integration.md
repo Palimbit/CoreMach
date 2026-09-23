@@ -14,7 +14,7 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
   import validation, HOLD acknowledgement and explicit unsupported-event stops.
   Real-mode data transfer now includes basic byte/word MOV, register XCHG,
   16-bit effective addresses, segment overrides and ES/DS/SS reload.
-  Memory XCHG and protected execution remain explicitly unsupported.
+  Memory XCHG now uses the bus-lock adapter; protected execution remains unsupported.
   Binary arithmetic/logical operations, CMP/TEST, INC/DEC and NEG/NOT now
   operate on byte/word operands with defined flag semantics. Logical AF is
   undefined by Intel; deterministic clearing is an emulator policy only.
@@ -397,7 +397,19 @@ GCC UCRT64/MSVC Debug/Release with the same two skips; 30 Python checks and
 provenance 36 components / 197 files pass. The unchanged SST selection does not
 cover these instructions; timing remains UNKNOWN, no BIOS/POST claim.
 
-Next CPU tranche: memory XCHG/LOCK with explicit bus ownership and atomicity.
+Memory XCHG now asserts implicit bus exclusion; F0 supports memory-destination
+arithmetic/logical RMW, INC/DEC/NOT/NEG and XCHG. The pin callback brackets all
+operand fragments and architectural commit, or releases after a stopped host
+failure. LOCKED attributes propagate through the actual AT bus. A synthetic
+competing master is denied until release/HOLD/HLDA across 320 XCHG cases;
+430 locked/unlocked RMW comparisons, pin/attribute checks, IRQ and every-transfer
+failures also pass. No DMA chip or timing is inferred from this integration.
+GCC UCRT64/MSVC Debug/Release pass 102 ordinary tests, two explicit device skips;
+30 Python checks and provenance 36 components / 198 files pass. No new SST claim.
+
+Next CPU tranche: broader 286-specific LOCK scopes, including LOCK REP and
+automatic interrupt windows. Current unsupported combinations are missing
+implementation, not the 386 legal-prefix rule or fabricated guest #UD.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.
