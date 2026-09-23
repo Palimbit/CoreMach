@@ -159,7 +159,12 @@ def pending_reason(test):
     if code[i] in (0xf0, 0xf2, 0xf3):
         return 'lock-or-repeat-prefix'
     # Deliberately bounded first corpus selection, not a full ISA classifier.
-    if code[i] not in (0x00, 0x01, 0x31, 0x54, 0x60, 0x61, 0x8b, 0x90, 0xc8, 0xc9, 0xe8):
+    if code[i] == 0xff:
+        if i + 1 >= len(code):
+            raise ValueError('missing Group 5 ModR/M')
+        if ((code[i + 1] >> 3) & 7) == 5 and code[i + 1] >> 6 != 3:
+            return None
+    if code[i] not in (0x00, 0x01, 0x31, 0x54, 0x60, 0x61, 0x8b, 0x90, 0xc8, 0xc9, 0xe8, 0xea):
         return 'instruction-outside-initial-scope'
     return None
 
@@ -230,6 +235,18 @@ def verified_inputs(root, lock):
     return root
 
 
+def opcode_metadata(metadata, key):
+    opcode, separator, group = key.partition('.')
+    entry = metadata['opcodes'][opcode]
+    if separator:
+        subentry = entry['reg'][group]
+        combined = dict(entry)
+        combined.update(subentry)
+        combined['flags-mask'] = entry.get('flags-mask', 0xffff) & subentry.get('flags-mask', 0xffff)
+        return combined
+    return entry
+
+
 def run(root, probe, lock, limit=0):
     root = verified_inputs(root, lock)
     revocations = set()
@@ -254,7 +271,7 @@ def run(root, probe, lock, limit=0):
             raise ValueError('uncompressed corpus exceeds bound')
         tests, masks = parse_moo(data)
         key = Path(filename).name.removesuffix('.MOO.gz')
-        opmeta = metadata['opcodes'][key]
+        opmeta = opcode_metadata(metadata, key)
         masks['flags'] = masks.get('flags', 0xffff) & opmeta.get('flags-mask', 0xffff)
         counts = Counter(available=len(tests), not_selected=0, passed=0, failed=0, pending=0, revoked=0)
         if limit:

@@ -18,9 +18,13 @@
     "v1_real_mode/90.MOO.gz",
     "v1_real_mode/C8.MOO.gz",
     "v1_real_mode/C9.MOO.gz",
-    "v1_real_mode/E8.MOO.gz"
+    "v1_real_mode/E8.MOO.gz",
+    "v1_real_mode/EA.MOO.gz",
+    "v1_real_mode/FF.5.MOO.gz"
   ],
   "sha256": {
+    "v1_real_mode/EA.MOO.gz": "9a0842bce22511c0fd67b3d2b7c3a4c2b6cd7d068420ebd3660fe7bee983a1cf",
+    "v1_real_mode/FF.5.MOO.gz": "b674ecaa6437545dcd9262758183c46403c20485ac2b6bee21bd04ef31442eec",
     "README.md": "0381eb13604e5b2cea6f3ede348146d28d129b8f5f6d4af3668cc54be83bf025",
     "LICENSE": "17169beea9b37538e699029d724687acf89182988b78f5ddce0f65a01db14653",
     "CHANGELOG.md": "5efd9f33316ea637f551a2662257cac0d5939ffc242bfa6252d0f5debe42cfc2",

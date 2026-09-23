@@ -597,14 +597,43 @@ static bm_status_t near_branch(decoded_286_t *decode, uint16_t target, int call)
     return BM_STATUS_OK;
 }
 
+/* Real-mode CS reload drops the special reset base. A20 remains board-owned.
+ * Only called after both pointer words were obtained successfully; protected
+ * mode and guest exception delivery are rejected by the surrounding decoder. */
+static bm_status_t far_jump(decoded_286_t *decode, uint16_t ip, uint16_t cs)
+{
+    bm_286_segment_state_t *segment = &decode->state->arch.cs;
+    segment->selector = cs;
+    segment->base = (uint32_t) cs << 4;
+    segment->limit = 0xffffU;
+    segment->access = 0U;
+    segment->valid = 1U;
+    decode->cursor = ip;
+    return BM_STATUS_OK;
+}
+
 static bm_status_t execute_ff_control(decoded_286_t *decode,
                                       const operand_286_t *operand)
 {
-    uint16_t value;
+    uint16_t value, selector;
     bm_status_t status;
+    if (operand->reg_field == 5U) {
+        if (!operand->memory || !operand->segment->valid ||
+            (uint32_t) operand->offset + 1U > operand->segment->limit ||
+            (uint32_t) (uint16_t) (operand->offset + 2U) + 1U > operand->segment->limit)
+            return BM_STATUS_UNSUPPORTED; /* Invalid form/#13 not yet delivered. */
+        /* The two word offsets wrap independently. SST Harris captures
+         * FF.5 cases 2914/3652/4550 read the selector at 0000 after FFFE. */
+        status = read_operand(decode, operand, 2U, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        status = data_access(decode, operand->segment,
+                             (uint16_t) (operand->offset + 2U), 2U, 0, &selector);
+        return status == BM_STATUS_OK ? far_jump(decode, value, selector) : status;
+    }
     if (operand->reg_field != 2U && operand->reg_field != 4U &&
         operand->reg_field != 6U)
-        return BM_STATUS_UNSUPPORTED; /* Far control and /7 remain gaps. */
+        return BM_STATUS_UNSUPPORTED; /* Far call and /7 remain gaps. */
     status = read_operand(decode, operand, 2U, &value);
     if (status != BM_STATUS_OK)
         return status;
@@ -639,6 +668,13 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
     uint8_t byte;
     int take;
     bm_status_t status;
+    if (opcode == 0xeaU) {
+        status = next_word(decode, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        status = next_word(decode, &extra);
+        return status == BM_STATUS_OK ? far_jump(decode, value, extra) : status;
+    }
     if (opcode == 0x60U || opcode == 0x61U)
         return aggregate_stack(decode, opcode == 0x61U);
     if (opcode == 0xc8U)

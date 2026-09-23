@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2026 BluMach contributors
- * Partial Intel 80286 real-mode data, ALU, stack and near-control interpreter.
+ * Partial Intel 80286 real-mode data, ALU, stack, near-control and far-JMP core.
  * Timing, remaining ISA, faults and protected-mode execution are pending.
  */
 #ifndef BLUMACH_COMPONENTS_CPU_80286_H

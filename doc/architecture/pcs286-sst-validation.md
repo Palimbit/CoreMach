@@ -89,3 +89,22 @@ its explicit eligibility rules as CPU coverage grows.
 
 Sources: upstream README, LICENSE, metadata, revocations and CHANGELOG at the
 pinned commit; [MOO format specification](https://github.com/dbalsom/moo/blob/main/doc/moo_format_v1.md).
+
+## Far-JMP expansion, 2026-09-23
+
+The lock now includes EA and FF.5 (5,000 cases each), at the same immutable
+upstream commit: 13 files, **61,000 cases: 57,498 matched, zero discrepancies,
+3,501 pending, one revoked**. EA contributes 4,830 matches/170 pending;
+FF.5 contributes 3,592 matches/1,408 pending. UCRT64 GCC and MSVC probes agree
+in both Debug and Release. This remains a selected subset, not full ISA coverage.
+
+The first grouped-file run exposed a harness KeyError: FF.5 metadata is nested
+under FF/reg/5. Resolution now combines parent and subgroup masks without
+relaxing either; an authored unit test covers it. The next run found three
+genuine core discrepancies (FF.5 indices 2914, 3652, 4550): a pointer starting
+at FFFE reads its selector at 0000 in the same segment on this captured CPU.
+The initial contiguous-four-byte limit check was wrong for these cases. The
+core now checks each word independently, wrapping the offset between words.
+All three pass after correction, with an authored synthetic regression and
+unchanged eligibility, vectors and undefined-state masks. This is observed
+Harris behaviour, not a claim of validation against every Intel stepping.

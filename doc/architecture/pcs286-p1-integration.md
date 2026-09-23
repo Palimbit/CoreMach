@@ -21,7 +21,8 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
   Basic real-mode PUSH/POP (excluding POP SS and flags), near CALL/JMP/RET,
   short Jcc, LOOP/LOOPE/LOOPNE and JCXZ are implemented. PUSHA/POPA and
   ENTER/LEAVE now cover real-mode aggregate saves and procedure frames;
-  far control transfers are still missing.
+  real-mode far JMP EA and memory FF /5 reload CS and leave the high reset
+  mapping. Far CALL/RET, interrupts and protected control remain missing.
 - A synthetic integration test connects these real components and checks
   suspension, DMA access after grant, return to CPU ownership and reset. It
   also raises a DMA request during a fetch: the current instruction completes
@@ -103,7 +104,7 @@ see `pcs286-sst-validation.md`. The first 51,000-case pinned selection gives
 and one upstream revocation. It is not whole-ISA, timing or board validation.
 The core and its clock policy were not changed for this adapter.
 
-1. Prioritize real-mode far control, SS reload and direct I/O to enable board
+1. Prioritize SS reload and direct I/O to enable board
    bring-up, then remaining ALU families and exception handling with authored tests. Resolve distinct
    STI versus SS-load inhibition and LOCK before completing deferred transfers.
    Keep valid-but-unimplemented, invalid guest encoding and unknown timing
@@ -141,3 +142,23 @@ but do not label a synthetic fixture as a firmware boot.
 
 See `pcs286-cpu286-coverage.md`, `pcs286-at-fabric-notes.md` and `pcs286-p0.md`
 for the larger pending coverage and acceptance gates.
+
+## Far-JMP validation, 2026-09-23
+
+Both real-mode forms commit CS/IP only after all pointer reads succeed. An
+authored reset program jumps from FFFFF0 to F000:0100 and fetches its next
+instruction at F0100. A separate target above 1 MiB proves that A20 masking
+remains board-owned. Tests cover segment overrides, even/odd pointers,
+per-transfer failures, invalid encodings and explicit unsupported limits.
+
+The expanded hardware comparison exposed three FF /5 discrepancies: a pointer
+at offset FFFE reads its selector word at offset 0000 on the captured Harris
+286. The core now wraps between words while still checking each word's limit;
+an independently authored regression protects this case. No exclusion or
+metadata mask was introduced to hide these failures.
+
+UCRT64 GCC and MSVC, Debug and Release, each pass 84 ordinary tests, with three
+absent-chip gates skipped (87 registered). The optional external-corpus CTest
+also passes in GCC Debug. All four comparator runs agree: 61,000 cases,
+57,498 matches, 3,501 pending, one upstream revoked, zero discrepancies.
+These are functional register/RAM results, not timing or PCS286 boot evidence.

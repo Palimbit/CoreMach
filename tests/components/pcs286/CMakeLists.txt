@@ -60,6 +60,12 @@ endfunction()
 
 pcs286_acceptance(cpu286 cpu286_acceptance.c blumach_cpu_80286)
 if(TARGET blumach_cpu_80286)
+    add_executable(pcs286-cpu-far-jump cpu286_far_jump.c)
+    target_link_libraries(pcs286-cpu-far-jump PRIVATE blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-far-jump)
+    add_test(NAME pcs286-component.cpu-far-jump COMMAND pcs286-cpu-far-jump)
+    set_tests_properties(pcs286-component.cpu-far-jump PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
     # Test-only single-boundary probe. No downloaded data or parser in the core.
     add_executable(pcs286-sst-probe cpu286_sst_probe.c)
     target_link_libraries(pcs286-sst-probe PRIVATE blumach_cpu_80286 blumach_platform_null)

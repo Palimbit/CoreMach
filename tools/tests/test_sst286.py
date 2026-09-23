@@ -47,6 +47,12 @@ def corpus():
 
 
 class SST286Tests(unittest.TestCase):
+    def test_grouped_metadata(self):
+        metadata = {'opcodes': {'FF': {'flags-mask': 0x0fff,
+                                      'reg': {'5': {'flags-mask': 0xffef}}}}}
+        self.assertEqual(sst.opcode_metadata(metadata, 'FF.5')['flags-mask'], 0x0fef)
+        with self.assertRaises(KeyError): sst.opcode_metadata(metadata, 'FF.8')
+
     def test_sparse_final_and_halt_normalization(self):
         tests, masks = sst.parse_moo(corpus())
         actual = initial(); actual['ip'] += 1
@@ -77,6 +83,12 @@ class SST286Tests(unittest.TestCase):
         self.assertEqual(sst.pending_reason(test), 'guest-exception-13')
         test['exception'] = None; test['code'] = b'\x26\xf0\x90'
         self.assertEqual(sst.pending_reason(test), 'lock-or-repeat-prefix')
+        test['code'] = b'\x36\xff\x2f'
+        self.assertIsNone(sst.pending_reason(test))
+        test['code'] = b'\xff\xe8'  # Register form is not a far pointer.
+        self.assertEqual(sst.pending_reason(test), 'instruction-outside-initial-scope')
+        test['code'] = b'\xff\x1f'  # Far CALL is still outside this tranche.
+        self.assertEqual(sst.pending_reason(test), 'instruction-outside-initial-scope')
 
     def test_truncated_chunks_and_duplicate_identity(self):
         data = corpus()
