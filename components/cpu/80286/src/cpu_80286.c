@@ -1299,6 +1299,34 @@ static bm_status_t execute_system_real(decoded_286_t *decode)
     status = decode_operand(decode, &operand);
     if (status != BM_STATUS_OK)
         return status;
+    if (operand.reg_field < 4U) {
+        bm_286_table_state_t *table = (operand.reg_field & 1U) ? &arch->idtr : &arch->gdtr;
+        uint16_t words[3];
+        int load = operand.reg_field >= 2U;
+        if (!operand.memory)
+            return deliver_fault(decode, 6U);
+        if (!operand.segment->valid)
+            return BM_STATUS_UNSUPPORTED;
+        /* Functional whole-operand preflight; not a physical access-order claim. */
+        if ((uint32_t) operand.offset + 5U > operand.segment->limit)
+            return deliver_fault(decode, 13U);
+        words[0] = table->limit;
+        words[1] = (uint16_t) table->base;
+        /* The 286 PRM leaves byte 5 undefined on stores. Retain inherited FF
+         * readback, also described by Intel's 386 compatibility notes. */
+        words[2] = (uint16_t) (0xff00U | (table->base >> 16U));
+        for (unsigned i = 0; i < 3U; ++i) {
+            status = data_access(decode, operand.segment,
+                (uint16_t) (operand.offset + 2U * i), 2U, !load, &words[i]);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+        if (load) {
+            table->limit = words[0];
+            table->base = (uint32_t) words[1] | ((uint32_t) (words[2] & 0xffU) << 16U);
+        }
+        return BM_STATUS_OK;
+    }
     if (operand.reg_field != 4U && operand.reg_field != 6U)
         return BM_STATUS_UNSUPPORTED; /* Other system forms remain pending. */
     if (operand.memory) {

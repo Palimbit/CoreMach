@@ -2,7 +2,42 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode MSW system instructions
+## Latest tranche: real-mode descriptor-table registers
+
+SGDT/SIDT and LGDT/LIDT (`0F 01 /0..3`) now store/load instance-owned GDTR
+and IDTR in real mode. The six-byte operand contains a 16-bit limit and a
+24-bit base. Loads ignore the sixth byte; stores retain inherited FF readback
+for it. FLAGS and segment caches are unchanged. Loads commit only after all
+reads succeed; failed stores retain completed external writes without replay.
+No ABI change, descriptor lookup or protected-mode execution is introduced.
+
+Primary references: Intel 80286 PRM [B-65, LGDT/LIDT](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=275)
+and [B-101, SGDT/SIDT](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=311).
+The latter calls the last stored byte undefined; FF is compatibility policy,
+also described for the 286 in Intel's
+[80386 System Software Writer's Guide](https://www.bitsavers.org/components/intel/80386/231499-001_80386_System_Software_Writers_Guide_1987.pdf).
+Inherited logic was reviewed in pinned `x86_ops_pmode.h`; its globals, 386
+branches and timing constants were not imported.
+
+Register operands deliver restartable #6. The complete six-byte memory
+operand is preflighted against the segment limit and overruns deliver #13,
+without an error word. Whole-operand preflight and three ascending word
+transactions are functional policy, not measured silicon bus/fault ordering.
+Odd words use the existing byte-fragment path. Invalid imported caches,
+unsupported prefixes and unimplemented groups remain explicit gaps.
+
+Authored tests extend `cpu-extension`: 80 group/address/override/alignment
+combinations, every transfer failing before/after external effects, 32 invalid
+register forms, and 28 end-of-segment cases including the last valid operands.
+A guest-only LIDT/INT/IRET/HLT program proves that the relocated IDTR is actually
+used, and reset restores the real-mode IVT. These are not hardware-derived
+SST cases and do not establish timing or complete exception escalation.
+
+Next: general real-mode fault delivery and escalation before protected-mode
+execution. The existing unknown-timing gate remains; loading an IDTR whose
+limit is too small does not implement the subsequent #8/shutdown path.
+
+## Previous tranche: real-mode MSW system instructions
 
 `0F 01 /4` SMSW writes the 16-bit MSW to a register or word memory operand;
 `0F 01 /6` LMSW loads its low four control bits; `0F 06` CLTS clears TS.
@@ -816,7 +851,7 @@ generic catch-all or NOP is not coverage.
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
 | 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode forms implemented including BOUND #5/register #6/limit #13; ARPL pending; timing unknown |
-| Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Real-mode SMSW/LMSW/CLTS implemented; remaining system forms and all protected checks missing; timing unknown |
+| Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Real-mode SGDT/SIDT/LGDT/LIDT/SMSW/LMSW/CLTS implemented; remaining system forms and all protected checks missing; timing unknown |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
 | Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | WAIT completion with inactive BUSY/ERROR and documented #7 gates implemented; untrapped ESC and populated interface pending; timing unknown |
 

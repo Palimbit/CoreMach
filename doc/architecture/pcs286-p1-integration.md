@@ -447,8 +447,12 @@ prefix restart, IRET/TF, fault-frame failures and BOUND EA repair/retry.
 Real-mode SMSW/LMSW/CLTS now let the guest control MSW and recover from #7
 without test-side state edits. Register/memory forms, #13 overruns and
 per-transfer failures are tested. Setting PE stops at the next boundary;
-protected execution is not implemented. The next system block is descriptor
-table registers. General real-mode exceptions/escalation and untrapped ESC
+protected execution is not implemented. Real-mode SGDT/SIDT/LGDT/LIDT now
+transfer six-byte operands with 24-bit bases, #6 register rejection, #13
+whole-operand preflight and failure-safe register commits. An executable
+LIDT/INT/IRET sequence validates relocation of the IVT. Access ordering and
+undefined-byte FF readback are explicit functional policies, not timing
+evidence. General real-mode exceptions/escalation and untrapped ESC
 handshake/absence detection also remain pending.
 Protected lock windows remain coupled to future protected execution.
 Current unsupported combinations are missing

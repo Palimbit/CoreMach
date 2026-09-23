@@ -296,10 +296,117 @@ static void system_limits(fixture_t *f)
         if (bad == 0) s.msw |= 1;
         if (bad == 1) f->ram[0x30100] = 0xf0;
         if (bad == 2) f->ram[0x30100] = 0xf3;
-        if (bad == 3) f->ram[0x30103] = 0xd0; /* LGDT still unimplemented. */
+        if (bad == 3) f->ram[0x30103] = 0xe8; /* 0F 01 /5 remains unsupported. */
         set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state(f); same(&a, &s);
     }
+}
+static void table_memory(fixture_t *f)
+{
+    const uint8_t prefixes[] = {0,0x26,0x2e,0x36,0x3e};
+    for (unsigned group = 0; group < 4; ++group)
+    for (unsigned p = 0; p < 5; ++p) for (unsigned bp = 0; bp < 2; ++bp)
+    for (unsigned odd = 0; odd < 2; ++odd) {
+        bm_286_arch_state_t s = setup(f, 0x0f, 0, p != 0), a, e;
+        bm_286_boundary_t b;
+        unsigned start = p != 0, load = group >= 2;
+        s.es.valid = 1; s.es.base = 0x20000; s.es.selector = 0x2000;
+        s.bx = s.bp = (uint16_t)(0x4f0+odd);
+        s.gdtr.base = 0xabcdef; s.gdtr.limit = 0x8765;
+        s.idtr.base = 0x123456; s.idtr.limit = 0x4321;
+        if (p) f->ram[0x30100] = prefixes[p];
+        f->ram[0x30101+start] = 1;
+        f->ram[0x30102+start] = (uint8_t)(0x40 | group*8 | (bp ? 6 : 7));
+        f->ram[0x30103+start] = 0x10;
+        unsigned base = p == 1 ? s.es.base : p == 2 ? s.cs.base :
+            p == 3 || (!p && bp) ? s.ss.base : s.ds.base;
+        unsigned address = base+0x500+odd;
+        const uint8_t input[] = {0xfe,0xca,0x98,0xba,0xdc,0x23};
+        memcpy(f->ram+address, input, 6); e = s; e.ip += (uint16_t)(4+start);
+        bm_286_table_state_t *target = (group & 1) ? &e.idtr : &e.gdtr;
+        uint8_t expected[6] = {(uint8_t)target->limit,(uint8_t)(target->limit >> 8),
+            (uint8_t)target->base,(uint8_t)(target->base >> 8),(uint8_t)(target->base >> 16),0xff};
+        if (load) { target->limit = 0xcafe; target->base = 0xdcba98; }
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); same(&a, &e);
+        assert(!memcmp(f->ram+address, load ? input : expected, 6));
+        assert(f->count == 4+start+(odd ? 6 : 3));
+        assert(!b.has_vector && b.timing == BM_286_TIMING_UNKNOWN);
+        assert(b.cpu_cycles == f->count*2 && b.bus_wait_cycles == b.cpu_cycles);
+        for (unsigned i = 4+start; i < f->count; ++i) {
+            assert(f->trace[i].address == address+(i-4-start)*(odd ? 1 : 2));
+            assert(f->trace[i].size == (odd ? 1U : 2U));
+            assert(f->trace[i].operation == (load ? BM_BUS_READ : BM_BUS_WRITE));
+        }
+        bm_bus_transaction_t trace[24]; memcpy(trace, f->trace, sizeof(trace));
+        unsigned total = f->count;
+        for (unsigned fail = 1; fail <= total; ++fail) for (unsigned after = 0; after < 2; ++after) {
+            assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
+            memcpy(f->ram+address, input, 6); memcpy(expected, input, 6);
+            for (unsigned t = 0; t < fail-1+after; ++t) if (trace[t].operation == BM_BUS_WRITE)
+                for (unsigned j = 0; j < trace[t].size; ++j)
+                    expected[(size_t)trace[t].address+j-address] = (uint8_t)(trace[t].value >> (8*j));
+            f->count = 0; f->fail_at = fail; f->fail_after = after; set(f, &s);
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+            a = state(f); same(&a, &s);
+            assert(f->count == fail && !memcmp(f->ram+address, expected, 6));
+            assert(bm_286_step(&f->cpu, &b) != BM_STATUS_OK && f->count == fail);
+        }
+    }
+}
+static void table_faults(fixture_t *f)
+{
+    for (unsigned group = 0; group < 4; ++group) for (unsigned n = 0; n < 15; ++n) {
+        bm_286_arch_state_t s = setup(f, 0x0f, 0, 1), a, e;
+        bm_286_boundary_t b;
+        unsigned memory = n >= 8, vector = memory ? 13 : 6;
+        s.es.valid = 1; s.es.base = 0x20000; s.es.selector = 0x2000;
+        f->ram[0x30102] = 1;
+        f->ram[0x30103] = (uint8_t)(group*8 | (memory ? 6 : 0xc0+n));
+        unsigned offset = 0xfff9+n-8;
+        if (memory) word(f, 0x30104, (uint16_t)offset);
+        word(f, vector*4, 0x200); word(f, vector*4+2, 0x4000);
+        memset(f->ram+0x2fff9, 0xa5, 7); set(f, &s);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK); a = state(f); e = s;
+        if (memory && offset <= 0xfffa) {
+            e.ip += 6;
+            if (group >= 2) {
+                bm_286_table_state_t *table = (group & 1) ? &e.idtr : &e.gdtr;
+                table->base = 0xa5a5a5; table->limit = 0xa5a5;
+            }
+            assert(!b.has_vector);
+        } else {
+            e.sp -= 6; e.flags &= 0xfcffU; e.ip = 0x200;
+            e.cs.selector = 0x4000; e.cs.base = 0x40000;
+            e.cs.limit = 0xffff; e.cs.access = 0; e.cs.valid = 1;
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == vector);
+            assert(get_word(f, s.ss.base+s.sp-6) == s.ip);
+            assert(f->count == (memory ? 11U : 9U));
+            for (unsigned i = 0; i < 7; ++i) assert(f->ram[0x2fff9+i] == 0xa5);
+        }
+        same(&a, &e);
+    }
+}
+static void table_interrupt_program(fixture_t *f)
+{
+    /* LIDT [0500]; INT 20h; HLT. Handler from relocated IVT: IRET. */
+    const uint8_t program[] = {0x0f,1,0x1e,0,5,0xcd,0x20,0xf4};
+    bm_286_arch_state_t s = setup(f, 0x0f, 0, 0), a;
+    bm_286_boundary_t b;
+    memcpy(f->ram+0x30100, program, sizeof(program));
+    word(f, 0x500, 0x83); word(f, 0x502, 0x6000); word(f, 0x504, 0xee00);
+    word(f, 0x6080, 0x200); word(f, 0x6082, 0x4000);
+    set(f, &s);
+    for (unsigned i = 0; i < 4; ++i) {
+        f->count = 0; assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f);
+        if (i == 1) assert(a.cs.base == 0x40000 && a.ip == 0x200);
+    }
+    assert(a.idtr.base == 0x6000 && a.idtr.limit == 0x83);
+    assert(a.halted && a.ip == 0x108 && a.cs.base == s.cs.base);
+    assert(a.sp == s.sp && a.flags == s.flags);
+    assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
+    a = state(f); assert(a.idtr.base == 0 && a.idtr.limit == 0x3ff);
 }
 int main(void)
 {
@@ -312,5 +419,6 @@ int main(void)
     assert(bm_286_create(&host, &c, &f.cpu) == BM_STATUS_OK);
     matrix(&f); retry_and_failure(&f); boundaries(&f);
     system_registers(&f); system_memory(&f); system_guest_program(&f); system_limits(&f);
+    table_memory(&f); table_faults(&f); table_interrupt_program(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }
