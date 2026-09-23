@@ -197,7 +197,7 @@ rtc_access(void *context, bm_bus_transaction_t *transaction)
     if (transaction->operation == BM_BUS_READ) {
         value = rtc->registers[reg];
         if (reg == M42_CONTROL_D)
-            value &= (uint8_t) ~0x02U; /* Atomic I/O: BUSY not modeled. */
+            value &= 0x0dU; /* Atomic I/O: BUSY not modeled. */
         transaction->value = value & 0x0fU;
         return BM_STATUS_OK;
     }
