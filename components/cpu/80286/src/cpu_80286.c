@@ -497,6 +497,87 @@ static bm_status_t push_word(decoded_286_t *decode, uint16_t value)
     return status;
 }
 
+static int stack_word_valid(const bm_286_arch_state_t *arch, uint16_t offset)
+{
+    return arch->ss.valid && (uint32_t) offset + 1U <= arch->ss.limit;
+}
+
+/* Multiword operations stage register changes, not external bus writes.
+ * Preflight rejects unsupported exception/shutdown paths without claiming
+ * silicon fault precedence or bus-cycle ordering on those paths. */
+static bm_status_t aggregate_stack(decoded_286_t *decode, int pop)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t values[8], offsets[8];
+    unsigned i;
+    bm_status_t status;
+    for (i = 0U; i < 8U; ++i) {
+        offsets[i] = (uint16_t) (pop ? arch->sp + 2U * i :
+                                      arch->sp - 2U * (i + 1U));
+        if (!stack_word_valid(arch, offsets[i]))
+            return BM_STATUS_UNSUPPORTED;
+        values[i] = *word_register(arch, i);
+    }
+    for (i = 0U; i < 8U; ++i) {
+        if (pop && i == 3U)
+            continue; /* Discard the saved SP slot; never load it into SP. */
+        status = data_access(decode, &arch->ss, offsets[i], 2U, !pop, &values[i]);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    if (pop)
+        for (i = 0U; i < 8U; ++i)
+            if (i != 3U)
+                *word_register(arch, 7U - i) = values[i];
+    arch->sp = (uint16_t) (pop ? arch->sp + 16U : arch->sp - 16U);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t enter_frame(decoded_286_t *decode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t allocation, frame = (uint16_t) (arch->sp - 2U), value;
+    uint16_t sp = arch->sp, bp = arch->bp, final_sp;
+    uint8_t nesting;
+    unsigned i, words;
+    bm_status_t status = next_word(decode, &allocation);
+    if (status != BM_STATUS_OK)
+        return status;
+    status = next_byte(decode, &nesting);
+    if (status != BM_STATUS_OK)
+        return status;
+    nesting &= 31U; /* Intel 286 Appendix B: LEVEL modulo 32. */
+    words = nesting == 0U ? 1U : (unsigned) nesting + 1U;
+    final_sp = (uint16_t) (sp - 2U * words - allocation);
+    if (!arch->ss.valid || final_sp > arch->ss.limit)
+        return BM_STATUS_UNSUPPORTED;
+    for (i = 0U; i < words; ++i)
+        if (!stack_word_valid(arch, (uint16_t) (sp - 2U * (i + 1U))))
+            return BM_STATUS_UNSUPPORTED;
+    for (i = 1U; i < nesting; ++i)
+        if (!stack_word_valid(arch, (uint16_t) (bp - 2U * i)))
+            return BM_STATUS_UNSUPPORTED;
+    for (i = 0U; i < words; ++i) {
+        if (i == 0U)
+            value = arch->bp;
+        else if (i == nesting)
+            value = frame;
+        else {
+            bp = (uint16_t) (bp - 2U);
+            status = data_access(decode, &arch->ss, bp, 2U, 0, &value);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+        sp = (uint16_t) (sp - 2U);
+        status = data_access(decode, &arch->ss, sp, 2U, 1, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    arch->bp = frame;
+    arch->sp = final_sp;
+    return BM_STATUS_OK;
+}
+
 static int valid_near_target(const bm_286_arch_state_t *arch, uint16_t ip)
 {
     return arch->cs.valid && ip <= arch->cs.limit;
@@ -558,6 +639,18 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
     uint8_t byte;
     int take;
     bm_status_t status;
+    if (opcode == 0x60U || opcode == 0x61U)
+        return aggregate_stack(decode, opcode == 0x61U);
+    if (opcode == 0xc8U)
+        return enter_frame(decode);
+    if (opcode == 0xc9U) {
+        status = data_access(decode, &arch->ss, arch->bp, 2U, 0, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        arch->sp = (uint16_t) (arch->bp + 2U);
+        arch->bp = value;
+        return BM_STATUS_OK;
+    }
     if (opcode >= 0x50U && opcode <= 0x57U)
         /* Including SP: the 286 pushes the pre-decrement value. */
         return push_word(decode, *word_register(arch, opcode & 7U));
@@ -657,7 +750,7 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
         arch->cx = next_cx;
         return BM_STATUS_OK;
     }
-    return BM_STATUS_UNSUPPORTED; /* Flags, frames, SS and far control pending. */
+    return BM_STATUS_UNSUPPORTED; /* Flags, SS and far control pending. */
 }
 
 /* ALU kinds follow the three-bit opcode/ModR/M operation field. TEST uses

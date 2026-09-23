@@ -19,8 +19,9 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
   operate on byte/word operands with defined flag semantics. Logical AF is
   undefined by Intel; deterministic clearing is an emulator policy only.
   Basic real-mode PUSH/POP (excluding POP SS and flags), near CALL/JMP/RET,
-  short Jcc, LOOP/LOOPE/LOOPNE and JCXZ are implemented. Aggregate/frame stack
-  operations and far control transfers are still missing.
+  short Jcc, LOOP/LOOPE/LOOPNE and JCXZ are implemented. PUSHA/POPA and
+  ENTER/LEAVE now cover real-mode aggregate saves and procedure frames;
+  far control transfers are still missing.
 - A synthetic integration test connects these real components and checks
   suspension, DMA access after grant, return to CPU ownership and reset. It
   also raises a DMA request during a fetch: the current instruction completes
@@ -65,13 +66,26 @@ The stack/control suite tests register and memory operands, sign extension,
 explicit operands, near CALL/RET sequencing, and all 16 short conditions over
 32 relevant flag combinations in both displacement directions. LOOP variants
 cover CX=0/1/2/FFFF and both ZF values. An endpoint failure is injected at every
-transfer of 14 representative instructions, including odd-word fragments:
+transfer of 20 representative instruction forms, including odd-word fragments:
 CPU state remains unchanged, completed writes persist and cannot be retried.
 Stack/code limits reject explicitly; PUSH at SP=1 is an unsupported shutdown
 path, not a claimed guest exception or successful stack wrap. Tests include
 SP=0 push/pop, relative IP wrap, RET cleanup wrap, non-taken out-of-limit
-targets and deferred SS/far/flags/aggregate/frame instructions. No new public
+targets and deferred SS/far/flags instructions. No new public
 ABI or changes to the common scheduler were required.
+
+Aggregate/frame tests cover PUSHA's original SP, POPA's discarded SP slot,
+all 256 ENTER nesting encodings at both stack alignments (level modulo 32),
+overlapping frame reads/writes, LEAVE restoration, allocation arithmetic and
+segment overrides that do not redirect SS. Multiword operations commit CPU
+registers only after success; completed external writes persist on host errors.
+Preflight rejects unsupported segment-crossing/shutdown cases, including
+PUSHA with odd SP from 1 through 15, before operand accesses. This is not guest
+fault delivery, silicon fault precedence or cycle-accurate bus emulation.
+POPA omits the discarded slot's endpoint read as an implementation policy,
+not a measured physical-bus claim. See Intel Appendix B, ENTER/LEAVE/PUSHA/POPA;
+the indexed primary-manual extracts were checked alongside the pinned inherited
+`x86_ops_stack.h`. No timing constants were imported from that implementation.
 
 The portable CI path filters now include `tests/components/**`, so a change
 limited to these tests also triggers validation. These local results are not
@@ -83,8 +97,8 @@ the versioned provenance manifest. The AT interconnect is authored new code.
 
 ## Next work
 
-1. Extend the CPU through remaining ALU families and aggregate/frame stack
-   operations, then far control and exception handling with authored tests. Resolve distinct
+1. Prioritize real-mode far control, SS reload and direct I/O to enable board
+   bring-up, then remaining ALU families and exception handling with authored tests. Resolve distinct
    STI versus SS-load inhibition and LOCK before completing deferred transfers.
    Keep valid-but-unimplemented, invalid guest encoding and unknown timing
    distinct. Do not substitute a success/NOP or invent elapsed cycles.
@@ -94,6 +108,30 @@ the versioned provenance manifest. The AT interconnect is authored new code.
    schematic wiring must not be presented as observed PCS286 wiring.
 4. Compose board devices only after their contracts and ownership pass. No
    BIOS patch, permanently enabled memory alias or forced POST result.
+
+## Earliest assembly milestones
+
+The current executable integration is a synthetic CPU + AT bus fixture, not
+the PCS286 board: the system, Headland and IOC02 targets are still interfaces.
+Do not wait for the entire protected-mode ISA before writing board diagnostics,
+but do not label a synthetic fixture as a firmware boot.
+
+1. **Reset diagnostic:** implement a board-owned RAM/ROM map and lifecycle,
+   documented reset aliases, far reset transfer and SS reload. Assert fetch
+   and mapping traces with authored code first. Unknown decode/register paths
+   stop explicitly. This can run instruction-by-instruction without a claimed
+   real-time clock or GUI.
+2. **Firmware/POST diagnostic:** connect evidenced Headland/IOC02 behaviour,
+   A20 and CPU reset, PIC cascade, PIT/refresh, RTC/CMOS and keyboard controller;
+   supply CPU I/O, interrupts and the instruction paths actually required.
+   Select and document a scheduling policy before timed devices run together;
+   diagnostic instruction counts are not CPU clocks. Preserve unresolved board
+   wiring as an evidence gap, not a reference-schematic assumption.
+3. **Visible, usable machine:** integrate/validate the existing portable PVGA1A
+   and the PCS286 DAC/video path, then floppy controller/DMA/media and input.
+   Existing PIC8259, DMA8237, PIT8253 and FDC765 components are reuse candidates,
+   not proof that AT cascade, PIT8254, WD37C65 or PCS286 wiring is complete.
+   Register the machine as available only once its declared profile works.
 
 See `pcs286-cpu286-coverage.md`, `pcs286-at-fabric-notes.md` and `pcs286-p0.md`
 for the larger pending coverage and acceptance gates.

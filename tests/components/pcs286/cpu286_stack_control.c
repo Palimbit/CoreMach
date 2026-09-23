@@ -11,7 +11,7 @@
 enum { CODE = 0x30000, DATA = 0x10000, STACK = 0x20000 };
 typedef struct fixture {
     uint8_t bytes[0x40000];
-    bm_bus_transaction_t trace[64];
+    bm_bus_transaction_t trace[256];
     unsigned count, fail_at;
 } fixture_t;
 
@@ -19,7 +19,7 @@ static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
 {
     fixture_t *f = context;
     unsigned i;
-    assert(f->count < 64U);
+    assert(f->count < sizeof(f->trace) / sizeof(f->trace[0]));
     assert(t->size == 1U || t->size == 2U);
     assert(t->address <= sizeof(f->bytes) - t->size);
     assert(t->endianness == BM_ENDIAN_LITTLE && t->wait_states == 0U);
@@ -248,6 +248,98 @@ static void condition_matrix(bm_cpu_t *cpu, fixture_t *f)
     }
 }
 
+static void aggregate_and_frames(bm_cpu_t *cpu, fixture_t *f)
+{
+    unsigned parity, level, i;
+    for (parity = 0U; parity < 2U; ++parity) {
+        const uint8_t code[] = {0x60,0x61};
+        bm_286_arch_state_t s = load(cpu, f, code, sizeof(code)), a;
+        s.sp = (uint16_t) (0x200U + parity);
+        a = step(cpu, f, &s);
+        assert(a.sp == s.sp - 16U && a.ip == 1U);
+        for (i = 0U; i < 8U; ++i)
+            assert(read_word(f, STACK + s.sp - 2U * (i + 1U)) == *reg_at(&s, i));
+        /* POPA must ignore the saved SP, even if its contents change. */
+        word_at(f, STACK + s.sp - 10U, 0xabcdU);
+        for (i = 0U; i < 8U; ++i)
+            if (i != 4U)
+                *reg_at(&a, i) = 0U;
+        a = step(cpu, f, &a);
+        for (i = 0U; i < 8U; ++i)
+            assert(*reg_at(&a, i) == *reg_at(&s, i));
+        assert(a.ip == 2U);
+    }
+    /* All 256 encodings, two alignments: high nesting bits are ignored. */
+    for (parity = 0U; parity < 2U; ++parity)
+        for (level = 0U; level < 256U; ++level) {
+            uint8_t code[] = {0xc8,0x23,0,0,0xc9};
+            bm_286_arch_state_t s, a;
+            unsigned effective = level & 31U;
+            unsigned words = effective == 0U ? 1U : effective + 1U;
+            code[3] = (uint8_t) level;
+            s = load(cpu, f, code, sizeof(code));
+            s.sp = (uint16_t) (0x200U + parity);
+            s.bp = (uint16_t) (0x800U + parity);
+            for (i = 1U; i < 32U; ++i)
+                word_at(f, STACK + s.bp - 2U * i, (uint16_t) (0xa000U + i));
+            a = step(cpu, f, &s);
+            assert(a.bp == s.sp - 2U && a.sp == s.sp - 2U * words - 0x23U);
+            assert(read_word(f, STACK + a.bp) == s.bp);
+            for (i = 1U; i < effective; ++i)
+                assert(read_word(f, STACK + s.sp - 2U * (i + 1U)) == 0xa000U + i);
+            if (effective != 0U)
+                assert(read_word(f, STACK + s.sp - 2U * words) == a.bp);
+            a = step(cpu, f, &a);
+            assert(a.sp == s.sp && a.bp == s.bp && a.ip == 5U);
+        }
+    {
+        /* Interleaved reads see earlier pushes when the old/new frames overlap. */
+        const uint8_t code[] = {0x3e,0xc8,0,0,3};
+        bm_286_arch_state_t s = load(cpu, f, code, sizeof(code)), a;
+        s.bp = s.sp;
+        a = step(cpu, f, &s);
+        assert(a.bp == 0x1feU && a.sp == 0x1f8U);
+        assert(read_word(f, STACK + 0x1feU) == 0x200U);
+        assert(read_word(f, STACK + 0x1fcU) == 0x200U);
+        assert(read_word(f, STACK + 0x1faU) == 0x200U);
+        assert(read_word(f, STACK + 0x1f8U) == 0x1feU);
+        assert(read_word(f, DATA + 0x1feU) == 0U);
+    }
+    {
+        const uint8_t code[] = {0xc8,0xff,0xff,0,0xc9};
+        bm_286_arch_state_t s = load(cpu, f, code, sizeof(code)), a;
+        a = step(cpu, f, &s);
+        assert(a.bp == 0x1feU && a.sp == 0x1ffU); /* 16-bit allocation arithmetic */
+        a = step(cpu, f, &a); assert(a.sp == s.sp && a.bp == s.bp);
+    }
+    for (i = 0U; i < 8U; ++i) {
+        const uint8_t code[] = {0x60};
+        bm_286_arch_state_t s = load(cpu, f, code, sizeof(code)), a;
+        bm_286_boundary_t b;
+        s.sp = (uint16_t) (2U * i + 1U);
+        assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
+        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
+        a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
+        assert(f->count == 1U); /* Explicit gap, not guest exception emulation. */
+    }
+    for (i = 0U; i < 5U; ++i) {
+        const uint8_t enter[] = {0xc8,0,0,3}, popa[] = {0x61}, leave[] = {0xc9};
+        bm_286_arch_state_t s = load(cpu, f, i < 3U ? enter : i == 3U ? popa : leave,
+                                    i < 3U ? 4U : 1U), a;
+        bm_286_boundary_t b;
+        if (i == 0U) s.sp = 3U;
+        if (i == 1U) s.bp = 1U;
+        if (i == 2U) s.ss.valid = 0U;
+        if (i == 3U) s.sp = 0xfff9U; /* Discarded slot cannot hide a segment crossing. */
+        if (i == 4U) s.bp = 0xffffU;
+        assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
+        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
+        a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
+        for (unsigned j = 0U; j < f->count; ++j)
+            assert(f->trace[j].operation == BM_BUS_FETCH);
+    }
+}
+
 /* Fail every individual endpoint transfer of each instruction. The CPU state
  * must remain unchanged; only writes completed before the failure may persist. */
 static void failures(bm_cpu_t *cpu, fixture_t *f)
@@ -255,7 +347,9 @@ static void failures(bm_cpu_t *cpu, fixture_t *f)
     static const uint8_t codes[][4] = {{0x50,0,0,0},{0x68,0x34,0x12,0},
         {0x6a,0x80,0,0},{0xff,0x37,0,0},{0x58,0,0,0},{0x8f,0x07,0,0},
         {0xe8,3,0,0},{0xff,0x17,0,0},{0xc3,0,0,0},{0xc2,4,0,0},
-        {0xeb,0xfe,0,0},{0x74,2,0,0},{0xe2,0xfe,0,0},{0x07,0,0,0}};
+        {0xeb,0xfe,0,0},{0x74,2,0,0},{0xe2,0xfe,0,0},{0x07,0,0,0},
+        {0x60,0,0,0},{0x61,0,0,0},{0xc8,0x23,0,0},{0xc8,0x23,0,1},
+        {0xc8,0x23,0,0xff},{0xc9,0,0,0}};
     unsigned op;
     uint8_t *expected = malloc(sizeof(f->bytes));
     assert(expected != NULL);
@@ -265,6 +359,7 @@ static void failures(bm_cpu_t *cpu, fixture_t *f)
             bm_286_arch_state_t s = load(cpu, f, codes[op], 4U), after;
             bm_286_boundary_t b;
             s.sp = 0x201U;
+            s.bp = 0x3457U;
             word_at(f, DATA + s.bx, 0x1234U);
             word_at(f, STACK + s.sp, 0x4567U);
             memcpy(expected, f->bytes, sizeof(f->bytes));
@@ -295,9 +390,9 @@ static void failures(bm_cpu_t *cpu, fixture_t *f)
 
 static void limits_and_gaps(bm_cpu_t *cpu, fixture_t *f)
 {
-    static const uint8_t gaps[][3] = {{0x17,0,0},{0x60,0,0},{0x61,0,0},
+    static const uint8_t gaps[][3] = {{0x17,0,0},
         {0x9c,0,0},{0x9d,0,0},{0x9a,0,0},{0xea,0,0},{0xcb,0,0},
-        {0xcf,0,0},{0xc8,0,0},{0xc9,0,0},{0xff,0xd8,0},{0xff,0xe8,0},
+        {0xcf,0,0},{0xff,0xd8,0},{0xff,0xe8,0},
         {0xff,0xf8,0},{0x8f,0xc8,0},{0xf0,0x50,0},{0xf3,0xc3,0}};
     unsigned i;
     for (i = 0; i < sizeof(gaps) / sizeof(gaps[0]); ++i) {
@@ -380,6 +475,7 @@ int main(void)
     registers_and_forms(&cpu, f);
     calls_and_returns(&cpu, f);
     condition_matrix(&cpu, f);
+    aggregate_and_frames(&cpu, f);
     failures(&cpu, f);
     limits_and_gaps(&cpu, f);
     cpu.ops.destroy(cpu.context);
