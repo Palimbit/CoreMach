@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: P1 partial lifecycle and real-mode data-transfer tranche, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode arithmetic, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -49,7 +49,7 @@ cannot become a 286 by selecting a flag.
 `Required` means required for a reusable documented 80286 core, including
 guest #6 for undefined encodings. `Later` names a separately scoped silicon
 or populated-80287 feature. The current portable core implements the reset
-state, NOP and a bounded real-mode data-transfer subset; all other rows are
+state, NOP and bounded real-mode data-transfer and ALU subsets; all other rows are
 **not implemented**. A
 classic handler is a review/reuse candidate only, never a
 portable pass. Every grouped opcode must classify each ModR/M subform; a
@@ -59,7 +59,7 @@ generic catch-all or NOP is not coverage.
 |---|---|---|---|
 | Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
 | Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Partial: listed basic MOV forms, ES/DS reload and register XCHG; MOV SS, memory XCHG, LEA/LDS/LES/XLAT and protection missing; timing unknown |
-| Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_flag_2386.h`, `x86_ops_mul.h` | Missing; timing unknown |
+| Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Missing; timing path-dependent |
@@ -200,3 +200,45 @@ Known valid unimplemented forms return host `BM_STATUS_UNSUPPORTED`; an
 architecturally invalid encoding is likewise stopped for now, **not** falsely
 reported as delivered guest #6. UNKNOWN timing remains unschedulable. This is
 not a bootable PCS 286 or an approved full CPU.
+
+## Bounded arithmetic/flags tranche
+
+This tranche implements the documented real-mode 8- and 16-bit binary
+arithmetic/logical families ADD, OR, ADC, SBB, AND, SUB, XOR and CMP in their
+register/memory and accumulator-immediate forms (00-3D), Group 1 80/81/83,
+TEST 84/85/A8/A9 and F6/F7 /0, register INC/DEC 40-4F, FE/FF /0 and /1,
+and F6/F7 /2 NOT and /3 NEG. Opcode 82 remains an explicit unsupported gap:
+no primary Intel evidence used here establishes its documented status or exact
+behavior. F6/F7 /1 is not delivered as guest #6 because fault delivery is
+missing; /4-7 MUL/DIV and FF /2+ control/stack forms remain unsupported.
+No LOCK-prefixed arithmetic, protected-mode execution, shifts, BCD,
+multiply/divide, stack or control flow is claimed.
+
+The status bits CF, PF, AF, ZF, SF and OF use width-correct arithmetic.
+INC/DEC preserve incoming CF; NOT preserves every flag; CMP/TEST perform no
+destination write. ADC/SBB use incoming CF for both result and borrow/carry.
+Intel leaves AF undefined after logical operations. The explicit
+**logical-AF-clear emulator policy** sets it to zero for deterministic state;
+conformance assertions mask AF and do not claim this is a physical 286 output.
+Result and flags are computed locally and committed only after successful
+writeback. On an odd-word read-modify-write whose second byte write fails,
+the first completed byte remains changed, but IP, registers and FLAGS do not
+advance; the CPU latches a stop and cannot silently retry. Successful
+boundaries still report only known bus-wait lower bounds with UNKNOWN timing.
+
+The authored `cpu286_arithmetic.c` tests all eight binary families, their
+direction and immediate groups, sign extension of 83, TEST/CMP read-only
+transactions, INC/DEC carry preservation, NEG/NOT, logical AF masking,
+odd-word partial-write failure, no retry and deferred/invalid group stops.
+It also tests failed immediate fetch, failed second read fragment, failed
+INC/DEC/NEG writeback with unchanged IP/registers/FLAGS, and verifies that
+memory CMP plus byte/word TEST never invoke a write callback.
+No preserved software or timing constants are used. Additional selectively
+consulted inherited sources at exact base
+`87c3fb4876eaad086921bc3444569da026286c36` are
+`src/cpu/x86_ops_arith.h`, `src/cpu/x86_ops_inc_dec.h`,
+`src/cpu/x86_ops_misc.h` and `src/cpu/x86_flags.h`. This is a
+**derived rewrite** with original project author/license notices retained in
+the CPU source, not an embedded global core. Intel 210498-005 chapters 3 and
+Appendix B are the primary arithmetic/flag reference. The forms have no
+certified elapsed native-clock timing.

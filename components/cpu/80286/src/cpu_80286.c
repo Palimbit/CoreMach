@@ -1,11 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2026 BluMach contributors
  *
- * Instance-owned 80286 lifecycle and initial execution boundary. Derived
+ * Instance-owned partial 80286 interpreter. Derived
  * rewrite references at BluMach 87c3fb4876eaad086921bc3444569da026286c36:
  * src/cpu/x86.c, src/cpu/386.c, src/cpu/386_ops.h, src/cpu/x86seg.c,
  * src/cpu/x86_ops_pmode.h, src/cpu/x86_ops_rep_286_2386.h,
- * src/cpu/x86_ops_mov.h and src/cpu/x86_ops_mov_seg.h. The inherited
+ * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h,
+ * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h,
+ * src/cpu/x86_ops_misc.h and src/cpu/x86_flags.h. The inherited
  * sources retain these notices:
  *
  * src/cpu/x86.c — Authors: Andrew Jenner, Miran Grca.
@@ -31,8 +33,16 @@
 
 enum {
     FLAG_FIXED_ONE = 0x0002U,
+    FLAG_CF = 0x0001U,
+    FLAG_PF = 0x0004U,
+    FLAG_AF = 0x0010U,
+    FLAG_ZF = 0x0040U,
+    FLAG_SF = 0x0080U,
     FLAG_TF = 0x0100U,
     FLAG_IF = 0x0200U,
+    FLAG_OF = 0x0800U,
+    FLAG_STATUS = FLAG_CF | FLAG_PF | FLAG_AF | FLAG_ZF | FLAG_SF |
+                  FLAG_OF,
     MSW_PE = 0x0001U,
     ADDRESS_MASK = 0x00ffffffU
 };
@@ -472,6 +482,240 @@ static bm_status_t write_operand(decoded_286_t *decode,
     return BM_STATUS_OK;
 }
 
+/* ALU kinds follow the three-bit opcode/ModR/M operation field. TEST uses
+ * the AND calculation but does not write the operand. All result/flag values
+ * are private until the destination write has completed successfully. */
+static int even_parity(uint8_t value)
+{
+    unsigned i, ones = 0U;
+    for (i = 0U; i < 8U; ++i)
+        ones += (value >> i) & 1U;
+    return (ones & 1U) == 0U;
+}
+
+static void alu_calculate(unsigned operation, unsigned size,
+                          uint16_t destination, uint16_t source,
+                          uint16_t old_flags, int preserve_carry,
+                          uint16_t *out_result, uint16_t *out_flags)
+{
+    uint32_t mask = size == 1U ? 0xffU : 0xffffU;
+    uint32_t sign = size == 1U ? 0x80U : 0x8000U;
+    uint32_t a = destination & mask, b = source & mask;
+    uint32_t carry = ((operation == 2U || operation == 3U) &&
+                      (old_flags & FLAG_CF)) ? 1U : 0U;
+    uint32_t wide = 0U, result;
+    uint16_t flags = (uint16_t) (old_flags & ~FLAG_STATUS);
+    if (operation == 0U || operation == 2U) { /* ADD, ADC */
+        wide = a + b + carry;
+        result = wide & mask;
+        if (wide > mask)
+            flags |= FLAG_CF;
+        if ((a ^ b ^ result) & 0x10U)
+            flags |= FLAG_AF;
+        if ((~(a ^ b) & (a ^ result) & sign) != 0U)
+            flags |= FLAG_OF;
+    } else if (operation == 3U || operation == 5U || operation == 7U) {
+        /* SBB, SUB, CMP; NEG and DEC reuse subtraction with a=0 or b=1. */
+        wide = b + carry;
+        result = (a - wide) & mask;
+        if (a < wide)
+            flags |= FLAG_CF;
+        if ((a ^ b ^ result) & 0x10U)
+            flags |= FLAG_AF;
+        if (((a ^ b) & (a ^ result) & sign) != 0U)
+            flags |= FLAG_OF;
+    } else {
+        switch (operation) {
+        case 1U: result = a | b; break;
+        case 4U: result = a & b; break;
+        default: result = a ^ b; break; /* XOR */
+        }
+        /* Logical-AF-clear policy: Intel leaves AF undefined. Clearing it
+         * makes this emulator deterministic, not silicon-fidelity evidence. */
+    }
+    if (result == 0U)
+        flags |= FLAG_ZF;
+    if (result & sign)
+        flags |= FLAG_SF;
+    if (even_parity((uint8_t) result))
+        flags |= FLAG_PF;
+    if (preserve_carry)
+        flags = (uint16_t) ((flags & ~FLAG_CF) | (old_flags & FLAG_CF));
+    *out_result = (uint16_t) result;
+    *out_flags = flags;
+}
+
+static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    operand_286_t operand = {0};
+    uint16_t destination, source, result, flags;
+    uint8_t immediate;
+    unsigned operation, form, size;
+    bm_status_t status;
+    if (opcode <= 0x3dU && (opcode & 7U) <= 5U) {
+        operation = opcode >> 3;
+        form = opcode & 7U;
+        size = (form & 1U) ? 2U : 1U;
+        if (form < 4U) {
+            status = decode_operand(decode, &operand);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (form < 2U) {
+                status = read_operand(decode, &operand, size, &destination);
+                source = size == 1U ? byte_register(arch, operand.reg_field) :
+                    *word_register(arch, operand.reg_field);
+            } else {
+                destination = size == 1U ?
+                    byte_register(arch, operand.reg_field) :
+                    *word_register(arch, operand.reg_field);
+                status = read_operand(decode, &operand, size, &source);
+            }
+            if (status != BM_STATUS_OK)
+                return status;
+            alu_calculate(operation, size, destination, source, arch->flags,
+                          0, &result, &flags);
+            if (operation != 7U) {
+                if (form < 2U) {
+                    status = write_operand(decode, &operand, size, result);
+                    if (status != BM_STATUS_OK)
+                        return status;
+                } else if (size == 1U)
+                    set_byte_register(arch, operand.reg_field, (uint8_t) result);
+                else
+                    *word_register(arch, operand.reg_field) = result;
+            }
+            arch->flags = flags;
+            return BM_STATUS_OK;
+        }
+        if (size == 1U) {
+            status = next_byte(decode, &immediate);
+            if (status != BM_STATUS_OK)
+                return status;
+            source = immediate;
+            destination = byte_register(arch, 0U);
+        } else {
+            status = next_word(decode, &source);
+            if (status != BM_STATUS_OK)
+                return status;
+            destination = arch->ax;
+        }
+        alu_calculate(operation, size, destination, source, arch->flags,
+                      0, &result, &flags);
+        if (operation != 7U) {
+            if (size == 1U)
+                set_byte_register(arch, 0U, (uint8_t) result);
+            else
+                arch->ax = result;
+        }
+        arch->flags = flags;
+        return BM_STATUS_OK;
+    }
+    if (opcode >= 0x40U && opcode <= 0x4fU) {
+        operation = opcode < 0x48U ? 0U : 5U;
+        operand.reg_number = opcode & 7U;
+        destination = *word_register(arch, operand.reg_number);
+        alu_calculate(operation, 2U, destination, 1U, arch->flags,
+                      1, &result, &flags);
+        *word_register(arch, operand.reg_number) = result;
+        arch->flags = flags;
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0x80U || opcode == 0x81U || opcode == 0x83U ||
+        opcode == 0x84U || opcode == 0x85U || opcode == 0xf6U ||
+        opcode == 0xf7U || opcode == 0xfeU || opcode == 0xffU) {
+        status = decode_operand(decode, &operand);
+        if (status != BM_STATUS_OK)
+            return status;
+        size = (opcode == 0x80U || opcode == 0x84U ||
+                opcode == 0xf6U || opcode == 0xfeU) ? 1U : 2U;
+        if (opcode == 0x80U || opcode == 0x81U || opcode == 0x83U) {
+            operation = operand.reg_field;
+            if (opcode == 0x81U) {
+                status = next_word(decode, &source);
+            } else {
+                status = next_byte(decode, &immediate);
+                if (status == BM_STATUS_OK)
+                    source = opcode == 0x83U ?
+                        (uint16_t) (int16_t) (int8_t) immediate : immediate;
+            }
+            if (status != BM_STATUS_OK)
+                return status;
+        } else if (opcode == 0x84U || opcode == 0x85U) {
+            operation = 4U;
+            source = size == 1U ? byte_register(arch, operand.reg_field) :
+                *word_register(arch, operand.reg_field);
+        } else if (opcode == 0xf6U || opcode == 0xf7U) {
+            if (operand.reg_field == 0U) {
+                operation = 4U; /* TEST */
+                if (size == 1U) {
+                    status = next_byte(decode, &immediate);
+                    if (status == BM_STATUS_OK)
+                        source = immediate;
+                } else
+                    status = next_word(decode, &source);
+                if (status != BM_STATUS_OK)
+                    return status;
+            } else if (operand.reg_field == 2U || operand.reg_field == 3U) {
+                operation = operand.reg_field == 2U ? 8U : 5U;
+            } else
+                return BM_STATUS_UNSUPPORTED; /* /1 invalid; /4-7 deferred. */
+        } else {
+            if (operand.reg_field > 1U)
+                return BM_STATUS_UNSUPPORTED; /* FF /2+ valid, deferred. */
+            operation = operand.reg_field == 0U ? 0U : 5U;
+        }
+        status = read_operand(decode, &operand, size, &destination);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (operation == 8U) { /* NOT, including no FLAGS change. */
+            result = (uint16_t) (destination ^ (size == 1U ? 0xffU : 0xffffU));
+            return write_operand(decode, &operand, size, result);
+        }
+        if ((opcode == 0xf6U || opcode == 0xf7U) &&
+            operand.reg_field == 3U) {
+            source = destination;
+            destination = 0U; /* NEG = 0 - operand. */
+        } else if (opcode == 0xfeU || opcode == 0xffU)
+            source = 1U;
+        alu_calculate(operation, size, destination, source, arch->flags,
+                      opcode == 0xfeU || opcode == 0xffU,
+                      &result, &flags);
+        if (opcode != 0x84U && opcode != 0x85U &&
+            !(opcode == 0xf6U && operand.reg_field == 0U) &&
+            !(opcode == 0xf7U && operand.reg_field == 0U) &&
+            !(opcode == 0x80U && operation == 7U) &&
+            !(opcode == 0x81U && operation == 7U) &&
+            !(opcode == 0x83U && operation == 7U)) {
+            status = write_operand(decode, &operand, size, result);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+        arch->flags = flags;
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0xa8U || opcode == 0xa9U) {
+        size = opcode == 0xa8U ? 1U : 2U;
+        if (size == 1U) {
+            status = next_byte(decode, &immediate);
+            if (status != BM_STATUS_OK)
+                return status;
+            source = immediate;
+            destination = byte_register(arch, 0U);
+        } else {
+            status = next_word(decode, &source);
+            if (status != BM_STATUS_OK)
+                return status;
+            destination = arch->ax;
+        }
+        alu_calculate(4U, size, destination, source, arch->flags,
+                      0, &result, &flags);
+        arch->flags = flags;
+        return BM_STATUS_OK;
+    }
+    return BM_STATUS_UNSUPPORTED; /* 82 and all other families remain gaps. */
+}
+
 static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -598,7 +842,7 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             *word_register(arch, operand.reg_field);
         return write_operand(decode, &operand, size, value);
     }
-    return BM_STATUS_UNSUPPORTED;
+    return execute_arithmetic(decode, opcode);
 }
 
 bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
