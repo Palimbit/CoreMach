@@ -288,7 +288,7 @@ typedef struct decoded_286 {
     uint8_t next_shadow; /* Published only after a successful instruction. */
     uint8_t software_interrupt; /* Completed INT/INT3/taken INTO, not INTA. */
     uint8_t software_vector;
-    uint8_t divide_error; /* Completed synchronous #DE entry, not INT 0. */
+    uint8_t synchronous_fault; /* Completed fault entry, not software INT. */
     uint8_t lock_prefix; /* Bounded memory forms, not the full 286 LOCK space. */
 } decoded_286_t;
 
@@ -1266,13 +1266,15 @@ static bm_status_t execute_multiply(decoded_286_t *decode, uint8_t opcode,
     return BM_STATUS_OK;
 }
 
-static bm_status_t deliver_divide_error(decoded_286_t *decode)
+static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector)
 {
-    /* 286 faults save the initial IP, including prefixes; no error code or
-     * INTA. Only mark delivery complete after the whole frame/IVT succeeds. */
-    bm_status_t status = interrupt_frame(decode, 0U, decode->state->arch.ip);
-    if (status == BM_STATUS_OK)
-        decode->divide_error = 1U;
+    /* Implemented real-mode #0/#5/#6 save initial IP, including prefixes,
+     * without error code or INTA. Mark complete only after frame/IVT success. */
+    bm_status_t status = interrupt_frame(decode, vector, decode->state->arch.ip);
+    if (status == BM_STATUS_OK) {
+        decode->synchronous_fault = 1U;
+        decode->software_vector = vector;
+    }
     return status;
 }
 
@@ -1315,7 +1317,7 @@ static bm_status_t execute_decimal(decoded_286_t *decode, uint8_t opcode)
                 return status;
             if (opcode == 0xd4U) {
                 if (radix == 0U)
-                    return deliver_divide_error(decode);
+                    return deliver_fault(decode, 0U);
                 ax = (uint16_t) (((al / radix) << 8U) | (al % radix));
             } else
                 ax = (uint16_t) ((al + (ax >> 8U) * radix) & 0xffU);
@@ -1364,7 +1366,7 @@ static bm_status_t execute_divide(decoded_286_t *decode, unsigned size,
         fault = quotient > (size == 1U ? 0xffU : 0xffffU);
     }
     if (fault)
-        return deliver_divide_error(decode);
+        return deliver_fault(decode, 0U);
     if (size == 1U)
         arch->ax = (uint16_t) ((quotient & 0xffU) | ((remainder & 0xffU) << 8U));
     else {
@@ -1737,6 +1739,32 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if (opcode == 0x62U) { /* BOUND r16, m16:16 (Intel PRM B-22). */
+        status = decode_operand(decode, &operand);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (!operand.memory)
+            return deliver_fault(decode, 6U);
+        /* The pair may not wrap at FFFF, unlike the separately observed
+         * far-pointer policy. Guest #13 delivery for this limit violation
+         * remains a gap. Preflight ordering is not physical bus evidence. */
+        if (!operand.segment->valid ||
+            (uint32_t) operand.offset + 3U > operand.segment->limit)
+            return BM_STATUS_UNSUPPORTED;
+        status = read_operand(decode, &operand, 2U, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        status = data_access(decode, operand.segment,
+            (uint16_t) (operand.offset + 2U), 2U, 0, &other);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (signed_operand(*word_register(arch, operand.reg_field), 2U) <
+                signed_operand(value, 2U) ||
+            signed_operand(*word_register(arch, operand.reg_field), 2U) >
+                signed_operand(other, 2U))
+            return deliver_fault(decode, 5U);
+        return BM_STATUS_OK;
+    }
     if ((opcode >= 0x6cU && opcode <= 0x6fU) ||
         (opcode >= 0xa4U && opcode <= 0xa7U) ||
         (opcode >= 0xaaU && opcode <= 0xafU))
@@ -2077,17 +2105,17 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
      * The following instruction samples its incoming TF normally.
      * A previously deferred trap is kept,
      * not lost when TF is clear or when SS is loaded again. */
-    state->arch.trap_pending = (uint8_t) (!decode.divide_error &&
+    state->arch.trap_pending = (uint8_t) (!decode.synchronous_fault &&
         (state->arch.trap_pending ||
         (trap_was_enabled && decode.next_shadow != BM_286_SHADOW_SS_LOAD &&
          !decode.software_interrupt)));
     /* A fault is not a completed instruction to single-step. Restoring TF
      * through IRET allows the retried instruction to be sampled normally.
-     * Discarding a prior SS-deferred trap on #DE is an explicit functional
+     * Discarding a prior SS-deferred trap on a fault is an explicit functional
      * policy awaiting hardware coverage of that combined boundary case. */
-    boundary.kind = decode.divide_error ? BM_286_BOUNDARY_EXCEPTION :
+    boundary.kind = decode.synchronous_fault ? BM_286_BOUNDARY_EXCEPTION :
         repeat_more ? BM_286_BOUNDARY_REP_ITERATION : BM_286_BOUNDARY_INSTRUCTION;
-    boundary.has_vector = (uint8_t) (decode.software_interrupt || decode.divide_error);
+    boundary.has_vector = (uint8_t) (decode.software_interrupt || decode.synchronous_fault);
     boundary.vector = decode.software_vector;
     boundary.bus_wait_cycles = decode.waits;
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock

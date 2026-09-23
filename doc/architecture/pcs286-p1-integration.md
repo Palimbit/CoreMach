@@ -430,7 +430,15 @@ interrupt/restart, failure effects, cleanup and 65,535 elements. Combined
 LOCK/event pin ordering remains explicit functional policy, not measured
 silicon timing; other strings/register forms and protected windows are pending.
 
-Next CPU tranche: real-mode exceptions/BOUND and absent-80287 behavior.
+BOUND now compares signed inclusive memory bounds, delivers restartable vector 5,
+and delivers vector 6 for register second operands. DIV/AAM share the private
+fault helper. Tests cover all 16-bit indices in a crossing-zero range,
+register/address matrices, invalid encodings, retry/TF and every-transfer errors.
+Four local configurations pass 103 ordinary tests with two device skips.
+BOUND segment-limit vector 13 remains a visible unsupported gap, as do general
+fault escalation and protected delivery. No measured timing or boot claim.
+
+Next CPU tranche: remaining real-mode exceptions and absent-80287 behavior.
 Protected lock windows remain coupled to future protected execution.
 Current unsupported combinations are missing
 implementation, not the 386 legal-prefix rule or fabricated guest #UD.

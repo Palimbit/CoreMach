@@ -98,7 +98,8 @@ typedef struct bm_286_boundary {
     uint8_t vector;
     /* INSTRUCTION + has_vector identifies a completed software interrupt;
      * EXCEPTION identifies sampled traps or delivered synchronous faults
-     * (currently real-mode #DE); external interrupts use INTERRUPT. */
+     * (real-mode #DE, BOUND #5 and BOUND register-operand #6);
+     * external interrupts use INTERRUPT. */
     uint8_t has_vector;
 } bm_286_boundary_t;
 
@@ -197,7 +198,7 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
  * is not a full saved microarchitectural/prefetch checkpoint.
  * Entry and IRET stage registers until all accesses succeed; completed bus
  * writes/acknowledgements are not undone on host errors, and retry is latched
- * off. Guest faults, protected gates and shutdown recovery are
+ * off. Remaining guest faults, protected gates and shutdown recovery are
  * pending, not approximated. Timing remains UNKNOWN for every boundary. */
 bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary);
 /* Exact existing engine callback: start_ns is virtual boundary time; returned

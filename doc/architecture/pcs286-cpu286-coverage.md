@@ -2,7 +2,37 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: bounded LOCK REP transfers
+## Latest tranche: real-mode BOUND and bounded fault delivery
+
+`62 /r` reads two consecutive signed word bounds and checks its word register
+inclusively. Out-of-range (including inverted bounds) delivers vector 5;
+ModRM register second operands deliver vector 6. FLAGS/registers are unchanged
+on an in-range result. Fault entry saves the first prefix IP, FLAGS and CS,
+clears IF/TF, and does not acknowledge the PIC. IRET can retry after a handler
+repairs the range. Existing DIV/AAM vector 0 uses the same private fault helper.
+
+The [Intel PRM, B-22](https://manualsdump.com/en/manuals/intel-80287model-80286model/110730/232)
+documents signed inclusive bounds, vector 5, invalid-register vector 6 and
+vector 13 for offsets FFFD..FFFF. The last condition remains **unsupported**,
+not a delivered guest fault: the four-byte pair is preflighted without wrapping.
+Protected mode, LOCK/REP BOUND, general #UD/#GP/#SS/#DF and shutdown escalation
+are not implemented by this tranche. No general unsupported opcode is turned
+into #UD. Bus failures still stop the emulator without replaying partial effects.
+Deferred SS-trap clearing on a fault and preflight ordering remain functional
+policies, not physical-chip precedence evidence. Timing stays UNKNOWN.
+
+Authored tests cover 2,744 register/range combinations (SP uses safe stack
+values), every 16-bit AX index against [-1,1], 20 address/segment/alignment
+combinations, the FFFC pair, all 64 invalid register encodings, prefix restart,
+IRET/TF, inhibited events and failure before/after every transfer of four fault
+forms. They do not replace silicon captures. GCC UCRT64 and MSVC Debug/Release
+pass 103 ordinary tests with two explicit Headland/AT DMA skips. The existing
+optional SST selection is unchanged. No BIOS, POST or machine-availability claim.
+
+Next: complete real-mode fault/absent-80287 handling, then system instructions,
+protected execution and a separately evidenced timing model.
+
+## Previous tranche: bounded LOCK REP transfers
 
 Real-mode LOCK MOVS, INS and OUTS (byte/word) now work with no repeat prefix
 or F2/F3. A repeated transfer retains private exclusion between diagnostic
@@ -724,7 +754,7 @@ generic catch-all or NOP is not coverage.
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h`, `x86_ops_io.h` | Memory strings and INS/OUTS with interruptible REP implemented; guest segment faults and physical timing pending |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
-| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH/IMUL, ENTER/LEAVE and immediate shifts implemented; other forms and guest faults missing; timing unknown |
+| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode forms implemented including BOUND #5/register #6; BOUND limit #13 and ARPL pending; timing unknown |
 | Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Missing; timing descriptor/path-dependent |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
 | Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | Missing; no populated FPU contract; timing unknown |
@@ -734,7 +764,8 @@ generic catch-all or NOP is not coverage.
 These are independent checks, not consequences of decoding the opcodes above.
 Defined reset, real-mode caches, HOLD and bounded real-mode hardware/software
 interrupt entry/return are implemented as described above. Protected execution
-and guest fault delivery remain missing. The table lists required coverage,
+and general guest fault delivery remain missing; real-mode #DE and BOUND
+#5/register-operand #6 are implemented. The table lists required coverage,
 not a claim that every case is implemented; it follows Intel manual
 chapters 8-10; exact frame/error-code and restart IP must be asserted through
 authored guest programs and bus traces.

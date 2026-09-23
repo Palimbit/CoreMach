@@ -95,6 +95,12 @@ if(TARGET blumach_cpu_80286)
     add_test(NAME pcs286-component.cpu-decimal COMMAND pcs286-cpu-decimal)
     set_tests_properties(pcs286-component.cpu-decimal PROPERTIES
         LABELS "pcs286-p0;component-acceptance" TIMEOUT 60)
+    add_executable(pcs286-cpu-bound cpu286_bound.c)
+    target_link_libraries(pcs286-cpu-bound PRIVATE blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-bound)
+    add_test(NAME pcs286-component.cpu-bound COMMAND pcs286-cpu-bound)
+    set_tests_properties(pcs286-component.cpu-bound PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 60)
     add_executable(pcs286-cpu-divide cpu286_divide.c)
     target_link_libraries(pcs286-cpu-divide PRIVATE blumach_cpu_80286 blumach_platform_null)
     pcs286_test_options(pcs286-cpu-divide)
