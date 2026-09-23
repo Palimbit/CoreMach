@@ -708,6 +708,11 @@ static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector,
             (uint16_t) (arch->sp - 2U * (i + 1U)), 2U, 1, &words[i]);
         if (status != BM_STATUS_OK)
             return status;
+        /* B-2/later INTA exclusion reaches the first stack push, not the
+         * complete frame/IVT. The word's odd fragments stay indivisible in
+         * this logical-transfer model; physical pin edges are not timed. */
+        if (i == 0U && decode->state->lock_active)
+            end_bus_lock(decode->state);
     }
     table.base = arch->idtr.base;
     table.limit = arch->idtr.limit;
@@ -756,8 +761,12 @@ static bm_status_t accept_interrupt(decoded_286_t *decode, unsigned event,
     if ((state->arch.msw & MSW_PE) || state->arch.shutdown)
         return BM_STATUS_UNSUPPORTED; /* Protected gates/recovery pending. */
     if (event == 0U) {
-        if (state->config.interrupt_ack == NULL)
+        if (state->config.interrupt_ack == NULL || state->config.bus_lock == NULL)
             return BM_STATUS_UNSUPPORTED;
+        /* Intel B-2/B-3 Information Sheet: both INTA cycles are joined to
+         * the first stack push. Do not silently run an unlocked acknowledge. */
+        state->lock_active = 1U;
+        state->config.bus_lock(state->config.pin_context, 1);
         for (unsigned phase = 0; phase < 2U; ++phase) {
             uint32_t waits = 0U;
             status = state->config.interrupt_ack(state->config.interrupt_context,
@@ -1938,6 +1947,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         status = accept_interrupt(&decode, event, &boundary);
         if (status != BM_STATUS_OK) {
             state->stopped = 1U;
+            end_bus_lock(state);
             return status;
         }
         state->rep_active = 0U;

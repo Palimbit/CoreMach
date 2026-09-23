@@ -2,7 +2,36 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: locked memory MOV and shifts/rotates
+## Latest tranche: automatic real-mode INTR exclusion
+
+Accepted INTR now requires the existing bus-lock adapter before either INTA
+callback. The logical exclusion window spans both acknowledgements and the
+first stack word; remaining frame writes and IVT reads are outside it.
+This follows Intel's B-2/later clarification in the
+[1984 information sheet](https://www.pcjs.org/documents/manuals/intel/80286/b2_b3_info/).
+Early-stepping behavior is not modeled. Odd fragments of the first word remain
+together as a logical-word policy, not certified physical pin timing.
+
+An absent adapter refuses before PIC or memory side effects. Any acknowledge,
+preflight or memory failure releases exclusion, latches the CPU stopped and
+never retries irreversible effects. A requester becoming pending during INTA
+cannot access until release and the subsequent HOLD/HLDA boundary. NMI, sampled
+TF and software INT do not acquire this INTA-specific window.
+
+The actual CPU/AT fixture tests aligned/odd stacks, both INTA phases, the
+second-phase vector, exact LOCKED coverage, release before remaining frame
+writes, contention and failed acknowledgements/each memory transfer. Memory
+failures are injected before and after effects; missing adapters and invalid
+stack/IDT preflight are checked. Existing CPU/PIC/AT integration now connects
+the real arbiter; single-master unit fixtures explicitly track lock pins.
+
+GCC UCRT64/MSVC Debug/Release pass 102 ordinary tests with two device skips;
+GCC Debug also runs the unchanged SST selection. Thirty Python checks,
+catalogue and provenance pass. No ABI layout, scheduler or other CPU changed.
+Timing remains UNKNOWN; no BIOS/POST claim. LOCK REP and protected automatic
+windows remain pending. This does not claim complete LOCK support.
+
+## Previous tranche: locked memory MOV and shifts/rotates
 
 F0 now supports real-mode memory MOV 88-8C/8E, A0-A3 and C6-C7,
 including segment-register transfers, and documented memory Group 2 operations

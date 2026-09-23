@@ -9,11 +9,19 @@
 #include <string.h>
 
 typedef struct fixture {
+    unsigned locked;
     bm_cpu_t cpu;
     uint8_t *ram;
     bm_bus_transaction_t trace[64];
     unsigned count, fail_at, acknowledgements;
 } fixture_t;
+/* No competing master in this fixture; track the exclusion contract. */
+static void lock_changed(void *context, int high)
+{
+    fixture_t *f = context;
+    assert(f->locked != (unsigned) high);
+    f->locked = (unsigned) high;
+}
 static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
 {
     fixture_t *f = context;
@@ -267,6 +275,7 @@ int main(void)
     f.ram = calloc(0x100000, 1); assert(f.ram);
     c.size = sizeof(c); c.version = BM_286_CONTRACT_VERSION;
     c.access = access_bus; c.access_context = &f; c.interrupt_ack = ack; c.interrupt_context = &f;
+    c.bus_lock = lock_changed; c.pin_context = &f;
     assert(bm_286_create(&host, &c, &f.cpu) == BM_STATUS_OK);
     interrupts(&f); flags(&f); popf_events(&f); failures(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;

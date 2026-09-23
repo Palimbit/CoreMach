@@ -102,7 +102,10 @@ typedef struct bm_286_boundary {
     uint8_t has_vector;
 } bm_286_boundary_t;
 
-/* Two interrupt-acknowledge phases per accepted INTR. phase is 0 then 1;
+/* Two interrupt-acknowledge phases per accepted INTR. Requires bus_lock.
+ * B-2/later logical exclusion spans both phases through the first stack word;
+ * the remainder of the frame and IVT reads are not in that window.
+ * Phase is 0 then 1;
  * vector is meaningful on phase 1; waits are extra CPU clocks. Device state
  * changes only at these real acknowledge calls, not when INTR is asserted. */
 typedef bm_status_t (*bm_286_inta_fn)(void *context, unsigned int phase,
@@ -129,11 +132,14 @@ typedef struct bm_286_config {
     bm_286_inta_fn interrupt_ack;
     void *interrupt_context;
     bm_286_pin_fn hold_ack;
-    /* Required for memory XCHG / supported LOCK memory forms. NULL rejects those
+    /* Required for accepted INTR, memory XCHG / supported LOCK memory forms.
+     * NULL rejects INTR before acknowledging the interrupt controller, and those
      * forms before data access. Assert/deassert delimit all operand fragments;
      * adapter must establish exclusion synchronously (no failure return).
      * Signal changes are allowed; reset/import/destroy/execution are deferred.
-     * Release follows architectural commit, or a latched host-error stop.
+     * Instruction LOCK releases after commit or a latched host-error stop.
+     * INTR releases after its first complete stack word, before frame commit;
+     * odd fragments stay together as a logical-word policy, not timed pins.
      * Operand transfers carry LOCKED, instruction fetches never do. */
     bm_286_pin_fn bus_lock;
     bm_286_pin_fn shutdown;

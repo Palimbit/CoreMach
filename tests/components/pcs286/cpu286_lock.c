@@ -16,6 +16,7 @@ typedef struct fixture {
     unsigned count, fail_at, acknowledgements, traced, hold_at;
     bm_at_bus_t *bus;
     unsigned lock_edges, locked, hold, request, error_after, dma_calls;
+    unsigned fail_ack, release_count;
     uint16_t release_ip;
     bm_286_boundary_t last_boundary;
 } fixture_t;
@@ -37,7 +38,7 @@ static void lock_changed(void *context, int asserted)
     f->locked=(unsigned)asserted; ++f->lock_edges;
     assert(bm_at_bus_set_lock(f->bus,asserted)==BM_STATUS_OK);
     assert(bm_286_get_arch_state(&f->cpu,&s)==BM_STATUS_OK);
-    if(!asserted) f->release_ip=s.ip;
+    if(!asserted) { f->release_ip=s.ip; f->release_count=f->count; }
 }
 static bm_at_transfer_t dma_transfer(void)
 {
@@ -80,7 +81,15 @@ static bm_status_t ack(void *context, unsigned phase, uint8_t *v, uint32_t *wait
 {
     fixture_t *f = context;
     assert(phase == (f->acknowledgements & 1U) && !*waits);
-    ++f->acknowledgements; *v = 0x30; return BM_STATUS_OK;
+    assert(f->locked);
+    ++f->acknowledgements;
+    if(f->request) {
+        bm_at_transfer_t dma=dma_transfer();
+        assert(bm_at_bus_request(f->bus,BM_AT_MASTER_DMA16,1)==BM_STATUS_OK);
+        assert(!f->hold && bm_at_bus_access(f->bus,&dma)==BM_STATUS_IDLE);
+    }
+    if(f->fail_ack==f->acknowledgements) return BM_STATUS_DEVICE_ERROR;
+    *v = phase ? 0x30 : 0x77; return BM_STATUS_OK;
 }
 static void trace_boundary(void *context, const bm_286_boundary_t *b)
 {
@@ -124,6 +133,7 @@ static bm_286_arch_state_t setup(fixture_t *f, const uint8_t *code, size_t size)
     assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
     assert(!f->locked);
     f->lock_edges=f->request=f->error_after=f->dma_calls=0;
+    f->fail_ack=f->release_count=0;
     f->count = f->fail_at = f->acknowledgements = f->traced = f->hold_at = 0;
     s = state(f); s.ip = 0x100;
     s.cs.selector = 0x3000; s.cs.base = 0x30000;
@@ -393,6 +403,62 @@ static void rejection_and_interrupt(fixture_t *f)
         }
     }
 }
+static void interrupt_lock(fixture_t *f)
+{
+    const uint8_t code[]={0x90};
+    for(unsigned odd=0;odd<2;++odd) {
+        bm_286_arch_state_t s=prepare(f,code,sizeof(code),1);
+        s.sp=(uint16_t)(s.sp+odd); s.flags=0x202; set(f,&s); f->request=1;
+        assert(f->cpu.ops.signal(f->cpu.context,BM_286_SIGNAL_INTR,1)==BM_STATUS_OK);
+        bm_286_boundary_t b=step(f);
+        assert(b.vector==0x30 && f->acknowledgements==2 && f->lock_edges==2 && !f->locked);
+        assert(f->release_count==1+odd && f->release_ip==s.ip);
+        for(unsigned i=0;i<f->count;++i) {
+            assert(f->trace[i].operation!=BM_BUS_FETCH);
+            assert(f->trace[i].attributes==(i<1+odd ? BM_BUS_TRANSACTION_LOCKED : 0U));
+        }
+        assert(read_word(f,s.ss.base+s.sp-2)==s.flags);
+        assert(f->hold && !f->dma_calls);
+        bm_at_transfer_t dma=dma_transfer();
+        assert(bm_at_bus_access(f->bus,&dma)==BM_STATUS_IDLE);
+        assert(bm_286_step(&f->cpu,&b)==BM_STATUS_IDLE && b.kind==BM_286_BOUNDARY_HOLD);
+        assert(bm_at_bus_access(f->bus,&dma)==BM_STATUS_OK && f->dma_calls==1);
+        assert(bm_at_bus_request(f->bus,BM_AT_MASTER_DMA16,0)==BM_STATUS_OK);
+        unsigned total=f->count;
+        for(unsigned after=0;after<2;++after)
+            for(unsigned fail=1;fail<=total+2;++fail) {
+                s=prepare(f,code,sizeof(code),1); s.sp=(uint16_t)(s.sp+odd);
+                s.flags=0x202; set(f,&s); f->request=1; f->error_after=after;
+                if(fail<=2) f->fail_ack=fail; else f->fail_at=fail-2;
+                assert(f->cpu.ops.signal(f->cpu.context,BM_286_SIGNAL_INTR,1)==BM_STATUS_OK);
+                assert(bm_286_step(&f->cpu,&b)==BM_STATUS_DEVICE_ERROR);
+                bm_286_arch_state_t a=state(f); same(&a,&s);
+                assert(!f->locked && f->lock_edges==2 && !f->traced);
+                assert(f->acknowledgements==(fail<=2 ? fail : 2U));
+                unsigned count=f->count, acks=f->acknowledgements;
+                assert(bm_286_step(&f->cpu,&b)==BM_STATUS_INVALID_STATE);
+                assert(f->count==count && f->acknowledgements==acks);
+                for(unsigned i=0;i<f->count;++i)
+                    if((!f->fail_at || i+1<f->fail_at || after) && f->trace[i].operation==BM_BUS_WRITE)
+                        for(unsigned j=0;j<f->trace[i].size;++j)
+                            assert(f->ram[f->trace[i].address+j]==(uint8_t)(f->trace[i].value>>(8*j)));
+            }
+    }
+    for(unsigned event=0;event<3;++event) {
+        const uint8_t op[]={0xcc};
+        bm_286_arch_state_t s=prepare(f,op,sizeof(op),1);
+        if(event==0) s.nmi_pending=1;
+        if(event==1) s.trap_pending=1;
+        set(f,&s); step(f); assert(!f->lock_edges && !f->acknowledgements);
+    }
+    for(unsigned invalid=0;invalid<2;++invalid) {
+        bm_286_arch_state_t s=prepare(f,code,sizeof(code),1); bm_286_boundary_t b;
+        s.flags=0x202; if(invalid) s.ss.valid=0; else s.idtr.limit=0;
+        set(f,&s); assert(f->cpu.ops.signal(f->cpu.context,BM_286_SIGNAL_INTR,1)==BM_STATUS_OK);
+        assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED);
+        assert(f->acknowledgements==2 && !f->count && !f->locked && f->lock_edges==2);
+    }
+}
 int main(void)
 {
     fixture_t f={0}; bm_host_services_t host=bm_null_host_services();
@@ -409,6 +475,17 @@ int main(void)
     assert(bm_286_create(&host,&cpu,&f.cpu)==BM_STATUS_OK);
     exchanged(&f); rmw_equivalence(&f); moves_and_shifts(&f);
     failures(&f); rejection_and_interrupt(&f);
+    interrupt_lock(&f);
+    /* Missing exclusion adapter must refuse before touching the PIC or RAM. */
+    f.cpu.ops.destroy(f.cpu.context); cpu.bus_lock=NULL;
+    assert(bm_286_create(&host,&cpu,&f.cpu)==BM_STATUS_OK);
+    {
+        const uint8_t code[]={0x90}; bm_286_boundary_t b;
+        bm_286_arch_state_t s=prepare(&f,code,sizeof(code),1); s.flags=0x202; set(&f,&s);
+        assert(f.cpu.ops.signal(f.cpu.context,BM_286_SIGNAL_INTR,1)==BM_STATUS_OK);
+        assert(bm_286_step(&f.cpu,&b)==BM_STATUS_UNSUPPORTED);
+        assert(!f.count && !f.acknowledgements && !f.lock_edges);
+    }
     bm_at_bus_reset(f.bus); assert(f.cpu.ops.reset(f.cpu.context)==BM_STATUS_OK);
     bm_at_bus_destroy(f.bus); f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }

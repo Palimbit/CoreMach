@@ -9,12 +9,20 @@
 #include <string.h>
 
 typedef struct fixture {
+    unsigned locked;
     bm_cpu_t cpu;
     uint8_t *ram;
     bm_bus_transaction_t trace[64];
     unsigned count, fail_at, acknowledgements, traced;
     bm_286_boundary_t last_boundary;
 } fixture_t;
+/* No competing master in this fixture; track the exclusion contract. */
+static void lock_changed(void *context, int high)
+{
+    fixture_t *f = context;
+    assert(f->locked != (unsigned) high);
+    f->locked = (unsigned) high;
+}
 static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
 {
     fixture_t *f = context;
@@ -294,7 +302,8 @@ static void prefixes_and_failures(fixture_t *f)
         bm_286_boundary_t b; if (bad == 3) s.msw |= 1;
         set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state(f); same(&a, &s);
-        assert(f->count == (bad == 3 ? 0U : bad == 0 ? 1U : 2U));
+        /* With an installed lock adapter, F0 is decoded before refusing AAM. */
+        assert(f->count == (bad == 3 ? 0U : 2U));
     }
 }
 int main(void)
@@ -304,6 +313,7 @@ int main(void)
     config.size = sizeof(config); config.version = BM_286_CONTRACT_VERSION;
     config.access = access_bus; config.access_context = &f;
     config.interrupt_ack = ack; config.interrupt_context = &f;
+    config.bus_lock = lock_changed; config.pin_context = &f;
     config.trace = trace_boundary; config.trace_context = &f;
     assert(bm_286_create(&host, &config, &f.cpu) == BM_STATUS_OK);
     exhaustive(&f); decimal_pairs(&f); prefixes_and_failures(&f);

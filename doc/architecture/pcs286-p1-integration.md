@@ -417,8 +417,14 @@ The same 102 ordinary tests pass in all four local configurations, two device
 skips, 30 Python checks and provenance 36 components / 198 files. Timing remains
 UNKNOWN and existing masked-zero read/no-write policy is not a bus capture.
 
-Next CPU tranche: broader 286-specific LOCK scopes, including LOCK REP and
-automatic interrupt windows. Current unsupported combinations are missing
+Real-mode INTR now uses the bus-lock adapter across both INTA callbacks and
+the first stack word (B-2/later policy); remaining frame and IVT are outside
+that window. CPU/PIC/AT integration connects the real arbiter. Tests cover
+contention, both alignments, failure cleanup and missing adapter refusal.
+No new timing or complete-machine claim follows.
+
+Next CPU tranche: LOCK REP and remaining/protected automatic lock windows.
+Current unsupported combinations are missing
 implementation, not the 386 legal-prefix rule or fabricated guest #UD.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution

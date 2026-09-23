@@ -10,6 +10,7 @@
 #include <string.h>
 
 typedef struct fixture {
+    unsigned locked;
     bm_cpu_t cpu;
     bm_at_pic_t *pic;
     uint8_t *ram;
@@ -17,6 +18,13 @@ typedef struct fixture {
     unsigned count, fail_at, acks, fail_ack, new_nmi_at, boundaries;
     int use_pic;
 } fixture_t;
+/* No competing master in this fixture; track the exclusion contract. */
+static void lock_changed(void *context, int high)
+{
+    fixture_t *f = context;
+    assert(f->locked != (unsigned) high);
+    f->locked = (unsigned) high;
+}
 
 static bm_286_arch_state_t state(fixture_t *f)
 {
@@ -283,6 +291,7 @@ int main(void)
     config.size = sizeof(config); config.version = BM_286_CONTRACT_VERSION;
     config.access = access_bus; config.access_context = &f;
     config.interrupt_ack = acknowledge; config.interrupt_context = &f;
+    config.bus_lock = lock_changed; config.pin_context = &f;
     config.trace = trace_boundary; config.trace_context = &f;
     assert(bm_286_create(&host, &config, &f.cpu) == BM_STATUS_OK);
     assert(bm_at_pic_create(&host, &pc, &f.pic) == BM_STATUS_OK);

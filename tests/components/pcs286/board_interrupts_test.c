@@ -106,6 +106,11 @@ static void hlda_changed(void *context, int high)
     board_t *b = context;
     assert(bm_at_bus_hold_ack(b->bus, high) == BM_STATUS_OK);
 }
+static void lock_changed(void *context, int high)
+{
+    board_t *b = context;
+    assert(bm_at_bus_set_lock(b->bus, high) == BM_STATUS_OK);
+}
 static bm_status_t memory_access(void *context, bm_at_transfer_t *transfer)
 {
     board_t *b = context;
@@ -191,6 +196,7 @@ static bm_status_t create(board_t *b, const bm_host_services_t *host, const uint
     cpu.access = bm_at_bus_cpu_access; cpu.access_context = b->bus;
     cpu.interrupt_ack = interrupt_ack; cpu.interrupt_context = b;
     cpu.hold_ack = hlda_changed; cpu.pin_context = b;
+    cpu.bus_lock = lock_changed;
     result = bm_286_create(host, &cpu, &b->cpu);
     if (result != BM_STATUS_OK) goto failed;
     result = bm_at_pic_create(host, &pic, &b->pic);
