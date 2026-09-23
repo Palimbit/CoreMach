@@ -67,6 +67,20 @@ if(TARGET blumach_cpu_80286)
     add_test(NAME pcs286-component.cpu-data-transfer COMMAND pcs286-cpu-data-transfer)
     set_tests_properties(pcs286-component.cpu-data-transfer PROPERTIES
         LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
+    add_executable(pcs286-cpu-alu-oracle cpu286_alu_oracle.c)
+    target_link_libraries(pcs286-cpu-alu-oracle PRIVATE
+        blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-alu-oracle)
+    add_test(NAME pcs286-component.cpu-alu-oracle COMMAND pcs286-cpu-alu-oracle)
+    set_tests_properties(pcs286-component.cpu-alu-oracle PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 60)
+    add_executable(pcs286-cpu-arithmetic cpu286_arithmetic.c)
+    target_link_libraries(pcs286-cpu-arithmetic PRIVATE
+        blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-arithmetic)
+    add_test(NAME pcs286-component.cpu-arithmetic COMMAND pcs286-cpu-arithmetic)
+    set_tests_properties(pcs286-component.cpu-arithmetic PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
 endif()
 pcs286_acceptance(headland headland_acceptance.c blumach_headland_gc10x)
 pcs286_acceptance(at-bus at_bus_acceptance.c blumach_at_bus)

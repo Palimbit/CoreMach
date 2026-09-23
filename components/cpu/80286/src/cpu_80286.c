@@ -549,7 +549,7 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
     operand_286_t operand = {0};
-    uint16_t destination, source, result, flags;
+    uint16_t destination, source = 0U, result, flags;
     uint8_t immediate;
     unsigned operation, form, size;
     bm_status_t status;

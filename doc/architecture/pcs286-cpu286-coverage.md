@@ -242,3 +242,10 @@ consulted inherited sources at exact base
 the CPU source, not an embedded global core. Intel 210498-005 chapters 3 and
 Appendix B are the primary arithmetic/flag reference. The forms have no
 certified elapsed native-clock timing.
+
+Coordinator validation: 81 executed tests pass in UCRT64 GCC and MSVC, each
+in Debug and Release; Headland/PIC/DMA remain three explicit skips. The added
+independent mathematical oracle covers 1,054,848 binary/unary cases, exhaustive
+for the selected byte operands/carry inputs and sampled at 16-bit boundaries.
+It does not certify timings, undocumented silicon or complete ISA coverage.
+Provenance audit: 34 components/175 files, zero errors. No firmware executed.
