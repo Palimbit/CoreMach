@@ -1223,7 +1223,7 @@ pcs86_create(bm_engine_t *engine,
         machine->jumpers = (uint8_t) (machine->jumpers & ~0x80U);
     if (config->jumpers_manual)
         machine->jumpers = config->jumpers_value;
-    for (size_t index = 0U; index < 2U; ++index)
+    for (index = 0U; index < 2U; ++index)
         machine->floppy_drive_type[index] = config->floppy_drive_type[index];
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
