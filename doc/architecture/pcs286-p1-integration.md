@@ -353,8 +353,18 @@ The unchanged SST selection excludes these groups and still defers exceptions.
 Undefined FLAGS and clearing a previously SS-deferred trap on #DE are explicit
 functional policies; no timing, general fault escalation or board POST claim.
 
-Next CPU tranche: decimal adjustment, including AAM base zero via #DE;
-memory XCHG still needs its separate LOCK path.
+DAA/DAS/AAA/AAS/AAM/AAD are now implemented with explicit undefined-flag
+preservation. AAA/AAS adjust full AX; AAM zero enters #DE without partial
+results, instead of inheriting the old base-ten substitution. Authored tests
+cover 1,319,424 scalar cases, 40,000 valid ADC/SBB plus decimal-adjust pairs,
+all segment overrides, aligned/odd exception entry, transfer failures and
+guest patch/IRET/retry with TF. All 98 ordinary tests pass in GCC UCRT64/MSVC
+Debug/Release, two component skips, 30 Python checks and provenance
+(36 components / 194 files). The unchanged SST selection excludes BCD;
+nondecimal/invalid-BCD edges still need 286 hardware-capture comparison.
+
+Next CPU tranche: unprefixed strings, then interruptible/restartable REP and
+string I/O; memory XCHG still needs its separate LOCK path.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.

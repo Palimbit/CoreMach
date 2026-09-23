@@ -7,7 +7,8 @@
  * src/cpu/x86_ops_pmode.h, src/cpu/x86_ops_rep_286_2386.h,
  * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h,
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h, src/cpu/x86_ops_shift.h,
- * src/cpu/x86_ops_misc.h, src/cpu/x86_ops_mul.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
+ * src/cpu/x86_ops_misc.h, src/cpu/x86_ops_mul.h, src/cpu/x86_ops_bcd.h,
+ * src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
  * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
  * src/cpu/x86_ops_ret_2386.h, src/cpu/x86_ops_flag.h,
  * src/cpu/x86_ops_flag_2386.h, src/cpu/x86_ops_int.h and src/cpu/x86_ops_io.h. The inherited
@@ -1208,6 +1209,72 @@ static bm_status_t execute_multiply(decoded_286_t *decode, uint8_t opcode,
     return BM_STATUS_OK;
 }
 
+static bm_status_t deliver_divide_error(decoded_286_t *decode)
+{
+    /* 286 faults save the initial IP, including prefixes; no error code or
+     * INTA. Only mark delivery complete after the whole frame/IVT succeeds. */
+    bm_status_t status = interrupt_frame(decode, 0U, decode->state->arch.ip);
+    if (status == BM_STATUS_OK)
+        decode->divide_error = 1U;
+    return status;
+}
+
+static bm_status_t execute_decimal(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t ax = arch->ax, flags = arch->flags;
+    unsigned al = ax & 0xffU;
+    int low_adjust = (al & 0xfU) > 9U || (flags & FLAG_AF);
+    if (opcode == 0x37U || opcode == 0x3fU) { /* AAA/AAS: 286 full AX. */
+        flags &= (uint16_t) ~(FLAG_AF | FLAG_CF);
+        if (low_adjust) {
+            ax = (uint16_t) (opcode == 0x37U ? ax + 0x106U : ax - 0x106U);
+            flags |= FLAG_AF | FLAG_CF;
+        }
+        ax &= 0xff0fU;
+        /* S/Z/P/O undefined: preserved, not a silicon behavior claim. */
+    } else {
+        if (opcode == 0x27U || opcode == 0x2fU) {
+            unsigned old_al = al;
+            int high_adjust = old_al > 0x99U || (flags & FLAG_CF);
+            flags &= (uint16_t) ~(FLAG_AF | FLAG_CF);
+            if (low_adjust) {
+                al = (opcode == 0x27U ? al + 6U : al - 6U) & 0xffU;
+                flags |= FLAG_AF;
+                /* DAS retains the low-stage borrow even without a high
+                 * adjustment (e.g. AL=0, AF=1, CF=0). DAA does not. */
+                if (opcode == 0x2fU && old_al < 6U)
+                    flags |= FLAG_CF;
+            }
+            if (high_adjust) {
+                al = (opcode == 0x27U ? al + 0x60U : al - 0x60U) & 0xffU;
+                flags |= FLAG_CF;
+            }
+            ax = (uint16_t) ((ax & 0xff00U) | al);
+        } else { /* AAM/AAD: fetch the radix before changing any state. */
+            uint8_t radix;
+            bm_status_t status = next_byte(decode, &radix);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (opcode == 0xd4U) {
+                if (radix == 0U)
+                    return deliver_divide_error(decode);
+                ax = (uint16_t) (((al / radix) << 8U) | (al % radix));
+            } else
+                ax = (uint16_t) ((al + (ax >> 8U) * radix) & 0xffU);
+            al = ax & 0xffU;
+            /* AAM/AAD A/C/O undefined: preserve them explicitly. */
+        }
+        flags &= (uint16_t) ~(FLAG_SF | FLAG_ZF | FLAG_PF);
+        if (al == 0U) flags |= FLAG_ZF;
+        if (al & 0x80U) flags |= FLAG_SF;
+        if (even_parity((uint8_t) al)) flags |= FLAG_PF;
+    }
+    arch->ax = ax;
+    arch->flags = flags;
+    return BM_STATUS_OK;
+}
+
 static bm_status_t execute_divide(decoded_286_t *decode, unsigned size,
                                   const operand_286_t *operand)
 {
@@ -1239,14 +1306,8 @@ static bm_status_t execute_divide(decoded_286_t *decode, unsigned size,
         remainder = dividend % source;
         fault = quotient > (size == 1U ? 0xffU : 0xffffU);
     }
-    if (fault) {
-        /* 286 faults save the initial IP, including all prefixes. No error
-         * code, no INTA, and no partial quotient/remainder commit. */
-        status = interrupt_frame(decode, 0U, arch->ip);
-        if (status == BM_STATUS_OK)
-            decode->divide_error = 1U;
-        return status;
-    }
+    if (fault)
+        return deliver_divide_error(decode);
     if (size == 1U)
         arch->ax = (uint16_t) ((quotient & 0xffU) | ((remainder & 0xffU) << 8U));
     else {
@@ -1266,6 +1327,9 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
     uint8_t immediate;
     unsigned operation, form, size;
     bm_status_t status;
+    if (opcode == 0x27U || opcode == 0x2fU || opcode == 0x37U ||
+        opcode == 0x3fU || opcode == 0xd4U || opcode == 0xd5U)
+        return execute_decimal(decode, opcode);
     if (opcode == 0x98U || opcode == 0x99U) { /* CBW, CWD; FLAGS unchanged. */
         if (opcode == 0x98U)
             arch->ax = (uint16_t) signed_operand(arch->ax, 1U);

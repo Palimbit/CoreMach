@@ -2,7 +2,48 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode division and divide-error delivery
+## Latest tranche: real-mode decimal adjustments
+
+DAA/DAS/AAA/AAS/AAM/AAD now update AX and their defined flags. AAA/AAS
+apply the 286 full-AX correction (including carry/borrow into AH), not the
+8086 AL-only variant. DAA/DAS inspect the original AL and CF for the high
+correction; DAS retains a borrow from its low correction. AAM/AAD consume
+the immediate radix. AAD zero is valid; AAM zero delivers the same real-mode
+#DE as DIV/IDIV, before changing AX or flags. A guest test patches the radix,
+returns through IRET and retries from the initial segment prefix.
+
+Undefined flags are preserved as explicit policy, not hardware evidence:
+OF for DAA/DAS, OF/SF/ZF/PF for AAA/AAS, OF/AF/CF for AAM/AAD. Valid results
+set SF/ZF/PF from AL where defined. Failed immediate fetch or exception entry
+preserves architectural state and stops, retaining completed external writes
+without replay. No clock, public contract, GUI or other guest CPU changed.
+
+Evidence: pinned inherited `src/cpu/x86_ops_bcd.h` at
+`87c3fb4876eaad086921bc3444569da026286c36` was consulted and added to
+derived-rewrite provenance. Its AAM-zero-to-ten fallback is deliberately not
+ported. [Intel's later instruction reference, AAM/AAD and DAA/DAS entries](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-2a-manual.pdf)
+clarifies generalized radix and #DE behavior. This is functional evidence,
+not proof that all invalid-BCD/nondecimal edge cases have been captured from
+a 286. Earlier Intel 386 pseudocode uses a different adjustment presentation;
+it is not used as an exhaustive invalid-input oracle. No new manual, firmware
+or third-party test data is copied into the repository.
+
+Authored `cpu286_decimal.c` checks 1,319,424 scalar cases with separate
+arithmetic/flag calculations: all AL/flag combinations for DAA/DAS; all AX/AF
+values for AAA/AAS; every AL/nonzero radix for AAM; every AX in nine AAD bases
+and all radices against boundary pairs. Another 40,000 valid packed-decimal
+ADC/SBB followed by DAA/DAS sequences use ordinary decimal mathematics as
+the oracle. Tests include all segment overrides, odd/even stack and relocated
+IVT, every failing transfer, 256 AAM-zero faults, guest self-repair/IRET/TF,
+and explicit PE/LOCK/REP rejection. Existing division tests remain active.
+
+GCC UCRT64 and MSVC Debug/Release pass 98 ordinary tests with two Headland/AT
+DMA skips; GCC Debug adds the unchanged optional SST regression. The selected
+SST files do not cover these decimal instructions. Thirty Python checks,
+catalogue and provenance (36 components / 194 files) pass. Timing is UNKNOWN;
+strict clocked execution still refuses before fetch. No BIOS/POST claim.
+
+## Previous tranche: real-mode division and divide-error delivery
 
 DIV/IDIV F6/F7 /6,/7 now read byte/word divisors and commit quotient/remainder
 only after checking for zero and out-of-range quotients. Signed division uses
@@ -203,15 +244,18 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 ### Remaining CPU work (not motherboard work)
 
 - Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
-- Decimal adjustment instructions (multiply, DIV/IDIV and CBW/CWD implemented).
+- Decimal/multiply/divide edge cases still need expanded hardware-capture
+  comparison; functional instruction implementations are present.
 - Strings, REP restart/interruption and string I/O.
 - Guest faults beyond real-mode #DE, BOUND/invalid-opcode handling, protected segmentation, descriptors,
   privilege, tasks/gates and system instructions; correct double fault/shutdown.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is decimal adjustment (DAA/DAS/AAA/AAS/AAM/AAD),
-including AAM base zero reusing the real-mode divide-error path.
+The next bounded block is unprefixed string operations, followed by REP with
+interruptible/restartable iterations and string I/O. The ordered CPU roadmap
+then covers memory XCHG/LOCK, remaining real-mode faults and 80287 interface,
+protected segmentation/system instructions, gates/tasks, and calibrated timing.
 Memory XCHG stays separate until
 the implicit LOCK/bus contract is implemented and tested. Completing real-mode
 instructions does not certify a full 286 or eliminate the PCS286 chipset gates.
@@ -359,7 +403,7 @@ generic catch-all or NOP is not coverage.
 | Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
 | Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register XCHG implemented; MOV SS has SS-load inhibition; memory XCHG and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
-| Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode MUL/IMUL/DIV/IDIV including #DE, IMUL 69/6B and CBW/CWD implemented; BCD and general fault escalation pending; timings unknown |
+| Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode functional forms implemented, including #DE for division and AAM zero; general fault escalation and expanded hardware captures pending; timings unknown |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
