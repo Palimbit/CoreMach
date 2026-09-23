@@ -7,12 +7,15 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUuid>
 
 #include <utility>
+#include <cmath>
+#include <limits>
 
 namespace {
 constexpr auto profileFileName = "machine.blumach.json";
@@ -73,6 +76,21 @@ bool parseProfile(const QByteArray &json, const QFileInfo &directory,
                 QUrl(reference).toLocalFile() :
                 profileDir.absoluteFilePath(reference)));
     }
+    const QJsonValue optionsValue = configuration.value(QStringLiteral("options"));
+    if (!optionsValue.isUndefined() && !optionsValue.isObject())
+        return false;
+    const QJsonObject options = optionsValue.toObject();
+    static const QRegularExpression optionName(
+        QStringLiteral("^[a-z][a-z0-9_]*$"));
+    for (auto it = options.begin(); it != options.end(); ++it) {
+        const double number = it.value().toDouble(-1);
+        if (!optionName.match(it.key()).hasMatch() || !it.value().isDouble() ||
+            !std::isfinite(number) || number < 0 ||
+            number > std::numeric_limits<quint32>::max() ||
+            std::floor(number) != number)
+            return false;
+        profile->options.insert(it.key(), static_cast<quint32>(number));
+    }
     return true;
 }
 }
@@ -113,6 +131,7 @@ bool MachineProfileStore::save(PortableMachineProfile *profile,
     const QString directory = QDir(root_).filePath(id);
     const QDir profileDir(directory);
     QJsonObject assets;
+    QJsonObject options;
     for (auto it = profile->assets.cbegin(); it != profile->assets.cend(); ++it) {
         if (it.key().isEmpty() || it.value().isEmpty())
             continue;
@@ -126,6 +145,16 @@ bool MachineProfileStore::save(PortableMachineProfile *profile,
         assets.insert(it.key(), QDir::isAbsolutePath(relative) ?
             QUrl::fromLocalFile(input.absoluteFilePath()).toString(QUrl::FullyEncoded) :
             QDir::fromNativeSeparators(relative));
+    }
+    static const QRegularExpression optionName(
+        QStringLiteral("^[a-z][a-z0-9_]*$"));
+    for (auto it = profile->options.cbegin(); it != profile->options.cend(); ++it) {
+        if (!optionName.match(it.key()).hasMatch()) {
+            if (error != nullptr)
+                *error = QStringLiteral("Invalid machine option name");
+            return false;
+        }
+        options.insert(it.key(), static_cast<double>(it.value()));
     }
     if (!QDir().mkpath(directory)) {
         if (error != nullptr)
@@ -142,7 +171,8 @@ bool MachineProfileStore::save(PortableMachineProfile *profile,
             { QStringLiteral("variant"), QStringLiteral("default") }
         } },
         { QStringLiteral("configuration"), QJsonObject {
-            { QStringLiteral("assets"), assets }
+            { QStringLiteral("assets"), assets },
+            { QStringLiteral("options"), options }
         } }
     };
     QSaveFile output(profileDir.filePath(QString::fromLatin1(profileFileName)));

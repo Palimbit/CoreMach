@@ -40,9 +40,11 @@ The BIOS establishes a CGA-compatible video route at 3D4h, 3D8h, 3D9h and
 extended registers 00h–69h, recognizes modes 00h–07h and clears 16 KB through
 the colour video path. BluMach therefore uses the V6355D compatibility device
 and its known memory aliases, then gives the M15 variant a fixed LCD
-presentation that maps RGBI luminance to four green levels. This is enough to
-make the firmware's text and graphics observable, but it is not a model of
-the LCD's drive waveform, contrast or response time.
+presentation that maps RGBI luminance to four green/blue-grey levels. The
+unenergized background is light green and active pixels darken toward a cooler
+blue-grey green, matching the direction visible in panel photographs. These
+approximate RGB values are not
+measurements of the original LCD's drive waveform, contrast or response time.
 
 The BIOS also supplies a useful physical clue that ordinary CGA lacks: a table
 of 128 8×8 ASCII glyphs. The initializer copies only codes 00h–7Fh from the

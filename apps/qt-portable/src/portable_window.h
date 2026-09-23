@@ -27,7 +27,6 @@ class QCloseEvent;
 class QKeyEvent;
 class QLabel;
 class LauncherPage;
-class QStackedWidget;
 class QToolBar;
 
 class PortableWindow final : public QMainWindow {
@@ -39,6 +38,7 @@ public:
                      const QHash<QString, QString> &paths);
     bool openInitialProduct(const QString &productId,
                             const QHash<QString, QString> &paths);
+    void showLauncher();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -58,12 +58,14 @@ private:
 
     void chooseMachine(const QString &productId = QString());
     void chooseSavedMachine(const QString &profileId);
+    void editSavedMachine(const QString &profileId);
     void refreshProfiles();
-    void showLauncher();
+    void savePreview();
     bool openMachine(const bm_frontend_adapter_t *adapter,
                      const QHash<QString, QString> &paths,
                      const QString &stateId = QString(),
-                     const QString &displayName = QString());
+                     const QString &displayName = QString(),
+                     const QHash<QString, quint32> &options = {});
     void closeMachine();
     void togglePause();
     void resetMachine();
@@ -88,7 +90,6 @@ private:
     void updateActions();
     void showStatus(const QString &detail = QString());
     DisplayWidget *display_;
-    QStackedWidget *pages_;
     LauncherPage *launcher_ = nullptr;
     QLabel *status_;
     QLabel *storageStatus_;
@@ -114,6 +115,7 @@ private:
     QVector<PortableMachineProfile> profiles_;
     PortableCatalog catalog_;
     QString catalogError_;
+    QString resourceRoot_;
     bm_frontend_machine_t *machine_ = nullptr;
     std::unique_ptr<SessionWorker> worker_;
     SnapshotMailbox snapshotMailbox_;
@@ -131,6 +133,9 @@ private:
     QString activeDisplayName_;
     bm_video_geometry_t videoGeometry_ {};
     QElapsedTimer frameRateTimer_;
+    QElapsedTimer previewTimer_;
+    QImage lastPreview_;
+    bool previewSaved_ = false;
     unsigned int presentedFrames_ = 0U;
     double presentationFps_ = 0.0;
     bool hasVideoGeometry_ = false;

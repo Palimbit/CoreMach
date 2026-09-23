@@ -74,7 +74,7 @@ the emulated processor.
 | NEC V30 | Functional instruction-boundary core derived from the inherited interpreter | Complete documented native and 8080 opcode-map classification, snapshot v4 with MD write gate, segmented 20-bit addresses, ModR/M, native and emulated stacks, hardware-vector-validated primary ALU forms, 80186-compatible and NEC extensions, FPO/POLL CPU contract, BRKEM/CALLN/RETEM, interrupt and NMI round trips, prefix shadows, interruptible REP and BUSLOCK transaction attributes; aligned word memory, stack/vector transfers and even-port word I/O use one 16-bit bus transaction while odd words use two byte cycles; a private instance-owned BCU component holds the real six-byte instruction queue, independent PFP and T1/T2/T3/Tw/T4 state for both prefetch and operand/I/O transfers; every instruction-queue read advances that BCU for its documented predecode clock, and a pending prefetch completes before an operand acquires the shared bus; demand fetch is phase-driven and safe bus-free instructions with exact documented timings overlap BCU prefetch with EXU clocks across boundaries; timing-observation v38 reports exact/ranged native execution clocks, bus occupancy, waits, queue reads, prefetch and operand transactions, phase state and prefetch-to-operand handoff, places every native prefix at decode time, and places all eight native `IN`/`OUT`, four direct accumulator-memory `MOV` forms, `XLAT`, all four ModR/M `MOV` memory forms, all ModR/M ALU memory forms including read-modify-write destinations, ModR/M `TEST` and `XCHG` memory forms, immediate ALU groups `80h`-`83h`, segment-register `MOV` memory forms, immediate-to-r/m `MOV` groups `C6h`-`C7h`, Group 3 `F6h`-`F7h` memory operands, `FEh`/`FFh` memory `INC`/`DEC`, common single-word stack `PUSH`/`POP` forms including Group 5 `PUSH r/m16` and memory `POP r/m16`, all complete `MOVS`/`LODS`/`STOS`/`SCAS`/`CMPS` strings, relative and direct or indirect near and far `CALL`, indirect near and far `JMP`, near and far `RET` including immediate cleanup, `LES`/`LDS`, software `INT`/`IRET`, and accumulator-immediate `TEST` on an explicit EXU timeline, resolves unsigned MULU's one-clock range with the inherited high-half condition, places accepted NMI and maskable INT boundaries with alignment-sensitive stack writes and a separate BCU handoff, and classifies the immediately-ready seven-clock `POLL` case while preserving signed arithmetic ranges; remaining operand EXU placement, exact realised values inside ranges, interrupted string fragments, busy-POLL resumption, DMA arbitration and embedded floating-point execution remain explicit |
 | Conventional RAM | Board-owned portable memory region | 640 KiB, zero-initialized and byte-addressable; the 64 KiB below the EMS frame remains visible whenever its corresponding window is disabled or selects an unavailable page |
 | System ROM | Evidence-backed map | Two 32 KiB halves interleaved at `F0000h-FFFFFh`; bytes remain external and CPU writes have no effect |
-| Scheduler timing | Clocked runtime with strict unsupported guard | Runtime time is integer nanoseconds. The V30 reports exact boundary cycles at 10 MHz; PIT uses the exact `14.31818 MHz / 12` rational rate and the MM58167 uses its microsecond domain. All boundaries on the BIOS-only path through indexed VGA word I/O are scalar, including accepted NMI/INT and the PCS 86 immediately-ready `POLL`; unresolved ranges, busy `POLL`, single-step and synchronous faults stop instead of inventing time. XTA DMA service uses a demand-driven timed source, disarmed while idle and retried at the declared functional interval of 32 microseconds only while pending; this is not yet a physical disk-latency model. With the preserved System Disk mounted read-only, the strict run completes 20 seconds of virtual time across 16,503,008 exact instruction boundaries and 11,977 I/O operations with no ranged or unknown boundary; this validates the exercised BIOS-and-floppy path, not every possible V30 path |
+| Scheduler timing | Clocked runtime with strict CPU callback and explicit PCS 86 provisional-range policy | Runtime time is integer nanoseconds; V30 runs at 10 MHz, PIT at exact `14.31818 MHz / 12`, and MM58167 in its microsecond domain. Exact NEC instruction times remain exact. For a *documented* data-dependent range whose realised V30 timing is not yet measured, the PCS 86 alone schedules the published upper bound and reports `PROVISIONAL`; `UNKNOWN` still stops. This permits the local BIOS 1.09 + System Disk + blank XTA to complete 60 virtual seconds and FDISK 3.30a to show `Disco fijo actual: 1`, but it is not timing conformance. The memory-form `ESC` operand fetch now reaches the documented 11/15-clock total; its internal phase split is a deterministic model, not measured hardware timing. XTA DMA service remains a demand-driven functional 32-microsecond approximation, not a physical disk-latency model. |
 | Single 8259A PIC | Derived portable subset | Initialization, masking, edge requests including withdrawal before INTA, fixed-priority nesting, output callback, CPU acknowledge, and non-specific or specific EOI; no cascaded/level modes |
 | 8253 PIT | Selective port of measured edge-state core | Deterministic modes 0-5, binary and BCD counts, gates, output edges and stable counter-latch reads; driven by an independent exact rational input clock with lazy synchronization to observable transitions |
 | PCS 86 board glue | Derived minimum map | Reset values and known semantics at `60h-6Fh`, write-only NMI aperture, jumpers at `100h` and the early POST diagnostic latch at disabled `378h`; opaque write-only memory-control state at `70h`; dual keyboard/mouse command queues, IRQ1 scan queue and the keyboard `EDh` LED parameter. One board-level passive-I/O policy returns `FFh` for every unclaimed or non-readable port and ignores writes, including absent expansion slots; this is not a firmware-specific port list |
@@ -89,6 +89,44 @@ the emulated processor.
 | Complete PPI behaviour | Partial board glue | Sufficient for the validated resident diagnostics and bootstrap path; electrical/timing fidelity and undocumented bits remain unclaimed |
 | Floppy controller and storage | Functional boot subset | Caller-owned raw block media, independent 360 KiB/1.2 MiB/720 KiB/1.44 MiB drive geometry, validated 720 KiB/1.44 MiB runtime insertion and ejection, PCS 86 jumpers, active-low disk change, reset/sense/specify/seek/recalibrate/read-ID and DMA read/write-data paths; no rotational timing, flux/track formats, formatting or weak-sector behaviour |
 | Integrated XTA | Portable derived rewrite of the inherited generic XTA controller | Onboard `320h-323h` interface; the three unpopulated conventional base slots through `32Fh` naturally receive the board's general passive-I/O response rather than individual mappings. Includes the port-`65h` gate, active-low presence jumper, IRQ5, DMA3 and PIO, caller-owned 512-byte block media, CP3026 615/4/17 geometry, read/write/verify/seek/recalibrate/sense/parameters/buffer/format/diagnostic commands; unknown commands complete with an explicit illegal-command sense code, and there is no option ROM, host path or private disk API |
+
+## XTA boot and FDISK validation (2026-09-22)
+
+With the local-only BIOS 1.09 pair, original 720 KiB System Diskette and the
+read-only preserved CP3026 image, the current headless build completes 60
+virtual seconds without an unsupported timing boundary. Typing `FDISK` at 35
+seconds reaches the Microsoft FDISK 3.30a menu, which reports fixed disk 1.
+The active-low XTA jumper is observed as `7Dh` at port `100h`. Despite its
+historical `blank` filename, that preserved image already contains an active
+DOS primary partition in its MBR; it is not a suitable starting point for a
+new-partition test.
+
+A separate, newly generated zero-filled 615/4/17 working image was therefore
+used for write validation. FDISK created an active DOS primary partition
+(start LBA 17, 41,531 sectors; 222 XTA writes). After a fresh boot from the
+original floppy, `FORMAT C: /S` completed with `Sistema transferido`,
+21,204,992 total bytes and 21,123,072 available bytes; the run made 41,582
+XTA reads and 286 writes. A further process with no floppy booted DOS from
+the XTA and reached `C>` after the date/time prompts. These are functional
+tests on a disposable copy, not timing-conformance tests or GUI acceptance. No firmware
+or media have entered Git.
+
+The Qt6 machine form now exposes an explicit, catalogue-driven "Crear disco
+nuevo" choice for generated block media. Selecting the XTA commercial preset
+checks it when no disk path is present; changing memory leaves the preset
+intact, and customising a floppy retains the explicit XTA choice. The same
+flow works while editing a saved machine without a disk. An existing disk path
+remains selected and is never replaced by the generator. Synthetic Qt tests
+cover these paths, but a real interactive desktop acceptance is still pending.
+
+This result uses the PCS 86-only provisional policy for NEC instructions with
+published timing ranges: schedule the documented upper bound and label the
+observation `PROVISIONAL`. The V30's actual data-dependent rule remains
+unmeasured; the strict CPU entry point continues to reject those ranges, and
+unknown timing still stops. A separate change places the documented `ESC`
+memory-operand fetch on the execution timeline; it does not emulate an 8087.
+The [NEC manual](https://datasheets.chipdb.org/NEC/V20-V30/U11301EJ5V0UMJ1.PDF)
+lists the relevant ranges. No firmware or media are distributed with BluMach.
 
 ## Text cursor timing and observed CRTC state
 

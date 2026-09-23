@@ -73,6 +73,7 @@ typedef struct bm_pcs86_machine {
     uint8_t scan_queue_end;
     uint8_t keyboard_data_latch;
     uint8_t jumpers;
+    uint8_t floppy_drive_type[2];
     uint8_t nmi_mask;
     uint8_t diagnostic_port;
     uint8_t memory_control_latch;
@@ -637,8 +638,12 @@ pcs86_input(void *context, const bm_input_event_t *event)
         return status;
     if (pcs86_queue_free(machine->scan_queue_start,
                          machine->scan_queue_end, 0x3fU) <
-        (extended ? 2U : 1U))
-        return BM_STATUS_CAPACITY_EXCEEDED;
+        (extended ? 2U : 1U)) {
+        /* Host key transitions can arrive while the guest is waiting for a
+         * floppy timeout and not reading port 60h. A full emulated keyboard
+         * buffer drops the newest transition; it must not abort the session. */
+        return BM_STATUS_OK;
+    }
     if (extended) {
         status = pcs86_scan_queue_push(machine, 0xe0U);
         if (status != BM_STATUS_OK)
@@ -972,8 +977,16 @@ pcs86_validate(const bm_configuration_view_t *configuration)
     status = validate_blob(&config->firmware_even, &expected_firmware[0]);
     if (status == BM_STATUS_OK)
         status = validate_blob(&config->firmware_odd, &expected_firmware[1]);
-    for (index = 0U; (status == BM_STATUS_OK) && (index < 2U); ++index)
-        status = bm_floppy_drive_config_validate(&config->floppy[index]);
+    for (index = 0U; (status == BM_STATUS_OK) && (index < 2U); ++index) {
+        const uint8_t type = config->floppy_drive_type[index];
+        const bm_floppy_drive_config_t *drive = &config->floppy[index];
+        status = bm_floppy_drive_config_validate(drive);
+        if ((type > 3U) || ((type == 3U) && drive->installed) ||
+            (((type == 1U) || (type == 2U)) && !drive->installed) ||
+            ((type == 1U) && drive->media_present &&
+             (drive->media.block_count == 2880U)))
+            status = BM_STATUS_INVALID_ARGUMENT;
+    }
     if ((status == BM_STATUS_OK) &&
         (config->ems_kib != BM_PCS86_EMS_NONE_KIB) &&
         (config->ems_kib != BM_PCS86_EMS_384_KIB) &&
@@ -1002,10 +1015,15 @@ pcs86_validate(const bm_configuration_view_t *configuration)
 }
 
 static uint8_t
-pcs86_floppy_jumper_code(const bm_floppy_drive_config_t *config)
+pcs86_floppy_jumper_code(const bm_floppy_drive_config_t *config,
+                        uint8_t drive_type)
 {
     const bm_floppy_geometry_t *geometry = &config->geometry;
 
+    if (drive_type == 1U)
+        return 1U;
+    if ((drive_type == 2U) || (drive_type == 3U))
+        return 3U;
     if (!config->installed)
         return 3U;
     if ((geometry->cylinders == 40U) && (geometry->heads == 2U) &&
@@ -1147,6 +1165,9 @@ pcs86_storage_media(void *context, bm_storage_device_kind_t kind,
         ((change->media.block_count != 1440U) &&
          (change->media.block_count != 2880U)))
         return BM_STATUS_INVALID_ARGUMENT;
+    if ((machine->floppy_drive_type[unit] == 1U) &&
+        (change->media.block_count == 2880U))
+        return BM_STATUS_INVALID_ARGUMENT;
     geometry = (bm_floppy_geometry_t) {
         80U, 2U,
         (uint8_t) (change->media.block_count == 1440U ? 9U : 18U), 512U
@@ -1194,10 +1215,16 @@ pcs86_create(bm_engine_t *engine,
     machine->control = 0x80U;
     machine->ps2[0] = 0x04U; /* The front-panel key lock is open. */
     machine->jumpers = (uint8_t) (
-        0xf0U | pcs86_floppy_jumper_code(&config->floppy[0]) |
-        (uint8_t) (pcs86_floppy_jumper_code(&config->floppy[1]) << 2U));
+        0xf0U | pcs86_floppy_jumper_code(&config->floppy[0],
+                                        config->floppy_drive_type[0]) |
+        (uint8_t) (pcs86_floppy_jumper_code(&config->floppy[1],
+                                           config->floppy_drive_type[1]) << 2U));
     if (config->hard_disk.present)
         machine->jumpers = (uint8_t) (machine->jumpers & ~0x80U);
+    if (config->jumpers_manual)
+        machine->jumpers = config->jumpers_value;
+    for (size_t index = 0U; index < 2U; ++index)
+        machine->floppy_drive_type[index] = config->floppy_drive_type[index];
     machine->io_trace = config->io_trace;
     machine->io_trace_context = config->io_trace_context;
     machine->memory_trace = config->memory_trace;
@@ -1407,7 +1434,8 @@ pcs86_create(bm_engine_t *engine,
         };
 
         status = bm_engine_add_clocked_cpu(engine, &cpu,
-                                           bm_808x_step_clocked, &v30_rate,
+                                           bm_808x_step_clocked_nec_ranges_provisional,
+                                           &v30_rate,
                                            &machine->cpu_id);
         if (status != BM_STATUS_OK)
             cpu.ops.destroy(cpu.context);

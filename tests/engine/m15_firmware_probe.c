@@ -266,7 +266,7 @@ main(int argc, char **argv)
         uint64_t pic_requests = 0U;
         bm_video_geometry_t geometry = { 0 };
         bm_status_t video_status = bm_session_video_geometry(session, &geometry);
-        size_t nonblack = 0U;
+        size_t active_pixels = 0U;
         if (video_status == BM_STATUS_OK) {
             size_t pixel_count = (size_t) geometry.width * geometry.height;
             uint32_t *pixels = calloc(pixel_count, sizeof(*pixels));
@@ -279,8 +279,8 @@ main(int argc, char **argv)
                 video_status = bm_session_render_video(session, &frame);
                 if (video_status == BM_STATUS_OK) {
                     for (index = 0U; index < pixel_count; ++index) {
-                        if (pixels[index] != UINT32_C(0xff000000))
-                            ++nonblack;
+                        if (pixels[index] != UINT32_C(0xff8aa21d))
+                            ++active_pixels;
                     }
                     if ((argc >= 6) && !write_ppm(argv[5], &frame))
                         video_status = BM_STATUS_DEVICE_ERROR;
@@ -298,14 +298,14 @@ main(int argc, char **argv)
                " keyboard_latch=%02" PRIx64 " full=%" PRIu64
                " pic_requests=%02" PRIx64 " video_status=%d"
                " width=%" PRIu32 " height=%" PRIu32
-               " nonblack=%zu\n",
+               " active_pixels=%zu\n",
                (int) status, bm_session_time(session), probe.instructions,
                probe.last.cs, probe.last.ip, probe.last.physical_address,
                probe.last.opcode, inspect(session, "cs"), inspect(session, "ip"),
                inspect(session, "ax"), inspect(session, "halted"),
                probe.bios_error_path, keyboard_latch, keyboard_full,
                pic_requests, (int) video_status, geometry.width,
-               geometry.height, nonblack);
+               geometry.height, active_pixels);
         printf("pit_ch0=%s%04x pit_ch1=%s%04x pit_ch2=%s%04x"
                " pit_failure_channel=%u pit_passed=%u\n",
                probe.pit_seen[0] ? "" : "unseen:", probe.pit_count[0],

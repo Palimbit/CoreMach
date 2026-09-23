@@ -26,5 +26,19 @@
   "product.olivetti-pcs86.technical.source_firmware": "CSAB04/CSAB05 EPROMs, Resident Diagnostics 1.09, Customer Test and execution observations made during recovery.",
   "product.olivetti-pcs86.technical.brochure": "PCS 86, Olivetti Office Italia product sheet dated September 1990, 2 pages",
   "product.olivetti-pcs86.creation.model": "640 KB, integrated VGA, one floppy and Conner CP3026 20 MB disk",
-  "product.olivetti-pcs86.creation.note": "BluMach automatically derives the PCS 86 jumper state from this configuration."
+  "product.olivetti-pcs86.portable.commercial_base": "PCS 86: 640 KB, integrated VGA and one floppy; optional XTA disk",
+  "product.olivetti-pcs86.creation.note": "BluMach automatically derives the PCS 86 jumper state from this configuration.",
+  "product.olivetti-pcs86.form.commercial": "Commercial configuration",
+  "product.olivetti-pcs86.form.custom": "Custom",
+  "product.olivetti-pcs86.form.one_floppy": "One 720 KB floppy drive",
+  "product.olivetti-pcs86.form.two_floppies": "Two 720 KB floppy drives",
+  "product.olivetti-pcs86.form.floppy_xta": "720 KB floppy drive and 20 MB XTA disk (27 ms)",
+  "product.olivetti-pcs86.form.floppy_a": "Installed drive A",
+  "product.olivetti-pcs86.form.floppy_b": "Installed drive B",
+  "product.olivetti-pcs86.form.no_drive": "No drive",
+  "product.olivetti-pcs86.form.drive_720": "3.5-inch, 720 KB",
+  "product.olivetti-pcs86.form.drive_1440": "3.5-inch, 1.44 MB (custom)",
+  "product.olivetti-pcs86.form.jumpers": "Jumper bank (advanced)",
+  "product.olivetti-pcs86.form.jumpers_help": "Automatic is recommended. In manual mode the hexadecimal byte is read at port 100h: bits 0–1 drive A, 2–3 drive B, and 7 XTA disk. Fitted jumpers are active low.",
+  "product.olivetti-pcs86.form.jumpers_auto": "Automatic from hardware"
 }

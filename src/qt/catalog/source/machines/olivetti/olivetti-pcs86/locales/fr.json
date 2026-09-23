@@ -26,5 +26,19 @@
   "product.olivetti-pcs86.technical.source_firmware": "CSAB04/CSAB05 EPROM, Diagnostics résidents 1.09, Client Observations d'essai et d'exécution faites pendant la récupération.",
   "product.olivetti-pcs86.technical.brochure": "PCS 86, Olivetti Office Italia fiche produit en date de septembre 1990, 2 pages",
   "product.olivetti-pcs86.creation.model": "640 Ko, VGA intégrée, un lecteur et disque Conner CP3026 de 20 Mo",
-  "product.olivetti-pcs86.creation.note": "BluMach déduit automatiquement l'état des cavaliers du PCS 86 à partir de cette configuration."
+  "product.olivetti-pcs86.portable.commercial_base": "PCS 86 : 640 Ko, VGA intégrée et un lecteur ; disque XTA en option",
+  "product.olivetti-pcs86.creation.note": "BluMach déduit automatiquement l'état des cavaliers du PCS 86 à partir de cette configuration.",
+  "product.olivetti-pcs86.form.commercial": "Configuration commerciale",
+  "product.olivetti-pcs86.form.custom": "Personnalisée",
+  "product.olivetti-pcs86.form.one_floppy": "Un lecteur de disquettes de 720 Ko",
+  "product.olivetti-pcs86.form.two_floppies": "Deux lecteurs de disquettes de 720 Ko",
+  "product.olivetti-pcs86.form.floppy_xta": "Lecteur de 720 Ko et disque XTA de 20 Mo (27 ms)",
+  "product.olivetti-pcs86.form.floppy_a": "Lecteur A installé",
+  "product.olivetti-pcs86.form.floppy_b": "Lecteur B installé",
+  "product.olivetti-pcs86.form.no_drive": "Aucun lecteur",
+  "product.olivetti-pcs86.form.drive_720": "3,5 pouces, 720 Ko",
+  "product.olivetti-pcs86.form.drive_1440": "3,5 pouces, 1,44 Mo (personnalisé)",
+  "product.olivetti-pcs86.form.jumpers": "Bloc de cavaliers (avancé)",
+  "product.olivetti-pcs86.form.jumpers_help": "Le mode automatique est recommandé. En mode manuel, l'octet hexadécimal est lu au port 100h : bits 0–1 lecteur A, 2–3 lecteur B et 7 disque XTA. Les cavaliers sont actifs à l'état bas.",
+  "product.olivetti-pcs86.form.jumpers_auto": "Automatique selon le matériel"
 }

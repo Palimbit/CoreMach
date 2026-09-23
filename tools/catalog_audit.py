@@ -217,6 +217,9 @@ def validate_creation(product_id: str, product: dict[str, Any], errors: list[str
         else:
             field_ids.add(field_id)
 
+        if "portable_advanced" in field and not isinstance(field["portable_advanced"], bool):
+            errors.append(f"{location}.portable_advanced must be a boolean")
+
         choices = field.get("choices")
         if not isinstance(choices, list) or not choices:
             errors.append(f"{location}.choices must be a non-empty array")
@@ -249,6 +252,21 @@ def validate_creation(product_id: str, product: dict[str, Any], errors: list[str
                             or not setting.get("section") or not isinstance(setting.get("key"), str) \
                             or not setting.get("key") or "value" not in setting:
                         errors.append(f"{setting_location} must define section, key and value")
+
+            generated = choice.get("portable_generate_assets", [])
+            required = choice.get("portable_require_assets", [])
+            resources = product.get("portable_resources", [])
+            resource_roles = {item.get("role") for item in resources if isinstance(item, dict)} \
+                if isinstance(resources, list) else set()
+            if not isinstance(generated, list):
+                errors.append(f"{choice_location}.portable_generate_assets must be an array")
+            else:
+                for role in generated:
+                    if not isinstance(role, str) or not CREATION_ID.fullmatch(role) \
+                            or role not in resource_roles or role not in required:
+                        errors.append(
+                            f"{choice_location}.portable_generate_assets must name a required resource role"
+                        )
 
         default_id = field.get("default")
         if not isinstance(default_id, str) or default_id not in choices_by_id:
@@ -284,6 +302,88 @@ def validate_media(product_id: str, product: dict[str, Any], errors: list[str]) 
         errors.append(f"{owner}.resource must be a catalogue image resource path")
     if not isinstance(media.get("label_key"), str) or not media.get("label_key"):
         errors.append(f"{owner}.label_key is required")
+
+
+def validate_expansion_slots(product_id: str, product: dict[str, Any], errors: list[str]) -> None:
+    slots = product.get("expansion_slots")
+    if slots is None:
+        return
+    owner = f"catalog.json: product {product_id!r}.expansion_slots"
+    if not isinstance(slots, list):
+        errors.append(f"{owner} must be an array")
+        return
+    seen: set[str] = set()
+    for position, slot in enumerate(slots):
+        location = f"{owner}[{position}]"
+        if not isinstance(slot, dict):
+            errors.append(f"{location} must be an object")
+            continue
+        slot_id = slot.get("id")
+        if not isinstance(slot_id, str) or not CREATION_ID.fullmatch(slot_id):
+            errors.append(f"{location}.id must be a lowercase identifier")
+        elif slot_id in seen:
+            errors.append(f"{owner} has duplicate slot {slot_id!r}")
+        else:
+            seen.add(slot_id)
+        if not isinstance(slot.get("bus"), str) or not slot["bus"]:
+            errors.append(f"{location}.bus is required")
+        if not isinstance(slot.get("length"), str) or not slot["length"]:
+            errors.append(f"{location}.length is required")
+        if not isinstance(slot.get("modelled"), bool):
+            errors.append(f"{location}.modelled must be a boolean")
+
+
+def validate_portable_resources(
+    product_id: str, product: dict[str, Any], errors: list[str]
+) -> None:
+    resources = product.get("portable_resources")
+    if resources is None:
+        return
+    owner = f"catalog.json: product {product_id!r}.portable_resources"
+    if not isinstance(resources, list):
+        errors.append(f"{owner} must be an array")
+        return
+    roles: set[str] = set()
+    for position, resource in enumerate(resources):
+        location = f"{owner}[{position}]"
+        if not isinstance(resource, dict):
+            errors.append(f"{location} must be an object")
+            continue
+        role = resource.get("role")
+        folder = resource.get("folder")
+        if not isinstance(role, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", role):
+            errors.append(f"{location}.role must be a lowercase asset role")
+        elif role in roles:
+            errors.append(f"{owner} duplicates role {role!r}")
+        else:
+            roles.add(role)
+        if not isinstance(folder, str) or not re.fullmatch(
+            r"[a-z0-9-]+(?:/[a-z0-9-]+)*", folder
+        ):
+            errors.append(f"{location}.folder must be a safe relative directory")
+        known = resource.get("known")
+        if not isinstance(known, list):
+            errors.append(f"{location}.known must be an array")
+            continue
+        preferred_count = 0
+        for identity_position, identity in enumerate(known):
+            identity_location = f"{location}.known[{identity_position}]"
+            if not isinstance(identity, dict):
+                errors.append(f"{identity_location} must be an object")
+                continue
+            if not isinstance(identity.get("name"), str) or not identity["name"]:
+                errors.append(f"{identity_location}.name is required")
+            if type(identity.get("size")) is not int or identity["size"] <= 0:
+                errors.append(f"{identity_location}.size must be positive")
+            if not isinstance(identity.get("sha256"), str) or not re.fullmatch(
+                r"[0-9a-fA-F]{64}", identity["sha256"]
+            ):
+                errors.append(f"{identity_location}.sha256 must be 64 hex characters")
+            if identity.get("preferred", False) not in (True, False):
+                errors.append(f"{identity_location}.preferred must be boolean")
+            preferred_count += identity.get("preferred") is True
+        if preferred_count > 1:
+            errors.append(f"{location} has more than one preferred identity")
 
 
 def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
@@ -349,6 +449,8 @@ def validate_catalog(catalog: Any, errors: list[str]) -> set[str]:
             errors.append(f"catalog.json: product {product_id!r} has invalid status {status!r}")
         validate_creation(product_id, product, errors)
         validate_media(product_id, product, errors)
+        validate_expansion_slots(product_id, product, errors)
+        validate_portable_resources(product_id, product, errors)
         implementation = product.get("implementation")
         if implementation is not None:
             if not isinstance(implementation, dict):

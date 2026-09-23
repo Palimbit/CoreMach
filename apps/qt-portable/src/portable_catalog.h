@@ -3,6 +3,7 @@
 #define BLUMACH_PORTABLE_CATALOG_H
 
 #include <QByteArray>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -15,13 +16,63 @@ struct PortableCatalogFact {
 
 struct PortableCatalogSection {
     QString title;
+    QString evidence;
+    QString description;
+    bool sources = false;
     QVector<PortableCatalogFact> facts;
+};
+
+/* Recognition data is catalogue metadata, never a packaged asset. */
+struct PortableResourceIdentity {
+    QString name;
+    QString sha256;
+    qint64 size = 0;
+    bool preferred = false;
+};
+
+struct PortableResourceRole {
+    QString role;
+    QString folder;
+    QVector<PortableResourceIdentity> known;
 };
 
 struct PortableCatalogReference {
     QString title;
     QString publisher;
     QString url;
+};
+
+struct PortableCatalogCreationChoice {
+    QString id;
+    QString label;
+    QString status;
+    quint32 portableValue = 0;
+    bool available = false;
+    QHash<QString, quint32> setOptions;
+    QStringList requiredAssets;
+    QStringList generatedAssets;
+    QStringList forbiddenAssets;
+    QString mediaRole;
+    qint64 mediaMaxBytes = 0;
+};
+
+struct PortableCatalogCreationField {
+    QString id;
+    QString label;
+    QString help;
+    QString defaultId;
+    QString portableOption;
+    QString portableKind;
+    bool advanced = false;
+    bool quick = false;
+    QVector<PortableCatalogCreationChoice> choices;
+};
+
+struct PortableCatalogExpansionSlot {
+    QString id;
+    QString bus;
+    QString length;
+    bool modelled = false;
 };
 
 struct PortableCatalogManufacturer {
@@ -45,15 +96,25 @@ struct PortableCatalogMachine {
     QString familyId;
     QString name;
     QString status;
+    QString statusLabel;
     QString adapterId;
+    QString architecture;
     QString period;
     QString summary;
     QString history;
     QString warning;
     QString mediaResource;
+    QString mediaLabel;
+    QString implementationDocument;
+    QString implementationLanguage;
+    QString commercialConfiguration;
     QStringList aliases;
     QStringList tags;
+    QVector<PortableCatalogFact> hardware;
     QVector<PortableCatalogSection> sections;
+    QVector<PortableCatalogCreationField> configurationFields;
+    QVector<PortableCatalogExpansionSlot> expansionSlots;
+    QVector<PortableResourceRole> resources;
 };
 
 class PortableCatalog final {

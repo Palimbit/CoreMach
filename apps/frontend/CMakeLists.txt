@@ -40,6 +40,7 @@ if(BUILD_TESTING)
     target_link_libraries(blumach_frontend_test PRIVATE
         blumach_frontend
         blumach_platform_null
+        blumach_system_olivetti_pcs86
     )
     target_compile_features(blumach_frontend_test PRIVATE c_std_11)
     set_target_properties(blumach_frontend_test PROPERTIES C_EXTENSIONS OFF)

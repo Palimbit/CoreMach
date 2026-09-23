@@ -140,7 +140,7 @@ main(void)
         assert(geometry.width == 640U && geometry.height == 200U);
         assert(bm_session_render_video(session, &framebuffer) == BM_STATUS_OK);
         assert(framebuffer.geometry.width == 640U);
-        assert(framebuffer_pixels[0] == UINT32_C(0xff000000));
+        assert(framebuffer_pixels[0] == UINT32_C(0xff8aa21d));
     }
     assert(inspect_cpu(session, "cs") == 0xffffU);
     assert(inspect_cpu(session, "ip") == 0U);

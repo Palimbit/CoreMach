@@ -55,6 +55,12 @@ typedef struct bm_frontend_persistent_state_binding {
     size_t size;
 } bm_frontend_persistent_state_binding_t;
 
+/* Typed machine options are independent of catalogue labels and host UI. */
+typedef struct bm_frontend_machine_option {
+    const char *name;
+    uint32_t value;
+} bm_frontend_machine_option_t;
+
 /* Bindings and their backing bytes/callback contexts remain caller-owned and
  * must outlive both the prepared machine and every session configured from it.
  * The adapter contract has no dependency on paths, file APIs, Qt or a host UI. */
@@ -151,6 +157,13 @@ bm_status_t bm_frontend_machine_open_with_persistent_state(
     const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     const bm_frontend_persistent_state_binding_t *state_bindings,
     size_t state_binding_count,
+    bm_frontend_machine_t **out_machine);
+bm_status_t bm_frontend_machine_open_configured(
+    const bm_frontend_adapter_t *adapter,
+    const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+    const bm_frontend_persistent_state_binding_t *state_bindings,
+    size_t state_binding_count,
+    const bm_frontend_machine_option_t *options, size_t option_count,
     bm_frontend_machine_t **out_machine);
 const bm_machine_config_t *bm_frontend_machine_config(
     const bm_frontend_machine_t *machine);

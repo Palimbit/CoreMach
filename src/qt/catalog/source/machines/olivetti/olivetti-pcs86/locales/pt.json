@@ -26,5 +26,19 @@
   "product.olivetti-pcs86.technical.source_firmware": "EPROMs CSAB04/CSAB05, Diagnóstico Residente 1.09, Cliente Observações de ensaio e execução efectuadas durante a recuperação.",
   "product.olivetti-pcs86.technical.brochure": "PCS 86, Olivetti Office Italia folha de produto datada de Setembro de 1990, 2 páginas",
   "product.olivetti-pcs86.creation.model": "640 KB, VGA integrada, uma unidade e disco Conner CP3026 de 20 MB",
-  "product.olivetti-pcs86.creation.note": "O BluMach determina automaticamente o estado dos jumpers do PCS 86 a partir desta configuração."
+  "product.olivetti-pcs86.portable.commercial_base": "PCS 86: 640 KB, VGA integrada e uma unidade; disco XTA opcional",
+  "product.olivetti-pcs86.creation.note": "O BluMach determina automaticamente o estado dos jumpers do PCS 86 a partir desta configuração.",
+  "product.olivetti-pcs86.form.commercial": "Configuração comercial",
+  "product.olivetti-pcs86.form.custom": "Personalizada",
+  "product.olivetti-pcs86.form.one_floppy": "Uma unidade de disquete de 720 KB",
+  "product.olivetti-pcs86.form.two_floppies": "Duas unidades de disquete de 720 KB",
+  "product.olivetti-pcs86.form.floppy_xta": "Unidade de 720 KB e disco XTA de 20 MB (27 ms)",
+  "product.olivetti-pcs86.form.floppy_a": "Unidade A instalada",
+  "product.olivetti-pcs86.form.floppy_b": "Unidade B instalada",
+  "product.olivetti-pcs86.form.no_drive": "Sem unidade",
+  "product.olivetti-pcs86.form.drive_720": "3,5 polegadas, 720 KB",
+  "product.olivetti-pcs86.form.drive_1440": "3,5 polegadas, 1,44 MB (personalizada)",
+  "product.olivetti-pcs86.form.jumpers": "Banco de jumpers (avançado)",
+  "product.olivetti-pcs86.form.jumpers_help": "Recomenda-se o modo automático. No modo manual, o byte hexadecimal é lido na porta 100h: bits 0–1 unidade A, 2–3 unidade B e 7 disco XTA. Os jumpers são ativos em nível baixo.",
+  "product.olivetti-pcs86.form.jumpers_auto": "Automático segundo o hardware"
 }

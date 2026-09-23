@@ -155,7 +155,8 @@ static void
 test_passive_register_directions(const bm_host_services_t *host,
                                  bm_pcs86_config_t *config,
                                  uint8_t *even,
-                                 uint8_t *odd)
+                                 uint8_t *odd,
+                                 uint8_t expected_jumpers)
 {
     static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
     static const uint8_t program[] = {
@@ -186,7 +187,7 @@ test_passive_register_directions(const bm_host_services_t *host,
     assert(bm_session_start(session) == BM_STATUS_OK);
     run_until_halted(session);
     assert(inspect_cpu(session, "halted") == 1U);
-    assert(inspect_cpu(session, "bx") == 0xffffU);
+    assert(inspect_cpu(session, "bx") == (uint16_t) (0xff00U | expected_jumpers));
     assert(inspect_cpu(session, "cx") == 0xffffU);
     assert(inspect_cpu(session, "dx") == 0xffffU);
     bm_session_destroy(session);
@@ -299,6 +300,54 @@ test_interrupt_trace(const bm_host_services_t *host)
         assert(bm_session_run_for(session, 100U) == BM_STATUS_OK);
     assert(interrupt_trace.count == 1U);
     assert(interrupt_trace.vector == 0x09U);
+    assert(bm_session_stop(session) == BM_STATUS_OK);
+    bm_session_destroy(session);
+}
+
+static void
+test_full_keyboard_queue_does_not_stop_session(const bm_host_services_t *host)
+{
+    uint8_t even[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    uint8_t odd[BM_PCS86_FIRMWARE_HALF_SIZE] = { 0 };
+    static const uint8_t reset_jump[] = { 0xea, 0x00, 0x01, 0x00, 0xf0 };
+    bm_pcs86_config_t config;
+    bm_machine_config_t machine;
+    bm_session_t *session = NULL;
+    bm_input_event_t key = {
+        .kind = BM_INPUT_KEY, .key = BM_KEY_A, .pressed = 1
+    };
+    size_t index;
+
+    for (index = 0U; index < sizeof(reset_jump); ++index)
+        put_combined_byte(even, odd, 0xfff0U + index, reset_jump[index]);
+    put_combined_byte(even, odd, 0x0100U, 0xf4U);
+    config = (bm_pcs86_config_t) {
+        .firmware_even = { "synthetic-even", even, sizeof(even), NULL },
+        .firmware_odd = { "synthetic-odd", odd, sizeof(odd), NULL }
+    };
+    machine = bm_pcs86_machine_config(&config);
+    assert(bm_session_create(host, &session) == BM_STATUS_OK);
+    assert(bm_session_configure(session, &machine) == BM_STATUS_OK);
+    assert(bm_session_start(session) == BM_STATUS_OK);
+    for (index = 0U; index < 62U; ++index)
+        assert(bm_session_send_input(session, &key) == BM_STATUS_OK);
+    assert(inspect_machine(session, "keyboard_queue_depth") == 62U);
+
+    /* An extended key requires two slots; do not enqueue half a scan code. */
+    key.key = BM_KEY_RIGHT_CONTROL;
+    assert(bm_session_send_input(session, &key) == BM_STATUS_OK);
+    assert(inspect_machine(session, "keyboard_queue_depth") == 62U);
+    key.key = BM_KEY_A;
+    assert(bm_session_send_input(session, &key) == BM_STATUS_OK);
+    assert(inspect_machine(session, "keyboard_queue_depth") == 63U);
+    key.repeat = 1;
+    for (index = 0U; index < 32U; ++index)
+        assert(bm_session_send_input(session, &key) == BM_STATUS_OK);
+    key.pressed = 0;
+    key.repeat = 0;
+    assert(bm_session_send_input(session, &key) == BM_STATUS_OK);
+    assert(inspect_machine(session, "keyboard_queue_depth") == 63U);
+    assert(bm_session_run_for(session, 1000U) == BM_STATUS_OK);
     assert(bm_session_stop(session) == BM_STATUS_OK);
     bm_session_destroy(session);
 }
@@ -566,10 +615,15 @@ main(void)
     test_unclaimed_io(&host, &config, even, odd, 0x3400U);
     test_unclaimed_io(&host, &config, even, odd, 0x0072U);
     test_absent_xta_slots(&host, &config, even, odd);
-    test_passive_register_directions(&host, &config, even, odd);
+    test_passive_register_directions(&host, &config, even, odd, 0xffU);
+    config.jumpers_manual = 1;
+    config.jumpers_value = 0xacU;
+    test_passive_register_directions(&host, &config, even, odd, 0xacU);
+    config.jumpers_manual = 0;
     test_unclaimed_io(&host, &config, even, odd, 0x02f1U);
     test_unclaimed_io(&host, &config, even, odd, 0x06f2U);
     test_keyboard_scan_stream(&host);
+    test_full_keyboard_queue_does_not_stop_session(&host);
     test_interrupt_trace(&host);
     test_keyboard_led_protocol(&host);
     test_ps2_mouse_stream(&host);

@@ -13,6 +13,7 @@ struct PortableMachineProfile {
     QString productId;
     QString adapterId;
     QHash<QString, QString> assets;
+    QHash<QString, quint32> options;
 };
 
 class MachineProfileStore final {

@@ -4,6 +4,7 @@
 #include <blumach/systems/olivetti_m15.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct m15_frontend_machine {
     bm_frontend_machine_t base;
@@ -34,6 +35,7 @@ static bm_status_t
 open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
              const bm_frontend_persistent_state_binding_t *state_bindings,
              size_t state_binding_count,
+             const bm_frontend_machine_option_t *options, size_t option_count,
              bm_frontend_machine_t **out_machine)
 {
     const bm_frontend_asset_binding_t *firmware = bm_frontend_binding_find(
@@ -42,6 +44,7 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
         bindings, binding_count, "floppy-0");
     m15_frontend_machine_t *machine;
     size_t index;
+    uint32_t ram_kib = 512U;
 
     (void) state_bindings;
     if ((state_binding_count != 0U) || (firmware == NULL) ||
@@ -57,13 +60,20 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
          (floppy->value.media.block_size != 512U) ||
          (floppy->value.media.block_count != 1440U)))
         return BM_STATUS_INVALID_ARGUMENT;
+    for (index = 0U; index < option_count; ++index) {
+        if ((strcmp(options[index].name, "ram_kib") != 0) ||
+            ((options[index].value != 256U) &&
+             (options[index].value != 512U)))
+            return BM_STATUS_INVALID_ARGUMENT;
+        ram_kib = options[index].value;
+    }
 
     machine = calloc(1U, sizeof(*machine));
     if (machine == NULL)
         return BM_STATUS_OUT_OF_MEMORY;
     machine->base.destroy = destroy_machine;
     machine->config.firmware = firmware->value.blob;
-    machine->config.ram_kib = 512U;
+    machine->config.ram_kib = ram_kib;
     machine->config.startup_display_switches = 0x20U;
     for (index = 0U; index < 2U; ++index) {
         machine->config.floppy[index] = (bm_floppy_drive_config_t) {

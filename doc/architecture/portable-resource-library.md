@@ -1,8 +1,42 @@
-# Local resource discovery for BluMach Portable (proposal)
+# Local resource discovery for BluMach Portable
 
-Status: design only. No automatic scanning or binding is implemented in
-`0.0.1-dev.2`. Firmware and guest media remain user-supplied and never enter
-the BluMach repository or release package.
+Status: first desktop implementation on the portable launcher branch, after
+`0.0.1-dev.2`. The user selects one local root in the machine form; BluMach
+remembers it across sessions, searches it when the form opens, and fills
+uniquely recognized preferred firmware and read-only floppy images. Detected
+BIOS identities appear by name in a dropdown, with their SHA-256 in the
+tooltip and an explicit **Other BIOS** choice for a custom file. The
+resource identities and suggested subfolders live in the non-visible
+`portable_resources` section of each catalogue machine bundle. Firmware and
+guest media remain user-supplied and never enter the repository or package.
+
+The catalogue now previews the documented commercial base and the first
+portable machine option (M15 RAM or PCS 86 EMS) beside a BIOS-set selector.
+Only a complete, unambiguous set of locally hash-recognized firmware is offered
+there; otherwise the user chooses the files in the creation dialog. This quick
+selection pre-fills the same dialog, whose choices remain editable. The
+commercial label is historical context. The explicit PCS 86 floppy-plus-XTA
+commercial choice creates a new, blank, writable working image when no disk
+was selected; other optional media remain independent of sales models. A blank
+image contains no DOS installation, partition or vendor software.
+
+Machine options are typed values passed through the frontend contract and
+stored under `configuration.options` in the existing v1 profile schema.
+Existing saved profiles without options keep the adapter defaults (M15
+512 KiB RAM, PCS 86 1,920 KiB EMS). The frontend validates allowed values;
+catalogue labels cannot silently change machine hardware.
+
+The first implementation scans at most 1,000 files, eight directory levels,
+and 64 MiB of candidate data. It ignores symlinks, archives and writable disk
+images. A limited scan does not auto-select anything. The form shows missing,
+recognized and manually selected/unverified resources; it can open the
+suggested logical folder and rescan. Saved profiles retain their explicit
+paths, even when another matching file exists in the selected root.
+
+Still pending: background scan with cancel/progress, cache, saved-profile
+relocation by identity, and persistent verification of an asset after a saved
+path's content changes. No claim is made that a same-sized manually selected
+BIOS is a recognized one.
 
 ## User outcome
 
@@ -41,7 +75,7 @@ Machine profiles continue to save references to local paths, not bytes.
 | PCS 86 | `firmware-even` | Known 32 KiB EPROM SHA-256 | Fill on exact match; required |
 | PCS 86 | `firmware-odd` | Known 32 KiB EPROM SHA-256 | Fill on exact match; required |
 | PCS 86 | `floppy-0` | Known 720 KiB system disk | Suggest as visible default; optional |
-| PCS 86 | `hard-disk-0` | 21,411,840-byte XTA *working image* | Never auto-attach; explicit choice only |
+| PCS 86 | `hard-disk-0` | 21,411,840-byte XTA *working image* | Create a new blank image only for the explicit floppy-plus-XTA choice, or use the selected existing working image |
 | M15 | `firmware` | Known 64 KiB BIOS SHA-256 | Fill on exact match; required |
 | M15 | `floppy-0` | Known 720 KiB tutorial disk | Suggest as visible default; optional |
 
@@ -109,8 +143,9 @@ not content hashes after use.
    `unverified`, and missing roles as `missing`. Report duplicates and errors.
 3. Creation form: show the selected resources and their origin/identity beside
    machine-specific choices. Required exact matches are filled; optional
-   recommended disks are suggested, not hidden. No auto-attachment of writable
-   media.
+   recommended disks are suggested, not hidden. The explicit PCS 86 XTA choice
+   can generate a new zero-filled working disk without replacing an existing
+   path; editing a saved profile never silently generates a replacement disk.
 4. Save a machine: keep a resource identity and its resolved local path, so a
    moved file can be relocated without guessing. When re-opening, an explicit
    choice remains authoritative. No migration from 86Box VM files is implied.
@@ -120,13 +155,19 @@ not content hashes after use.
 
 ## Delivery slices and acceptance
 
-1. Metadata and resolver tests: known hashes, wrong-half EPROM, renamed file,
-   duplicate identical file, same-size wrong file, missing root, symlink and
-   cross-volume paths.
-2. Qt root setting and scan/report UI: no change to machine creation yet.
-3. Prefill and missing-resource guidance in the existing single modal form.
-4. Saved-profile relocation and end-to-end tests with PCS 86 and M15; ensure
-   firmware/disks are absent from Git and release archives.
+1. Implemented: metadata, bounded resolver, wrong-size/same-size-wrong-content,
+   renamed file, duplicate, missing-root tests and local PCS 86/M15 scan.
+2. Implemented: Qt root selection, remembered setting, scan/status display.
+3. Implemented: prefill and missing-resource guidance in the single modal.
+   The modal keeps name, commercial profile, firmware and boot floppy on
+   `General`. A catalogue field opts into `Hardware avanzado` with the boolean
+   `portable_advanced`; PCS 86 uses it for drive types, jumpers and EMS. Other
+   media follow the frontend's typed storage requirement. Declared expansion
+   slots are informational until card configuration is implemented. Creating
+   and editing a saved machine use these same controls and typed options. The
+   advanced tab remains visible for machines without advanced controls and
+   explains that there are no configurable settings yet.
+4. Pending: saved-profile relocation and full packaged end-to-end tests.
 
 Keep the local test folder outside Git. Its M15 tutorial image has unknown
 distribution rights; the feature must work without shipping that image.

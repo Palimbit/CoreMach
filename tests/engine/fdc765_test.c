@@ -91,6 +91,9 @@ main(void)
         1, 1, 0, { 80U, 2U, 9U, 512U },
         { &media, 1440U, 512U, 0, media_read, media_write }
     };
+    bm_floppy_drive_config_t empty_drive_config = {
+        1, 0, 0, { 80U, 2U, 18U, 512U }, { 0 }
+    };
     fdc765_test_config_t config = { 0 };
     uint8_t reset_sense[2];
     uint8_t read_params[8] = { 0U, 0U, 0U, 1U, 2U, 9U, 0x2aU, 0xffU };
@@ -112,6 +115,7 @@ main(void)
     config.drive_configs[0] = &drive_config;
     config.drive_configs[1] = &oversized_drive_config;
     config.drive_configs[2] = &writable_drive_config;
+    config.drive_configs[3] = &empty_drive_config;
     config.disk_change_active_low = 1;
     config.irq = capture_irq;
     config.irq_context = &irq;
@@ -190,6 +194,24 @@ main(void)
     assert((results[0] & 0x40U) != 0U);
     assert((results[1] & 0x04U) != 0U);
     assert(guarded_media.reads == 0U && guarded_media.writes == 0U);
+
+    /* An installed drive without a disk is a guest-visible not-ready error,
+     * not a fatal status from the emulator or an attempted DMA transfer. */
+    {
+        uint8_t empty_params[8] = {
+            3U, 0U, 0U, 1U, 2U, 18U, 0x1bU, 0xffU
+        };
+        fdc765_test_io_write(&machine, 0x03f2U, 0x8fU);
+        fdc765_test_send_command(&machine, 0x46U, empty_params, 8U);
+        assert(irq.asserted);
+        fdc765_test_read_results(&machine, results, 7U);
+        assert(!irq.asserted);
+        assert(results[0] == 0x4bU && results[1] == 0x04U &&
+               results[2] == 0U);
+        fdc765_test_send_command(&machine, 0x45U, empty_params, 8U);
+        fdc765_test_read_results(&machine, results, 7U);
+        assert(results[0] == 0x4bU && results[1] == 0x04U);
+    }
 
     fdc765_test_machine_destroy(&machine);
 

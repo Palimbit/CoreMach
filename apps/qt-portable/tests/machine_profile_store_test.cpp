@@ -30,6 +30,11 @@ int main(int argc, char **argv)
     profile.productId = QStringLiteral("olivetti-pcs86");
     profile.adapterId = QStringLiteral("olivetti-pcs86");
     profile.assets.insert(QStringLiteral("bios"), firmware);
+    profile.options.insert(QStringLiteral("ems_kib"), 384U);
+    profile.options.insert(QStringLiteral("commercial_profile"), 0U);
+    profile.options.insert(QStringLiteral("floppy_a_type"), 2U);
+    profile.options.insert(QStringLiteral("floppy_b_type"), 1U);
+    profile.options.insert(QStringLiteral("jumper_bank"), 256U);
     QString error;
     assert(store.save(&profile, &error));
     assert(error.isEmpty());
@@ -46,6 +51,9 @@ int main(int argc, char **argv)
         .value(QStringLiteral("assets")).toObject()
         .value(QStringLiteral("bios")).toString();
     assert(!QDir::isAbsolutePath(path));
+    assert(json.value(QStringLiteral("configuration")).toObject()
+               .value(QStringLiteral("options")).toObject()
+               .value(QStringLiteral("ems_kib")).toInt() == 384);
     assert(!serialized.contains("test"));
     config.close();
 
@@ -53,12 +61,18 @@ int main(int argc, char **argv)
     QVector<PortableMachineProfile> profiles = store.load(&warnings);
     assert(warnings.isEmpty() && profiles.size() == 1);
     assert(profiles[0].assets.value(QStringLiteral("bios")) == firmware);
+    assert(profiles[0].options.value(QStringLiteral("ems_kib")) == 384U);
+    assert(profiles[0].options.value(QStringLiteral("floppy_a_type")) == 2U);
+    assert(profiles[0].options.value(QStringLiteral("floppy_b_type")) == 1U);
+    assert(profiles[0].options.value(QStringLiteral("jumper_bank")) == 256U);
     assert(profiles[0].name == profile.name);
     profile.name = QStringLiteral("Renamed PCS 86");
+    profile.options.insert(QStringLiteral("jumper_bank"), 0U);
     assert(store.save(&profile, &error));
     profiles = store.load(&warnings);
     assert(profiles.size() == 1);
     assert(profiles[0].name == profile.name);
+    assert(profiles[0].options.value(QStringLiteral("jumper_bank")) == 0U);
     assert(!store.save(nullptr, &error));
 
     PortableMachineProfile invalid = profile;
@@ -82,6 +96,22 @@ int main(int argc, char **argv)
     profiles = store.load(&warnings);
     assert(warnings.isEmpty() && profiles.size() == 1);
     assert(profiles[0].assets.value(QStringLiteral("bios")) == firmware);
+    assert(profiles[0].options.value(QStringLiteral("ems_kib")) == 384U);
+
+    QJsonObject invalidOptionsDocument = absoluteDocument;
+    QJsonObject invalidConfiguration = invalidOptionsDocument.value(
+        QStringLiteral("configuration")).toObject();
+    invalidConfiguration.insert(QStringLiteral("options"), QJsonObject {
+        { QStringLiteral("ems_kib"), -1 }
+    });
+    invalidOptionsDocument.insert(QStringLiteral("configuration"),
+                                  invalidConfiguration);
+    assert(config.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray invalidOptions = QJsonDocument(invalidOptionsDocument).toJson();
+    assert(config.write(invalidOptions) == invalidOptions.size());
+    config.close();
+    warnings.clear();
+    assert(store.load(&warnings).isEmpty() && warnings.size() == 1);
 
     assert(config.open(QIODevice::WriteOnly | QIODevice::Truncate));
     assert(config.write("{}", 2) == 2);

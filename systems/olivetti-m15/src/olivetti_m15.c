@@ -640,7 +640,13 @@ static bm_status_t
 m15_video_render(const void *context, bm_tick_t emulated_time,
                  bm_video_framebuffer_t *framebuffer)
 {
-    static const uint8_t green[4] = { 0x00U, 0x19U, 0x43U, 0x78U };
+    /* Approximate the reflective LCD: unenergized pixels show the green
+     * background, while progressively brighter RGBI values darken it. The
+     * panel's optical response and exact colours have not been measured. */
+    static const uint32_t lcd_palette[4] = {
+        UINT32_C(0xff8aa21d), UINT32_C(0xff70892d),
+        UINT32_C(0xff4e6e6b), UINT32_C(0xff31535a)
+    };
     bm_m15_machine_t *machine = (bm_m15_machine_t *) context;
     bm_video_geometry_t geometry;
     bm_status_t status;
@@ -670,7 +676,7 @@ m15_video_render(const void *context, bm_tick_t emulated_time,
             unsigned int level = (luminance * 3U + 6U) / 13U;
 
             framebuffer->pixels[(size_t) y * framebuffer->stride + x] =
-                UINT32_C(0xff000000) | ((uint32_t) green[level] << 8U);
+                lcd_palette[level];
         }
     }
     framebuffer->geometry = geometry;

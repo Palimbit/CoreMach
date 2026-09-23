@@ -442,6 +442,13 @@ bm_status_t bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed);
 bm_status_t bm_808x_step_clocked(void *context, bm_tick_t start_ns,
                                  uint64_t *cycles);
 
+/* PCS 86 bring-up policy: use the documented upper bound for NEC timing
+ * ranges whose data-dependent rule remains unresolved. Such boundaries are
+ * explicitly PROVISIONAL; UNKNOWN timing remains unsupported. The strict
+ * callback above is unchanged and must be used for timing conformance. */
+bm_status_t bm_808x_step_clocked_nec_ranges_provisional(
+    void *context, bm_tick_t start_ns, uint64_t *cycles);
+
 /* Bring-up callback for an Intel 8088 machine when complete cycle placement
  * is not yet available. Unlike the strict callback, it can execute from an
  * empty queue and across operands, branches and interrupts. Its deterministic

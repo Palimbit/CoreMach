@@ -89,13 +89,40 @@ bm_frontend_machine_open_with_persistent_state(
     size_t state_binding_count,
     bm_frontend_machine_t **out_machine)
 {
+    return bm_frontend_machine_open_configured(
+        adapter, bindings, binding_count, state_bindings,
+        state_binding_count, NULL, 0U, out_machine);
+}
+
+bm_status_t
+bm_frontend_machine_open_configured(
+    const bm_frontend_adapter_t *adapter,
+    const bm_frontend_asset_binding_t *bindings, size_t binding_count,
+    const bm_frontend_persistent_state_binding_t *state_bindings,
+    size_t state_binding_count,
+    const bm_frontend_machine_option_t *options, size_t option_count,
+    bm_frontend_machine_t **out_machine)
+{
     size_t binding_index;
     size_t requirement_index;
     if ((adapter == NULL) || (out_machine == NULL) ||
         ((bindings == NULL) && (binding_count != 0U)) ||
-        ((state_bindings == NULL) && (state_binding_count != 0U)))
+        ((state_bindings == NULL) && (state_binding_count != 0U)) ||
+        ((options == NULL) && (option_count != 0U)))
         return BM_STATUS_INVALID_ARGUMENT;
     *out_machine = NULL;
+    for (binding_index = 0U; binding_index < option_count; ++binding_index) {
+        if ((options[binding_index].name == NULL) ||
+            (options[binding_index].name[0] == '\0'))
+            return BM_STATUS_INVALID_ARGUMENT;
+        for (requirement_index = binding_index + 1U;
+             requirement_index < option_count; ++requirement_index) {
+            if ((options[requirement_index].name != NULL) &&
+                (strcmp(options[binding_index].name,
+                        options[requirement_index].name) == 0))
+                return BM_STATUS_INVALID_ARGUMENT;
+        }
+    }
     for (binding_index = 0U; binding_index < binding_count; ++binding_index) {
         const bm_frontend_asset_requirement_t *matched = NULL;
         size_t matches = 0U;
@@ -181,7 +208,7 @@ bm_frontend_machine_open_with_persistent_state(
         }
     }
     return adapter->open(bindings, binding_count, state_bindings,
-                         state_binding_count, out_machine);
+                         state_binding_count, options, option_count, out_machine);
 }
 
 const bm_machine_config_t *

@@ -23,9 +23,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QSaveFile>
 #include <QSettings>
 #include <QSignalBlocker>
-#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QStringList>
@@ -55,7 +55,7 @@ PortableWindow::AssetStorage::~AssetStorage()
 
 PortableWindow::PortableWindow(QWidget *parent)
     : QMainWindow(parent), display_(new DisplayWidget),
-      pages_(new QStackedWidget), status_(new QLabel),
+      status_(new QLabel),
       storageStatus_(new QLabel), keyboardStatus_(new QLabel),
       machineToolbar_(addToolBar(tr("Machine"))),
       pauseAction_(new QAction(tr("Pause"), this)),
@@ -69,7 +69,7 @@ PortableWindow::PortableWindow(QWidget *parent)
       statusBarAction_(new QAction(tr("Status bar"), this)),
       copyFrameAction_(new QAction(tr("Copy frame"), this)),
       saveFrameAction_(new QAction(tr("Save frame as…"), this)),
-      catalogAction_(new QAction(tr("Machine catalogue"), this)),
+      catalogAction_(new QAction(tr("Library and catalogue"), this)),
       scaleGroup_(new QActionGroup(this)),
       rendererGroup_(new QActionGroup(this)),
       effectGroup_(new QActionGroup(this)),
@@ -175,7 +175,7 @@ PortableWindow::PortableWindow(QWidget *parent)
     captureMenu->addAction(saveFrameAction_);
 
     setWindowTitle(tr("BluMach Portable"));
-    setCentralWidget(pages_);
+    setCentralWidget(display_);
     statusBar()->addPermanentWidget(status_, 1);
     keyboardStatus_->setTextFormat(Qt::RichText);
     keyboardStatus_->setVisible(false);
@@ -187,7 +187,10 @@ PortableWindow::PortableWindow(QWidget *parent)
             [this] { chooseMachine(); });
     connect(catalogAction_, &QAction::triggered, this,
             [this] { showLauncher(); });
-    connect(quitAction, &QAction::triggered, this, &QWidget::close);
+    connect(quitAction, &QAction::triggered, this, [this] {
+        launcher_->close();
+        close();
+    });
     connect(pauseAction_, &QAction::triggered, this,
             [this] { togglePause(); });
     connect(resetAction_, &QAction::triggered, this,
@@ -243,11 +246,17 @@ PortableWindow::PortableWindow(QWidget *parent)
     (void) catalog_.load(&catalogError_);
     launcher_ = new LauncherPage(catalog_, catalogError_,
         [this](const QString &productId) { chooseMachine(productId); },
-        [this](const QString &profileId) { chooseSavedMachine(profileId); });
+        [this](const QString &profileId) { chooseSavedMachine(profileId); },
+        [this](const QString &profileId) { editSavedMachine(profileId); },
+        [this] {
+            show();
+            raise();
+            activateWindow();
+        });
+    launcher_->setWindowTitle(tr("BluMach — Mis máquinas y catálogo"));
+    launcher_->resize(1050, 700);
+    launcher_->setProfileRoot(profileStore_.root());
     refreshProfiles();
-    pages_->addWidget(launcher_);
-    pages_->addWidget(display_);
-    pages_->setCurrentWidget(launcher_);
     resize(960, 600);
     readSettings();
     updateActions();
@@ -258,12 +267,14 @@ PortableWindow::PortableWindow(QWidget *parent)
 PortableWindow::~PortableWindow()
 {
     closeMachine();
+    delete launcher_;
 }
 
 void
 PortableWindow::closeEvent(QCloseEvent *event)
 {
     writeSettings();
+    closeMachine();
     QMainWindow::closeEvent(event);
 }
 
@@ -291,10 +302,18 @@ PortableWindow::chooseMachine(const QString &productId)
         QMessageBox::critical(this, tr("Catalogue unavailable"), catalogError_);
         return;
     }
-    MachineDialog dialog(catalog_, this);
-    if (!productId.isEmpty())
+    MachineDialog dialog(catalog_, resourceRoot_, launcher_);
+    if (!productId.isEmpty()) {
         dialog.selectProduct(productId);
-    if (dialog.exec() != QDialog::Accepted)
+        if (dialog.productId() != productId)
+            return;
+        dialog.setMachineSelectionLocked(true);
+    }
+    const int result = dialog.exec();
+    resourceRoot_ = dialog.resourceRoot();
+    QSettings(settingsOrganization, settingsApplication).setValue(
+        QStringLiteral("resources/root"), resourceRoot_);
+    if (result != QDialog::Accepted)
         return;
     QString stateId;
     if (dialog.saveProfile()) {
@@ -306,6 +325,7 @@ PortableWindow::chooseMachine(const QString &productId)
         profile.productId = product->productId;
         profile.adapterId = product->adapterId;
         profile.assets = dialog.paths();
+        profile.options = dialog.options();
         QString error;
         if (!profileStore_.save(&profile, &error)) {
             QMessageBox::critical(this, tr("Could not save machine"), error);
@@ -315,7 +335,7 @@ PortableWindow::chooseMachine(const QString &productId)
         refreshProfiles();
     }
     (void) openMachine(dialog.adapter(), dialog.paths(), stateId,
-                       dialog.profileName());
+                       dialog.profileName(), dialog.options());
 }
 
 void
@@ -330,24 +350,48 @@ PortableWindow::chooseSavedMachine(const QString &profileId)
     const PortableCatalogMachine *product = catalog_.product(match->productId);
     if (product == nullptr || product->adapterId != match->adapterId)
         return;
-    MachineDialog dialog(catalog_, this);
+    const QByteArray adapterId = match->adapterId.toUtf8();
+    const bm_frontend_adapter_t *adapter =
+        bm_frontend_adapter_find(adapterId.constData());
+    if (adapter != nullptr)
+        (void) openMachine(adapter, match->assets, match->id,
+                           match->name, match->options);
+}
+
+void
+PortableWindow::editSavedMachine(const QString &profileId)
+{
+    const auto match = std::find_if(profiles_.cbegin(), profiles_.cend(),
+        [&profileId](const PortableMachineProfile &profile) {
+            return profile.id == profileId;
+        });
+    if (match == profiles_.cend())
+        return;
+    const PortableCatalogMachine *product = catalog_.product(match->productId);
+    if (product == nullptr || product->adapterId != match->adapterId)
+        return;
+    MachineDialog dialog(catalog_, resourceRoot_, launcher_);
     dialog.selectProduct(match->productId);
+    dialog.setEditingExistingProfile(true);
     dialog.setProfileName(match->name);
     dialog.setPaths(match->assets);
-    dialog.setEditingExistingProfile(true);
-    if (dialog.exec() != QDialog::Accepted)
+    dialog.setOptions(match->options);
+    const int result = dialog.exec();
+    resourceRoot_ = dialog.resourceRoot();
+    QSettings(settingsOrganization, settingsApplication).setValue(
+        QStringLiteral("resources/root"), resourceRoot_);
+    if (result != QDialog::Accepted)
         return;
     PortableMachineProfile updated = *match;
     updated.name = dialog.profileName();
     updated.assets = dialog.paths();
+    updated.options = dialog.options();
     QString error;
     if (!profileStore_.save(&updated, &error)) {
         QMessageBox::critical(this, tr("Could not save machine"), error);
         return;
     }
     refreshProfiles();
-    (void) openMachine(dialog.adapter(), dialog.paths(), updated.id,
-                       updated.name);
 }
 
 void
@@ -362,27 +406,56 @@ PortableWindow::refreshProfiles()
 }
 
 void
+PortableWindow::savePreview()
+{
+    if (previewSaved_)
+        return;
+    const QImage frame = display_->frame();
+    const QImage preview = frame.isNull() ? lastPreview_ :
+        frame.scaled(QSize(256, 160), Qt::KeepAspectRatio,
+                     Qt::SmoothTransformation);
+    if (preview.isNull())
+        return;
+    previewSaved_ = true;
+    const auto match = std::find_if(profiles_.cbegin(), profiles_.cend(),
+        [this](const PortableMachineProfile &profile) {
+            return profile.id == activeStateId_;
+        });
+    if (match == profiles_.cend())
+        return;
+    launcher_->setProfilePreview(activeStateId_, preview);
+    const QString path = QDir(profileStore_.root()).filePath(
+        match->id + QStringLiteral("/preview.png"));
+    QSaveFile output(path);
+    if (!output.open(QIODevice::WriteOnly) ||
+        !preview.save(&output, "PNG") || !output.commit())
+        statusBar()->showMessage(tr("No se pudo guardar la última imagen"), 5000);
+}
+
+void
 PortableWindow::showLauncher()
 {
-    if (worker_ != nullptr &&
-        (worker_->state() == BM_SESSION_RUNNING ||
-         worker_->state() == BM_SESSION_PAUSED) &&
-        QMessageBox::question(this, tr("Close machine"),
-            tr("Stop the current machine and return to the catalogue?")) !=
-            QMessageBox::Yes)
-        return;
-    closeMachine();
     refreshProfiles();
-    pages_->setCurrentWidget(launcher_);
-    showStatus(tr("Choose a machine to begin"));
+    launcher_->show();
+    launcher_->raise();
+    launcher_->activateWindow();
 }
 
 bool
 PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
                             const QHash<QString, QString> &paths,
                             const QString &stateId,
-                            const QString &displayName)
+                            const QString &displayName,
+                            const QHash<QString, quint32> &options)
 {
+    if (worker_ != nullptr &&
+        (worker_->state() == BM_SESSION_RUNNING ||
+         worker_->state() == BM_SESSION_PAUSED)) {
+        if (QMessageBox::question(launcher_, tr("Cambiar de máquina"),
+                tr("Hay una máquina en ejecución. ¿Detenerla y abrir esta?")) !=
+            QMessageBox::Yes)
+            return false;
+    }
     size_t requirementCount = 0U;
     size_t persistentStateCount = 0U;
     const bm_frontend_asset_requirement_t *requirements =
@@ -398,6 +471,9 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
     activeMachineId_ = machineId;
     activeStateId_ = stateId.isEmpty() ? machineId : stateId;
     activeDisplayName_ = displayName.isEmpty() ? machineId : displayName;
+    previewTimer_.invalidate();
+    lastPreview_ = QImage();
+    previewSaved_ = false;
     for (size_t index = 0U; index < requirementCount; ++index) {
         if (requirements[index].replaceable &&
             (requirements[index].storage_kind == BM_STORAGE_DEVICE_FLOPPY) &&
@@ -510,9 +586,19 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
         retainStateAction_->setVisible(hasBatteryBackedState);
         retainStateAction_->setChecked(retainBatteryBackedState);
     }
-    bm_status_t result = bm_frontend_machine_open_with_persistent_state(
+    std::vector<QByteArray> optionNames;
+    std::vector<bm_frontend_machine_option_t> machineOptions;
+    optionNames.reserve(static_cast<size_t>(options.size()));
+    machineOptions.reserve(static_cast<size_t>(options.size()));
+    for (auto it = options.cbegin(); it != options.cend(); ++it)
+        optionNames.push_back(it.key().toUtf8());
+    size_t optionIndex = 0U;
+    for (auto it = options.cbegin(); it != options.cend(); ++it, ++optionIndex)
+        machineOptions.push_back({optionNames[optionIndex].constData(), it.value()});
+    bm_status_t result = bm_frontend_machine_open_configured(
         adapter, bindings_.data(), bindings_.size(), persistentBindings_.data(),
-        persistentBindings_.size(), &machine_);
+        persistentBindings_.size(), machineOptions.data(), machineOptions.size(),
+        &machine_);
     if (result == BM_STATUS_OK) {
         const uint64_t generation = workerGeneration_;
         worker_ = std::make_unique<SessionWorker>(
@@ -545,7 +631,10 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
                                     !paths.value(role).isEmpty();
     }
     display_->setFocus();
-    pages_->setCurrentWidget(display_);
+    launcher_->setActiveMachine(activeDisplayName_, stateId);
+    show();
+    raise();
+    activateWindow();
     updateActions();
     showStatus();
     return true;
@@ -554,6 +643,7 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
 void
 PortableWindow::closeMachine()
 {
+    savePreview();
     ++workerGeneration_;
     lifecyclePending_ = false;
     if (worker_ != nullptr) {
@@ -591,6 +681,11 @@ PortableWindow::closeMachine()
     activeMachineId_.clear();
     activeStateId_.clear();
     activeDisplayName_.clear();
+    if (launcher_ != nullptr)
+        launcher_->setActiveMachine(QString());
+    previewTimer_.invalidate();
+    lastPreview_ = QImage();
+    previewSaved_ = false;
     hasVideoGeometry_ = false;
     presentedFrames_ = 0U;
     presentationFps_ = 0.0;
@@ -784,6 +879,7 @@ void
 PortableWindow::readSettings()
 {
     QSettings settings(settingsOrganization, settingsApplication);
+    resourceRoot_ = settings.value(QStringLiteral("resources/root")).toString();
     const QByteArray geometry = settings.value(QStringLiteral("window/geometry"))
                                     .toByteArray();
     if (!geometry.isEmpty())
@@ -916,6 +1012,14 @@ PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
     if (!snapshot.frame.isNull()) {
         LatencyTrace::event("ui-frame", snapshot.traceFrame, snapshot.traceInput);
         display_->setFrame(snapshot.frame, snapshot.traceFrame);
+        if (!previewTimer_.isValid() || previewTimer_.elapsed() >= 1000) {
+            lastPreview_ = snapshot.frame.scaled(
+                QSize(256, 160), Qt::KeepAspectRatio,
+                Qt::SmoothTransformation);
+            previewTimer_.restart();
+            launcher_->setRunningPreview(lastPreview_);
+            launcher_->setProfilePreview(activeStateId_, lastPreview_);
+        }
         if (snapshot.hasVideo) {
             videoGeometry_ = snapshot.geometry;
             hasVideoGeometry_ = true;
@@ -934,9 +1038,42 @@ PortableWindow::handleSnapshot(SessionWorker::Snapshot snapshot)
     if ((snapshot.status != BM_STATUS_OK) &&
         (snapshot.status != lastError_)) {
         lastError_ = snapshot.status;
+        QString operation;
+        switch (snapshot.failurePhase) {
+            case SessionWorker::FailurePhase::Startup:
+                operation = tr("starting the machine"); break;
+            case SessionWorker::FailurePhase::Input:
+                operation = tr("processing input"); break;
+            case SessionWorker::FailurePhase::MediaChange:
+                operation = tr("changing removable media"); break;
+            case SessionWorker::FailurePhase::Lifecycle:
+                operation = tr("changing machine state"); break;
+            case SessionWorker::FailurePhase::Emulation:
+                operation = tr("running the machine"); break;
+            case SessionWorker::FailurePhase::Video:
+                operation = tr("rendering video"); break;
+            case SessionWorker::FailurePhase::StorageStatus:
+                operation = tr("reading storage status"); break;
+            case SessionWorker::FailurePhase::KeyboardStatus:
+                operation = tr("reading keyboard status"); break;
+            case SessionWorker::FailurePhase::Unknown: break;
+        }
         QMessageBox::critical(this, tr("Portable session error"),
-                              tr("The worker reported status %1.")
-                                  .arg(static_cast<int>(snapshot.status)));
+                              operation.isEmpty() ?
+                                  tr("The worker reported status %1.")
+                                      .arg(static_cast<int>(snapshot.status)) :
+                                  tr("The worker reported status %1 while %2.")
+                                      .arg(static_cast<int>(snapshot.status))
+                                      .arg(operation));
+    }
+    if (launcher_ != nullptr) {
+        const bm_session_state_t state = worker_ != nullptr ? worker_->state() :
+            BM_SESSION_STOPPED;
+        if (state == BM_SESSION_STOPPED)
+            savePreview();
+        launcher_->setActiveMachine(
+            state == BM_SESSION_RUNNING || state == BM_SESSION_PAUSED ?
+                activeDisplayName_ : QString(), activeStateId_);
     }
     updateActions();
     showStatus();

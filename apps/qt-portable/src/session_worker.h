@@ -22,8 +22,13 @@ class TickPacer;
 
 class SessionWorker final {
 public:
+    enum class FailurePhase {
+        Unknown, Startup, Input, MediaChange, Lifecycle, Emulation,
+        Video, StorageStatus, KeyboardStatus
+    };
     struct Snapshot {
         bm_status_t status = BM_STATUS_OK;
+        FailurePhase failurePhase = FailurePhase::Unknown;
         bm_session_state_t state = BM_SESSION_NEW;
         uint64_t ticks = 0U;
         bm_video_geometry_t geometry {};
@@ -99,7 +104,8 @@ private:
     void publish(bm_session_t *session, bm_status_t status,
                  QImage frame = QImage(), bool lifecycleResult = false,
                  const bm_video_geometry_t *geometry = nullptr,
-                 std::vector<bm_storage_device_status_t> storage = {});
+                 std::vector<bm_storage_device_status_t> storage = {},
+                 FailurePhase failurePhase = FailurePhase::Unknown);
 
     bm_host_services_t host_;
     const bm_machine_config_t *configuration_;
