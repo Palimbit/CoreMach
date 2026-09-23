@@ -6,7 +6,7 @@
  * src/cpu/x86.c, src/cpu/386.c, src/cpu/386_ops.h, src/cpu/x86seg.c,
  * src/cpu/x86_ops_pmode.h, src/cpu/x86_ops_rep_286_2386.h,
  * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h,
- * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h,
+ * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h, src/cpu/x86_ops_shift.h,
  * src/cpu/x86_ops_misc.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
  * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
  * src/cpu/x86_ops_ret_2386.h, src/cpu/x86_ops_flag.h,
@@ -998,7 +998,7 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
         arch->cx = next_cx;
         return BM_STATUS_OK;
     }
-    return BM_STATUS_UNSUPPORTED; /* Flags and far CALL/returns pending. */
+    return BM_STATUS_UNSUPPORTED; /* Remaining instruction families. */
 }
 
 /* ALU kinds follow the three-bit opcode/ModR/M operation field. TEST uses
@@ -1010,6 +1010,86 @@ static int even_parity(uint8_t value)
     for (i = 0U; i < 8U; ++i)
         ones += (value >> i) & 1U;
     return (ones & 1U) == 0U;
+}
+
+/* Group 2: Intel 210498-005, 3.4.2 and Appendix B. Count masking is 286,
+ * not 8086. Execute individual unsigned bit steps (at most 31), avoiding
+ * host signed-shift rules and shifts by the host word width. */
+static bm_status_t execute_shift(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    operand_286_t operand = {0};
+    unsigned size = (opcode & 1U) ? 2U : 1U;
+    uint32_t mask = size == 1U ? 0xffU : 0xffffU;
+    uint32_t sign = size == 1U ? 0x80U : 0x8000U;
+    uint8_t count = opcode < 0xd0U ? 0U :
+        opcode < 0xd2U ? 1U : (uint8_t) arch->cx;
+    uint16_t original, flags = arch->flags;
+    uint32_t value, carry = (flags & FLAG_CF) ? 1U : 0U;
+    unsigned i;
+    bm_status_t status = decode_operand(decode, &operand);
+    if (status != BM_STATUS_OK)
+        return status;
+    /* Undocumented /6 is not silently accepted as SAL or a guest fault. */
+    if (operand.reg_field == 6U)
+        return BM_STATUS_UNSUPPORTED;
+    if (opcode < 0xd0U) {
+        status = next_byte(decode, &count);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    count &= 31U;
+    status = read_operand(decode, &operand, size, &original);
+    if (status != BM_STATUS_OK || count == 0U)
+        return status;
+    /* Zero-count memory reads, but no write, match the inherited functional
+     * access policy; no claim of measured bus sequencing/timing is made. */
+    value = original;
+    for (i = 0U; i < count; ++i) {
+        uint32_t previous_carry = carry;
+        switch (operand.reg_field) {
+        case 0U: /* ROL */
+        case 2U: /* RCL */
+        case 4U: /* SHL/SAL */
+            carry = (value & sign) ? 1U : 0U;
+            value = ((value << 1U) & mask) |
+                (operand.reg_field == 0U ? carry :
+                 operand.reg_field == 2U ? previous_carry : 0U);
+            break;
+        default: /* ROR, RCR, SHR, SAR */
+            carry = value & 1U;
+            value = (value >> 1U) |
+                (operand.reg_field == 1U ? carry * sign :
+                 operand.reg_field == 3U ? previous_carry * sign :
+                 operand.reg_field == 7U ? value & sign : 0U);
+            break;
+        }
+    }
+    flags = (uint16_t) ((flags & ~FLAG_CF) | (carry ? FLAG_CF : 0U));
+    if (operand.reg_field >= 4U) {
+        /* AF undefined: deterministic clear policy, not hardware evidence. */
+        flags &= (uint16_t) ~(FLAG_SF | FLAG_ZF | FLAG_PF | FLAG_AF);
+        if (value & sign) flags |= FLAG_SF;
+        if (value == 0U) flags |= FLAG_ZF;
+        if (even_parity((uint8_t) value)) flags |= FLAG_PF;
+    }
+    /* OF is defined only for masked count 1. Preserve it otherwise as an
+     * explicit emulator policy, including full rotations of the bit ring. */
+    if (count == 1U) {
+        uint32_t overflow;
+        if (operand.reg_field == 0U || operand.reg_field == 2U ||
+            operand.reg_field == 4U)
+            overflow = ((value & sign) != 0U) ^ carry;
+        else if (operand.reg_field == 1U || operand.reg_field == 3U)
+            overflow = ((value & sign) != 0U) ^ ((value & (sign >> 1U)) != 0U);
+        else
+            overflow = operand.reg_field == 5U && (original & sign);
+        flags = (uint16_t) ((flags & ~FLAG_OF) | (overflow ? FLAG_OF : 0U));
+    }
+    status = write_operand(decode, &operand, size, (uint16_t) value);
+    if (status == BM_STATUS_OK)
+        arch->flags = flags;
+    return status;
 }
 
 static void alu_calculate(unsigned operation, unsigned size,
@@ -1072,6 +1152,9 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
     uint8_t immediate;
     unsigned operation, form, size;
     bm_status_t status;
+    if (opcode == 0xc0U || opcode == 0xc1U ||
+        (opcode >= 0xd0U && opcode <= 0xd3U))
+        return execute_shift(decode, opcode);
     if (opcode <= 0x3dU && (opcode & 7U) <= 5U) {
         operation = opcode >> 3;
         form = opcode & 7U;

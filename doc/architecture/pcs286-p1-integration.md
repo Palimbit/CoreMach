@@ -326,7 +326,17 @@ tests pass in GCC/MSVC Debug/Release, with the same two skips; provenance
 covers 36 components / 190 files. The unchanged optional SST selection does
 not cover the new groups. Real-mode functional scope only, no clock/ABI change.
 
-Next CPU tranche: shifts/rotates; memory XCHG needs its separate LOCK path.
+Group 2 shifts/rotates now cover all seven documented operations, byte/word
+registers and memory, count 1/CL/imm8 and five-bit masking. An independent
+closed-form oracle checks 1,899,520 scalar cases, plus opcode/alias/segment,
+alignment and every-transfer failure cases. Undefined flags and zero-count
+memory reads are explicit policies, not chip/bus certification. GCC UCRT64
+and MSVC Debug/Release pass 95 ordinary tests with the same two skips;
+30 Python checks and provenance (36 components / 191 files) pass.
+The unchanged SST selection does not include Group 2. Timings remain UNKNOWN.
+
+Next CPU tranche: multiplication and CBW/CWD; division requires divide-error
+delivery, and memory XCHG needs its separate LOCK path.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.

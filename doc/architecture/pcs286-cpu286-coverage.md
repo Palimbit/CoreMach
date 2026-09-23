@@ -2,7 +2,47 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: address and pointer loads
+## Latest tranche: real-mode shifts and rotates
+
+Group 2 ROL/ROR/RCL/RCR/SHL (SAL)/SHR/SAR now supports byte and word
+register/memory operands, count 1, CL and immediate byte (D0-D3/C0-C1).
+Counts use the 286 five-bit mask, including immediate values. CL is captured
+before changing an aliased destination. Full bit-ring rotations are not
+mistaken for a masked-zero count; carry reflects the final bit shifted out.
+Single-count overflow and shift sign/zero/parity follow the instruction rules;
+rotations preserve sign/zero/parity/auxiliary carry. Masked zero preserves all
+flags and does not write the destination.
+
+Primary reference: [Intel 210498-005, section 3.4.2 and Appendix B
+RCL/RCR/ROL/ROR/SAL/SAR/SHL/SHR](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf).
+Indexed primary text was consulted, not a newly acquired or fully visually
+reviewed PDF. The pinned inherited `x86_ops_shift.h` was also consulted and
+added to provenance. This is a derived rewrite with existing author notices.
+
+Explicit policies, not silicon claims: preserve undefined OF for masked counts
+greater than one; clear undefined AF on nonzero shifts; masked-zero memory
+operands still read/check the operand, without writing it. This access policy
+follows the inherited handlers, not measured bus sequencing. Undocumented /6,
+LOCK/REP and protected execution remain unsupported; no fabricated guest fault.
+Registers/FLAGS/IP commit only after successful transfers; a completed low byte
+of an odd memory write remains visible if the second byte fails, with no retry.
+
+`cpu286_shifts.c` uses an independent closed-form oracle (bit rings and wide
+arithmetic, versus production's bounded single-bit loop): 1,899,520 scalar
+cases cover every byte value/count/carry, two status backgrounds, plus nine
+word boundary patterns. It also covers 3,360 opcode/register/count combinations,
+1,008 memory/segment/alignment/count combinations, all 70 transfer failures
+across the six encodings and two alignments, masked-zero read failure, invalid
+forms and segment/fetch limits. These are authored functional tests.
+
+GCC UCRT64 and MSVC Debug/Release pass 95 ordinary tests, with two explicit
+Headland/AT DMA skips; GCC Debug also passes the unchanged SST selection.
+That selection does not include Group 2. Thirty Python checks, catalogue
+and provenance (36 components / 191 files) pass. No timing constants, ABI,
+other CPU, machine registration or board decoding changed. Timing remains
+UNKNOWN and strict clocked execution rejects before fetch; no PCS286 POST claim.
+
+## Previous tranche: address and pointer loads
 
 Real-mode LEA 8D, LES C4, LDS C5 and XLAT D7 are implemented. LEA computes
 only the wrapped 16-bit EA, ignoring the data segment's base, validity and
@@ -78,14 +118,15 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 
 - Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
 - Multiply/divide, immediate IMUL, CBW/CWD and decimal adjustment instructions.
-- Shifts/rotates, including variable counts and their defined/undefined flags.
 - Strings, REP restart/interruption and string I/O.
 - Guest faults/BOUND/invalid-opcode handling, protected segmentation, descriptors,
   privilege, tasks/gates and system instructions; correct double fault/shutdown.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is shifts/rotates with count/flag tests. Memory XCHG stays separate until
+The next bounded block is multiplication and CBW/CWD with signed/unsigned tests;
+division needs explicit divide-error delivery and must not fake success.
+Memory XCHG stays separate until
 the implicit LOCK/bus contract is implemented and tested. Completing real-mode
 instructions does not certify a full 286 or eliminate the PCS286 chipset gates.
 
@@ -174,7 +215,7 @@ passes the pinned optional 71,000-case SST subset with unchanged classification.
 Thirty Python tests, catalogue and provenance audit pass. This remains local
 implementation, not a remote CI, boot or full-ISA certification.
 
-Status: P1 partial interpreter through real-mode address loads, far procedures, interrupts and FLAGS, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode shifts/rotates, address loads, far procedures, interrupts and FLAGS, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -233,13 +274,13 @@ generic catch-all or NOP is not coverage.
 | Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register XCHG implemented; MOV SS has SS-load inhibition; memory XCHG and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
-| Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |
+| Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Missing; timing iteration/prefetch-dependent |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
-| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH and ENTER/LEAVE implemented; other forms and guest faults missing; timing unknown |
+| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH, ENTER/LEAVE and immediate shifts implemented; other forms and guest faults missing; timing unknown |
 | Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Missing; timing descriptor/path-dependent |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
 | Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | Missing; no populated FPU contract; timing unknown |
