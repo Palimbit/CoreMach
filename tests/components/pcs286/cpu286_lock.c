@@ -17,6 +17,8 @@ typedef struct fixture {
     bm_at_bus_t *bus;
     unsigned lock_edges, locked, hold, request, error_after, dma_calls;
     unsigned fail_ack, release_count;
+    unsigned in_bytes, out_bytes;
+    uint8_t output[128];
     uint16_t release_ip;
     bm_286_boundary_t last_boundary;
 } fixture_t;
@@ -52,7 +54,7 @@ static bm_status_t access_bus(void *context, bm_at_transfer_t *at)
 {
     fixture_t *f=context; bm_bus_transaction_t *t=&at->bus;
     if(at->master!=BM_AT_MASTER_CPU) { ++f->dma_calls; t->value=f->ram[t->address]; return BM_STATUS_OK; }
-    assert(t->space!=BM_ADDRESS_IO && t->address+t->size<=0x1000000);
+    assert(t->address+t->size<=(t->space==BM_ADDRESS_IO ? 0x10000U : 0x1000000U));
     assert(!t->wait_states && f->count<64 && t->alignment==t->size);
     assert(t->endianness==BM_ENDIAN_LITTLE);
     assert(t->attributes==(f->locked ? BM_BUS_TRANSACTION_LOCKED : 0U));
@@ -71,7 +73,12 @@ static bm_status_t access_bus(void *context, bm_at_transfer_t *at)
     if(f->count==f->fail_at && !f->error_after) return BM_STATUS_DEVICE_ERROR;
     if(t->operation!=BM_BUS_WRITE) t->value=0;
     for(unsigned i=0;i<t->size;++i) {
-        if(t->operation==BM_BUS_WRITE) f->ram[(size_t)t->address+i]=(uint8_t)(t->value>>(8*i));
+        if(t->space==BM_ADDRESS_IO) {
+            if(t->operation==BM_BUS_WRITE) {
+                assert(f->out_bytes<sizeof(f->output));
+                f->output[f->out_bytes++]=(uint8_t)(t->value>>(8*i));
+            } else t->value|=(uint64_t)(uint8_t)(0x40+f->in_bytes++)<<(8*i);
+        } else if(t->operation==BM_BUS_WRITE) f->ram[(size_t)t->address+i]=(uint8_t)(t->value>>(8*i));
         else t->value|=(uint64_t)f->ram[(size_t)t->address+i]<<(8*i);
     }
     if(f->count==f->fail_at) return BM_STATUS_DEVICE_ERROR;
@@ -134,6 +141,7 @@ static bm_286_arch_state_t setup(fixture_t *f, const uint8_t *code, size_t size)
     assert(!f->locked);
     f->lock_edges=f->request=f->error_after=f->dma_calls=0;
     f->fail_ack=f->release_count=0;
+    f->in_bytes=f->out_bytes=0;
     f->count = f->fail_at = f->acknowledgements = f->traced = f->hold_at = 0;
     s = state(f); s.ip = 0x100;
     s.cs.selector = 0x3000; s.cs.base = 0x30000;
@@ -358,7 +366,7 @@ static void rejection_and_interrupt(fixture_t *f)
     const uint8_t rejected[][6]={
         {0xf0,0x87,0xc0}, {0xf0,0x03,6,0,5}, {0xf0,0x81,0x3e,0,5,1},
         {0xf0,0xf7,6,0,5,1}, {0xf0,0xff,0x36,0,5},
-        {0xf0,0xf3,0xa4}, {0xf3,0xf0,0xa4}, {0xf0,0x90},
+        {0xf0,0xf3,0xaa}, {0xf3,0xf0,0xa6}, {0xf0,0x90},
         {0xf0,0xd1,0xe0}, {0xf0,0xc1,0x36,0,5,1},
         {0xf0,0x89,0xc0}, {0xf0,0xc7,0xc0,1,0},
         {0xf0,0x8e,0x0e,0,5}, {0xf0,0x8c,0x26,0,5},
@@ -403,6 +411,207 @@ static void rejection_and_interrupt(fixture_t *f)
         }
     }
 }
+static void locked_strings(fixture_t *f)
+{
+    const uint8_t ops[]={0xa4,0xa5,0x6c,0x6d,0x6e,0x6f};
+    for(unsigned op=0;op<6;++op)
+        for(unsigned repeat=0;repeat<3;++repeat)
+            for(unsigned order=0;order<2;++order)
+                for(unsigned pref=0;pref<5;++pref)
+                    for(unsigned odd=0;odd<2;++odd)
+                        for(unsigned port_odd=0;port_odd<2;++port_odd)
+                            for(unsigned df=0;df<2;++df)
+                                for(unsigned count=0;count<3;++count) {
+                                    uint8_t code[4]; unsigned n=0;
+                                    if(order) code[n++]=0xf0;
+                                    if(repeat) code[n++]=(uint8_t)(0xf1+repeat);
+                                    if(pref) code[n++]=(uint8_t)(0x26+8*(pref-1));
+                                    if(!order) code[n++]=0xf0;
+                                    code[n++]=ops[op];
+                                    bm_286_arch_state_t s=prepare(f,code,n,count), a;
+                                    unsigned size=(ops[op]&1)+1, elements=repeat ? count : 1;
+                                    s.si=(uint16_t)(0x500+odd); s.di=(uint16_t)(0x600+odd);
+                                    s.dx=(uint16_t)(0xfffeU + port_odd); s.flags=(uint16_t)(2+(df ? 0x400 : 0));
+                                    uint32_t bases[]={s.es.base,s.cs.base,s.ss.base,s.ds.base};
+                                    uint32_t source=bases[pref ? pref-1 : 3];
+                                    for(unsigned k=0;k<elements;++k)
+                                        for(unsigned j=0;j<size;++j)
+                                            f->ram[source+(uint16_t)(s.si+(df ? 0U-k*size : k*size))+j]=(uint8_t)(0x80+k*size+j);
+                                    set(f,&s); f->request=1;
+                                    for(unsigned k=0;k<(elements ? elements : 1);++k) {
+                                        unsigned before=f->count;
+                                        bm_286_boundary_t b=step(f);
+                                        if(k) for(unsigned j=before;j<f->count;++j) assert(f->trace[j].operation!=BM_BUS_FETCH);
+                                        assert(b.kind==(k+1<elements ? BM_286_BOUNDARY_REP_ITERATION : BM_286_BOUNDARY_INSTRUCTION));
+                                        assert(f->locked==(unsigned)(k+1<elements) && f->lock_edges==(elements ? (k+1<elements ? 1U : 2U) : 0U));
+                                        a=state(f);
+                                        assert(a.ip==(k+1<elements ? s.ip : s.ip+n));
+                                    }
+                                    a=state(f);
+                                    int uses_source=op<2 || op>=4, uses_dest=op<4;
+                                    uint16_t delta=(uint16_t)(df ? 0U-elements*size : elements*size);
+                                    assert(a.si==(uint16_t)(s.si+(uses_source ? delta : 0)));
+                                    assert(a.di==(uint16_t)(s.di+(uses_dest ? delta : 0)));
+                                    assert(a.cx==(repeat ? 0 : count) && a.flags==s.flags && a.dx==s.dx && a.ax==s.ax);
+                                    assert(f->in_bytes==(op==2 || op==3 ? elements*size : 0));
+                                    assert(f->out_bytes==(op>=4 ? elements*size : 0));
+                                    for(unsigned k=0;k<elements;++k)
+                                        for(unsigned j=0;j<size;++j) {
+                                            uint8_t expected=(uint8_t)((op==2 || op==3 ? 0x40 : 0x80)+k*size+j);
+                                            if(uses_dest) assert(f->ram[s.es.base+(uint16_t)(s.di+(df ? 0U-k*size : k*size))+j]==expected);
+                                            else assert(f->output[k*size+j]==expected);
+                                        }
+                                    assert(!f->dma_calls);
+                                }
+}
+
+static void locked_repeat_events(fixture_t *f)
+{
+    const uint8_t ops[]={0xa4,0xa5,0x6c,0x6d,0x6e,0x6f};
+    for(unsigned op=0;op<6;++op) {
+    const uint8_t code[]={0xf0,0xf3,ops[op]};
+    for(unsigned event=0;event<4;++event) {
+        bm_286_arch_state_t s=prepare(f,code,sizeof(code),2);
+        unsigned size=(ops[op]&1)+1;
+        s.dx=0xffff;
+        s.flags=(uint16_t)(event==2 ? 0x302 : 0x202);
+        word(f,s.si,0x1234); word(f,s.si+2,0x5678); set(f,&s);
+        step(f); assert(f->locked && state(f).cx==1 && state(f).ip==s.ip);
+        if(event==3) {
+            assert(f->cpu.ops.signal(f->cpu.context,BM_286_SIGNAL_HOLD,1)==BM_STATUS_OK);
+            step(f); assert(!f->locked && state(f).cx==0);
+            /* Direct HOLD cannot cut a locked block either. Deassert before
+             * asking the real arbiter to validate HLDA (it did not request it). */
+            assert(f->cpu.ops.signal(f->cpu.context,BM_286_SIGNAL_HOLD,0)==BM_STATUS_OK);
+            continue;
+        }
+        if(event<2) assert(f->cpu.ops.signal(f->cpu.context,event ? BM_286_SIGNAL_NMI : BM_286_SIGNAL_INTR,1)==BM_STATUS_OK);
+        bm_286_boundary_t b=step(f);
+        assert(!f->locked && b.has_vector && b.vector==(event==0 ? 0x30 : event==1 ? 2 : 1));
+        assert(read_word(f,s.ss.base+s.sp-6)==s.ip && state(f).cx==1);
+        if(event==0) assert(f->cpu.ops.signal(f->cpu.context,BM_286_SIGNAL_INTR,0)==BM_STATUS_OK);
+        step(f); /* IRET */
+        assert(!f->locked && state(f).ip==s.ip);
+        unsigned before=f->count;
+        step(f); assert(!f->locked && state(f).cx==0 && state(f).ip==s.ip+3);
+        assert(f->trace[before].operation==BM_BUS_FETCH);
+        assert(f->in_bytes==(op==2 || op==3 ? size*2 : 0));
+        assert(f->out_bytes==(op>=4 ? size*2 : 0));
+        for(unsigned i=0;i<size*2;++i) {
+            uint8_t expected=(op==2 || op==3) ? (uint8_t)(0x40+i) : f->ram[s.si+i];
+            if(op<4) assert(f->ram[s.es.base+s.di+i]==expected);
+            else assert(f->output[i]==expected);
+        }
+    }
+    }
+}
+
+static void locked_repeat_failures(fixture_t *f)
+{
+    const uint8_t ops[]={0xa4,0xa5,0x6c,0x6d,0x6e,0x6f};
+    for(unsigned op=0;op<6;++op)
+        for(unsigned later=0;later<2;++later)
+            for(unsigned after=0;after<2;++after) {
+                unsigned total=0;
+                for(unsigned fail=0;fail<=total;++fail) {
+                    uint8_t code[]={0xf0,0xf3,ops[op]};
+                    bm_286_arch_state_t s=prepare(f,code,sizeof(code),3);
+                    s.si=0x501; s.di=0x601; s.dx=0xffff; set(f,&s);
+                    if(later) step(f);
+                    s=state(f); unsigned before=f->count, traced=f->traced;
+                    if(!fail) {step(f); total=f->count-before; continue;}
+                    f->fail_at=before+fail; f->error_after=after;
+                    bm_286_boundary_t b;
+                    assert(bm_286_step(&f->cpu,&b)==BM_STATUS_DEVICE_ERROR);
+                    bm_286_arch_state_t a=state(f); same(&a,&s);
+                    assert(!f->locked && !(f->lock_edges&1) && f->traced==traced);
+                    unsigned count=f->count, in=f->in_bytes, out=f->out_bytes;
+                    assert(bm_286_step(&f->cpu,&b)==BM_STATUS_INVALID_STATE);
+                    assert(f->count==count && f->in_bytes==in && f->out_bytes==out);
+                    unsigned expected_in=0, expected_out=0;
+                    for(unsigned i=0;i<f->count-(after ? 0U : 1U);++i) {
+                        bm_bus_transaction_t *t=&f->trace[i];
+                        if(t->space==BM_ADDRESS_IO) {
+                            if(t->operation==BM_BUS_READ) expected_in+=t->size;
+                            else expected_out+=t->size;
+                        } else if(t->operation==BM_BUS_WRITE)
+                            for(unsigned j=0;j<t->size;++j)
+                                assert(f->ram[t->address+j]==(uint8_t)(t->value>>(8*j)));
+                    }
+                    assert(in==expected_in && out==expected_out);
+                }
+            }
+}
+
+static void locked_repeat_lifecycle(fixture_t *f, const bm_host_services_t *host, const bm_286_config_t *config)
+{
+    const uint8_t code[]={0xf0,0xf3,0xa4};
+    for(unsigned action=0;action<5;++action) {
+        bm_286_arch_state_t s=prepare(f,code,sizeof(code),2); set(f,&s);
+        if(action==1) f->request=1;
+        step(f);
+        assert(f->locked && f->lock_edges==1);
+        bm_286_arch_state_t current=state(f), bad=current; bad.version=0;
+        assert(bm_286_set_arch_state(&f->cpu,&bad)==BM_STATUS_INVALID_ARGUMENT);
+        assert(bm_286_step(&f->cpu,NULL)==BM_STATUS_INVALID_ARGUMENT);
+        assert(f->locked && f->lock_edges==1);
+        if(action==0) {set(f,&current); assert(!f->locked); step(f); assert(!f->locked && state(f).cx==0);}
+        if(action==1) {
+            bm_286_boundary_t b;
+            assert(f->cpu.ops.reset(f->cpu.context)==BM_STATUS_OK); assert(!f->locked && f->hold);
+            assert(bm_286_step(&f->cpu,&b)==BM_STATUS_IDLE && b.kind==BM_286_BOUNDARY_HOLD);
+            assert(bm_at_bus_request(f->bus,BM_AT_MASTER_DMA16,0)==BM_STATUS_OK);
+        }
+        if(action==2) {
+            uint64_t cycles=99; unsigned count=f->count;
+            assert(bm_286_step_clocked(f->cpu.context,0,&cycles)==BM_STATUS_UNSUPPORTED);
+            assert(!f->locked && cycles==0 && f->count==count);
+        }
+        if(action==3) {
+            f->cpu.ops.destroy(f->cpu.context); assert(!f->locked);
+            assert(bm_286_create(host,config,&f->cpu)==BM_STATUS_OK);
+        }
+        if(action==4) {
+            bm_tick_t consumed=99;
+            assert(f->cpu.ops.run(f->cpu.context,0,&consumed)==BM_STATUS_OK && consumed==0 && f->locked);
+            assert(f->cpu.ops.run(f->cpu.context,1,&consumed)==BM_STATUS_OK && consumed==1 && !f->locked);
+        }
+    }
+}
+
+static void locked_repeat_limits(fixture_t *f)
+{
+    const uint8_t ops[]={0xa5,0x6d,0x6f};
+    for(unsigned op=0;op<3;++op)
+        for(unsigned empty=0;empty<2;++empty) {
+            uint8_t code[]={0xf0,0xf3,ops[op]};
+            bm_286_arch_state_t s=prepare(f,code,sizeof(code),empty ? 0 : 3), a;
+            s.si=s.di=0xfffd; s.dx=0xffff;
+            if(empty) {s.ds.valid=s.es.valid=0;}
+            set(f,&s); step(f);
+            if(empty) {
+                assert(!f->lock_edges && f->count==sizeof(code) && !f->in_bytes && !f->out_bytes);
+                continue;
+            }
+            s=state(f); assert(s.si==0xffff || s.di==0xffff);
+            unsigned count=f->count, in=f->in_bytes, out=f->out_bytes;
+            bm_286_boundary_t b;
+            assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED);
+            a=state(f); same(&a,&s);
+            assert(!f->locked && f->lock_edges==2 && f->count==count && f->in_bytes==in && f->out_bytes==out);
+        }
+    { /* Budgeting must not release the bus between any of 65535 elements. */
+        const uint8_t code[]={0xf0,0xf3,0xa4};
+        bm_286_arch_state_t s=prepare(f,code,sizeof(code),0xffff); set(f,&s);
+        for(unsigned k=0;k<65535;++k) {
+            f->count=0;
+            step(f);
+            assert(f->lock_edges==(k==65534 ? 2U : 1U));
+        }
+        assert(!f->locked && state(f).cx==0 && state(f).ip==s.ip+3);
+    }
+}
+
 static void interrupt_lock(fixture_t *f)
 {
     const uint8_t code[]={0x90};
@@ -476,6 +685,9 @@ int main(void)
     exchanged(&f); rmw_equivalence(&f); moves_and_shifts(&f);
     failures(&f); rejection_and_interrupt(&f);
     interrupt_lock(&f);
+    locked_strings(&f); locked_repeat_events(&f); locked_repeat_failures(&f);
+    locked_repeat_lifecycle(&f,&host,&cpu);
+    locked_repeat_limits(&f);
     /* Missing exclusion adapter must refuse before touching the PIC or RAM. */
     f.cpu.ops.destroy(f.cpu.context); cpu.bus_lock=NULL;
     assert(bm_286_create(&host,&cpu,&f.cpu)==BM_STATUS_OK);

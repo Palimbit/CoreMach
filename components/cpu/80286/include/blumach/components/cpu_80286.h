@@ -178,7 +178,14 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
  * segment-register transfers), and documented memory shifts/rotates.
  * Masked-zero shifts retain the unlocked read/no-write functional policy;
  * register-only LOCK and undocumented shift /6 remain unsupported. Other forms
- * including LOCK REP remain UNSUPPORTED, not a fabricated guest #UD.
+ * remain UNSUPPORTED, not a fabricated guest #UD.
+ * LOCK MOVS/INS/OUTS support F2/F3 with exclusion retained across iteration
+ * boundaries. It releases on completion, accepted interrupt, host failure,
+ * reset, valid state import, destruction or strict-clock refusal. Invalid
+ * calls leave an active continuation intact. The adapter must outlive CPU
+ * destruction. HOLD cannot split the block; accepted events discard decode
+ * and IRET restarts from committed CX/SI/DI. Combined event/pin ordering is
+ * a functional policy pending silicon traces, not cycle-exact validation.
  * Memory strings and INS/OUTS support F2/F3 repetition, one element per step.
  * INS fixes ES:DI; OUTS uses DS:SI or override; DX and FLAGS are unchanged.
  * Host I/O effects are irreversible, including input consumed before a failed

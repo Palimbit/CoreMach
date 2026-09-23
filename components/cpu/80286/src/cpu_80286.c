@@ -65,13 +65,14 @@ typedef struct bm_286_private {
     /* Decoded repetition survives only uninterrupted execution/HOLD. Public
      * arch import and interrupt entry discard it; architectural IP points
      * at the first prefix while incomplete. Not a cycle-exact prefetch. */
-    uint8_t rep_active, rep_opcode, rep_prefix;
+    uint8_t rep_active, rep_opcode, rep_prefix, rep_lock;
     int rep_segment;
     uint16_t rep_end_ip;
 } bm_286_private_t;
 
 static bm_status_t cpu_run(void *context, bm_tick_t budget,
                            bm_tick_t *consumed);
+static void end_bus_lock(bm_286_private_t *state);
 
 static void reset_architecture(bm_286_private_t *state)
 {
@@ -110,6 +111,9 @@ static bm_status_t cpu_reset(void *context)
     if (state->arch.shutdown && state->config.shutdown != NULL)
         state->config.shutdown(state->config.pin_context, 0);
     reset_architecture(state);
+    /* Release after reset so a pending arbiter request can reassert HOLD
+     * through the callback without that input being cleared afterwards. */
+    end_bus_lock(state);
     return BM_STATUS_OK;
 }
 
@@ -166,8 +170,10 @@ static bm_status_t cpu_inspect(const void *context, const char *name,
 static void cpu_destroy(void *context)
 {
     bm_286_private_t *state = context;
-    if (state != NULL)
+    if (state != NULL) {
+        end_bus_lock(state);
         state->host.release(state->host.context, state);
+    }
 }
 
 static int is_286_cpu(const bm_cpu_t *cpu)
@@ -246,6 +252,7 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
         return BM_STATUS_INVALID_STATE;
     state->arch = *arch;
     state->rep_active = 0U; /* Conformance import starts a new decode interval. */
+    end_bus_lock(state); /* A valid import abandons the private continuation. */
     return BM_STATUS_OK;
 }
 
@@ -427,6 +434,17 @@ static void end_bus_lock(bm_286_private_t *state)
     }
 }
 
+static bm_status_t begin_bus_lock(bm_286_private_t *state)
+{
+    if (state->config.bus_lock == NULL)
+        return BM_STATUS_UNSUPPORTED;
+    if (!state->lock_active) {
+        state->lock_active = 1U;
+        state->config.bus_lock(state->config.pin_context, 1);
+    }
+    return BM_STATUS_OK;
+}
+
 static bm_status_t data_access(decoded_286_t *decode,
                                const bm_286_segment_state_t *segment,
                                uint16_t offset, unsigned size, int write,
@@ -443,10 +461,9 @@ static bm_status_t data_access(decoded_286_t *decode,
         bm_286_private_t *state = decode->state;
         /* Bracket writes as well as reads (MOV need not read its destination).
          * All instruction bytes and operand validation precede acquisition. */
-        if (state->config.bus_lock == NULL)
-            return BM_STATUS_UNSUPPORTED;
-        state->lock_active = 1U;
-        state->config.bus_lock(state->config.pin_context, 1);
+        status = begin_bus_lock(state);
+        if (status != BM_STATUS_OK)
+            return status;
     }
     address = (segment->base + offset) & ADDRESS_MASK;
     transfer.space = BM_ADDRESS_DATA;
@@ -1576,6 +1593,7 @@ static bm_status_t io_access(decoded_286_t *decode, uint16_t port,
         t.size = fragment_size;
         t.alignment = fragment_size;
         t.endianness = BM_ENDIAN_LITTLE;
+        t.attributes = decode->state->lock_active ? BM_BUS_TRANSACTION_LOCKED : 0U;
         t.wait_states = 0;
         t.value = output ? (fragment_size == 1U ?
             (uint8_t) (*value >> (i * 8U)) : *value) : 0U;
@@ -1633,6 +1651,11 @@ static bm_status_t execute_string_io(decoded_286_t *decode, uint8_t opcode)
      * Host callback failures may still consume input or commit partial output. */
     if (!segment->valid || (uint32_t) offset + size - 1U > segment->limit)
         return BM_STATUS_UNSUPPORTED;
+    if (decode->lock_prefix) {
+        status = begin_bus_lock(decode->state);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
     if (output) {
         status = data_access(decode, segment, offset, size, 0, &value);
         if (status == BM_STATUS_OK)
@@ -1922,7 +1945,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     boundary.instruction_address =
         (state->arch.cs.base + state->arch.ip) & ADDRESS_MASK;
     boundary.timing = BM_286_TIMING_UNKNOWN;
-    if (state->hold_line) {
+    if (state->hold_line && !state->lock_active) {
         if (!state->hold_acknowledged) {
             state->hold_acknowledged = 1U;
             if (state->config.hold_ack != NULL)
@@ -1944,6 +1967,11 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         (state->arch.flags & FLAG_IF) && !state->arch.interrupt_shadow)
         event = 0U;
     if (event != 3U) {
+        /* Suspend the REP window before handler entry. INTR establishes its
+         * own window; IRET resumes at the prefix using committed CX/SI/DI.
+         * Combined event/LOCK pin edges remain a functional policy, not
+         * a measured silicon trace. */
+        end_bus_lock(state);
         status = accept_interrupt(&decode, event, &boundary);
         if (status != BM_STATUS_OK) {
             state->stopped = 1U;
@@ -1971,6 +1999,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         opcode = state->rep_opcode;
         repeat = state->rep_prefix;
         decode.override_segment = state->rep_segment;
+        decode.lock_prefix = state->rep_lock;
         decode.cursor = state->rep_end_ip;
         status = BM_STATUS_OK;
     } else for (;;) {
@@ -1997,8 +2026,10 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         break;
     }
     if (status == BM_STATUS_OK) {
-        if (decode.lock_prefix && (repeat ||
-            !((opcode <= 0x31U && (opcode & 7U) <= 1U) ||
+        int locked_string = (opcode >= 0x6cU && opcode <= 0x6fU) ||
+            opcode == 0xa4U || opcode == 0xa5U;
+        if (decode.lock_prefix && ((repeat && !locked_string) ||
+            !(locked_string || (opcode <= 0x31U && (opcode & 7U) <= 1U) ||
               opcode == 0x80U || opcode == 0x81U || opcode == 0x83U ||
               (opcode >= 0x88U && opcode <= 0x8cU) || opcode == 0x8eU ||
               (opcode >= 0xa0U && opcode <= 0xa3U) ||
@@ -2035,6 +2066,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     if (repeat_more) {
         state->rep_opcode = opcode;
         state->rep_prefix = repeat;
+        state->rep_lock = decode.lock_prefix;
         state->rep_segment = decode.override_segment;
         state->rep_end_ip = (uint16_t) decode.cursor;
     } else
@@ -2061,7 +2093,8 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock
      * claim. The strict clocked entry point never schedules this boundary. */
     boundary.cpu_cycles = decode.waits;
-    end_bus_lock(state); /* Includes all odd fragments and architectural commit. */
+    if (!repeat_more)
+        end_bus_lock(state); /* REP keeps exclusion between diagnostic steps. */
     *out_boundary = boundary;
     if (state->config.trace != NULL)
         state->config.trace(state->config.trace_context, &boundary);
@@ -2108,5 +2141,6 @@ bm_status_t bm_286_step_clocked(void *context, bm_tick_t start_ns,
     /* No exact prefetch + execution duration is certified in this tranche.
      * Latch before any fetch so retry cannot repeat guest-visible activity. */
     state->stopped = 1U;
+    end_bus_lock(state);
     return BM_STATUS_UNSUPPORTED;
 }

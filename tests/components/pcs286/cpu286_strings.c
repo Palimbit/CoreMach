@@ -313,6 +313,7 @@ static void irrelevant_segments_and_rejection(fixture_t *f)
         uint8_t code[] = {0xa5,0xa5};
         bm_286_arch_state_t s; bm_286_boundary_t b;
         if (bad < 3) code[0] = (uint8_t)(bad == 0 ? 0xf0 : bad == 1 ? 0xf2 : 0xf3);
+        if (bad == 0) code[1] = 0xab; /* LOCK STOS remains outside this tranche. */
         if (bad == 1 || bad == 2) code[1] = 0x9b; /* REP WAIT remains unsupported. */
         s = setup(f, code, sizeof(code)); s.si = 0x500; s.di = 0x600;
         if (bad == 3) s.msw |= 1;

@@ -423,7 +423,15 @@ that window. CPU/PIC/AT integration connects the real arbiter. Tests cover
 contention, both alignments, failure cleanup and missing adapter refusal.
 No new timing or complete-machine claim follows.
 
-Next CPU tranche: LOCK REP and remaining/protected automatic lock windows.
+LOCK MOVS/INS/OUTS now retain bus exclusion across REP iterations and mark
+memory/I/O fragments. Completion, accepted events, failures and lifecycle
+cancellation release the window. Tests cover 4,320 transfer combinations,
+interrupt/restart, failure effects, cleanup and 65,535 elements. Combined
+LOCK/event pin ordering remains explicit functional policy, not measured
+silicon timing; other strings/register forms and protected windows are pending.
+
+Next CPU tranche: real-mode exceptions/BOUND and absent-80287 behavior.
+Protected lock windows remain coupled to future protected execution.
 Current unsupported combinations are missing
 implementation, not the 386 legal-prefix rule or fabricated guest #UD.
 Headland/IOC02 evidence

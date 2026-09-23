@@ -308,7 +308,7 @@ static void limits(fixture_t *f)
             if(mode==0) {if(output) s.ds.valid=0; else s.es.valid=0;}
             if(mode==1) {if(output) s.ds.limit=0x100; else s.es.limit=0x100;}
             if(mode==2) s.msw|=1;
-            if(mode==3) code[0]=0xf0;
+            if(mode==3) {code[0]=0xf0; code[1]=0x9b;} /* LOCK WAIT pending. */
             if(mode==4) {
                 s.si=s.di=0xffff;
                 if(size==1) { /* A byte at FFFF is legal, then offset wraps. */

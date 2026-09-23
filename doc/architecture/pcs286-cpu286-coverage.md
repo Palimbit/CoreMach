@@ -2,7 +2,52 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: automatic real-mode INTR exclusion
+## Latest tranche: bounded LOCK REP transfers
+
+Real-mode LOCK MOVS, INS and OUTS (byte/word) now work with no repeat prefix
+or F2/F3. A repeated transfer retains private exclusion between diagnostic
+steps, without refetching prefixes or yielding ownership to HOLD. CX=0
+performs no data/I/O access and acquires no window. Memory and port fragments
+carry LOCKED. Completion or failure releases the window; completed external
+effects are never rolled back or retried.
+
+Accepted INTR/NMI/TF suspends the repetition and releases its window before
+handler entry. INTR then acquires its own existing acknowledgement window.
+IRET redecodes the original prefix using committed CX/SI/DI. This combined
+event/pin ordering is an explicit functional policy pending hardware traces,
+not a claim about every stepping's physical LOCK edges. F2 compatibility and
+STI/SS shadow policies remain those of the existing REP implementation.
+
+Reset, destruction, valid architectural import and strict-clock refusal also
+release an active window. Invalid calls/import leave it unchanged. Reset
+releases after resetting CPU state so an arbiter's newly asserted HOLD is not
+erased. Adapters must outlive the CPU. Host pauses/zero execution budgets
+retain the window; they are not guest instruction completion.
+
+[Intel's 286 hardware reference](https://www.bitsavers.org/components/intel/80286/210760-002_80286_Hardware_Reference_Manual_1987.pdf)
+identifies locked MOVS/INS/OUTS and count-dependent HOLD latency.
+[Intel's REP restart note](https://www.pcjs.org/documents/manuals/intel/80286/rep_restart/)
+documents restart after external interrupts, but does not by itself certify
+the combined LOCK/event pin sequence. Sources were consulted as indexed
+extracts/transcriptions; no restricted asset enters Git.
+
+The actual CPU/AT fixture covers 4,320 opcode/prefix-order/repeat/segment/
+alignment/port/DF/count configurations, all six forms interrupted by
+INTR/NMI/TF or direct HOLD, first/later-iteration failures before/after effects,
+I/O wrap, segment-limit stops, zero count with invalid unused segments,
+import/reset/destroy/strict-clock cleanup, pending-request reset and a complete
+65,535-element transfer. Existing non-LOCK tests and SST selection remain.
+Four local compiler/configuration suites pass 102 ordinary tests with two
+Headland/AT DMA skips, plus 30 Python checks and catalogue/provenance checks.
+No ABI layout, scheduler, other CPU or AT implementation changed.
+
+Still outside this tranche: LOCK on other string/register-only forms,
+protected descriptor windows, complete guest faults and physical timing.
+Timing remains UNKNOWN and strict-clock execution refuses. No BIOS/POST claim.
+Next useful CPU block: real-mode exceptions/BOUND and the absent-80287 path;
+protected automatic windows should accompany protected execution.
+
+## Previous tranche: automatic real-mode INTR exclusion
 
 Accepted INTR now requires the existing bus-lock adapter before either INTA
 callback. The logical exclusion window spans both acknowledgements and the
