@@ -57,12 +57,11 @@ rotation and special masks. It checks relocated ports/cascade wiring, mismatch
 failure, initialization, observational DEBUG, errors and allocation failure.
 These are authored contract tests, not captured hardware vectors.
 
-The 286 CPU has **not** changed in this packet. Its event-delivery paths still
-return UNSUPPORTED. The next gate is real-mode interrupt entry/return: two INTA
-callbacks, IVT lookup, FLAGS/CS/IP frame, IF/TF rules, STI/CLI, IRET and NMI/trap
-inhibition. It must test failures without repeating acknowledgements or rolling
-back completed external side effects. Then wire this PIC into the authored
-RAM/ROM/AT diagnostic. Protected delivery and timing require separate evidence.
+The subsequent CPU interrupt tranche now tests a real cascaded-PIC IRQ9,
+two INTA phases, IVT/frame entry, separate slave/master EOI instructions and
+IRET back to the interrupted program. It also checks CLI/STI/HLT and NMI/trap
+inhibition. See `pcs286-cpu286-coverage.md`. Its flat synthetic endpoint is not
+yet a PCS286 RAM/ROM/AT board map. Protected delivery and timing remain gaps.
 
 Headland and AT DMA remain absent. No runtime registration, firmware POST,
 GUI launch or PCS286 hardware validation follows from the PIC tests.

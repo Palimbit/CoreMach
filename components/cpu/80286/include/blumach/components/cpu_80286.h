@@ -17,7 +17,7 @@ extern "C" {
 #define BM_286_STATE_VERSION 3U
 
 /* Inhibition for the next instruction boundary, not a clock count.
- * INTR_ONLY is reserved for STI-style state; STI execution is still pending.
+ * INTR_ONLY is set by real-mode STI.
  * SS_LOAD additionally inhibits NMI and single-step delivery. Faults are not
  * suppressed. HOLD/idle/error paths do not consume either shadow. */
 typedef enum bm_286_interrupt_shadow {
@@ -137,7 +137,7 @@ typedef struct bm_286_config {
  * destroy operations. On failure, out_cpu is cleared and allocations released.
  * Creation leaves reset architectural state but performs no fetch/INTA.
  * CPU owns no RAM, chipset, scheduler or host file. ops.run follows the legacy
- * engine's one-instruction-per-tick diagnostic convention; it is not CPU
+ * engine's one-boundary-per-tick diagnostic convention; it is not CPU
  * clocks or nanoseconds and must not schedule a PCS 286 machine. Use the
  * strict clocked callback after instruction timing is established.
  * Configuration is copied;
@@ -153,6 +153,12 @@ bm_status_t bm_286_get_arch_state(const bm_cpu_t *cpu,
  * a new microarchitectural observation interval, not a cycle-exact restore. */
 bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
                                   const bm_286_arch_state_t *state);
+/* Real-mode INTR (two INTA phases), NMI and sampled #1 are accepted before
+ * fetch, respecting SS/STI inhibition. CLI/STI/HLT/IRET are implemented.
+ * Entry and IRET stage registers until all accesses succeed; completed bus
+ * writes/acknowledgements are not undone on host errors, and retry is latched
+ * off. Software INT, guest faults, protected gates and shutdown recovery are
+ * pending, not approximated. Timing remains UNKNOWN for every boundary. */
 bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary);
 /* Exact existing engine callback: start_ns is virtual boundary time; returned
  * cycles are native CPU clocks. Never turn unknown timing into zero/one clocks.

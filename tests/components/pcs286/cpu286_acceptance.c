@@ -105,7 +105,8 @@ static void test_state_import_and_sampled_trap(void)
     assert(bm_286_step(&cpu, &boundary) == BM_STATUS_OK);
     after = state_of(&cpu);
     assert(after.ip == 0xfff1U && after.trap_pending == 1U);
-    assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNSUPPORTED);
+    /* Entry is implemented, but this reset-ROM-only fixture has no stack. */
+    assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNMAPPED);
     assert(bm_286_step(&cpu, &boundary) == BM_STATUS_INVALID_STATE);
     assert(cpu.ops.reset(cpu.context) == BM_STATUS_OK);
     after = state_of(&cpu);
@@ -254,7 +255,7 @@ static void test_halt_shutdown_and_pending_signals(void)
     assert(boundary.kind == BM_286_BOUNDARY_HALT);
     state.nmi_blocked = 0U;
     assert(bm_286_set_arch_state(&cpu, &state) == BM_STATUS_OK);
-    assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNSUPPORTED);
+    assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNMAPPED);
     assert(cpu.ops.reset(cpu.context) == BM_STATUS_OK);
 
     state = state_of(&cpu);

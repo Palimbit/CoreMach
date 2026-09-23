@@ -9,7 +9,7 @@
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h,
  * src/cpu/x86_ops_misc.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
  * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
- * src/cpu/x86_ops_ret_2386.h and src/cpu/x86_ops_io.h. The inherited
+ * src/cpu/x86_ops_ret_2386.h, src/cpu/x86_ops_flag.h and src/cpu/x86_ops_io.h. The inherited
  * sources retain these notices:
  *
  * src/cpu/x86.c — Authors: Andrew Jenner, Miran Grca.
@@ -600,7 +600,7 @@ static bm_status_t near_branch(decoded_286_t *decode, uint16_t target, int call)
 
 /* Real-mode CS reload drops the special reset base. A20 remains board-owned.
  * Only called after both pointer words were obtained successfully; protected
- * mode and guest exception delivery are rejected by the surrounding decoder. */
+ * mode and guest fault delivery are rejected by the surrounding decoder. */
 static bm_status_t far_jump(decoded_286_t *decode, uint16_t ip, uint16_t cs)
 {
     bm_286_segment_state_t *segment = &decode->state->arch.cs;
@@ -610,6 +610,108 @@ static bm_status_t far_jump(decoded_286_t *decode, uint16_t ip, uint16_t cs)
     segment->access = 0U;
     segment->valid = 1U;
     decode->cursor = ip;
+    return BM_STATUS_OK;
+}
+
+/* Functional real-mode boundary only, not a pin-cycle/fault-order model.
+ * Stage registers, never roll back completed endpoint writes. */
+static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    bm_286_segment_state_t table = {0};
+    uint16_t words[3] = {arch->flags, arch->cs.selector, arch->ip};
+    uint16_t ip, cs;
+    uint16_t offset = (uint16_t) ((unsigned) vector * 4U);
+    bm_status_t status;
+    if ((uint32_t) offset + 3U > arch->idtr.limit)
+        return BM_STATUS_UNSUPPORTED; /* #13/#8/shutdown pending. */
+    for (unsigned i = 0; i < 3U; ++i)
+        if (!stack_word_valid(arch, (uint16_t) (arch->sp - 2U * (i + 1U))))
+            return BM_STATUS_UNSUPPORTED;
+    for (unsigned i = 0; i < 3U; ++i) {
+        status = data_access(decode, &arch->ss,
+            (uint16_t) (arch->sp - 2U * (i + 1U)), 2U, 1, &words[i]);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    table.base = arch->idtr.base;
+    table.limit = arch->idtr.limit;
+    table.valid = 1U;
+    status = data_access(decode, &table, offset, 2U, 0, &ip);
+    if (status != BM_STATUS_OK)
+        return status;
+    status = data_access(decode, &table, (uint16_t) (offset + 2U), 2U, 0, &cs);
+    if (status != BM_STATUS_OK)
+        return status;
+    arch->sp = (uint16_t) (arch->sp - 6U);
+    arch->flags &= (uint16_t) ~(FLAG_IF | FLAG_TF);
+    arch->halted = 0U;
+    arch->interrupt_shadow = BM_286_SHADOW_NONE;
+    return far_jump(decode, ip, cs);
+}
+
+static bm_status_t interrupt_return(decoded_286_t *decode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t words[3];
+    bm_status_t status;
+    for (unsigned i = 0; i < 3U; ++i)
+        if (!stack_word_valid(arch, (uint16_t) (arch->sp + 2U * i)))
+            return BM_STATUS_UNSUPPORTED;
+    for (unsigned i = 0; i < 3U; ++i) {
+        status = data_access(decode, &arch->ss,
+            (uint16_t) (arch->sp + 2U * i), 2U, 0, &words[i]);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    arch->sp = (uint16_t) (arch->sp + 6U);
+    /* 286 real-mode IRET cannot write IOPL/NT; not 386 FLAGS semantics. */
+    arch->flags = (uint16_t) ((arch->flags & 0x7000U) |
+        (words[2] & 0x0fd5U) | FLAG_FIXED_ONE);
+    arch->nmi_blocked = 0U;
+    return far_jump(decode, words[0], words[1]);
+}
+
+static bm_status_t accept_interrupt(decoded_286_t *decode, unsigned event,
+                                     bm_286_boundary_t *boundary)
+{
+    bm_286_private_t *state = decode->state;
+    uint8_t vector = (uint8_t) event; /* #1, NMI=2, INTR=0 */
+    bm_status_t status;
+    if ((state->arch.msw & MSW_PE) || state->arch.shutdown)
+        return BM_STATUS_UNSUPPORTED; /* Protected gates/recovery pending. */
+    if (event == 0U) {
+        if (state->config.interrupt_ack == NULL)
+            return BM_STATUS_UNSUPPORTED;
+        for (unsigned phase = 0; phase < 2U; ++phase) {
+            uint32_t waits = 0U;
+            status = state->config.interrupt_ack(state->config.interrupt_context,
+                                                 phase, &vector, &waits);
+            if (status != BM_STATUS_OK)
+                return status;
+            decode->waits += waits;
+        }
+    }
+    /* Consume the accepted edge BEFORE endpoint callbacks, so a new edge
+     * signalled from an access remains pending until a later IRET. */
+    if (event == 2U)
+        state->arch.nmi_pending = 0U;
+    status = interrupt_frame(decode, vector);
+    if (status != BM_STATUS_OK) {
+        if (event == 2U)
+            state->arch.nmi_pending = 1U;
+        return status;
+    }
+    if (event == 1U)
+        state->arch.trap_pending = 0U;
+    if (event == 2U)
+        state->arch.nmi_blocked = 1U;
+    state->arch.ip = (uint16_t) decode->cursor;
+    boundary->kind = event == 1U ? BM_286_BOUNDARY_EXCEPTION : BM_286_BOUNDARY_INTERRUPT;
+    boundary->has_vector = 1U;
+    boundary->vector = vector;
+    boundary->bus_wait_cycles = decode->waits;
+    boundary->cpu_cycles = decode->waits;
     return BM_STATUS_OK;
 }
 
@@ -1086,6 +1188,21 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if (opcode == 0xcfU)
+        return interrupt_return(decode);
+    if (opcode == 0xfaU || opcode == 0xfbU) {
+        if (opcode == 0xfaU)
+            arch->flags &= (uint16_t) ~FLAG_IF;
+        else {
+            arch->flags |= FLAG_IF;
+            decode->next_shadow = BM_286_SHADOW_INTR_ONLY;
+        }
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0xf4U) {
+        arch->halted = 1U;
+        return BM_STATUS_OK;
+    }
     if ((opcode >= 0xe4U && opcode <= 0xe7U) ||
         (opcode >= 0xecU && opcode <= 0xefU))
         return execute_io(decode, opcode);
@@ -1214,6 +1331,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     bm_status_t status;
     uint8_t opcode;
     uint8_t trap_was_enabled;
+    unsigned event = 3U; /* No accepted event. */
     if (!is_286_cpu(cpu) || out_boundary == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
     memset(out_boundary, 0, sizeof(*out_boundary));
@@ -1234,20 +1352,26 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         *out_boundary = boundary;
         return BM_STATUS_IDLE;
     }
+    decode = (decoded_286_t) {state, state->arch.ip, 0U, 0U, -1, BM_286_SHADOW_NONE};
     if (!state->arch.shutdown && state->arch.trap_pending &&
-        state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD) {
-        state->stopped = 1U;
-        return BM_STATUS_UNSUPPORTED; /* #1 delivery is not implemented. */
-    }
-    if (state->arch.nmi_pending && !state->arch.nmi_blocked &&
-        state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD) {
-        state->stopped = 1U;
-        return BM_STATUS_UNSUPPORTED; /* NMI delivery/recovery is missing. */
-    }
-    if (!state->arch.shutdown && state->intr_line &&
-        (state->arch.flags & FLAG_IF) && !state->arch.interrupt_shadow) {
-        state->stopped = 1U;
-        return BM_STATUS_UNSUPPORTED; /* INTR delivery is missing. */
+        state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD)
+        event = 1U;
+    else if (state->arch.nmi_pending && !state->arch.nmi_blocked &&
+        state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD)
+        event = 2U;
+    else if (!state->arch.shutdown && state->intr_line &&
+        (state->arch.flags & FLAG_IF) && !state->arch.interrupt_shadow)
+        event = 0U;
+    if (event != 3U) {
+        status = accept_interrupt(&decode, event, &boundary);
+        if (status != BM_STATUS_OK) {
+            state->stopped = 1U;
+            return status;
+        }
+        *out_boundary = boundary;
+        if (state->config.trace != NULL)
+            state->config.trace(state->config.trace_context, &boundary);
+        return BM_STATUS_OK;
     }
     if (state->arch.shutdown || state->arch.halted) {
         boundary.kind = state->arch.shutdown ? BM_286_BOUNDARY_SHUTDOWN :
@@ -1259,12 +1383,6 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         state->stopped = 1U;
         return BM_STATUS_UNSUPPORTED; /* No protected fetch/privilege model. */
     }
-    decode.state = state;
-    decode.cursor = state->arch.ip;
-    decode.length = 0U;
-    decode.waits = 0U;
-    decode.override_segment = -1;
-    decode.next_shadow = BM_286_SHADOW_NONE;
     trap_was_enabled = (uint8_t) ((state->arch.flags & FLAG_TF) != 0U);
     for (;;) {
         status = next_byte(&decode, &opcode);

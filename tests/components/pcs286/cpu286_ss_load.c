@@ -18,12 +18,15 @@ static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
 {
     fixture_t *f = context;
     assert(f->count < 32U && t->address + t->size <= 0x200000U);
-    assert(t->operation != BM_BUS_WRITE && t->wait_states == 0U);
+    assert(t->wait_states == 0U);
     f->trace[f->count++] = *t;
     if (f->count == f->fail_at) return BM_STATUS_DEVICE_ERROR;
-    t->value = 0;
-    for (unsigned i = 0; i < t->size; ++i)
-        t->value |= (uint64_t) f->ram[(size_t) t->address + i] << (i * 8U);
+    if (t->operation != BM_BUS_WRITE) t->value = 0;
+    for (unsigned i = 0; i < t->size; ++i) {
+        if (t->operation == BM_BUS_WRITE)
+            f->ram[(size_t) t->address + i] = (uint8_t) (t->value >> (i * 8U));
+        else t->value |= (uint64_t) f->ram[(size_t) t->address + i] << (i * 8U);
+    }
     t->wait_states = 2U;
     return BM_STATUS_OK;
 }
@@ -122,8 +125,15 @@ static void boundaries(bm_cpu_t *cpu, fixture_t *f)
         assert(a.sp == 0x8000U && a.ip == 5 && !a.interrupt_shadow);
         if (event >= 2) assert(a.trap_pending);
         if (event == 1) assert(a.nmi_pending);
-        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED); /* Delivery still absent. */
-        assert(f->count == 5); /* No fetch or fake acknowledge at pending event. */
+        if (event == 0) {
+            assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED); /* No INTA callback. */
+            assert(f->count == 5);
+        } else {
+            assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
+            assert(b.has_vector && b.vector == (event == 1 ? 2 : 1));
+            assert(state_of(cpu).sp == 0x7ffaU && state_of(cpu).ip == 0);
+            assert(f->count == 10); /* Frame + IVT, no instruction fetch. */
+        }
     }
     /* An INTR-only shadow must NOT mask NMI or an already sampled #1. */
     for (unsigned trap = 0; trap < 2; ++trap) {
@@ -132,7 +142,8 @@ static void boundaries(bm_cpu_t *cpu, fixture_t *f)
         s.interrupt_shadow = BM_286_SHADOW_INTR_ONLY;
         s.trap_pending = (uint8_t) trap; s.nmi_pending = (uint8_t) !trap;
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
-        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED && !f->count);
+        assert(bm_286_step(cpu, &b) == BM_STATUS_OK && f->count == 5);
+        assert(b.has_vector && b.vector == (trap ? 1 : 2));
     }
     /* Other segment loads do not acquire SS's inhibition. */
     for (unsigned ds = 0; ds < 2; ++ds) {
@@ -158,7 +169,8 @@ static void boundaries(bm_cpu_t *cpu, fixture_t *f)
         assert(state_of(cpu).ss.valid && state_of(cpu).ss.base == 0);
         assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
         assert(!state_of(cpu).interrupt_shadow && state_of(cpu).nmi_pending);
-        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
+        assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
+        assert(b.has_vector && b.vector == 2 && state_of(cpu).nmi_blocked);
         assert(cpu->ops.reset(cpu->context) == BM_STATUS_OK);
         assert(!state_of(cpu).interrupt_shadow && !state_of(cpu).nmi_pending);
     }

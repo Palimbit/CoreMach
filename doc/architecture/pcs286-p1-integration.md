@@ -247,8 +247,10 @@ DEBUG restrictions, unchanged transactions on errors and no partial out-of-range
 writes. An initial test used one-based failure indices; corrected to the
 existing allocator's zero-based convention before the full validation run.
 
-The next independent implementation packet is AT PIC cascade and CPU interrupt
-delivery, with architectural tests first. Exact Headland/IOC02 board decoding
+AT PIC cascade and real-mode CPU interrupt entry/return now have separate
+component tests and an authored IRQ9/EOI/IRET composition test. See
+`pcs286-at-pic.md` and `pcs286-cpu286-coverage.md`. This is not yet a complete
+board composition or executable firmware profile. Exact Headland/IOC02 board decoding
 still needs evidence review; it is not unlocked by this synthetic test. Timed
 PIT/RTC/KBC integration additionally needs an explicit CPU timing policy. The
 machine factory and frontend registration remain absent, and no BIOS or media

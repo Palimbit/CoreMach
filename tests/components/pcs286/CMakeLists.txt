@@ -150,6 +150,16 @@ if(TARGET blumach_at_pic)
 endif()
 pcs286_acceptance(at-dma at_dma_acceptance.c blumach_at_dma)
 
+if(TARGET blumach_cpu_80286 AND TARGET blumach_at_pic)
+    add_executable(pcs286-cpu-interrupts cpu286_interrupts.c)
+    target_link_libraries(pcs286-cpu-interrupts PRIVATE
+        blumach_cpu_80286 blumach_at_pic blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-interrupts)
+    add_test(NAME pcs286-component.cpu-interrupts COMMAND pcs286-cpu-interrupts)
+    set_tests_properties(pcs286-component.cpu-interrupts PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 15)
+endif()
+
 if(TARGET blumach_at_bus)
     add_executable(pcs286-at-bus-contract at_bus_contract_test.c)
     target_link_libraries(pcs286-at-bus-contract PRIVATE
