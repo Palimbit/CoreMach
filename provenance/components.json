@@ -11,12 +11,20 @@
   ],
   "components": [
     {
+      "id": "portable-at-interconnect",
+      "destination": ["components/pc/src/at_bus.c"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Instance-owned architectural-boundary CPU/DMA/ISA ownership, HOLD/HLDA/LOCK arbitration, read-only debug routing and forwarding of board-converted requester-clock waits. One external requester only; no physical ISA cycle timing or PIC/DMA implementation."
+    },
+    {
       "id": "pcs286-p0-test-foundation",
       "destination": ["tests/components/pcs286/**"],
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Authored synthetic endpoint and architecture-neutral bus/memory checks, an existing-engine clock-math oracle and initial component acceptance sources for 286, Headland, AT arbitration, PIC and DMA. Unimplemented components are explicitly skipped, never replaced with success stubs. No firmware, third-party test vectors or chip implementation copied."
+      "local_changes": "Authored synthetic endpoint and architecture-neutral bus/memory checks, an existing-engine clock-math oracle and initial component acceptance sources for 286, Headland, AT arbitration, PIC and DMA, plus extended AT ownership, cleanup, error and debug-isolation tests. Unimplemented components are explicitly skipped, never replaced with success stubs. No firmware, third-party test vectors or chip implementation copied."
     },
     {
       "id": "intel-80286-draft-contracts",

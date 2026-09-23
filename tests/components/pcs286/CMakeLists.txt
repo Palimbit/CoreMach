@@ -63,3 +63,13 @@ pcs286_acceptance(headland headland_acceptance.c blumach_headland_gc10x)
 pcs286_acceptance(at-bus at_bus_acceptance.c blumach_at_bus)
 pcs286_acceptance(at-pic at_pic_acceptance.c blumach_at_pic)
 pcs286_acceptance(at-dma at_dma_acceptance.c blumach_at_dma)
+
+if(TARGET blumach_at_bus)
+    add_executable(pcs286-at-bus-contract at_bus_contract_test.c)
+    target_link_libraries(pcs286-at-bus-contract PRIVATE
+        blumach_at_bus blumach_platform_null)
+    pcs286_test_options(pcs286-at-bus-contract)
+    add_test(NAME pcs286-component.at-bus-contract COMMAND pcs286-at-bus-contract)
+    set_tests_properties(pcs286-component.at-bus-contract PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
+endif()

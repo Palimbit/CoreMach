@@ -73,7 +73,11 @@ bm_status_t bm_at_bus_hold_ack(bm_at_bus_t *bus, int asserted);
  * asserted with HLDA high. Cancelling the request drops HOLD; CPU ownership
  * resumes only after HLDA goes low. A stale HIGH HLDA without HOLD is invalid.
  * Access by a non-owner returns IDLE with no callback or transaction mutation.
+ * A new request after cancellation is rejected while the old HLDA remains
+ * high; duplicate levels of a still-active request are idempotent.
  * DEBUG bypasses ownership read-only, never issuing grants or pin transitions.
+ * DEBUG WRITE returns UNSUPPORTED before decode; successful DEBUG reads return
+ * zero waits. Decode endpoints must themselves avoid inspection side effects.
  * The CPU's synchronous callback must not be retried mid-instruction: its
  * step adapter services HOLD at boundaries and performs no access while held.
  * Reset/cancel/duplicate levels must not synthesize extra edges. Setters do not
