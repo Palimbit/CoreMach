@@ -381,5 +381,27 @@
       "local_changes": "Isolated the documented V30, RAM, ROM, DMA, PIC, independently clocked PIT and MM58167, PVGA1A core and motherboard register map behind a typed machine factory; added explicit reset, inspection, interrupt routing, exact rational device clocks, caller-owned MM58167 initial state and opaque RTC state export, NMI/open-bus behavior, diagnostic and memory-control latches, configurable 0/384/1920 KiB onboard EMS with software-derived relocatable frames at 40000h-9FFFFh, independent selector banks gated by port 6Bh and conventional-memory fallback, immutable system-EPROM reads with hardware-like ignored CPU writes, unpopulated-option-ROM open bus, video-arbitration latches, runtime framebuffer publication, gated SPP and NS16450 devices, dual board keyboard/mouse protocol queues, normalized Set 1 keyboard delivery and keyboard EDh indicator state, baseline three-button PS/2 stream/remote packets and command state over neutral relative-pointer events, a uPD765-compatible controller with IRQ6/DMA2 and validated media replacement, and the onboard XTA gate with IRQ5/DMA3 and the active-low presence jumper. Accepted PIC vectors can be observed through an optional read-only callback used by frontend diagnostics. The V30, PIT and RTC share deterministic nanosecond virtual time; XTA DMA service uses a demand-driven timed source at the declared 32-microsecond functional interval instead of an always-running machine callback. Explicitly model the absent AT CMOS data port 71h as open bus, matching inherited device composition without adding a CMOS or changing the MM58167; model the inherited unclaimed 88h-9Fh region as open bus, and explicitly supply absent-coprocessor POLL ready without implementing an 8087; configuration version 6 can forward the versioned V30 timing observer to diagnostics, and the firmware probe reports exact, ranged and unknown boundary coverage per effective opcode plus the first unknown boundary context; the machine registers the V30 at 10 MHz, PIT at the exact divided PC crystal, RTC at one megahertz and XTA service at its explicit functional rate in the clocked runtime"
     }
   ],
-  "external_dependencies": []
+  "external_dependencies": [
+    {
+      "id": "singlesteptests-80286",
+      "version": "37c73caf53dcd22d3dd369ff09305d13d117a4fe",
+      "license": "MIT",
+      "scope": "optional development-only test input; not compiled, linked or packaged",
+      "lock": "tests/data/sst286-lock.json"
+    }
+  ],
+  "development_tool_provenance": [
+    {
+      "id": "sst286-moo-adapter",
+      "destination": ["tools/sst286.py"],
+      "method": "derived-rewrite",
+      "origin_repository": "https://github.com/SingleStepTests/80286",
+      "origin_commit": "37c73caf53dcd22d3dd369ff09305d13d117a4fe",
+      "origin_paths": ["tools/moo2json.py"],
+      "license": "MIT",
+      "copyright_holders": ["Daniel Balsom", "BluMach contributors"],
+      "verification": "External source bytes are SHA-256 pinned in tests/data/sst286-lock.json, verified by the offline comparator. This remote commit is not a BluMach historical commit checked by the engine provenance audit.",
+      "local_changes": "Bounded MOO 1.1 real-mode decoder, private probe transport, pinned corpus verification, revocation/pending classification and functional result comparison; timing and physical bus comparison deliberately excluded. Original notice retained. Authored comparator self-tests contain no captured vectors."
+    }
+  ]
 }

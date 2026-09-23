@@ -97,6 +97,12 @@ the versioned provenance manifest. The AT interconnect is authored new code.
 
 ## Next work
 
+Independent hardware comparison is now available as a development-only tool:
+see `pcs286-sst-validation.md`. The first 51,000-case pinned selection gives
+49,076 functional matches, zero discrepancies, 1,923 explicit pending cases
+and one upstream revocation. It is not whole-ISA, timing or board validation.
+The core and its clock policy were not changed for this adapter.
+
 1. Prioritize real-mode far control, SS reload and direct I/O to enable board
    bring-up, then remaining ALU families and exception handling with authored tests. Resolve distinct
    STI versus SS-load inhibition and LOCK before completing deferred transfers.

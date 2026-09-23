@@ -60,6 +60,34 @@ endfunction()
 
 pcs286_acceptance(cpu286 cpu286_acceptance.c blumach_cpu_80286)
 if(TARGET blumach_cpu_80286)
+    # Test-only single-boundary probe. No downloaded data or parser in the core.
+    add_executable(pcs286-sst-probe cpu286_sst_probe.c)
+    target_link_libraries(pcs286-sst-probe PRIVATE blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-sst-probe)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME pcs286-component.sst-adapter
+            COMMAND "${CMAKE_COMMAND}" -E env
+                "BM_SST286_PROBE=$<TARGET_FILE:pcs286-sst-probe>"
+                "${Python3_EXECUTABLE}" -B -m unittest tools.tests.test_sst286)
+        set_tests_properties(pcs286-component.sst-adapter PROPERTIES
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" TIMEOUT 30
+            LABELS "pcs286-p0;test-infrastructure")
+        set(BLUMACH_SST286_DATA_DIR "" CACHE PATH "Optional offline pinned SST286 corpus")
+        if(BLUMACH_SST286_DATA_DIR)
+            add_test(NAME pcs286-component.sst-functional-subset
+                COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tools/sst286.py"
+                    --root "${BLUMACH_SST286_DATA_DIR}"
+                    --probe "$<TARGET_FILE:pcs286-sst-probe>"
+                    --report "${CMAKE_CURRENT_BINARY_DIR}/sst286-$<CONFIG>-report.json")
+            set_tests_properties(pcs286-component.sst-functional-subset PROPERTIES
+                TIMEOUT 180 LABELS "pcs286-p0;external-hardware-subset")
+        endif()
+    else()
+        add_test(NAME pcs286-component.sst-adapter
+            COMMAND pcs286-component-pending "Python3 interpreter for SST adapter self-tests")
+        set_tests_properties(pcs286-component.sst-adapter PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
     add_executable(pcs286-cpu-data-transfer cpu286_data_transfer.c)
     target_link_libraries(pcs286-cpu-data-transfer PRIVATE
         blumach_cpu_80286 blumach_platform_null)

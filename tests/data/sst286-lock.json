@@ -1,0 +1,42 @@
+{
+  "schema": "blumach-sst286-lock-v1",
+  "repository": "https://github.com/SingleStepTests/80286",
+  "commit": "37c73caf53dcd22d3dd369ff09305d13d117a4fe",
+  "version": "1.1.0",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2025 Daniel Balsom",
+  "cpu": "Harris N80C286-12 (L4252050)",
+  "adapter_origin": "tools/moo2json.py",
+  "test_files": [
+    "v1_real_mode/00.MOO.gz",
+    "v1_real_mode/01.MOO.gz",
+    "v1_real_mode/31.MOO.gz",
+    "v1_real_mode/54.MOO.gz",
+    "v1_real_mode/60.MOO.gz",
+    "v1_real_mode/61.MOO.gz",
+    "v1_real_mode/8B.MOO.gz",
+    "v1_real_mode/90.MOO.gz",
+    "v1_real_mode/C8.MOO.gz",
+    "v1_real_mode/C9.MOO.gz",
+    "v1_real_mode/E8.MOO.gz"
+  ],
+  "sha256": {
+    "README.md": "0381eb13604e5b2cea6f3ede348146d28d129b8f5f6d4af3668cc54be83bf025",
+    "LICENSE": "17169beea9b37538e699029d724687acf89182988b78f5ddce0f65a01db14653",
+    "CHANGELOG.md": "5efd9f33316ea637f551a2662257cac0d5939ffc242bfa6252d0f5debe42cfc2",
+    "revocation_list.txt": "219381caae2bd5f86d616fd9ee7309193c1dc254589ef032c0059dd42db3716f",
+    "tools/moo2json.py": "adcf1227b901dbbf1c25d3fe58440e0383807a28d3d1e1cb9cead84cbb58c43d",
+    "v1_real_mode/metadata.json": "4b6959fd1916c03f425537a9d001a06f285cb00d645c9321113b14e6e2ce7ab3",
+    "v1_real_mode/00.MOO.gz": "e7b0918674823dbd840d0211a2a6d91bdbaf9cc421310e471bd1a698e11b9cee",
+    "v1_real_mode/01.MOO.gz": "89e67d0a56caab71e30cb4642f7ed4430630b153576dac5b86cf2a45a305e2d9",
+    "v1_real_mode/31.MOO.gz": "69147caf5a8e21ac6a3b31ddaf17e1f6ada6dcd4c816e6432179a06da2023a1d",
+    "v1_real_mode/54.MOO.gz": "17c4bb0e74c70e6d65c20c0255ef4243bb4334e78175bea8f49f1df3af258288",
+    "v1_real_mode/60.MOO.gz": "4af25589cd3a7e21ce13a727e7818d38eeddbad09adb2f2084e3aa90f0799eb7",
+    "v1_real_mode/61.MOO.gz": "e4db9e4fa5427b704de797117c091cd6e551fa7e8154025725167b138a5085d5",
+    "v1_real_mode/8B.MOO.gz": "e5dd8b00f130cef7f5d3a403813899a976acd92293bc30c8c997bb550a40dbad",
+    "v1_real_mode/90.MOO.gz": "e3de903bcd733ed6aaee5d908572eb309de0116cc7d1702998f5ec99e689ba54",
+    "v1_real_mode/C8.MOO.gz": "5e6429787d09ea75b1fc210d3e1b36b62d67ab823d198279c457731ca834432f",
+    "v1_real_mode/C9.MOO.gz": "3da3d14166d44cd6abfa7c01f1a314bc7b37c5fd4b1899f4be012035b9f506fd",
+    "v1_real_mode/E8.MOO.gz": "a343da886613019e6f7c1e26badab0ab5275b1f75b8c1013727e9fc9c8de2c17"
+  }
+}
