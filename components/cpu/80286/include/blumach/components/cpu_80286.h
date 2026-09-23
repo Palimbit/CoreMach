@@ -160,6 +160,9 @@ typedef struct bm_286_config {
  * WAIT completes unless MP+TS requests #7. ESC with EM or TS delivers #7;
  * untrapped ESC remains unsupported, not a fabricated no-op/store result.
  * There is no populated 80287, handshake, arithmetic or extension pin API yet.
+ * Real-mode SMSW/LMSW/CLTS control MSW. LMSW may set PE, but execution of the
+ * next protected boundary remains unsupported, before fetch; no protected
+ * descriptor/privilege behavior is implied by storing that bit.
  * Configuration is copied;
  * callback contexts and host services remain valid until CPU destruction. */
 bm_status_t bm_286_create(const bm_host_services_t *host,

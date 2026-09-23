@@ -2,7 +2,37 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: BOUND overrun and processor-extension fault gates
+## Latest tranche: real-mode MSW system instructions
+
+`0F 01 /4` SMSW writes the 16-bit MSW to a register or word memory operand;
+`0F 01 /6` LMSW loads its low four control bits; `0F 06` CLTS clears TS.
+FLAGS and unrelated architectural state are preserved. LMSW retains reserved-one
+286 readback and cannot clear PE; the current real-mode entry can set PE, but
+the next protected boundary refuses before fetch. This does **not** implement
+protected instructions, descriptor checks or a runnable protected-mode transition.
+
+Sources: [Intel LMSW](https://manualsdump.com/en/manuals/intel-80287model-80286model/110730/277)
+and [MSW control](https://manualsdump.com/en/manuals/intel-80287model-80286model/110730/182),
+checked against pinned inherited `x86_ops_pmode.h` and `x86_ops_misc.h`.
+No 386 CR0 branches or timing constants are ported. Real-mode memory overruns
+deliver #13 without error code; invalid imported caches and unimplemented
+groups/prefix combinations remain gaps. Failed memory transfers do not commit
+MSW/registers or replay partial writes. Preflight order remains functional policy.
+
+Tests extend `cpu-extension`: 2,048 register/control cases, all 65,536 LMSW AX
+inputs, eight CLTS controls, 40 addressing/alignment/override cases and each
+transfer failure before/after effects. A guest-only program loads MP+TS, faults
+on WAIT, executes CLTS in its #7 handler, IRETs, retries WAIT and reads SMSW
+before HLT. Additional tests cover #13, reset and PE-entry refusal.
+This is authored functional evidence, not a timing or physical-bus capture.
+All four GCC UCRT64/MSVC Debug/Release suites pass 104 ordinary tests, with
+two explicit Headland/DMA skips; the existing SST selection and 30 Python
+checks pass. Catalogue/provenance remain green (36 components/200 files).
+
+Next system block: descriptor-table register instructions; general fault
+escalation, protected execution and timing remain separate unfinished work.
+
+## Previous tranche: BOUND overrun and processor-extension fault gates
 
 BOUND now delivers real-mode vector 13 when its complete memory pair exceeds
 the segment limit, with first-prefix return IP and no error-code word.
@@ -786,7 +816,7 @@ generic catch-all or NOP is not coverage.
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
 | 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode forms implemented including BOUND #5/register #6/limit #13; ARPL pending; timing unknown |
-| Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Missing; timing descriptor/path-dependent |
+| Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Real-mode SMSW/LMSW/CLTS implemented; remaining system forms and all protected checks missing; timing unknown |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
 | Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | WAIT completion with inactive BUSY/ERROR and documented #7 gates implemented; untrapped ESC and populated interface pending; timing unknown |
 

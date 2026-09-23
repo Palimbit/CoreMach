@@ -1281,6 +1281,44 @@ static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector)
     return status;
 }
 
+static bm_status_t execute_system_real(decoded_286_t *decode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    operand_286_t operand;
+    uint8_t opcode;
+    uint16_t value;
+    bm_status_t status = next_byte(decode, &opcode);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (opcode == 0x06U) { /* CLTS, real mode: no privilege check. */
+        arch->msw &= 0xfff7U;
+        return BM_STATUS_OK;
+    }
+    if (opcode != 0x01U)
+        return BM_STATUS_UNSUPPORTED;
+    status = decode_operand(decode, &operand);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (operand.reg_field != 4U && operand.reg_field != 6U)
+        return BM_STATUS_UNSUPPORTED; /* Other system forms remain pending. */
+    if (operand.memory) {
+        if (!operand.segment->valid)
+            return BM_STATUS_UNSUPPORTED;
+        if ((uint32_t) operand.offset + 1U > operand.segment->limit)
+            return deliver_fault(decode, 13U);
+    }
+    if (operand.reg_field == 4U) /* SMSW, always a 16-bit destination. */
+        return write_operand(decode, &operand, 2U, arch->msw);
+    status = read_operand(decode, &operand, 2U, &value);
+    if (status == BM_STATUS_OK) {
+        /* 286 lower four bits only; PE cannot be cleared by LMSW. Preserve
+         * reserved-one readback and do not import 386 CR0 behavior. Setting
+         * PE is observable, but the next protected boundary still refuses. */
+        arch->msw = (uint16_t) ((arch->msw & 0xfff1U) | (value & 0x000fU));
+    }
+    return status;
+}
+
 static bm_status_t execute_decimal(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -1742,6 +1780,8 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if (opcode == 0x0fU)
+        return execute_system_real(decode);
     if (opcode == 0x9bU) {
         if ((arch->msw & (MSW_MP | MSW_TS)) == (MSW_MP | MSW_TS))
             return deliver_fault(decode, 7U);

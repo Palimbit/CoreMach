@@ -444,8 +444,12 @@ interface, with BUSY/ERROR inactive. Untrapped ESC remains unsupported and
 does not fabricate stores or FPU results. Tests cover 144 control combinations,
 prefix restart, IRET/TF, fault-frame failures and BOUND EA repair/retry.
 
-Next CPU tranche: remaining real-mode exceptions/escalation and system
-instructions. Untrapped ESC handshake/absence detection also remains pending.
+Real-mode SMSW/LMSW/CLTS now let the guest control MSW and recover from #7
+without test-side state edits. Register/memory forms, #13 overruns and
+per-transfer failures are tested. Setting PE stops at the next boundary;
+protected execution is not implemented. The next system block is descriptor
+table registers. General real-mode exceptions/escalation and untrapped ESC
+handshake/absence detection also remain pending.
 Protected lock windows remain coupled to future protected execution.
 Current unsupported combinations are missing
 implementation, not the 386 legal-prefix rule or fabricated guest #UD.

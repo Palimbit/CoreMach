@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2026 BluMach contributors
- * Authored tests of the unpopulated processor-extension fault gate.
+ * Authored tests of real-mode MSW control and the extension fault gate.
  * No floating-point emulation or physical bus/timing evidence.
  */
 #include <blumach/components/cpu_80286.h>
@@ -175,6 +175,132 @@ static void boundaries(fixture_t *f)
         for (unsigned t = 0; t < f->count; ++t) assert(f->trace[t].operation == BM_BUS_FETCH);
     }
 }
+static uint16_t *reg(fixture_t *f, bm_286_arch_state_t *s, unsigned n)
+{
+    uint16_t *registers[] = {&s->ax,&s->cx,&s->dx,&s->bx,&s->sp,&s->bp,&s->si,&s->di};
+    (void)f;
+    return registers[n];
+}
+static void system_registers(fixture_t *f)
+{
+    for (unsigned bits = 0; bits < 8; ++bits) for (unsigned n = 0; n < 8; ++n)
+        for (unsigned load = 0; load < 2; ++load) for (unsigned v = 0; v < 16; ++v) {
+            bm_286_arch_state_t s = setup(f, 0x0f, bits, 0), e, a;
+            bm_286_boundary_t b;
+            f->ram[0x30101] = 1; f->ram[0x30102] = (uint8_t)((load ? 0xf0 : 0xe0) | n);
+            *reg(f, &s, n) = (uint16_t)(0xa5b0 | v); e = s;
+            if (load) e.msw = (uint16_t)(0xfff0 | v);
+            else *reg(f, &e, n) = s.msw;
+            e.ip += 3; set(f, &s);
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            a = state(f); same(&a, &e);
+            assert(f->count == 3 && !b.has_vector && b.timing == BM_286_TIMING_UNKNOWN);
+            if (load && (v & 1U)) {
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+                a = state(f); same(&a, &e); assert(f->count == 3);
+            }
+        }
+    for (unsigned value = 0; value < 65536; ++value) {
+        bm_286_arch_state_t s = setup(f, 0x0f, 0, 0), e, a;
+        bm_286_boundary_t b;
+        f->ram[0x30101] = 1; f->ram[0x30102] = 0xf0; /* LMSW AX */
+        s.ax = (uint16_t)value; e = s; e.ip += 3; e.msw = (uint16_t)(0xfff0 | (value % 16));
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); same(&a, &e);
+    }
+    for (unsigned bits = 0; bits < 8; ++bits) {
+        bm_286_arch_state_t s = setup(f, 0x0f, bits, 1), e = s, a;
+        bm_286_boundary_t b; f->ram[0x30102] = 6;
+        e.msw = (uint16_t)(0xfff0 | ((bits % 4) << 1)); e.ip += 3;
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); same(&a, &e); assert(f->count == 3);
+    }
+}
+static void system_memory(fixture_t *f)
+{
+    const uint8_t prefixes[] = {0,0x26,0x2e,0x36,0x3e};
+    for (unsigned p = 0; p < 5; ++p) for (unsigned bp = 0; bp < 2; ++bp)
+        for (unsigned odd = 0; odd < 2; ++odd) for (unsigned load = 0; load < 2; ++load) {
+            bm_286_arch_state_t s = setup(f, 0x0f, 7, p != 0), e, a;
+            bm_286_boundary_t b; unsigned start = p != 0;
+            s.es.valid = 1; s.es.base = 0x20000; s.es.selector = 0x2000;
+            s.bx = s.bp = (uint16_t)(0x4f0 + odd);
+            if (p) f->ram[0x30100] = prefixes[p];
+            f->ram[0x30101+start] = 1;
+            f->ram[0x30102+start] = (uint8_t)(0x40 | (load ? 0x30 : 0x20) | (bp ? 6 : 7));
+            f->ram[0x30103+start] = 0x10;
+            unsigned base = p == 1 ? s.es.base : p == 2 ? s.cs.base :
+                p == 3 || (!p && bp) ? s.ss.base : s.ds.base;
+            unsigned address = base+0x500+odd;
+            word(f, address, 0x5aa2); e = s; e.ip += (uint16_t)(4+start);
+            if (load) e.msw = 0xfff2;
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            a = state(f); same(&a, &e);
+            assert(get_word(f, address) == (load ? 0x5aa2 : s.msw));
+            assert(f->count == 4+start+(odd ? 2 : 1));
+            assert(f->trace[4+start].address == address);
+            assert(f->trace[4+start].operation == (load ? BM_BUS_READ : BM_BUS_WRITE));
+            unsigned total = f->count;
+            for (unsigned fail = 1; fail <= total; ++fail) for (unsigned after = 0; after < 2; ++after) {
+                assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
+                word(f, address, 0x5aa2); set(f, &s); f->count = 0;
+                f->fail_at = fail; f->fail_after = after;
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+                a = state(f); same(&a, &s); assert(f->count == fail);
+                unsigned completed = fail-1+after;
+                uint16_t expected = 0x5aa2;
+                if (!load && completed > 4+start)
+                    expected = (uint16_t)(odd && completed == 5+start ?
+                        (0x5a00 | (s.msw & 0xff)) : s.msw);
+                assert(get_word(f, address) == expected);
+                assert(bm_286_step(&f->cpu, &b) != BM_STATUS_OK && f->count == fail);
+            }
+        }
+}
+static void system_guest_program(fixture_t *f)
+{
+    /* Entire #7 recovery is now guest code; no state import inside handler. */
+    const uint8_t program[] = {0xb8,0x0a,0, 0x0f,1,0xf0, 0x9b, 0x0f,1,0xe3, 0xf4};
+    const uint8_t handler[] = {0x0f,6,0xcf}; /* CLTS; IRET */
+    bm_286_arch_state_t s = setup(f, 0x90, 0, 0), a;
+    bm_286_boundary_t b;
+    memcpy(f->ram+0x30100, program, sizeof(program));
+    memcpy(f->ram+0x40200, handler, sizeof(handler)); set(f, &s);
+    for (unsigned i = 0; i < 2; ++i) assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+    a = state(f); assert(a.msw == 0xfffa && a.ip == 0x106);
+    assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK); check_fault(f, &a, &b);
+    f->count = 0;
+    for (unsigned i = 0; i < 5; ++i) assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+    a = state(f); assert(a.halted && a.msw == 0xfff2 && a.bx == 0xfff2);
+    assert(a.sp == s.sp && a.flags == s.flags && a.ip == 0x10b);
+    assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
+    assert(state(f).msw == 0xfff0);
+}
+static void system_limits(fixture_t *f)
+{
+    for (unsigned load = 0; load < 2; ++load) {
+        bm_286_arch_state_t s = setup(f, 0x0f, 0, 0), a;
+        bm_286_boundary_t b;
+        f->ram[0x30101] = 1; f->ram[0x30102] = (uint8_t)(load ? 0x36 : 0x26);
+        f->ram[0x30103] = f->ram[0x30104] = 0xff;
+        word(f, 52, 0x200); word(f, 54, 0x4000); set(f, &s);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); assert(b.has_vector && b.vector == 13 && a.ip == 0x200);
+        assert(a.sp == s.sp-6 && a.msw == s.msw && f->count == 10);
+        assert(get_word(f, s.ss.base+s.sp-6) == s.ip);
+    }
+    for (unsigned bad = 0; bad < 4; ++bad) {
+        bm_286_arch_state_t s = setup(f, 0x0f, 0, 1), a;
+        bm_286_boundary_t b;
+        f->ram[0x30102] = 1; f->ram[0x30103] = 0xf0;
+        if (bad == 0) s.msw |= 1;
+        if (bad == 1) f->ram[0x30100] = 0xf0;
+        if (bad == 2) f->ram[0x30100] = 0xf3;
+        if (bad == 3) f->ram[0x30103] = 0xd0; /* LGDT still unimplemented. */
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        a = state(f); same(&a, &s);
+    }
+}
 int main(void)
 {
     fixture_t f = {0}; bm_286_config_t c = {0};
@@ -185,5 +311,6 @@ int main(void)
     /* No INTA or lock adapter: synchronous #7 must not need either. */
     assert(bm_286_create(&host, &c, &f.cpu) == BM_STATUS_OK);
     matrix(&f); retry_and_failure(&f); boundaries(&f);
+    system_registers(&f); system_memory(&f); system_guest_program(&f); system_limits(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }
