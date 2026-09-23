@@ -4,6 +4,10 @@
 
 Status: foundation for `0.2.0-dev`.
 
+The [PCS 286 contract scaffold](pcs286-portable-contracts.md) defines the next
+AT-class composition and component work packets. It is not yet a runnable
+machine and does not change the existing engine or runtime contracts.
+
 The proposed multi-clock execution model and its current evidence boundary are
 tracked in [Virtual time across CPU architectures](virtual-time.md).
 

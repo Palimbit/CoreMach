@@ -10,6 +10,66 @@
   ],
   "components": [
     {
+      "id": "intel-80286-draft-contracts",
+      "destination": ["components/cpu/80286/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Draft C11 CPU interfaces for explicit 286 architectural state, protected-mode hidden caches, board-owned bus accesses, INTA, HOLD/LOCK/shutdown and the existing native-cycle clocked scheduler. Declarations only; no CPU implementation or timing tables copied or provided."
+    },
+    {
+      "id": "headland-gc10x-draft-contracts",
+      "destination": ["components/chipsets/headland/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Draft independent memory routing and register interface, with explicit requester/A20 and memory-clock waits. No register implementation or inherited fixed remapping logic."
+    },
+    {
+      "id": "olivetti-ioc02-draft-contracts",
+      "destination": ["components/chipsets/olivetti-ioc02/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "New per-instance declaration boundary for future IOC02 register work. Existing code was consulted to identify integration responsibilities; no register semantics, firmware workaround or implementation was ported."
+    },
+    {
+      "id": "pc-at-platform-draft-contracts",
+      "destination": [
+        "components/pc/contracts/**",
+        "components/pc/include/blumach/components/at_bus.h",
+        "components/pc/include/blumach/components/at_pic.h",
+        "components/pc/include/blumach/components/at_dma.h",
+        "components/pc/include/blumach/components/at_clock.h",
+        "components/pc/include/blumach/components/pit8254.h",
+        "components/pc/include/blumach/components/rtc_at.h",
+        "components/pc/include/blumach/components/kbc8042.h",
+        "components/pc/include/blumach/components/keyboard_at.h",
+        "components/pc/include/blumach/components/wd37c65.h",
+        "components/pc/include/blumach/components/ata_pio.h"
+      ],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Draft contracts for board arbitration/ISA resources, cascaded PIC, dual-width DMA, timer readback, AT RTC, separate keyboard/controller protocols, WD37C65B, ATA PIO and synchronized clock links. No device implementations or firmware-derived routines copied."
+    },
+    {
+      "id": "ims-g171-draft-contracts",
+      "destination": ["components/video/contracts/**", "components/video/include/blumach/components/ims_g171.h"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Draft standalone palette/DAC interface and explicit single-owner boundary with existing PVGA1A. No new video or DAC emulation."
+    },
+    {
+      "id": "olivetti-pcs286-draft-contracts",
+      "destination": ["systems/olivetti-pcs286/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "New typed machine configuration, board-glue declarations and standalone C/C++ header compilation checks. Contract-only system is not registered or linked into frontends. Canonical evidence and inherited composition were consulted without porting behavioural code; future ports require their own exact provenance."
+    },
+    {
       "id": "portable-engine-core",
       "destination": ["engine/**"],
       "method": "new",
