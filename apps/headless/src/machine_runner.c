@@ -463,6 +463,7 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
                      const headless_run_options_t *options)
 {
     bm_frontend_asset_binding_t bindings[4];
+    bm_frontend_machine_option_t machine_options[HEADLESS_MAX_MACHINE_OPTIONS];
     bm_frontend_persistent_state_binding_t state_binding;
     size_t binding_count = 2U;
     size_t state_binding_count = 0U;
@@ -492,6 +493,13 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
     int memory_image_written = options->trace_memory_image_path == NULL;
     int result = 3;
     floppy_swap_context_t swap_context = { 0 };
+
+    for (size_t index = 0U; index < options->machine_option_count; ++index) {
+        machine_options[index] = (bm_frontend_machine_option_t) {
+            options->machine_options[index].name,
+            options->machine_options[index].value
+        };
+    }
 
     status = headless_input_schedule_validate(
         options->text_actions, options->text_action_count,
@@ -616,10 +624,11 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             { .media = hard_disk.media }
         };
     }
-    status = bm_frontend_machine_open_with_persistent_state(
+    status = bm_frontend_machine_open_configured(
         adapter, bindings, binding_count,
         state_binding_count != 0U ? &state_binding : NULL,
-        state_binding_count, &machine);
+        state_binding_count, machine_options,
+        options->machine_option_count, &machine);
     if (status != BM_STATUS_OK) {
         fputs("machine assets are missing, unreadable, or invalid\n", stderr);
         result = 2;

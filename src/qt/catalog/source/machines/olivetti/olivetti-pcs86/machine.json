@@ -55,12 +55,32 @@
       "interfaces": "RS-232C, bidirectional parallel, mouse, AT keyboard",
       "dimensions": "360 × 312 × 100 mm; 7.6 kg"
     },
+    "expansion_slots": [
+      {"id": "isa-1", "bus": "isa8", "length": "full", "modelled": false},
+      {"id": "isa-2", "bus": "isa8", "length": "full", "modelled": false},
+      {"id": "isa-3", "bus": "isa8", "length": "full", "modelled": false}
+    ],
     "firmware": {
       "known_sets": [
         "1.09"
       ],
       "required": true
     },
+    "portable_resources": [
+      {"role": "firmware-even", "folder": "olivetti/pcs86/firmware", "known": [
+        {"name": "PCS 86 BIOS 1.09, even EPROM", "size": 32768, "sha256": "c92a79509def8aee30d76700a5ce1c7b6716d2375a64075c9669ca376fde4eb8", "preferred": true}
+      ]},
+      {"role": "firmware-odd", "folder": "olivetti/pcs86/firmware", "known": [
+        {"name": "PCS 86 BIOS 1.09, odd EPROM", "size": 32768, "sha256": "82f8363ea7cde1fb8abe50fd76c7381831b7b89539d3dc71cbe4305fb1568d40", "preferred": true}
+      ]},
+      {"role": "floppy-0", "folder": "olivetti/pcs86/floppies", "known": [
+        {"name": "PCS 86 System Diskette", "size": 737280, "sha256": "75e1a068aa5910db736ce4b53e6b5fc179f83390ff5512d2af421e57af3a0c12", "preferred": true},
+        {"name": "PCS 86 Customer Test and Utilities", "size": 737280, "sha256": "92c583d9529b1fda32278500e0aa2ade6793f2a6250f48e2d500625d17bf8cb6"},
+        {"name": "PCS 86 Tutorial", "size": 737280, "sha256": "998d2890521a7776968dd7462ca546bdd1861139dfeb8c63b0d0336503b0f2a4"}
+      ]},
+      {"role": "floppy-1", "folder": "olivetti/pcs86/floppies", "known": []},
+      {"role": "hard-disk-0", "folder": "olivetti/pcs86/hard-disks/working", "known": []}
+    ],
     "storage": {
       "bus": "XTA",
       "official_drives": [
@@ -71,6 +91,7 @@
     "creation": {
       "status": "validated",
       "directory_prefix": "olivetti-pcs86",
+      "portable_commercial_key": "product.olivetti-pcs86.portable.commercial_base",
       "facts": [
         {
           "label_key": "creation.label.commercial_model",
@@ -83,14 +104,71 @@
       ],
       "fields": [
         {
+          "id": "commercial", "label_key": "product.olivetti-pcs86.form.commercial",
+          "default": "one_floppy", "portable_option": "commercial_profile",
+          "choices": [
+            {"id": "custom", "label_key": "product.olivetti-pcs86.form.custom", "status": "validated", "portable_value": 0},
+            {"id": "one_floppy", "label_key": "product.olivetti-pcs86.form.one_floppy", "status": "documented", "portable_value": 1,
+             "portable_forbid_assets": ["hard-disk-0"],
+             "portable_set": {"floppy_a_type": 1, "floppy_b_type": 0, "jumper_bank": 0}},
+            {"id": "two_floppies", "label_key": "product.olivetti-pcs86.form.two_floppies", "status": "documented", "portable_value": 2,
+             "portable_forbid_assets": ["hard-disk-0"],
+             "portable_set": {"floppy_a_type": 1, "floppy_b_type": 1, "jumper_bank": 0}},
+            {"id": "floppy_xta", "label_key": "product.olivetti-pcs86.form.floppy_xta", "status": "documented", "portable_value": 3,
+             "portable_require_assets": ["hard-disk-0"],
+             "portable_generate_assets": ["hard-disk-0"],
+             "portable_set": {"floppy_a_type": 1, "floppy_b_type": 0, "jumper_bank": 0}}
+          ]
+        },
+        {
+          "id": "floppy_a", "label_key": "product.olivetti-pcs86.form.floppy_a",
+          "portable_advanced": true,
+          "default": "dd", "portable_option": "floppy_a_type",
+          "choices": [
+            {"id": "none", "label_key": "product.olivetti-pcs86.form.no_drive", "status": "documented", "portable_value": 0,
+             "portable_forbid_assets": ["floppy-0"]},
+            {"id": "dd", "label_key": "product.olivetti-pcs86.form.drive_720", "status": "documented", "portable_value": 1,
+             "portable_media_role": "floppy-0", "portable_media_max_bytes": 737280},
+            {"id": "hd", "label_key": "product.olivetti-pcs86.form.drive_1440", "status": "experimental", "portable_value": 2,
+             "portable_media_role": "floppy-0", "portable_media_max_bytes": 1474560}
+          ]
+        },
+        {
+          "id": "floppy_b", "label_key": "product.olivetti-pcs86.form.floppy_b",
+          "portable_advanced": true,
+          "default": "none", "portable_option": "floppy_b_type",
+          "choices": [
+            {"id": "none", "label_key": "product.olivetti-pcs86.form.no_drive", "status": "documented", "portable_value": 0,
+             "portable_forbid_assets": ["floppy-1"]},
+            {"id": "dd", "label_key": "product.olivetti-pcs86.form.drive_720", "status": "documented", "portable_value": 1,
+             "portable_media_role": "floppy-1", "portable_media_max_bytes": 737280},
+            {"id": "hd", "label_key": "product.olivetti-pcs86.form.drive_1440", "status": "experimental", "portable_value": 2,
+             "portable_media_role": "floppy-1", "portable_media_max_bytes": 1474560}
+          ]
+        },
+        {
+          "id": "jumpers", "label_key": "product.olivetti-pcs86.form.jumpers",
+          "portable_advanced": true,
+          "help_key": "product.olivetti-pcs86.form.jumpers_help",
+          "default": "auto", "portable_option": "jumper_bank",
+          "portable_kind": "hex_byte_auto",
+          "choices": [
+            {"id": "auto", "label_key": "product.olivetti-pcs86.form.jumpers_auto", "status": "documented", "portable_value": 0}
+          ]
+        },
+        {
           "id": "ems",
+          "portable_advanced": true,
+          "portable_quick": true,
           "label_key": "creation.label.ems",
           "default": "1920",
+          "portable_option": "ems_kib",
           "choices": [
             {
               "id": "none",
               "label_key": "creation.option.ems.none",
               "status": "documented",
+              "portable_value": 0,
               "set": [
                 {
                   "section": "Machine",
@@ -103,6 +181,7 @@
               "id": "384",
               "label_key": "creation.option.ems.384kb",
               "status": "documented",
+              "portable_value": 384,
               "set": [
                 {
                   "section": "Machine",
@@ -115,6 +194,7 @@
               "id": "1920",
               "label_key": "creation.option.ems.1920kb",
               "status": "validated",
+              "portable_value": 1920,
               "set": [
                 {
                   "section": "Machine",

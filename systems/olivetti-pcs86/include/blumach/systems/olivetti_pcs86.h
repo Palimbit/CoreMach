@@ -62,6 +62,11 @@ typedef struct bm_pcs86_config {
     bm_pcs86_interrupt_trace_fn interrupt_trace;
     void *interrupt_trace_context;
     bm_floppy_drive_config_t floppy[2];
+    /* 0 = derive from geometry, 1 = 720 KiB, 2 = 1.44 MiB,
+     * 3 = no drive. The installed drive type is not the inserted medium. */
+    uint8_t floppy_drive_type[2];
+    int jumpers_manual;
+    uint8_t jumpers_value;
     uint32_t ems_kib;
     bm_pcs86_hard_disk_config_t hard_disk;
     const uint8_t *rtc_initial_state;

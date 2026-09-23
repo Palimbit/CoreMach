@@ -36,7 +36,7 @@ main(int argc, char **argv)
     parser.process(application);
 
     PortableWindow window;
-    window.show();
+    window.showLauncher();
     const QString machine = parser.value(machineOption);
     const QString product = parser.value(productOption);
     if (!machine.isEmpty() && !product.isEmpty()) {

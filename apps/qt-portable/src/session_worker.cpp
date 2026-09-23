@@ -150,6 +150,7 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
     for (const Command &command : commands) {
         bm_status_t status = BM_STATUS_OK;
         const bool lifecycleResult = command.kind != CommandKind::Input;
+        FailurePhase failurePhase = FailurePhase::Lifecycle;
         switch (command.kind) {
             case CommandKind::Pause: status = bm_session_pause(session); break;
             case CommandKind::Resume: status = bm_session_resume(session); break;
@@ -159,6 +160,7 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                 status = bm_session_stop(session);
                 break;
             case CommandKind::Input:
+                failurePhase = FailurePhase::Input;
                 traceInput_ = command.traceInput;
                 LatencyTrace::event("input-dispatch", traceInput_);
                 status = bm_session_send_input(session, &command.input);
@@ -174,6 +176,7 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                 LatencyTrace::event("input-complete", traceInput_);
                 break;
             case CommandKind::StorageMedia:
+                failurePhase = FailurePhase::MediaChange;
                 status = bm_session_replace_storage_media(
                     session, command.storageKind, command.storageUnit,
                     &command.mediaChange);
@@ -195,7 +198,8 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                 break;
             case CommandKind::Shutdown: return false;
         }
-        publish(session, status, QImage(), lifecycleResult);
+        publish(session, status, QImage(), lifecycleResult, nullptr, {},
+                failurePhase);
     }
     return true;
 }
@@ -280,10 +284,12 @@ void
 SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
                        bool lifecycleResult,
                        const bm_video_geometry_t *geometry,
-                       std::vector<bm_storage_device_status_t> storage)
+                       std::vector<bm_storage_device_status_t> storage,
+                       FailurePhase failurePhase)
 {
     Snapshot snapshot;
     snapshot.status = status;
+    snapshot.failurePhase = failurePhase;
     snapshot.state = session != nullptr ? bm_session_state(session) :
                                           BM_SESSION_NEW;
     snapshot.ticks = session != nullptr ? bm_session_time(session) : 0U;
@@ -295,8 +301,10 @@ SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
         if (keyboardStatus == BM_STATUS_OK)
             snapshot.hasKeyboardLeds = true;
         else if ((keyboardStatus != BM_STATUS_UNSUPPORTED) &&
-                 (snapshot.status == BM_STATUS_OK))
+                 (snapshot.status == BM_STATUS_OK)) {
             snapshot.status = keyboardStatus;
+            snapshot.failurePhase = FailurePhase::KeyboardStatus;
+        }
     }
     if (geometry != nullptr) {
         snapshot.geometry = *geometry;
@@ -332,7 +340,8 @@ SessionWorker::run()
         ready_ = true;
     }
     condition_.notify_all();
-    publish(session, status);
+    publish(session, status, QImage(), false, nullptr, {},
+            FailurePhase::Startup);
     if (status != BM_STATUS_OK) {
         bm_session_destroy(session);
         return;
@@ -351,27 +360,37 @@ SessionWorker::run()
             break;
         now = TickPacer::Clock::now();
         if (bm_session_state(session) == BM_SESSION_RUNNING) {
+            FailurePhase failurePhase = FailurePhase::Unknown;
             const uint64_t due = pacer.ticksDue(now);
-            if (due != 0U)
+            if (due != 0U) {
                 status = bm_session_run_for(session, due);
+                if (status != BM_STATUS_OK)
+                    failurePhase = FailurePhase::Emulation;
+            }
             if ((status == BM_STATUS_OK) && (now >= nextFrame)) {
                 const uint64_t renderStart = LatencyTrace::enabled() ? LatencyTrace::now() : 0U;
                 QImage frame;
                 bm_video_geometry_t geometry {};
                 std::vector<bm_storage_device_status_t> storage;
                 status = renderFrame(session, frame, geometry);
+                if (status != BM_STATUS_OK)
+                    failurePhase = FailurePhase::Video;
                 if (LatencyTrace::enabled())
                     LatencyTrace::event("render-us", 0U, LatencyTrace::now() - renderStart);
-                if (status == BM_STATUS_OK)
+                if (status == BM_STATUS_OK) {
                     status = collectStorage(session, storage);
+                    if (status != BM_STATUS_OK)
+                        failurePhase = FailurePhase::StorageStatus;
+                }
                 publish(session, status, std::move(frame), false, &geometry,
-                        std::move(storage));
+                        std::move(storage), failurePhase);
                 nextFrame = now + framePeriod;
             }
             if (status != BM_STATUS_OK) {
                 capturePersistentStates(session);
                 (void) bm_session_stop(session);
-                publish(session, status);
+                publish(session, status, QImage(), false, nullptr, {},
+                        failurePhase);
             }
         } else {
             pacer.reset(now);

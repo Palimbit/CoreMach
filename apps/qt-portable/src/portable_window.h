@@ -3,6 +3,7 @@
 #define BLUMACH_PORTABLE_WINDOW_H
 
 #include "display_widget.h"
+#include "machine_profile_store.h"
 #include "portable_catalog.h"
 #include "session_worker.h"
 #include "snapshot_mailbox.h"
@@ -25,6 +26,7 @@ class QActionGroup;
 class QCloseEvent;
 class QKeyEvent;
 class QLabel;
+class LauncherPage;
 class QToolBar;
 
 class PortableWindow final : public QMainWindow {
@@ -36,6 +38,7 @@ public:
                      const QHash<QString, QString> &paths);
     bool openInitialProduct(const QString &productId,
                             const QHash<QString, QString> &paths);
+    void showLauncher();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -53,9 +56,16 @@ private:
         bool retain = true;
     };
 
-    void chooseMachine();
+    void chooseMachine(const QString &productId = QString());
+    void chooseSavedMachine(const QString &profileId);
+    void editSavedMachine(const QString &profileId);
+    void refreshProfiles();
+    void savePreview();
     bool openMachine(const bm_frontend_adapter_t *adapter,
-                     const QHash<QString, QString> &paths);
+                     const QHash<QString, QString> &paths,
+                     const QString &stateId = QString(),
+                     const QString &displayName = QString(),
+                     const QHash<QString, quint32> &options = {});
     void closeMachine();
     void togglePause();
     void resetMachine();
@@ -80,6 +90,7 @@ private:
     void updateActions();
     void showStatus(const QString &detail = QString());
     DisplayWidget *display_;
+    LauncherPage *launcher_ = nullptr;
     QLabel *status_;
     QLabel *storageStatus_;
     QLabel *keyboardStatus_;
@@ -95,12 +106,16 @@ private:
     QAction *statusBarAction_;
     QAction *copyFrameAction_;
     QAction *saveFrameAction_;
+    QAction *catalogAction_;
     QActionGroup *scaleGroup_;
     QActionGroup *rendererGroup_;
     QActionGroup *effectGroup_;
     bm_host_services_t host_;
+    MachineProfileStore profileStore_;
+    QVector<PortableMachineProfile> profiles_;
     PortableCatalog catalog_;
     QString catalogError_;
+    QString resourceRoot_;
     bm_frontend_machine_t *machine_ = nullptr;
     std::unique_ptr<SessionWorker> worker_;
     SnapshotMailbox snapshotMailbox_;
@@ -114,8 +129,13 @@ private:
     bool lifecyclePending_ = false;
     bool wasMaximizedBeforeFullscreen_ = false;
     QString activeMachineId_;
+    QString activeStateId_;
+    QString activeDisplayName_;
     bm_video_geometry_t videoGeometry_ {};
     QElapsedTimer frameRateTimer_;
+    QElapsedTimer previewTimer_;
+    QImage lastPreview_;
+    bool previewSaved_ = false;
     unsigned int presentedFrames_ = 0U;
     double presentationFps_ = 0.0;
     bool hasVideoGeometry_ = false;

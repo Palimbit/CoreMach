@@ -14,6 +14,8 @@ struct bm_frontend_adapter {
                         size_t binding_count,
                         const bm_frontend_persistent_state_binding_t *state_bindings,
                         size_t state_binding_count,
+                        const bm_frontend_machine_option_t *options,
+                        size_t option_count,
                         bm_frontend_machine_t **out_machine);
 };
 
@@ -27,6 +29,7 @@ struct bm_frontend_machine {
 };
 
 extern const bm_frontend_adapter_t bm_frontend_pcs86_adapter;
+extern const bm_frontend_adapter_t bm_frontend_m15_adapter;
 
 const bm_frontend_asset_binding_t *bm_frontend_binding_find(
     const bm_frontend_asset_binding_t *bindings, size_t binding_count,

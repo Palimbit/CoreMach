@@ -11,6 +11,13 @@
 #define HEADLESS_MAX_KEY_ACTIONS 64U
 #define HEADLESS_MAX_ACTION_TEXT 256U
 #define HEADLESS_MAX_STATE_ROLE 64U
+#define HEADLESS_MAX_MACHINE_OPTIONS 16U
+#define HEADLESS_MAX_OPTION_NAME 64U
+
+typedef struct headless_machine_option {
+    char name[HEADLESS_MAX_OPTION_NAME];
+    uint32_t value;
+} headless_machine_option_t;
 
 typedef struct headless_run_options {
     const char *machine_id;
@@ -23,6 +30,8 @@ typedef struct headless_run_options {
     int hard_disk_writable;
     const char *frame_path;
     const char *scenario_path;
+    headless_machine_option_t machine_options[HEADLESS_MAX_MACHINE_OPTIONS];
+    size_t machine_option_count;
     char persistent_state_role[HEADLESS_MAX_STATE_ROLE];
     const char *persistent_state_path;
     char depleted_state_role[HEADLESS_MAX_STATE_ROLE];

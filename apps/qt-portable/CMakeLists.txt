@@ -10,6 +10,10 @@ add_executable(blumach_portable_qt WIN32
     src/display_widget.h
     src/machine_dialog.cpp
     src/machine_dialog.h
+    src/machine_profile_store.cpp
+    src/machine_profile_store.h
+    src/launcher_page.cpp
+    src/launcher_page.h
     src/main.cpp
     src/portable_window.cpp
     src/portable_window.h
@@ -17,6 +21,8 @@ add_executable(blumach_portable_qt WIN32
     src/qt_key_map.h
     src/portable_catalog.cpp
     src/portable_catalog.h
+    src/resource_library.cpp
+    src/resource_library.h
     src/session_worker.cpp
     src/session_worker.h
     src/worker_wakeup.cpp
@@ -27,6 +33,7 @@ add_executable(blumach_portable_qt WIN32
     src/tick_pacer.cpp
     src/tick_pacer.h
     ${BLUMACH_PORTABLE_CATALOG_QRC}
+    ${PROJECT_SOURCE_DIR}/src/qt/portable_catalog_images.qrc
 )
 set_target_properties(blumach_portable_qt PROPERTIES AUTORCC ON)
 target_link_libraries(blumach_portable_qt PRIVATE
@@ -272,6 +279,78 @@ if(BUILD_TESTING)
     add_test(NAME portable-qt.catalog
         COMMAND blumach_portable_catalog_test
     )
+
+    add_executable(blumach_portable_resource_library_test
+        src/resource_library.cpp
+        src/portable_catalog.cpp
+        tests/resource_library_test.cpp
+        ${BLUMACH_PORTABLE_CATALOG_QRC}
+    )
+    set_target_properties(blumach_portable_resource_library_test PROPERTIES AUTORCC ON)
+    target_include_directories(blumach_portable_resource_library_test PRIVATE src)
+    target_link_libraries(blumach_portable_resource_library_test PRIVATE Qt6::Core)
+    target_compile_features(blumach_portable_resource_library_test PRIVATE cxx_std_17)
+    if(MSVC)
+        target_compile_options(blumach_portable_resource_library_test PRIVATE /W4 /WX /UNDEBUG)
+    else()
+        target_compile_options(blumach_portable_resource_library_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+    endif()
+    add_test(NAME portable-qt.resource-library
+        COMMAND blumach_portable_resource_library_test)
+
+    add_executable(blumach_portable_launcher_page_test
+        src/launcher_page.cpp
+        src/machine_dialog.cpp
+        src/machine_profile_store.cpp
+        src/portable_catalog.cpp
+        src/resource_library.cpp
+        tests/launcher_page_test.cpp
+        ${BLUMACH_PORTABLE_CATALOG_QRC}
+        ${PROJECT_SOURCE_DIR}/src/qt/portable_catalog_images.qrc
+    )
+    set_target_properties(blumach_portable_launcher_page_test PROPERTIES
+        AUTORCC ON)
+    target_include_directories(blumach_portable_launcher_page_test PRIVATE src)
+    target_link_libraries(blumach_portable_launcher_page_test PRIVATE
+        blumach_frontend Qt6::Core Qt6::Gui Qt6::Widgets
+    )
+    target_compile_features(blumach_portable_launcher_page_test PRIVATE cxx_std_17)
+    if(MSVC)
+        target_compile_options(blumach_portable_launcher_page_test PRIVATE /W4 /WX /UNDEBUG)
+    else()
+        target_compile_options(blumach_portable_launcher_page_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG
+        )
+    endif()
+    add_test(NAME portable-qt.launcher-page
+        COMMAND blumach_portable_launcher_page_test
+    )
+    if(WIN32)
+        set_tests_properties(portable-qt.display-widget portable-qt.launcher-page PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=windows"
+        )
+    else()
+        set_tests_properties(portable-qt.display-widget portable-qt.launcher-page PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        )
+    endif()
+
+    add_executable(blumach_portable_machine_profile_test
+        src/machine_profile_store.cpp
+        tests/machine_profile_store_test.cpp
+    )
+    target_include_directories(blumach_portable_machine_profile_test PRIVATE src)
+    target_link_libraries(blumach_portable_machine_profile_test PRIVATE Qt6::Core)
+    target_compile_features(blumach_portable_machine_profile_test PRIVATE cxx_std_17)
+    if(MSVC)
+        target_compile_options(blumach_portable_machine_profile_test PRIVATE /W4 /WX /UNDEBUG)
+    else()
+        target_compile_options(blumach_portable_machine_profile_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+    endif()
+    add_test(NAME portable-qt.machine-profile
+        COMMAND blumach_portable_machine_profile_test)
 endif()
 
 if(WIN32)

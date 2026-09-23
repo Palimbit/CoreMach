@@ -66,7 +66,10 @@ def package_paths(root: Path, platform: str) -> tuple[Path, Path, list[Path]]:
         headless = root / "bin" / "BluMach-headless"
         desktop = root / "bin" / "BluMach-portable"
         required = [headless, desktop]
-    required.extend([root / "COPYING", root / "FORK-NOTICE.md", root / "AUTHORS"])
+    required.extend(
+        [root / "COPYING", root / "FORK-NOTICE.md", root / "AUTHORS",
+         root / "README-Portable.md"]
+    )
     return headless, desktop, required
 
 
@@ -144,13 +147,16 @@ def main() -> int:
         raise SystemExit(f"Unexpected version output: {output!r}; expected {expected!r}")
 
     machines = run_smoke(headless, ["--list-machines"], environment).splitlines()
-    if "olivetti-pcs86" not in machines:
-        raise SystemExit("Packaged registry does not contain olivetti-pcs86")
-    description = run_smoke(
-        headless, ["--describe", "olivetti-pcs86"], environment
-    )
-    if "engine_mode=clocked" not in description:
-        raise SystemExit(f"Unexpected machine description: {description}")
+    for machine_id in ("olivetti-pcs86", "olivetti-m15"):
+        if machine_id not in machines:
+            raise SystemExit(f"Packaged registry does not contain {machine_id}")
+        description = run_smoke(
+            headless, ["--describe", machine_id], environment
+        )
+        if "engine_mode=clocked" not in description:
+            raise SystemExit(
+                f"Unexpected description for {machine_id}: {description}"
+            )
 
     # --version exits before the event loop and proves the deployed Qt runtime
     # and platform plugin can load without opening a persistent window.

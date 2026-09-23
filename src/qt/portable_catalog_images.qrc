@@ -1,0 +1,12 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<RCC>
+    <qresource prefix="/blumach/catalog">
+        <file alias="images/olivetti-pcs86.jpg">catalog/images/olivetti-pcs86-family-v3.jpg</file>
+        <file alias="images/olivetti-pcs286.jpg">catalog/images/olivetti-pcs286-family-v3.jpg</file>
+        <file alias="images/olivetti-pcs286s-board.jpg">catalog/images/olivetti-pcs286s-board.jpg</file>
+        <file alias="images/olivetti-pcs386sx.jpg">catalog/images/olivetti-pcs386sx-branded.jpg</file>
+        <file alias="images/ta-dario286.jpg">catalog/images/ta-dario286-family-v1.jpg</file>
+        <file alias="images/ta-dario286s.jpg">catalog/images/ta-dario286s-family-v1.jpg</file>
+        <file alias="images/ta-dario386sx.jpg">catalog/images/ta-dario386sx-family-v1.jpg</file>
+    </qresource>
+</RCC>

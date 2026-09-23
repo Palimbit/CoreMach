@@ -47,11 +47,18 @@ static const bm_frontend_asset_requirement_t assets[] = {
       .accepted_size_count = sizeof(floppy_sizes) / sizeof(floppy_sizes[0]),
       .block_size = 512U, .replaceable = 1,
       .storage_kind = BM_STORAGE_DEVICE_FLOPPY, .storage_unit = 0U },
+    { .role = "floppy-1", .label = "Drive B floppy image",
+      .kind = BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
+      .accepted_sizes = floppy_sizes,
+      .accepted_size_count = sizeof(floppy_sizes) / sizeof(floppy_sizes[0]),
+      .block_size = 512U, .replaceable = 1,
+      .storage_kind = BM_STORAGE_DEVICE_FLOPPY, .storage_unit = 1U },
     { .role = "hard-disk-0", .label = "Conner CP3026 XTA disk image",
       .kind = BM_FRONTEND_ASSET_BLOCK_MEDIA,
       .accepted_sizes = hard_disk_sizes,
       .accepted_size_count = sizeof(hard_disk_sizes) / sizeof(hard_disk_sizes[0]),
-      .block_size = 512U }
+      .block_size = 512U,
+      .storage_kind = BM_STORAGE_DEVICE_HARD_DISK, .storage_unit = 0U }
 };
 
 static const bm_pcs86_firmware_identity_t *
@@ -168,14 +175,17 @@ static bm_status_t
 open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
              const bm_frontend_persistent_state_binding_t *state_bindings,
              size_t state_binding_count,
+             const bm_frontend_machine_option_t *options, size_t option_count,
              bm_frontend_machine_t **out_machine)
 {
     const bm_frontend_asset_binding_t *even = bm_frontend_binding_find(
         bindings, binding_count, "firmware-even");
     const bm_frontend_asset_binding_t *odd = bm_frontend_binding_find(
         bindings, binding_count, "firmware-odd");
-    const bm_frontend_asset_binding_t *floppy = bm_frontend_binding_find(
-        bindings, binding_count, "floppy-0");
+    const bm_frontend_asset_binding_t *floppy[2] = {
+        bm_frontend_binding_find(bindings, binding_count, "floppy-0"),
+        bm_frontend_binding_find(bindings, binding_count, "floppy-1")
+    };
     const bm_frontend_asset_binding_t *hard_disk = bm_frontend_binding_find(
         bindings, binding_count, "hard-disk-0");
     const bm_frontend_persistent_state_binding_t *rtc_state =
@@ -186,6 +196,12 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     const bm_pcs86_firmware_identity_t *odd_identity;
     pcs86_frontend_machine_t *machine;
     size_t identity_count = 0U;
+    size_t option_index;
+    uint32_t ems_kib = BM_PCS86_EMS_1920_KIB;
+    uint32_t drive_type[2] = { 0U, 0U };
+    int drive_type_given[2] = { 0, 0 };
+    uint32_t jumper_bank = 0U;
+    uint32_t commercial_profile = 0U;
 
     if ((even == NULL) || (odd == NULL) ||
         (even->kind != BM_FRONTEND_ASSET_BLOB) ||
@@ -195,15 +211,17 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
         (even->value.blob.size != BM_PCS86_FIRMWARE_HALF_SIZE) ||
         (odd->value.blob.size != BM_PCS86_FIRMWARE_HALF_SIZE))
         return BM_STATUS_INVALID_ARGUMENT;
-    if ((floppy != NULL) &&
-        ((floppy->kind != BM_FRONTEND_ASSET_READ_ONLY_MEDIA) ||
-         (floppy->value.media.read == NULL) ||
-         (floppy->value.media.write != NULL) ||
-         !floppy->value.media.read_only ||
-         (floppy->value.media.block_size != 512U) ||
-         ((floppy->value.media.block_count != 1440U) &&
-          (floppy->value.media.block_count != 2880U))))
-        return BM_STATUS_INVALID_ARGUMENT;
+    for (size_t index = 0U; index < 2U; ++index) {
+        if ((floppy[index] != NULL) &&
+            ((floppy[index]->kind != BM_FRONTEND_ASSET_READ_ONLY_MEDIA) ||
+             (floppy[index]->value.media.read == NULL) ||
+             (floppy[index]->value.media.write != NULL) ||
+             !floppy[index]->value.media.read_only ||
+             (floppy[index]->value.media.block_size != 512U) ||
+             ((floppy[index]->value.media.block_count != 1440U) &&
+              (floppy[index]->value.media.block_count != 2880U))))
+            return BM_STATUS_INVALID_ARGUMENT;
+    }
     if ((hard_disk != NULL) &&
         (((hard_disk->kind != BM_FRONTEND_ASSET_READ_ONLY_MEDIA) &&
           (hard_disk->kind != BM_FRONTEND_ASSET_BLOCK_MEDIA)) ||
@@ -214,6 +232,54 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
               (hard_disk->value.media.write == NULL))) ||
          (hard_disk->value.media.block_size != 512U) ||
          (hard_disk->value.media.block_count != 41820U)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    for (option_index = 0U; option_index < option_count; ++option_index) {
+        const char *name = options[option_index].name;
+        const uint32_t value = options[option_index].value;
+        if (strcmp(name, "ems_kib") == 0) {
+            if ((value != BM_PCS86_EMS_NONE_KIB) &&
+                (value != BM_PCS86_EMS_384_KIB) &&
+                (value != BM_PCS86_EMS_1920_KIB))
+                return BM_STATUS_INVALID_ARGUMENT;
+            ems_kib = value;
+        } else if ((strcmp(name, "floppy_a_type") == 0) ||
+                   (strcmp(name, "floppy_b_type") == 0)) {
+            const size_t index = name[7] == 'a' ? 0U : 1U;
+            if (value > 2U)
+                return BM_STATUS_INVALID_ARGUMENT;
+            drive_type[index] = value;
+            drive_type_given[index] = 1;
+        } else if (strcmp(name, "jumper_bank") == 0) {
+            if (value > 256U)
+                return BM_STATUS_INVALID_ARGUMENT;
+            jumper_bank = value;
+        } else if (strcmp(name, "commercial_profile") == 0) {
+            if (value > 3U)
+                return BM_STATUS_INVALID_ARGUMENT;
+            commercial_profile = value;
+        } else {
+            return BM_STATUS_INVALID_ARGUMENT;
+        }
+    }
+    for (size_t index = 0U; index < 2U; ++index) {
+        if (!drive_type_given[index])
+            drive_type[index] = floppy[index] == NULL ? 0U :
+                (floppy[index]->value.media.block_count == 1440U ? 1U : 2U);
+        if (((drive_type[index] == 0U) && (floppy[index] != NULL)) ||
+            ((drive_type[index] == 1U) && (floppy[index] != NULL) &&
+             (floppy[index]->value.media.block_count == 2880U)))
+            return BM_STATUS_INVALID_ARGUMENT;
+    }
+    if (((commercial_profile != 0U) && (jumper_bank != 0U)) ||
+        ((commercial_profile == 1U) &&
+         ((drive_type[0] != 1U) || (drive_type[1] != 0U) ||
+          (hard_disk != NULL))) ||
+        ((commercial_profile == 2U) &&
+         ((drive_type[0] != 1U) || (drive_type[1] != 1U) ||
+          (hard_disk != NULL))) ||
+        ((commercial_profile == 3U) &&
+         ((drive_type[0] != 1U) || (drive_type[1] != 0U) ||
+          (hard_disk == NULL))))
         return BM_STATUS_INVALID_ARGUMENT;
     machine = calloc(1U, sizeof(*machine));
     if (machine == NULL)
@@ -242,22 +308,38 @@ open_machine(const bm_frontend_asset_binding_t *bindings, size_t binding_count,
     machine->pcs86.memory_trace_context = machine;
     machine->pcs86.interrupt_trace = capture_interrupt;
     machine->pcs86.interrupt_trace_context = machine;
-    machine->pcs86.ems_kib = BM_PCS86_EMS_1920_KIB;
+    machine->pcs86.ems_kib = ems_kib;
     memcpy(machine->rtc_state,
            rtc_state != NULL ? rtc_state->data : default_rtc_state,
            sizeof(machine->rtc_state));
     machine->pcs86.rtc_initial_state = machine->rtc_state;
     machine->pcs86.rtc_initial_state_size = sizeof(machine->rtc_state);
-    if (floppy != NULL) {
-        machine->base.diagnostics.read_only_media_bytes =
-            floppy->value.media.block_count * floppy->value.media.block_size;
-        machine->pcs86.floppy[0] = (bm_floppy_drive_config_t) {
-            1, 1, 1,
-            { 80U, 2U,
-              (uint8_t) (floppy->value.media.block_count == 1440U ? 9U : 18U),
-              512U },
-            floppy->value.media
+    for (size_t index = 0U; index < 2U; ++index) {
+        if (drive_type[index] == 0U) {
+            machine->pcs86.floppy_drive_type[index] = 3U;
+            continue;
+        }
+        machine->pcs86.floppy_drive_type[index] = (uint8_t) drive_type[index];
+        machine->pcs86.floppy[index] = (bm_floppy_drive_config_t) {
+            .installed = 1,
+            .media_present = floppy[index] != NULL,
+            .write_protected = 1,
+            .geometry = { 80U, 2U,
+                (uint8_t) (floppy[index] != NULL ?
+                    (floppy[index]->value.media.block_count == 1440U ? 9U : 18U) :
+                    (drive_type[index] == 1U ? 9U : 18U)),
+                512U }
         };
+        if (floppy[index] != NULL) {
+            machine->pcs86.floppy[index].media = floppy[index]->value.media;
+            machine->base.diagnostics.read_only_media_bytes +=
+                floppy[index]->value.media.block_count *
+                floppy[index]->value.media.block_size;
+        }
+    }
+    if (jumper_bank != 0U) {
+        machine->pcs86.jumpers_manual = 1;
+        machine->pcs86.jumpers_value = (uint8_t) (jumper_bank - 1U);
     }
     if (hard_disk != NULL) {
         if (hard_disk->value.media.read_only)

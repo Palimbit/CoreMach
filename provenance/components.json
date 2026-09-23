@@ -180,7 +180,7 @@
     },
     {
       "id": "paradise-pvga1a-portable-video-core",
-      "destination": ["components/video/**"],
+      "destination": ["components/video/CMakeLists.txt", "components/video/include/blumach/components/pvga1a.h", "components/video/src/pvga1a.c"],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "08893f4fd0392ea6e95e9abbe108f0d8f1fbbe1c",
       "origin_paths": ["src/video/vid_paradise.c", "src/video/vid_svga.c", "src/video/vid_svga_render.c", "src/include/86box/vid_svga.h"],
@@ -188,6 +188,17 @@
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Sarah Walker", "Miran Grca", "BluMach contributors"],
       "local_changes": "Isolated the PVGA1A register files, Paradise extension lock, DAC state and 256 KiB planar VRAM behind generic memory and I/O buses; added ordered multi-byte I/O transactions so a V30 word access can program adjacent indexed-register ports without a CPU or firmware special case; added deterministic text-mode geometry and XRGB8888 rasterization from the programmed character, attribute, font and palette state. Text cursor shape, disable state, skew, character address and VSYNC-derived blink phase are rendered from CRTC state and explicit emulated time. Standard four-plane 16-colour and chain-4 256-colour output derive geometry, display start, offset, maximum-scan-line repetition, double-scan, Paradise PR4 pixel rate and palette selection from register state without BIOS mode-number cases. CGA-compatible packed shift modes, line compare/panning and scan-event generation remain absent, and input-status timing is an explicit deterministic bring-up approximation"
+    },
+    {
+      "id": "yamaha-v6355d-portable-video-core",
+      "destination": ["components/video/include/blumach/components/v6355d.h", "components/video/src/v6355d.c"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "7e967b9ffc0eb960074552d3402abe66c019d1f7",
+      "origin_paths": ["src/video/vid_cga_v6355.c", "src/include/86box/vid_v6355.h"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Sarah Walker", "John Elliott", "Miran Grca", "W. M. Martinez", "BluMach contributors"],
+      "local_changes": "Instance-owned register file, mirrored 16 KiB VRAM, M15 monochrome-port alias, 40/80-column text and 320/640-pixel CGA-compatible raster output to palette indices. Firmware glyph data is caller-provided and LCD green mapping belongs to the machine. Status timing is a declared virtual-time approximation; undocumented 16-colour modes, external composite output and exact panel timing are not modeled."
     },
     {
       "id": "portable-runtime-session",
@@ -247,6 +258,28 @@
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
       "local_changes": "Machine-selected timed-source adapter for deferred XTA DMA service; remains disarmed while idle, retries a pending transfer at the declared functional interval and makes no claim about mechanical disk timing"
+    },
+    {
+      "id": "portable-msm6242",
+      "destination": ["components/pc/include/blumach/components/rtc_msm6242.h", "components/pc/src/rtc_msm6242.c"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "7e967b9ffc0eb960074552d3402abe66c019d1f7",
+      "origin_paths": ["src/device/isartc.c"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Fred N. van Kempen", "BluMach contributors"],
+      "local_changes": "Isolated the M15 MSM6242 register calendar behind a typed, instance-owned I/O device. Caller-owned initial state and explicit virtual-second advancement replace global host-time and NVR state. Models 12/24-hour BCD calendar, HOLD, STOP, REST and 30-second adjustment; BUSY timing, IRQ pulse output and TEST mode remain unsupported. The source retains the inherited BSD terms in full."
+    },
+    {
+      "id": "olivetti-m15-portable-system",
+      "destination": ["systems/olivetti-m15/**"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "aa4631cf8c95a118d962e38b06a074c50789705f",
+      "origin_paths": ["src/machine/m_xt.c", "src/device/kbc_xt.c", "systems/olivetti-pcs86/src/olivetti_pcs86.c"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Sarah Walker", "Miran Grca", "Fred N. van Kempen", "EngiNerd", "Jasmine Iwanek", "rtzor", "BluMach contributors"],
+      "local_changes": "Internal M15 bring-up system with instance-owned board-switch and keyboard state, typed firmware, floppy and RTC configuration, rational-clock Intel 8088, memory, PIC, PIT, DMA, FDC, V6355D presentation and deterministic MSM6242 calendar. The M15-specific switch, 05h-to-82h identification and XT-compatible Port B strobe behavior derive from the inherited pilot; normalized-key to guest-byte mapping is adapted from the portable PCS86. A bounded per-instance scan queue, virtual-millisecond delivery, IRQ1 and explicit Port B acknowledgement replace inherited globals and polling fallback. This is a compatibility stream, not a validated physical M15 keyboard protocol. Generic components are independently linked. No BIOS, ROM or media are included."
     },
     {
       "id": "olivetti-pcs86-portable-system",

@@ -23,6 +23,7 @@ print_usage(const char *program)
             "  %s --describe <machine-id>\n"
             "  %s --machine <machine-id> --firmware-even <path>"
             " --firmware-odd <path> [--floppy <path>]"
+            " [--machine-option name=value]..."
             " [--swap-floppy-at <tick> --swap-floppy <path>]"
             " [--hard-disk <path> | --working-hard-disk <path>]"
             " [--persistent-state <role=path> | --depleted-state <role>]"
@@ -38,6 +39,7 @@ print_usage(const char *program)
             " [--expect-frame-crc32 <hex>]\n"
             "  %s --machine <machine-id> --firmware-even <path>"
             " --firmware-odd <path> [--floppy <path>]"
+            " [--machine-option name=value]..."
             " [--swap-floppy-at <tick> --swap-floppy <path>]"
             " [--hard-disk <path> | --working-hard-disk <path>]"
     " [--persistent-state <role=path> | --depleted-state <role>]"
@@ -188,6 +190,28 @@ parse_ticks(const char *value, uint64_t *ticks)
 }
 
 static int
+parse_machine_option_value(const char *value, uint32_t *out_value)
+{
+    char *end = NULL;
+    const char *cursor;
+    unsigned long parsed;
+
+    if ((value == NULL) || (value[0] == '\0'))
+        return 0;
+    for (cursor = value; *cursor != '\0'; ++cursor) {
+        if ((*cursor < '0') || (*cursor > '9'))
+            return 0;
+    }
+    errno = 0;
+    parsed = strtoul(value, &end, 10);
+    if ((errno == ERANGE) || (end == NULL) || (*end != '\0') ||
+        (parsed > UINT32_MAX))
+        return 0;
+    *out_value = (uint32_t) parsed;
+    return 1;
+}
+
+static int
 parse_run_options(int argc, char **argv, headless_run_options_t *options)
 {
     int index;
@@ -227,6 +251,23 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
         } else if (strcmp(argument, "--floppy") == 0) {
             if (!assign_once(&options->floppy_path, value))
                 return 0;
+        } else if (strcmp(argument, "--machine-option") == 0) {
+            const char *separator = strchr(value, '=');
+            size_t name_length;
+            uint32_t parsed;
+            size_t option_index = options->machine_option_count;
+            if ((separator == NULL) || (separator == value) ||
+                (option_index >= HEADLESS_MAX_MACHINE_OPTIONS))
+                return 0;
+            name_length = (size_t) (separator - value);
+            if ((name_length >= HEADLESS_MAX_OPTION_NAME) ||
+                !parse_machine_option_value(separator + 1, &parsed))
+                return 0;
+            memcpy(options->machine_options[option_index].name, value,
+                   name_length);
+            options->machine_options[option_index].name[name_length] = '\0';
+            options->machine_options[option_index].value = parsed;
+            ++options->machine_option_count;
         } else if (strcmp(argument, "--swap-floppy") == 0) {
             if (!assign_once(&options->swap_floppy_path, value))
                 return 0;

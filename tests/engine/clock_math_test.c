@@ -97,6 +97,36 @@ test_integral_period_large_advance_and_overflow(void)
 }
 
 static void
+test_fractional_fast_and_large_advance_agree(void)
+{
+    const bm_clock_rate_t m15_cpu = { UINT64_C(4772727), 1U };
+    bm_clock_position_t incremental;
+    bm_clock_position_t bulk;
+    bm_clock_position_t large = {
+        0U, 0U, UINT64_C(1000000000000000000),
+        UINT64_C(999999999999999999)
+    };
+    uint64_t index;
+
+    assert(bm_clock_position_init(&incremental, &m15_cpu) == BM_STATUS_OK);
+    assert(bm_clock_position_init(&bulk, &m15_cpu) == BM_STATUS_OK);
+    for (index = 0U; index < UINT64_C(100000); ++index)
+        assert(bm_clock_position_advance(&incremental, 130U) == BM_STATUS_OK);
+    assert(bm_clock_position_advance(&bulk, UINT64_C(13000000)) == BM_STATUS_OK);
+    assert(bm_clock_position_compare(&incremental, &bulk) == 0);
+
+    /* The residual product exceeds 64 bits, but the result is representable. */
+    assert(bm_clock_position_advance(&large,
+                                     UINT64_C(999999999999999999)) == BM_STATUS_OK);
+    assert(large.nanoseconds == UINT64_C(999999999999999998));
+    assert(large.phase == 1U);
+
+    /* Overflow on a bulk advance must not mutate the clock. */
+    assert(bm_clock_position_advance(&bulk, UINT64_MAX) ==
+           BM_STATUS_CAPACITY_EXCEEDED);
+}
+
+static void
 test_fraction_comparison_without_overflow(void)
 {
     bm_clock_position_t left = {
@@ -251,6 +281,7 @@ main(void)
     test_no_accumulated_rounding();
     test_rational_crystal_divider_has_no_drift();
     test_integral_period_large_advance_and_overflow();
+    test_fractional_fast_and_large_advance_agree();
     test_fraction_comparison_without_overflow();
     test_export_normalizes_public_fraction();
     test_next_domain_edge_is_strict_and_exact();

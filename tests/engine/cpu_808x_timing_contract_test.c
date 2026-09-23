@@ -3663,6 +3663,116 @@ test_taken_branch_discards_sequential_prefetch(void)
     cpu_808x_test_machine_destroy(&machine);
 }
 
+static void
+test_nec_documented_ranges_are_provisional_and_scoped(void)
+{
+    static const uint8_t program[] = { 0x99U, 0x90U };
+    static const uint16_t operands[] = { 0x0001U, 0x8001U };
+
+    for (size_t index = 0U; index < 2U; ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+        bm_808x_arch_state_t state;
+        uint64_t cycles = 0U;
+
+        cpu_808x_test_machine_create(&machine, &config, program,
+                                     sizeof(program));
+        start_program(&machine);
+        state = cpu_808x_test_get_state(&machine);
+        state.ax = operands[index];
+        cpu_808x_test_set_state(&machine, &state);
+        assert(bm_808x_step_clocked_nec_ranges_provisional(
+                   machine.cpu.context, 0U, &cycles) == BM_STATUS_OK);
+        assert(capture.count == 1U);
+        assert(capture.last.opcode == 0x99U);
+        assert(capture.last.execution_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_PROVISIONAL);
+        assert(capture.last.execution_clocks_min == 5U);
+        assert(capture.last.execution_clocks_max == 5U);
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_PROVISIONAL);
+        assert(cycles == capture.last.boundary_clocks_min);
+        assert(capture.last.boundary_clocks_min ==
+               capture.last.boundary_clocks_max);
+        state = cpu_808x_test_get_state(&machine);
+        assert(state.dx == (index == 0U ? 0U : 0xffffU));
+
+        memset(&capture, 0, sizeof(capture));
+        assert(bm_808x_step_clocked_nec_ranges_provisional(
+                   machine.cpu.context, 0U, &cycles) == BM_STATUS_OK);
+        assert(capture.count == 1U && capture.last.opcode == 0x90U);
+        assert(capture.last.execution_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
+test_esc_memory_fetch_has_a_complete_timeline(void)
+{
+    static const uint8_t cases[][4] = {
+        { 0xd9U, 0x06U, 0x00U, 0x20U },
+        { 0xd9U, 0x06U, 0x01U, 0x20U }
+    };
+
+    for (size_t index = 0U; index < 2U; ++index) {
+        timing_capture_t capture = { 0 };
+        cpu_808x_test_config_t config = {
+            .timing = capture_timing,
+            .timing_context = &capture
+        };
+        cpu_808x_test_machine_t machine;
+
+        cpu_808x_test_machine_create(&machine, &config, cases[index],
+                                     sizeof(cases[index]));
+        start_program(&machine);
+        step_once(&machine, &capture);
+        assert_exact_execution_clocks(&capture, index == 0U ? 11U : 15U);
+        assert(capture.last.execution_timeline_complete == 1U);
+        assert(capture.last.operand_transactions == (index == 0U ? 1U : 2U));
+        assert(capture.last.boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_EXACT);
+        cpu_808x_test_machine_destroy(&machine);
+    }
+}
+
+static void
+test_nec_provisional_signed_multiply_uses_documented_bound(void)
+{
+    static const uint8_t program[] = { 0xf6U, 0x2eU, 0x00U, 0x20U };
+    timing_capture_t capture = { 0 };
+    cpu_808x_test_config_t config = {
+        .timing = capture_timing,
+        .timing_context = &capture
+    };
+    cpu_808x_test_machine_t machine;
+    bm_808x_arch_state_t state;
+    uint64_t cycles = 0U;
+
+    cpu_808x_test_machine_create(&machine, &config, program, sizeof(program));
+    start_program(&machine);
+    state = cpu_808x_test_get_state(&machine);
+    state.ax = 0x0050U;
+    cpu_808x_test_set_state(&machine, &state);
+    cpu_808x_test_poke(&machine, 0x2000U, 0U);
+    assert(bm_808x_step_clocked_nec_ranges_provisional(
+               machine.cpu.context, 0U, &cycles) == BM_STATUS_OK);
+    assert(capture.count == 1U && capture.last.opcode == 0xf6U);
+    assert(capture.last.execution_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_PROVISIONAL);
+    assert(capture.last.execution_clocks_min == 45U);
+    assert(capture.last.execution_clocks_max == 45U);
+    assert(capture.last.boundary_clock_kind ==
+           BM_808X_EXECUTION_CLOCKS_PROVISIONAL);
+    assert(cycles == capture.last.boundary_clocks_min);
+    assert(cpu_808x_test_get_state(&machine).ax == 0U);
+    cpu_808x_test_machine_destroy(&machine);
+}
+
 int
 main(void)
 {
@@ -3689,6 +3799,9 @@ main(void)
     test_unsigned_multiply_resolves_its_data_dependent_clock();
     test_divide_error_does_not_claim_normal_execution_clocks();
     test_scalar_formula_and_condition_timing();
+    test_nec_documented_ranges_are_provisional_and_scoped();
+    test_nec_provisional_signed_multiply_uses_documented_bound();
+    test_esc_memory_fetch_has_a_complete_timeline();
     test_nec_extension_timing();
     test_standard_string_formula_timing();
     test_io_string_formula_timing();

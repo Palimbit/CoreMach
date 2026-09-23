@@ -81,6 +81,7 @@ typedef struct bm_808x_state {
     void *intel_queue_event_context;
     int intel_clocked_mode;
     int intel_provisional_mode;
+    int nec_ranges_provisional_mode;
     uint8_t boundary_initial_queue_count;
     uint32_t boundary_intel_exact_clocks;
     int boundary_rm_valid;
@@ -612,8 +613,17 @@ execute_fpo(bm_808x_state_t *state, uint8_t opcode, int segment_override,
         request.offset = operand.offset;
         request.physical_address = physical_address(operand.segment,
                                                     operand.offset);
-        status = read_word(state, operand.segment, operand.offset,
-                           &request.memory_value);
+        /* NEC documents an 11/15-clock total for memory ESC. Place the
+         * four/eight-clock word bus transfer between three and four internal
+         * clocks so the scheduler reaches that total. This phase split is a
+         * deterministic model, not a measured hardware timing. */
+        begin_operand_execution_timeline(state);
+        status = place_execution_clocks(state, 3U);
+        if (status == BM_STATUS_OK)
+            status = read_word(state, operand.segment, operand.offset,
+                               &request.memory_value);
+        if (status == BM_STATUS_OK)
+            status = place_execution_clocks(state, 4U);
         if (status != BM_STATUS_OK)
             return status;
     }
@@ -5495,6 +5505,25 @@ documented_native_execution_clocks(const bm_808x_state_t *state,
     return kind;
 }
 
+static bm_808x_execution_clock_kind_t
+scheduled_native_execution_clocks(const bm_808x_state_t *state,
+                                  uint32_t *minimum, uint32_t *maximum)
+{
+    bm_808x_execution_clock_kind_t kind =
+        documented_native_execution_clocks(state, minimum, maximum);
+
+    if (state->model == BM_808X_NEC_V30 &&
+        state->nec_ranges_provisional_mode &&
+        kind == BM_808X_EXECUTION_CLOCKS_RANGE) {
+        /* A deterministic upper-bound scheduling choice, not a claim that
+         * the V30 took this many physical clocks. Preserve the distinction
+         * in both execution and boundary timing observations. */
+        *minimum = *maximum;
+        kind = BM_808X_EXECUTION_CLOCKS_PROVISIONAL;
+    }
+    return kind;
+}
+
 static uint32_t
 intel_prefetched_baseline_clocks(uint8_t opcode)
 {
@@ -5574,8 +5603,9 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
              state->bcu.boundary_prefetch_transactions) &&
             !state->boundary_operand_timeline_supported)
             return BM_STATUS_OK;
-        kind = documented_native_execution_clocks(state, &minimum, &maximum);
-        if ((kind != BM_808X_EXECUTION_CLOCKS_EXACT) ||
+        kind = scheduled_native_execution_clocks(state, &minimum, &maximum);
+        if (((kind != BM_808X_EXECUTION_CLOCKS_EXACT) &&
+             (kind != BM_808X_EXECUTION_CLOCKS_PROVISIONAL)) ||
             (minimum != maximum) ||
             (state->boundary_execution_clocks_placed > minimum))
             return BM_STATUS_OK;
@@ -5593,8 +5623,10 @@ advance_uncontended_prefetch(bm_808x_state_t *state, int native_mode)
     if (state->bcu.boundary_bus_transactions !=
         state->bcu.boundary_prefetch_transactions)
         return BM_STATUS_OK;
-    kind = documented_native_execution_clocks(state, &minimum, &maximum);
-    if ((kind != BM_808X_EXECUTION_CLOCKS_EXACT) || (minimum != maximum))
+    kind = scheduled_native_execution_clocks(state, &minimum, &maximum);
+    if (((kind != BM_808X_EXECUTION_CLOCKS_EXACT) &&
+         (kind != BM_808X_EXECUTION_CLOCKS_PROVISIONAL)) ||
+        (minimum != maximum))
         return BM_STATUS_OK;
     return bm_808x_biu_advance_prefetch(
         &state->bcu, state->bus, state->segments[1],
@@ -5801,7 +5833,7 @@ emit_boundary_observation(bm_808x_state_t *state,
         observation.execution_clocks_max = state->boundary_intel_exact_clocks;
     } else if ((kind == BM_808X_BOUNDARY_INSTRUCTION) && native_mode)
         observation.execution_clock_kind =
-            documented_native_execution_clocks(
+            scheduled_native_execution_clocks(
                 state, &observation.execution_clocks_min,
                 &observation.execution_clocks_max);
     else if ((kind == BM_808X_BOUNDARY_INTERRUPT) && native_mode &&
@@ -6200,8 +6232,9 @@ bm_808x_step(bm_cpu_t *cpu, bm_tick_t *consumed)
     return cpu_run(cpu->context, 1U, consumed);
 }
 
-bm_status_t
-bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
+static bm_status_t
+step_clocked_nec(void *context, bm_tick_t start_ns, uint64_t *cycles,
+                 int allow_provisional_ranges)
 {
     bm_808x_state_t *state = context;
     bm_tick_t consumed = 0U;
@@ -6212,6 +6245,8 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
 
     (void) start_ns;
     if ((state == NULL) || (cycles == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (allow_provisional_ranges && (state->model != BM_808X_NEC_V30))
         return BM_STATUS_INVALID_ARGUMENT;
     *cycles = 0U;
     state->last_boundary_observed = 0;
@@ -6233,7 +6268,9 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
         state->intel_clocked_mode = 1;
         bm_808x_biu_set_clocked_timeline(&state->bcu, 1);
     }
+    state->nec_ranges_provisional_mode = allow_provisional_ranges;
     status = cpu_run(state, 1U, &consumed);
+    state->nec_ranges_provisional_mode = 0;
     bm_808x_biu_set_clocked_timeline(&state->bcu, 0);
     state->intel_clocked_mode = 0;
     if ((status == BM_STATUS_IDLE) && (consumed == 0U))
@@ -6242,12 +6279,29 @@ bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
         return status;
     if ((consumed != 1U) || !state->last_boundary_observed)
         return BM_STATUS_DEVICE_ERROR;
-    if ((state->last_boundary_clock_kind != BM_808X_EXECUTION_CLOCKS_EXACT) ||
+    if ((state->last_boundary_clock_kind != BM_808X_EXECUTION_CLOCKS_EXACT &&
+         !(allow_provisional_ranges &&
+           state->last_boundary_clock_kind ==
+               BM_808X_EXECUTION_CLOCKS_PROVISIONAL)) ||
         (state->last_boundary_clocks_min == 0U) ||
         (state->last_boundary_clocks_min != state->last_boundary_clocks_max))
         return BM_STATUS_UNSUPPORTED;
     *cycles = state->last_boundary_clocks_min;
     return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_808x_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
+{
+    return step_clocked_nec(context, start_ns, cycles, 0);
+}
+
+bm_status_t
+bm_808x_step_clocked_nec_ranges_provisional(void *context,
+                                             bm_tick_t start_ns,
+                                             uint64_t *cycles)
+{
+    return step_clocked_nec(context, start_ns, cycles, 1);
 }
 
 bm_status_t

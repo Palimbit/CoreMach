@@ -36,6 +36,14 @@
       "required": true,
       "identity_note": "A 64 KB local image contains 16 KB of effective BIOS at FC000h-FFFFFh. Provenance and redistribution rights remain pending."
     },
+    "portable_resources": [
+      {"role": "firmware", "folder": "olivetti/m15/firmware", "known": [
+        {"name": "M15 BIOS 1.08 local image", "size": 65536, "sha256": "4d329ee20aab121a73f88c2c694d65b1f3d3a00b865871aa553fadbe9ff3bd77", "preferred": true}
+      ]},
+      {"role": "floppy-0", "folder": "olivetti/m15/floppies", "known": [
+        {"name": "M15 Starter Kit tutorial", "size": 737280, "sha256": "d9c1c69fdb2a6d09179a93047e2eb4f91e07c4bff143d31275a50912ccefba09", "preferred": true}
+      ]}
+    ],
     "storage": {
       "bus": "Two internal floppy drives; no hard disk",
       "official_drives": ["Two internal 3.5-inch 720 KB drives", "Optional self-powered external 5.25-inch floppy drive"]
@@ -54,9 +62,10 @@
           "id": "memory",
           "label_key": "creation.label.memory",
           "default": "512",
+          "portable_option": "ram_kib",
           "choices": [
-            {"id": "256", "label_key": "product.olivetti-m15.creation.memory.256", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 256}]},
-            {"id": "512", "label_key": "product.olivetti-m15.creation.memory.512", "status": "validated", "set": [{"section": "Machine", "key": "mem_size", "value": 512}]}
+            {"id": "256", "label_key": "product.olivetti-m15.creation.memory.256", "status": "validated", "portable_value": 256, "set": [{"section": "Machine", "key": "mem_size", "value": 256}]},
+            {"id": "512", "label_key": "product.olivetti-m15.creation.memory.512", "status": "validated", "portable_value": 512, "set": [{"section": "Machine", "key": "mem_size", "value": 512}]}
           ]
         }
       ],
@@ -110,6 +119,7 @@
   "platform": {
     "id": "olivetti-m15-platform",
     "emulator_machine_id": "olivetti_m15",
+    "portable_adapter_id": "olivetti-m15",
     "architecture": "80C88"
   }
 }
