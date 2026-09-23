@@ -293,7 +293,8 @@ static void prefixes_and_failures(fixture_t *f)
         bm_286_arch_state_t s = setup(f, code, sizeof(code)), a;
         bm_286_boundary_t b; if (bad == 3) s.msw |= 1;
         set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
-        a = state(f); same(&a, &s); assert(f->count == (bad == 3 ? 0U : 1U));
+        a = state(f); same(&a, &s);
+        assert(f->count == (bad == 3 ? 0U : bad == 0 ? 1U : 2U));
     }
 }
 int main(void)

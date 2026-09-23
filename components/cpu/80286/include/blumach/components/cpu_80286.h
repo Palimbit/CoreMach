@@ -46,8 +46,8 @@ typedef enum bm_286_boundary_kind {
     BM_286_BOUNDARY_HALT,
     BM_286_BOUNDARY_HOLD,
     BM_286_BOUNDARY_SHUTDOWN,
-    /* One completed, resumable repetition; IP retains the prefix address
-     * until the repeated instruction has completed. */
+    /* One completed, resumable repetition with more work pending. IP retains
+     * the first prefix address; final or zero-count REP reports INSTRUCTION. */
     BM_286_BOUNDARY_REP_ITERATION
 } bm_286_boundary_kind_t;
 
@@ -162,6 +162,11 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
  * Real-mode far CALL 9A/FF /3 and RETF CA/CB preserve FLAGS/NMI blocking;
  * registers commit only after all pointer/stack accesses succeed.
  * LEA, LDS/LES and XLAT are available in real mode; memory XCHG/LOCK is not.
+ * Memory strings support F2/F3 repetition, at most one element per step.
+ * CX=0 completes without data accesses. Incomplete REP retains prefix IP;
+ * HOLD preserves decode, accepted interrupt/reset/import discards it.
+ * Import may resume architecturally from CX/SI/DI/IP and unchanged code, but
+ * is not a full saved microarchitectural/prefetch checkpoint.
  * Entry and IRET stage registers until all accesses succeed; completed bus
  * writes/acknowledgements are not undone on host errors, and retry is latched
  * off. Guest faults, protected gates and shutdown recovery are

@@ -2,7 +2,63 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: unprefixed real-mode string elements
+## Latest tranche: interruptible real-mode memory repetition
+
+F3 REP/REPE and F2 REPNE now repeat MOVS/STOS/LODS/CMPS/SCAS byte/word
+forms, with at most one element per diagnostic step. CX=0 advances past the
+instruction without checking data segments or changing indices/FLAGS. Otherwise
+CX decreases after each completed element. CMPS/SCAS evaluate the resulting ZF,
+not incoming ZF: F3 continues while equal, F2 while unequal, and both stop at
+zero CX. F2 on non-comparison strings is accepted as count-only compatibility
+policy; redundant repeat/segment prefixes select the last within the existing
+ten-byte bound. No ignored-REP policy for unrelated opcodes is introduced.
+
+Incomplete repetitions report `BM_286_BOUNDARY_REP_ITERATION` and retain the
+first prefix IP; final and zero-count boundaries report INSTRUCTION. Private
+per-instance decode survives uninterrupted iterations and HOLD, avoiding opcode
+refetch on each element. Accepted INTR/NMI/#1, reset or successful architectural
+state import discard it. IRET re-decodes current instruction bytes and continues
+with remaining CX/SI/DI, without replaying completed elements. This is a bounded
+functional continuation, not a physical prefetch queue or cycle-exact snapshot.
+
+TF can trap after each completed iteration. Incoming STI/SS-load shadows are
+consumed by the first completed element in this functional model; combined
+shadow/repetition behavior still needs dedicated hardware-capture validation.
+Host failures leave the current element's architectural state unchanged, retain
+completed external writes and latch a stop without retry. Earlier elements
+remain committed. Guest segment faults, their stepping-specific restart quirks
+and fault escalation are not simulated by successful repetition.
+
+Evidence: Intel 210498-005 section 3.7.2, [pages 3-23](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=79)
+and [3-24](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=80),
+[Intel's 286 REP restart errata](https://www.pcjs.org/documents/manuals/intel/80286/rep_restart/),
+and [IBM's hardware interface reference, repeated MOVS single-stepping](https://www.ardent-tool.com/docs/pdf/ibm_hitrc13.pdf).
+Pinned inherited `src/cpu/x86_ops_rep_286_2386.h` was consulted at
+`87c3fb4876eaad086921bc3444569da026286c36`; authors remain credited under
+derived-rewrite provenance. No inherited globals, cycle constants or abort
+workarounds are embedded in the portable core.
+
+Authored `cpu286_repeat.c` covers 5,000 opcode/prefix/DF/count/termination
+combinations, all 65,536 initial CX values, a full 65,535-element run, overlap,
+independent decode state in two instances, INTR/NMI/TF entry/IRET, code changes
+across interruption/import, HOLD during an element, shadow boundaries, length
+and segment limits, and every endpoint failure in first/later iterations.
+The initial descending-byte matrix accidentally initialized two bytes per
+element; fixed the fixture width without weakening expected termination.
+Existing REP rejection tests now reject still-unimplemented string I/O or
+non-string combinations rather than asserting supported memory strings fail.
+
+GCC UCRT64 and MSVC Debug/Release pass 100 ordinary tests, with two explicit
+Headland/AT DMA skips. GCC Debug also passes the unchanged optional SST
+regression, which still excludes strings/REP. Thirty Python checks, catalogue
+and provenance (36 components / 196 files) pass. No public ABI, scheduler,
+timing policy or other CPU changed; strict clocked execution still rejects
+UNKNOWN timing before fetch. No physical REP capture or BIOS/POST claim.
+
+Next: INS/OUTS, including repeated I/O and irreversible endpoint side effects;
+then memory XCHG/LOCK and the other explicit CPU/motherboard gates below.
+
+## Previous tranche: unprefixed real-mode string elements
 
 MOVS/STOS/LODS/CMPS/SCAS byte and word forms now execute exactly one element,
 including when CX is zero. CX is unchanged. Source is DS:SI or the selected
@@ -294,14 +350,15 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 - Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
 - Decimal/multiply/divide edge cases still need expanded hardware-capture
   comparison; functional instruction implementations are present.
-- REP restart/interruption and string I/O (unprefixed memory strings implemented).
+- String I/O INS/OUTS; memory strings now support interruptible REP. Combined
+  shadow/repetition and silicon fault-restart behavior need hardware comparison.
 - Guest faults beyond real-mode #DE, BOUND/invalid-opcode handling, protected segmentation, descriptors,
   privilege, tasks/gates and system instructions; correct double fault/shutdown.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is REP with interruptible/restartable iterations and
-string I/O. The ordered CPU roadmap
+The next bounded block is string I/O, including interruptible REP and host
+endpoint failure handling. The ordered CPU roadmap
 then covers memory XCHG/LOCK, remaining real-mode faults and 80287 interface,
 protected segmentation/system instructions, gates/tasks, and calibrated timing.
 Memory XCHG stays separate until
@@ -448,14 +505,14 @@ generic catch-all or NOP is not coverage.
 
 | Family / encodings | Required semantics and representative tests | Classic candidate | Portable / timing |
 |---|---|---|---|
-| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
+| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch, 10-byte-bounded segment/REP decode and real-mode #DE implemented; LOCK and other fault delivery missing; timing unknown |
 | Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register XCHG implemented; MOV SS has SS-load inhibition; memory XCHG and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode functional forms implemented, including #DE for division and AAM zero; general fault escalation and expanded hardware captures pending; timings unknown |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
-| Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Unprefixed memory strings implemented; REP, string I/O, guest segment faults and physical timing pending |
+| Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Memory strings with interruptible REP implemented; string I/O, guest segment faults and physical timing pending |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
 | 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH/IMUL, ENTER/LEAVE and immediate shifts implemented; other forms and guest faults missing; timing unknown |
@@ -522,9 +579,9 @@ or implicit zero-wait assumption closes the evidence gap.
    current FLAGS, with atomic import validation. NOP tests a sampled pending
    trap. IRET/POPF transitions and full event priority remain open.
 2. `BM_286_BOUNDARY_REP_ITERATION` is appended without renumbering previous
-   kinds. A future REP implementation must return at most one iteration per
-   step, retain prefix restart IP while incomplete, avoid data transactions
-   at CX=0, and check HOLD/interrupts at legal boundaries. Imported state
+   kinds. The memory REP implementation now returns at most one iteration per
+   step, retains prefix restart IP while incomplete, avoids data transactions
+   at CX=0, and checks HOLD/interrupts at legal boundaries. Imported state
    clears private continuation and is not cycle-exact restore.
 3. State explicitly that **NMI may recover SHUTDOWN without clearing PE**;
    RESET exits protected mode. The current signal and callback shapes can

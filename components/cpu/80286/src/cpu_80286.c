@@ -61,6 +61,12 @@ typedef struct bm_286_private {
     uint8_t hold_line;
     uint8_t hold_acknowledged;
     uint8_t stopped;
+    /* Decoded repetition survives only uninterrupted execution/HOLD. Public
+     * arch import and interrupt entry discard it; architectural IP points
+     * at the first prefix while incomplete. Not a cycle-exact prefetch. */
+    uint8_t rep_active, rep_opcode, rep_prefix;
+    int rep_segment;
+    uint16_t rep_end_ip;
 } bm_286_private_t;
 
 static bm_status_t cpu_run(void *context, bm_tick_t budget,
@@ -90,6 +96,7 @@ static void reset_architecture(bm_286_private_t *state)
     state->hold_line = 0U;
     state->hold_acknowledged = 0U;
     state->stopped = 0U;
+    state->rep_active = 0U;
 }
 
 static bm_status_t cpu_reset(void *context)
@@ -237,7 +244,7 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
     if (state->stopped)
         return BM_STATUS_INVALID_STATE;
     state->arch = *arch;
-    /* No prefetch or REP continuation exists in the first functional tranche. */
+    state->rep_active = 0U; /* Conformance import starts a new decode interval. */
     return BM_STATUS_OK;
 }
 
@@ -1814,6 +1821,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     bm_status_t status;
     uint8_t opcode;
     uint8_t trap_was_enabled;
+    uint8_t repeat = 0U, repeat_more = 0U;
     unsigned event = 3U; /* No accepted event. */
     if (!is_286_cpu(cpu) || out_boundary == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
@@ -1852,6 +1860,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
             state->stopped = 1U;
             return status;
         }
+        state->rep_active = 0U;
         *out_boundary = boundary;
         if (state->config.trace != NULL)
             state->config.trace(state->config.trace_context, &boundary);
@@ -1868,7 +1877,13 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         return BM_STATUS_UNSUPPORTED; /* No protected fetch/privilege model. */
     }
     trap_was_enabled = (uint8_t) ((state->arch.flags & FLAG_TF) != 0U);
-    for (;;) {
+    if (state->rep_active) {
+        opcode = state->rep_opcode;
+        repeat = state->rep_prefix;
+        decode.override_segment = state->rep_segment;
+        decode.cursor = state->rep_end_ip;
+        status = BM_STATUS_OK;
+    } else for (;;) {
         status = next_byte(&decode, &opcode);
         if (status != BM_STATUS_OK)
             break;
@@ -1877,19 +1892,44 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
             decode.override_segment = (opcode >> 3) & 3U;
             continue;
         }
-        /* LOCK and repeat require their own instruction/atomicity rules.
-         * Stop before any guest data transaction, even for valid opcodes. */
-        if (opcode == 0xf0U || opcode == 0xf2U || opcode == 0xf3U)
-            status = BM_STATUS_UNSUPPORTED;
-        else
-            status = execute_data(&decode, opcode);
+        if (opcode == 0xf2U || opcode == 0xf3U) {
+            repeat = opcode; /* Last repeat prefix wins, within length bound. */
+            continue;
+        }
         break;
+    }
+    if (status == BM_STATUS_OK) {
+        if (opcode == 0xf0U)
+            status = BM_STATUS_UNSUPPORTED; /* LOCK remains separate. */
+        else if (repeat) {
+            if (!((opcode >= 0xa4U && opcode <= 0xa7U) ||
+                  (opcode >= 0xaaU && opcode <= 0xafU)))
+                status = BM_STATUS_UNSUPPORTED; /* No ignored REP/nonstring policy yet. */
+            else if (state->arch.cx != 0U) {
+                status = execute_string(&decode, opcode);
+                if (status == BM_STATUS_OK) {
+                    --state->arch.cx;
+                    repeat_more = (uint8_t) (state->arch.cx != 0U);
+                    if ((opcode & 0xfeU) == 0xa6U || (opcode & 0xfeU) == 0xaeU)
+                        repeat_more &= (uint8_t) (((state->arch.flags & FLAG_ZF) != 0U) ==
+                                                  (repeat == 0xf3U));
+                }
+            } /* CX=0: no segment checks or data accesses; FLAGS unchanged. */
+        } else
+            status = execute_data(&decode, opcode);
     }
     if (status != BM_STATUS_OK) {
         state->stopped = 1U;
         return status;
     }
-    state->arch.ip = (uint16_t) decode.cursor;
+    state->rep_active = repeat_more;
+    if (repeat_more) {
+        state->rep_opcode = opcode;
+        state->rep_prefix = repeat;
+        state->rep_segment = decode.override_segment;
+        state->rep_end_ip = (uint16_t) decode.cursor;
+    } else
+        state->arch.ip = (uint16_t) decode.cursor;
     state->arch.interrupt_shadow = decode.next_shadow;
     /* MOV/POP SS and taken software interrupts suppress their own sampled
      * trap (documented B-2/later INT behavior, not an early-stepping model).
@@ -1904,7 +1944,8 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
      * through IRET allows the retried instruction to be sampled normally.
      * Discarding a prior SS-deferred trap on #DE is an explicit functional
      * policy awaiting hardware coverage of that combined boundary case. */
-    boundary.kind = decode.divide_error ? BM_286_BOUNDARY_EXCEPTION : BM_286_BOUNDARY_INSTRUCTION;
+    boundary.kind = decode.divide_error ? BM_286_BOUNDARY_EXCEPTION :
+        repeat_more ? BM_286_BOUNDARY_REP_ITERATION : BM_286_BOUNDARY_INSTRUCTION;
     boundary.has_vector = (uint8_t) (decode.software_interrupt || decode.divide_error);
     boundary.vector = decode.software_vector;
     boundary.bus_wait_cycles = decode.waits;

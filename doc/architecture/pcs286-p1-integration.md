@@ -374,7 +374,19 @@ All 99 ordinary tests pass on GCC UCRT64/MSVC Debug/Release, two device skips,
 30 Python checks and provenance 36 components / 195 files. The unchanged SST
 selection does not cover strings; no physical timing or BIOS/POST claim.
 
-Next CPU tranche: interruptible/restartable REP and string I/O;
+F2/F3 memory repetition now executes at most one element per step, preserving
+prefix IP while incomplete and reusing private per-instance decode until an
+interrupt, reset or successful state import. CX/ZF stopping, zero data accesses
+at CX=0, INTR/NMI/TF/IRET, HOLD, overlapping copies, two-instance isolation,
+code changes and transfer failures have authored tests: 5,000 matrix cases,
+every initial CX and a full 65,535-element run. Incoming STI/SS shadow consumption
+after the first completed element is explicit functional policy pending silicon
+comparison. Original authors and derived-rewrite provenance remain intact.
+All 100 ordinary tests pass on GCC UCRT64/MSVC Debug/Release, two device skips,
+30 Python checks and provenance 36 components / 196 files. Existing SST coverage
+still excludes strings/REP. Timing stays UNKNOWN; no machine boot claim.
+
+Next CPU tranche: INS/OUTS with repeated I/O and host failure handling;
 memory XCHG still needs its separate LOCK path.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
