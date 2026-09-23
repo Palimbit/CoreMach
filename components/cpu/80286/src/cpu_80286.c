@@ -272,6 +272,7 @@ typedef struct decoded_286 {
     uint8_t next_shadow; /* Published only after a successful instruction. */
     uint8_t software_interrupt; /* Completed INT/INT3/taken INTO, not INTA. */
     uint8_t software_vector;
+    uint8_t divide_error; /* Completed synchronous #DE entry, not INT 0. */
 } decoded_286_t;
 
 typedef struct operand_286 {
@@ -1207,6 +1208,56 @@ static bm_status_t execute_multiply(decoded_286_t *decode, uint8_t opcode,
     return BM_STATUS_OK;
 }
 
+static bm_status_t execute_divide(decoded_286_t *decode, unsigned size,
+                                  const operand_286_t *operand)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t source;
+    uint32_t dividend = size == 1U ? arch->ax :
+        ((uint32_t) arch->dx << 16U) | arch->ax;
+    uint32_t quotient = 0U, remainder = 0U;
+    int fault;
+    bm_status_t status = read_operand(decode, operand, size, &source);
+    if (status != BM_STATUS_OK)
+        return status;
+    fault = source == 0U;
+    if (!fault && operand->reg_field == 7U) {
+        /* int64_t also safely represents INT32_MIN / -1 before checking
+         * the guest quotient range. No host overflow or signed narrowing. */
+        int64_t numerator = size == 1U ? signed_operand(arch->ax, 2U) :
+            (int64_t) dividend - ((dividend & UINT32_C(0x80000000)) ?
+                                  INT64_C(4294967296) : 0);
+        int64_t divisor = signed_operand(source, size);
+        int64_t q = numerator / divisor;
+        int64_t r = numerator % divisor; /* C11: truncation toward zero. */
+        fault = q < (size == 1U ? -128 : -32768) ||
+                q > (size == 1U ? 127 : 32767);
+        quotient = (uint32_t) q;
+        remainder = (uint32_t) r;
+    } else if (!fault) {
+        quotient = dividend / source;
+        remainder = dividend % source;
+        fault = quotient > (size == 1U ? 0xffU : 0xffffU);
+    }
+    if (fault) {
+        /* 286 faults save the initial IP, including all prefixes. No error
+         * code, no INTA, and no partial quotient/remainder commit. */
+        status = interrupt_frame(decode, 0U, arch->ip);
+        if (status == BM_STATUS_OK)
+            decode->divide_error = 1U;
+        return status;
+    }
+    if (size == 1U)
+        arch->ax = (uint16_t) ((quotient & 0xffU) | ((remainder & 0xffU) << 8U));
+    else {
+        arch->ax = (uint16_t) quotient;
+        arch->dx = (uint16_t) remainder;
+    }
+    /* All arithmetic flags are undefined after division. Preserve them as
+     * a deterministic emulator policy, not measured silicon behavior. */
+    return BM_STATUS_OK;
+}
+
 static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -1326,6 +1377,8 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
         } else if (opcode == 0xf6U || opcode == 0xf7U) {
             if (operand.reg_field == 4U || operand.reg_field == 5U)
                 return execute_multiply(decode, opcode, &operand);
+            if (operand.reg_field >= 6U)
+                return execute_divide(decode, size, &operand);
             if (operand.reg_field == 0U) {
                 operation = 4U; /* TEST */
                 if (size == 1U) {
@@ -1339,7 +1392,7 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
             } else if (operand.reg_field == 2U || operand.reg_field == 3U) {
                 operation = operand.reg_field == 2U ? 8U : 5U;
             } else
-                return BM_STATUS_UNSUPPORTED; /* /1 invalid; DIV/IDIV deferred. */
+                return BM_STATUS_UNSUPPORTED; /* /1 invalid; #6 pending. */
         } else {
             if (operand.reg_field > 1U)
                 return BM_STATUS_UNSUPPORTED; /* FE /2+ invalid; #6 pending. */
@@ -1668,7 +1721,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         return BM_STATUS_IDLE;
     }
     decode = (decoded_286_t) {state, state->arch.ip, 0U, 0U, -1,
-                             BM_286_SHADOW_NONE, 0U, 0U};
+                             BM_286_SHADOW_NONE, 0U, 0U, 0U};
     if (!state->arch.shutdown && state->arch.trap_pending &&
         state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD)
         event = 1U;
@@ -1728,11 +1781,16 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
      * The following instruction samples its incoming TF normally.
      * A previously deferred trap is kept,
      * not lost when TF is clear or when SS is loaded again. */
-    state->arch.trap_pending = (uint8_t) (state->arch.trap_pending ||
+    state->arch.trap_pending = (uint8_t) (!decode.divide_error &&
+        (state->arch.trap_pending ||
         (trap_was_enabled && decode.next_shadow != BM_286_SHADOW_SS_LOAD &&
-         !decode.software_interrupt));
-    boundary.kind = BM_286_BOUNDARY_INSTRUCTION;
-    boundary.has_vector = decode.software_interrupt;
+         !decode.software_interrupt)));
+    /* A fault is not a completed instruction to single-step. Restoring TF
+     * through IRET allows the retried instruction to be sampled normally.
+     * Discarding a prior SS-deferred trap on #DE is an explicit functional
+     * policy awaiting hardware coverage of that combined boundary case. */
+    boundary.kind = decode.divide_error ? BM_286_BOUNDARY_EXCEPTION : BM_286_BOUNDARY_INSTRUCTION;
+    boundary.has_vector = (uint8_t) (decode.software_interrupt || decode.divide_error);
     boundary.vector = decode.software_vector;
     boundary.bus_wait_cycles = decode.waits;
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock

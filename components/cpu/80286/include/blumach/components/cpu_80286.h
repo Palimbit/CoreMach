@@ -97,7 +97,8 @@ typedef struct bm_286_boundary {
     uint16_t instruction_ip;
     uint8_t vector;
     /* INSTRUCTION + has_vector identifies a completed software interrupt;
-     * external interrupts and sampled traps have their own boundary kinds. */
+     * EXCEPTION identifies sampled traps or delivered synchronous faults
+     * (currently real-mode #DE); external interrupts use INTERRUPT. */
     uint8_t has_vector;
 } bm_286_boundary_t;
 

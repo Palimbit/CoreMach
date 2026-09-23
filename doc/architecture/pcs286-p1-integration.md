@@ -343,7 +343,17 @@ ordinary tests pass in GCC UCRT64/MSVC Debug/Release with two device skips;
 30 Python tests and provenance (36 components / 192 files) pass. The unchanged
 SST selection excludes these groups. No CPU timing or board boot claim.
 
-Next CPU tranche: DIV/IDIV together with real-mode divide-error delivery;
+DIV/IDIV now stage results and deliver real-mode #DE on divisor zero or
+quotient overflow, with prefix-inclusive IP and EXCEPTION vector 0. Guest
+repair/IRET/retry, TF, aliases, stack/IVT alignment and every-transfer failure
+are tested, plus 2,889,216 scalar cases against an independent long-division
+oracle. All 97 ordinary tests pass on GCC UCRT64/MSVC Debug/Release with two
+device skips; 30 Python tests and provenance (36 components / 193 files) pass.
+The unchanged SST selection excludes these groups and still defers exceptions.
+Undefined FLAGS and clearing a previously SS-deferred trap on #DE are explicit
+functional policies; no timing, general fault escalation or board POST claim.
+
+Next CPU tranche: decimal adjustment, including AAM base zero via #DE;
 memory XCHG still needs its separate LOCK path.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution

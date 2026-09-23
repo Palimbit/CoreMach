@@ -2,7 +2,52 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode multiply and sign conversion
+## Latest tranche: real-mode division and divide-error delivery
+
+DIV/IDIV F6/F7 /6,/7 now read byte/word divisors and commit quotient/remainder
+only after checking for zero and out-of-range quotients. Signed division uses
+int64_t, including INT32_MIN/-1 without host overflow, and truncates toward
+zero. Undefined arithmetic flags are preserved as emulator policy.
+
+A guest divide error is delivered through vector 0, with a six-byte
+FLAGS/CS/IP frame, no error code and no INTA. The saved IP identifies the
+first prefix, not the following instruction. The boundary reports EXCEPTION
+with vector 0, distinct from a completed INT 0. IF/TF are cleared on entry;
+no single-step trap is generated for the faulting instruction. An authored
+guest handler repairs BX, returns with IRET and successfully retries the DIV.
+TF restored by IRET causes a trap after successful retry, not before it.
+
+References: [Intel 210498-005, sections 3.3.4, 5.2, 9.7 and Appendix B
+DIV/IDIV](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf).
+Indexed primary text and already pinned `x86_ops_misc.h` were consulted;
+authors and derived-rewrite provenance retained. No firmware or timing copied.
+
+Functional limits are explicit: the shared frame helper preflights stack/IDTR
+and rejects unsupported #SS/#GP/#DF/shutdown cases. Host errors preserve
+architectural state and latch execution off; completed stack writes are not
+rolled back or retried. This is not physical fault precedence certification.
+Clearing a previously SS-deferred trap on #DE is an explicit functional policy
+awaiting combined-boundary hardware coverage. NMI pending/block state is not
+consumed by #DE. Protected mode and LOCK/REP remain unsupported.
+
+`cpu286_divide.c` uses independent sign/magnitude binary long division for
+2,889,216 scalar checks (all byte dividends against eleven divisors, all word
+divisors against eleven dividend boundaries, and every byte divisor against
+boundary dividends). It also covers 32 register aliases, 96 memory/form/
+segment/alignment/fault combinations, each transfer failure including frame
+writes and IVT reads, relocated/odd IVT, wrapping stack, trace callback,
+STI/SS shadow policies, TF and guest recovery. These are authored functional
+tests, not physical captures. Earlier unsupported-DIV expectations have become
+exact successful DIV checks and distinct invalid-encoding guards.
+
+GCC UCRT64 and MSVC Debug/Release pass 97 ordinary tests, with two explicit
+Headland/AT DMA skips; GCC Debug adds the unchanged SST regression. The selected
+corpus excludes DIV/IDIV and the adapter still defers exception vectors.
+Thirty Python checks, catalogue and provenance (36 components / 193 files)
+pass. Timing remains UNKNOWN and strict clocked execution rejects before fetch.
+No new board component, BIOS, POST, protected execution or general fault model.
+
+## Previous tranche: real-mode multiply and sign conversion
 
 MUL/IMUL F6/F7 /4,/5 now multiply byte or word operands into AX or DX:AX.
 IMUL 69/6B supports every destination register and register/memory source;
@@ -158,16 +203,15 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 ### Remaining CPU work (not motherboard work)
 
 - Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
-- DIV/IDIV and decimal adjustment instructions (multiply and CBW/CWD implemented).
+- Decimal adjustment instructions (multiply, DIV/IDIV and CBW/CWD implemented).
 - Strings, REP restart/interruption and string I/O.
-- Guest faults/BOUND/invalid-opcode handling, protected segmentation, descriptors,
+- Guest faults beyond real-mode #DE, BOUND/invalid-opcode handling, protected segmentation, descriptors,
   privilege, tasks/gates and system instructions; correct double fault/shutdown.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is real-mode divide-error delivery plus DIV/IDIV;
-zero divisor and quotient overflow must deliver the fault without committing
-partial results, and the saved IP must identify the faulting instruction.
+The next bounded block is decimal adjustment (DAA/DAS/AAA/AAS/AAM/AAD),
+including AAM base zero reusing the real-mode divide-error path.
 Memory XCHG stays separate until
 the implicit LOCK/bus contract is implemented and tested. Completing real-mode
 instructions does not certify a full 286 or eliminate the PCS286 chipset gates.
@@ -257,7 +301,7 @@ passes the pinned optional 71,000-case SST subset with unchanged classification.
 Thirty Python tests, catalogue and provenance audit pass. This remains local
 implementation, not a remote CI, boot or full-ISA certification.
 
-Status: P1 partial interpreter through real-mode multiplication/conversion, shifts/rotates, address loads, far procedures, interrupts and FLAGS, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode division/#DE, multiplication/conversion, shifts/rotates, address loads, far procedures, interrupts and FLAGS, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -315,7 +359,7 @@ generic catch-all or NOP is not coverage.
 | Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
 | Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register XCHG implemented; MOV SS has SS-load inhibition; memory XCHG and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
-| Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode MUL/IMUL F6/F7 /4,/5, IMUL 69/6B and CBW/CWD implemented; DIV/IDIV/#DE and BCD pending; timings unknown |
+| Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode MUL/IMUL/DIV/IDIV including #DE, IMUL 69/6B and CBW/CWD implemented; BCD and general fault escalation pending; timings unknown |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |

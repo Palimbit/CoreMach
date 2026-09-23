@@ -250,7 +250,9 @@ static void rejected(fixture_t *f)
         if (bad == 0) code[0] = 0xf0;
         if (bad == 1) code[0] = 0xf2;
         if (bad == 2) code[0] = 0xf3;
-        if (bad >= 7) {code[0] = 0xf7; code[1] = (uint8_t)(bad == 7 ? 0xf0 : bad == 8 ? 0xf8 : 0xc8);}
+        if (bad == 7) {code[0] = 0xf6; code[1] = 0xc8;} /* Undefined /1 byte */
+        if (bad == 8) {code[0] = 0x0f; code[1] = 0xaf;} /* 386 IMUL not a 286 form */
+        if (bad == 9) {code[0] = 0xf7; code[1] = 0xc8;} /* Undefined /1 word */
         s = setup(f, code, sizeof(code));
         if (bad == 3) s.msw |= 1;
         if (bad == 4) s.ds.valid = 0;
