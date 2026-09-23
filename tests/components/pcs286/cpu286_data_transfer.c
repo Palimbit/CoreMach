@@ -380,8 +380,9 @@ static void test_words_and_failures(void)
         const uint8_t limit[] = {0xa1U, 0xffU, 0xffU};
         prepare(&cpu, bus, limit, sizeof(limit), &state);
         assert(bm_286_set_arch_state(&cpu, &state) == BM_STATUS_OK);
-        assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNSUPPORTED);
-        assert(bus->count == 3U && state_of(&cpu).ip == 0U);
+        assert(bm_286_step(&cpu, &boundary) == BM_STATUS_OK);
+        assert(boundary.has_vector && boundary.vector == 13 && boundary.kind == BM_286_BOUNDARY_EXCEPTION);
+        assert(bus->count == 8U && state_of(&cpu).ax == state.ax);
     }
     {
         const uint8_t last_byte[] = {0xa0U, 0xffU, 0xffU};

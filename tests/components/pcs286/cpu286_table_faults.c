@@ -210,6 +210,65 @@ static void external_and_errors(fixture_t *f)
         }
     }
 }
+static void operand_faults(fixture_t *f)
+{
+    static const uint8_t codes[][4] = {
+        {0x8b,7}, {0x89,7}, {0xc7,7,0x34,0x12}, {0x87,7},
+        {3,7}, {1,7}, {0x39,7}, {0x85,7}, {0xff,7}, {0xff,0x0f},
+        {0xf7,0x1f}, {0xf7,0x17}, {0xd1,0x27}, {0xf7,0x27}, {0xf7,0x37},
+        {0x8e,0x17}, {0x8c,0x17}, {0x69,7,0x34,0x12}, {0x8f,7}, {0xff,0x37}, {0xff,0x17}
+    };
+    const uint8_t prefixes[] = {0x26,0x2e,0x36,0x3e};
+    for (unsigned op = 0; op < sizeof(codes)/sizeof(codes[0]); ++op)
+    for (unsigned p = 0; p < 4; ++p) for (unsigned odd = 0; odd < 2; ++odd) {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 0x80), a, e;
+        bm_286_boundary_t b; s.bx = 0xffff; s.ax = 0x1234; s.dx = 0x4567;
+        s.sp += (uint16_t)odd; s.es.base = 0x20000; s.es.selector = 0x2000;
+        word(f, 0x6034, 0x200); word(f, 0x6036, 0x4000);
+        f->ram[0x30100] = prefixes[p]; memcpy(f->ram+0x30101, codes[op], 4);
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        e = s; e.sp -= 6; e.flags &= 0xfcffU;
+        e.cs.base = 0x40000; e.cs.selector = 0x4000; e.ip = 0x200;
+        a = state(f); same(&a, &e);
+        assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+        assert(read_word(f, 0x107fa+odd) == s.ip && !f->acks && !f->lock_edges);
+        unsigned forbidden = (p == 0 ? 0x20000U : p == 1 ? 0x30000U : p == 2 ? 0x10000U : 0U)+0xffff;
+        for (unsigned i = 0; i < f->count; ++i) {
+            assert(f->trace[i].address != forbidden && f->trace[i].address != forbidden+1);
+            assert(!(f->trace[i].attributes & BM_BUS_TRANSACTION_LOCKED));
+        }
+        bm_bus_transaction_t trace[32]; memcpy(trace, f->trace, sizeof(trace));
+        unsigned total = f->count;
+        for (unsigned fail = 1; fail <= total; ++fail) for (unsigned after = 0; after < 2; ++after) {
+            assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
+            f->count = f->lock_edges = 0; f->fail_at = fail; f->after = after;
+            uint8_t expected[16]; memset(expected, 0xa5, sizeof(expected));
+            memset(f->ram+0x107f8, 0xa5, 16);
+            for (unsigned t = 0; t < fail-1+after; ++t) if (trace[t].operation == BM_BUS_WRITE)
+                for (unsigned j = 0; j < trace[t].size; ++j)
+                    expected[(size_t)trace[t].address+j-0x107f8] = (uint8_t)(trace[t].value >> (8*j));
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+            a = state(f); same(&a, &s);
+            assert(f->count == fail && !memcmp(expected, f->ram+0x107f8, 16));
+            assert(!f->locked && !f->lock_edges);
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_INVALID_STATE && f->count == fail);
+        }
+    }
+    /* Guest-only address repair: faulting store, MOV BX,0500 in handler, IRET,
+     * retry store, HLT. No test-side state import while recovering. */
+    bm_286_arch_state_t s = setup(f, 0x3ff, 0x80), a;
+    bm_286_boundary_t b;
+    const uint8_t program[] = {0x26,0x89,7,0xf4}, handler[] = {0xbb,0,5,0xcf};
+    memcpy(f->ram+0x30100, program, sizeof(program));
+    memcpy(f->ram+0x40200, handler, sizeof(handler));
+    word(f, 0x6034, 0x200); word(f, 0x6036, 0x4000);
+    s.bx = 0xffff; s.ax = 0xbeef; word(f, 0x500, 0); set(f, &s);
+    for (unsigned i = 0; i < 5; ++i) {
+        f->count = 0; assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+    }
+    a = state(f); assert(a.halted && a.bx == 0x500 && a.sp == s.sp && a.flags == s.flags);
+    assert(read_word(f, 0x500) == 0xbeef && a.ip == 0x104);
+}
 int main(void)
 {
     fixture_t f = {0}; bm_286_config_t c = {0}; bm_host_services_t host = bm_null_host_services();
@@ -219,6 +278,6 @@ int main(void)
     c.interrupt_ack = ack; c.interrupt_context = &f;
     c.bus_lock = lock_changed; c.shutdown = shutdown_changed; c.pin_context = &f;
     assert(bm_286_create(&host, &c, &f.cpu) == BM_STATUS_OK);
-    matrix(&f); recovery(&f); fault_and_trap(&f); external_and_errors(&f);
+    matrix(&f); recovery(&f); fault_and_trap(&f); external_and_errors(&f); operand_faults(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }

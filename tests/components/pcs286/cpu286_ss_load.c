@@ -209,6 +209,14 @@ static void errors_and_import(bm_cpu_t *cpu, fixture_t *f)
         if (form == 2) s.msw |= 1;
         s.interrupt_shadow = BM_286_SHADOW_SS_LOAD;
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
+        if (form == 0) {
+            assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
+            a = state_of(cpu);
+            assert(b.has_vector && b.vector == 13 && b.kind == BM_286_BOUNDARY_EXCEPTION);
+            assert(a.ss.selector == s.ss.selector && a.ss.base == s.ss.base && !a.interrupt_shadow);
+            assert(a.sp == (uint16_t)(s.sp-6));
+            continue;
+        }
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);

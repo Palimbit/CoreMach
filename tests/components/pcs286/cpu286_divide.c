@@ -320,6 +320,13 @@ static void rejected(fixture_t *f)
         if (bad == 6) s.ss.valid = 0;
         if (bad == 7) s.sp = 5; /* frame word would start at FFFF */
         set(f, &s);
+        if (bad == 4) {
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            bm_286_arch_state_t a = state(f);
+            assert(b.has_vector && b.vector == 13 && b.kind == BM_286_BOUNDARY_EXCEPTION);
+            assert(a.ax == s.ax && a.dx == s.dx && a.sp == (uint16_t)(s.sp-6));
+            continue;
+        }
         if (bad == 5) {
             assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
             bm_286_arch_state_t a = state(f); s.shutdown = 1; same(&a, &s);

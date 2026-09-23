@@ -391,6 +391,13 @@ static void rejection_and_interrupt(fixture_t *f)
                 bm_286_boundary_t b;
                 if(invalid) s.ds.valid=0;
                 set(f,&s);
+                if(!invalid) {
+                    assert(bm_286_step(&f->cpu,&b)==BM_STATUS_OK && !f->lock_edges);
+                    assert(b.has_vector && b.vector==13 && b.kind==BM_286_BOUNDARY_EXCEPTION);
+                    a=state(f); assert(a.ax==s.ax && a.sp==(uint16_t)(s.sp-6));
+                    for(unsigned i=0;i<f->count;++i) assert(!(f->trace[i].attributes & BM_BUS_TRANSACTION_LOCKED));
+                    continue;
+                }
                 assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED && !f->lock_edges);
                 a=state(f); same(&a,&s);
                 for(unsigned i=0;i<f->count;++i) assert(f->trace[i].operation==BM_BUS_FETCH);

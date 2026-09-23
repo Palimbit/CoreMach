@@ -14,13 +14,13 @@ typedef struct fixture {
     bm_cpu_t cpu;
     uint8_t *ram;
     bm_bus_transaction_t trace[32];
-    unsigned count, fail_at;
+    unsigned count, fail_at, allow_fault_frame;
 } fixture_t;
 static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
 {
     fixture_t *f = context;
     assert(f->count < 32 && t->address + t->size <= 0x1000000U);
-    assert(t->operation != BM_BUS_WRITE); /* Multiply and conversions never write memory. */
+    assert(t->operation != BM_BUS_WRITE || f->allow_fault_frame);
     assert(t->size == 1 || t->size == 2);
     assert(t->endianness == BM_ENDIAN_LITTLE && !t->wait_states);
     assert(t->space == (t->operation == BM_BUS_FETCH ? BM_ADDRESS_PROGRAM : BM_ADDRESS_DATA));
@@ -258,6 +258,14 @@ static void rejected(fixture_t *f)
         if (bad == 4) s.ds.valid = 0;
         if (bad == 5) s.bx = 0xffff;
         if (bad == 6) s.cs.limit = s.ip + 2;
+        if (bad == 5) {
+            f->allow_fault_frame = 1; set(f, &s);
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            f->allow_fault_frame = 0; a = state(f);
+            assert(b.has_vector && b.vector == 13 && b.kind == BM_286_BOUNDARY_EXCEPTION);
+            assert(a.ax == s.ax && a.dx == s.dx && a.sp == (uint16_t)(s.sp-6));
+            continue;
+        }
         set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state(f); same(&s, &a);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);

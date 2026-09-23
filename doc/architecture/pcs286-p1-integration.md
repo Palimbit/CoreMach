@@ -469,3 +469,12 @@ otherwise an IVT failure leaves NMI blocked until reset. Pin/order choices
 are explicit functional policy, not measured timing. Tests exhaust 262,144
 vector/limit pairs and execute a guest-only IDTR repair/retry. Stack-fault
 escalation and protected double-fault delivery remain separate unfinished work.
+
+Scalar ModR/M and moffs/XLAT operand overruns now unwind through a private
+decode marker and deliver real-mode #13. Registers are not committed and the
+instruction's LOCK is not inherited by its exception frame. Authored tests
+cover 168 forms, per-transfer failures and guest-only repair/IRET/retry.
+This does not yet generalize to implicit stack, fetch, strings or multiword
+pointer preflight faults. Earlier reads (such as POP's stack source) are not
+claimed absent. Generic transport still cannot manufacture a guest exception
+from a host error. Timing remains UNKNOWN.

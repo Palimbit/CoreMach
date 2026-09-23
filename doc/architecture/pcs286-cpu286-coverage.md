@@ -2,7 +2,39 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode IVT-limit escalation and shutdown
+## Latest tranche: restartable scalar operand-limit faults
+
+Scalar ModR/M memory operands, accumulator moffs and XLAT now request real-mode
+#13 when a valid segment cache cannot contain their access. A private decode
+marker unwinds the instruction before fault delivery; a host status alone
+never requests an exception. The rejected operand is not read or written,
+register results are not committed, and explicit/implicit instruction LOCK
+does not leak into the exception frame. Invalid imported caches still refuse.
+
+This applies to existing scalar MOV/segment loads, ALU, shifts, MUL/DIV,
+XCHG and the scalar operands of supported stack/control instructions. It does
+not automatically enable faults on implicit stack accesses, fetch, strings,
+or multiword-pointer preflights. POP memory can read its stack source before
+discovering a destination limit violation; no claim of zero earlier reads or
+silicon access precedence is made. Full stack/compound restart rules remain
+the next block, not a recursive exception from the generic bus accessor.
+
+Source: Intel 80286 PRM [5.2, segment overrun](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=107):
+restart at the first instruction byte and no real-mode error-code word.
+Short imported segment limits are functional conformance inputs, not an
+assertion that a normal real-mode segment has a non-FFFF limit.
+
+Authored tests add 168 scalar opcode/segment/stack-alignment combinations
+across 21 encodings, every transfer failing before/after its external effects,
+and an entirely guest-driven address repair with IRET/retried store/HLT.
+Existing scalar negative tests now assert #13 rather than unsupported; the
+multiplication fixture permits writes only while testing its exception frame.
+LOCK rejection before an invalid operand leaves frame transfers unlocked.
+Four GCC UCRT64/MSVC Debug/Release configurations pass 105 ordinary tests,
+with the same two Headland/AT DMA skips, existing SST selection and 30 Python
+tests. Catalogue/provenance remain green. No physical timing or boot claim.
+
+## Previous tranche: real-mode IVT-limit escalation and shutdown
 
 An interrupt vector outside IDTR.limit now attempts real-mode exception 8.
 Its frame saves the first instruction byte (including prefixes), even when

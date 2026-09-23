@@ -293,6 +293,7 @@ typedef struct decoded_286 {
     uint8_t software_vector;
     uint8_t synchronous_fault; /* Completed fault entry, not software INT. */
     uint8_t lock_prefix; /* Bounded memory forms, not the full 286 LOCK space. */
+    uint8_t operand_limit_fault; /* Unwind an instruction before delivering #13. */
 } decoded_286_t;
 
 typedef struct operand_286 {
@@ -510,6 +511,22 @@ static bm_status_t data_access(decoded_286_t *decode,
     return BM_STATUS_OK;
 }
 
+/* Keep operand faults separate from stack/IVT transport and host failures.
+ * Returning a non-OK status unwinds the caller before it commits registers;
+ * the private marker, never a host status alone, requests guest delivery. */
+static bm_status_t operand_access(decoded_286_t *decode,
+                                  const bm_286_segment_state_t *segment,
+                                  uint16_t offset, unsigned size, int write,
+                                  uint16_t *value)
+{
+    if (segment != NULL && segment->valid &&
+        (uint32_t) offset + size - 1U > segment->limit) {
+        decode->operand_limit_fault = 1U;
+        return BM_STATUS_UNSUPPORTED;
+    }
+    return data_access(decode, segment, offset, size, write, value);
+}
+
 static bm_status_t read_operand(decoded_286_t *decode,
                                 const operand_286_t *operand,
                                 unsigned size, uint16_t *value)
@@ -517,7 +534,7 @@ static bm_status_t read_operand(decoded_286_t *decode,
     if (decode->lock_prefix && !operand->memory)
         return BM_STATUS_UNSUPPORTED; /* Register-only LOCK is not modeled. */
     if (operand->memory)
-        return data_access(decode, operand->segment, operand->offset,
+        return operand_access(decode, operand->segment, operand->offset,
                            size, 0, value);
     *value = size == 1U ? byte_register(&decode->state->arch,
                                          operand->reg_number) :
@@ -532,7 +549,7 @@ static bm_status_t write_operand(decoded_286_t *decode,
     if (decode->lock_prefix && !operand->memory)
         return BM_STATUS_UNSUPPORTED;
     if (operand->memory)
-        return data_access(decode, operand->segment, operand->offset,
+        return operand_access(decode, operand->segment, operand->offset,
                            size, 1, &value);
     if (size == 1U)
         set_byte_register(&decode->state->arch, operand->reg_number,
@@ -1921,7 +1938,7 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         segment = segment_register(arch, decode->override_segment >= 0 ?
             (unsigned) decode->override_segment : 3U);
         offset = (uint16_t) (arch->bx + (arch->ax & 0xffU));
-        status = data_access(decode, segment, offset, 1U, 0, &value);
+        status = operand_access(decode, segment, offset, 1U, 0, &value);
         if (status == BM_STATUS_OK)
             set_byte_register(arch, 0U, (uint8_t) value);
         return status;
@@ -1976,7 +1993,7 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             (unsigned) decode->override_segment : 3U);
         size = (opcode & 1U) ? 2U : 1U;
         value = size == 1U ? byte_register(arch, 0U) : arch->ax;
-        status = data_access(decode, segment, offset, size,
+        status = operand_access(decode, segment, offset, size,
                              (opcode & 2U) != 0U, &value);
         if (status == BM_STATUS_OK && (opcode & 2U) == 0U) {
             if (size == 1U)
@@ -2097,7 +2114,7 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         return BM_STATUS_IDLE;
     }
     decode = (decoded_286_t) {state, state->arch.ip, 0U, 0U, -1,
-                             BM_286_SHADOW_NONE, 0U, 0U, 0U, 0U};
+                             BM_286_SHADOW_NONE, 0U, 0U, 0U, 0U, 0U};
     if (!state->arch.shutdown && state->arch.trap_pending &&
         state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD)
         event = 1U;
@@ -2197,6 +2214,13 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
             } /* CX=0: no segment checks or data accesses; FLAGS unchanged. */
         } else
             status = execute_data(&decode, opcode);
+    }
+    if (decode.operand_limit_fault) {
+        /* Do not carry an instruction's explicit/implicit LOCK into its
+         * fault frame. No operand access occurred at the rejected address. */
+        end_bus_lock(state);
+        decode.lock_prefix = 0U;
+        status = deliver_fault(&decode, 13U);
     }
     if (status != BM_STATUS_OK) {
         state->stopped = 1U;
