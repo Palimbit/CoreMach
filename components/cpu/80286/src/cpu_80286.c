@@ -709,6 +709,22 @@ static bm_status_t far_return(decoded_286_t *decode, uint16_t discard)
     return far_jump(decode, words[0], words[1]);
 }
 
+static bm_status_t enter_shutdown(decoded_286_t *decode)
+{
+    bm_286_private_t *state = decode->state;
+    uint8_t was_shutdown = state->arch.shutdown;
+    state->arch.shutdown = 1U;
+    state->arch.halted = 0U;
+    state->arch.trap_pending = 0U;
+    state->arch.interrupt_shadow = BM_286_SHADOW_NONE;
+    decode->cursor = state->arch.ip;
+    decode->synchronous_fault = 1U;
+    end_bus_lock(state);
+    if (!was_shutdown && state->config.shutdown != NULL)
+        state->config.shutdown(state->config.pin_context, 1);
+    return BM_STATUS_OK; /* Guest shutdown is not a failed host endpoint. */
+}
+
 static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector,
                                    uint16_t return_ip)
 {
@@ -718,8 +734,16 @@ static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector,
     uint16_t ip, cs;
     uint16_t offset = (uint16_t) ((unsigned) vector * 4U);
     bm_status_t status;
-    if ((uint32_t) offset + 3U > arch->idtr.limit)
-        return BM_STATUS_UNSUPPORTED; /* #13/#8/shutdown pending. */
+    if ((uint32_t) offset + 3U > arch->idtr.limit) {
+        /* Intel real-mode #8: restart at the first instruction byte, even
+         * for INT. No protected-mode error word or general #DF matrix. */
+        if (arch->shutdown || arch->idtr.limit < 35U)
+            return enter_shutdown(decode);
+        vector = 8U;
+        offset = 32U;
+        words[2] = arch->ip;
+        decode->synchronous_fault = 1U;
+    }
     for (unsigned i = 0; i < 3U; ++i)
         if (!stack_word_valid(arch, (uint16_t) (arch->sp - 2U * (i + 1U))))
             return BM_STATUS_UNSUPPORTED;
@@ -746,7 +770,9 @@ static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector,
     arch->sp = (uint16_t) (arch->sp - 6U);
     arch->flags &= (uint16_t) ~(FLAG_IF | FLAG_TF);
     arch->halted = 0U;
+    arch->shutdown = 0U;
     arch->interrupt_shadow = BM_286_SHADOW_NONE;
+    decode->software_vector = vector;
     return far_jump(decode, ip, cs);
 }
 
@@ -777,8 +803,9 @@ static bm_status_t accept_interrupt(decoded_286_t *decode, unsigned event,
 {
     bm_286_private_t *state = decode->state;
     uint8_t vector = (uint8_t) event; /* #1, NMI=2, INTR=0 */
+    uint8_t was_shutdown = state->arch.shutdown;
     bm_status_t status;
-    if ((state->arch.msw & MSW_PE) || state->arch.shutdown)
+    if ((state->arch.msw & MSW_PE) || (was_shutdown && event != 2U))
         return BM_STATUS_UNSUPPORTED; /* Protected gates/recovery pending. */
     if (event == 0U) {
         if (state->config.interrupt_ack == NULL || state->config.bus_lock == NULL)
@@ -811,9 +838,12 @@ static bm_status_t accept_interrupt(decoded_286_t *decode, unsigned event,
     if (event == 2U)
         state->arch.nmi_blocked = 1U;
     state->arch.ip = (uint16_t) decode->cursor;
-    boundary->kind = event == 1U ? BM_286_BOUNDARY_EXCEPTION : BM_286_BOUNDARY_INTERRUPT;
-    boundary->has_vector = 1U;
-    boundary->vector = vector;
+    if (was_shutdown && !state->arch.shutdown && state->config.shutdown != NULL)
+        state->config.shutdown(state->config.pin_context, 0);
+    boundary->kind = state->arch.shutdown ? BM_286_BOUNDARY_SHUTDOWN :
+        (event == 1U || decode->synchronous_fault) ? BM_286_BOUNDARY_EXCEPTION : BM_286_BOUNDARY_INTERRUPT;
+    boundary->has_vector = (uint8_t) !state->arch.shutdown;
+    boundary->vector = state->arch.shutdown ? 0U : decode->software_vector;
     boundary->bus_wait_cycles = decode->waits;
     boundary->cpu_cycles = decode->waits;
     return BM_STATUS_OK;
@@ -833,7 +863,6 @@ static bm_status_t software_interrupt(decoded_286_t *decode, uint8_t opcode)
     status = interrupt_frame(decode, vector, (uint16_t) decode->cursor);
     if (status == BM_STATUS_OK) {
         decode->software_interrupt = 1U;
-        decode->software_vector = vector;
     }
     return status;
 }
@@ -1276,7 +1305,6 @@ static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector)
     bm_status_t status = interrupt_frame(decode, vector, decode->state->arch.ip);
     if (status == BM_STATUS_OK) {
         decode->synchronous_fault = 1U;
-        decode->software_vector = vector;
     }
     return status;
 }
@@ -2198,10 +2226,12 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
      * through IRET allows the retried instruction to be sampled normally.
      * Discarding a prior SS-deferred trap on a fault is an explicit functional
      * policy awaiting hardware coverage of that combined boundary case. */
-    boundary.kind = decode.synchronous_fault ? BM_286_BOUNDARY_EXCEPTION :
+    boundary.kind = state->arch.shutdown ? BM_286_BOUNDARY_SHUTDOWN :
+        decode.synchronous_fault ? BM_286_BOUNDARY_EXCEPTION :
         repeat_more ? BM_286_BOUNDARY_REP_ITERATION : BM_286_BOUNDARY_INSTRUCTION;
-    boundary.has_vector = (uint8_t) (decode.software_interrupt || decode.synchronous_fault);
-    boundary.vector = decode.software_vector;
+    boundary.has_vector = (uint8_t) (!state->arch.shutdown &&
+        (decode.software_interrupt || decode.synchronous_fault));
+    boundary.vector = state->arch.shutdown ? 0U : decode.software_vector;
     boundary.bus_wait_cycles = decode.waits;
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock
      * claim. The strict clocked entry point never schedules this boundary. */

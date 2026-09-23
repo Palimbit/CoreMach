@@ -319,7 +319,15 @@ static void rejected(fixture_t *f)
         if (bad == 5) s.idtr.limit = 2;
         if (bad == 6) s.ss.valid = 0;
         if (bad == 7) s.sp = 5; /* frame word would start at FFFF */
-        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        set(f, &s);
+        if (bad == 5) {
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            bm_286_arch_state_t a = state(f); s.shutdown = 1; same(&a, &s);
+            assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
+            for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation != BM_BUS_WRITE);
+            continue;
+        }
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         bm_286_arch_state_t a = state(f); same(&a, &s);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation != BM_BUS_WRITE);
     }

@@ -170,6 +170,12 @@ static void boundaries(fixture_t *f)
         if (bad == 3) f->ram[0x30100] = 0xf0;
         if (bad == 4) f->ram[0x30100] = 0xf3;
         set(f, &s);
+        if (bad == 0) {
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            a = state(f); s.shutdown = 1; same(&a, &s);
+            assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector && f->count == 2);
+            continue;
+        }
         assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state(f); same(&a, &s);
         for (unsigned t = 0; t < f->count; ++t) assert(f->trace[t].operation == BM_BUS_FETCH);

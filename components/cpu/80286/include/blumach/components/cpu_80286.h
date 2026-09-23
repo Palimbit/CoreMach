@@ -98,8 +98,8 @@ typedef struct bm_286_boundary {
     uint8_t vector;
     /* INSTRUCTION + has_vector identifies a completed software interrupt;
      * EXCEPTION identifies sampled traps or delivered synchronous faults
-     * (real-mode #DE, BOUND #5/#6/#13 and processor-extension #7);
-     * external interrupts use INTERRUPT. */
+     * (real-mode #DE, BOUND/system #5/#6/#13, extension #7 and IVT-limit #8);
+     * external interrupts use INTERRUPT. SHUTDOWN has no delivered vector. */
     uint8_t has_vector;
 } bm_286_boundary_t;
 
@@ -177,6 +177,13 @@ bm_status_t bm_286_get_arch_state(const bm_cpu_t *cpu,
 bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
                                   const bm_286_arch_state_t *state);
 /* Real-mode INTR (two INTA phases), NMI and sampled #1 are accepted before
+ * fetch. An out-of-limit IVT vector attempts #8 with first-byte restart IP;
+ * if #8 is outside the IVT too, enter guest shutdown (OK on entry, then IDLE).
+ * Real-mode NMI can recover when its vector/frame is usable; failed IVT
+ * recovery leaves NMI blocked until reset. Host endpoint errors do not
+ * generate guest faults. Stack-fault escalation and protected recovery remain
+ * pending. This is functional state/signalling, not bus-cycle timing.
+ * Interrupts are accepted before
  * fetch, respecting SS/STI inhibition. Real-mode CLI/STI/HLT/IRET,
  * INT/INT3/INTO, PUSHF/POPF, LAHF/SAHF and carry/direction control are implemented.
  * Real-mode far CALL 9A/FF /3 and RETF CA/CB preserve FLAGS/NMI blocking;

@@ -240,6 +240,13 @@ static void failures(fixture_t *f)
         if (bad == 2) s.ss.valid = 0;
         if (bad == 3) s.msw |= 1;
         set(f, &s);
+        if (bad == 0) {
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK && !f->count && !f->acks);
+            after = state(f); s.shutdown = 1; s.nmi_pending = 0; s.nmi_blocked = 1;
+            assert(memcmp(&after, &s, sizeof(s)) == 0);
+            assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
+            continue;
+        }
         assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED && !f->count && !f->acks);
         after = state(f); assert(memcmp(&after, &s, sizeof(s)) == 0);
     }

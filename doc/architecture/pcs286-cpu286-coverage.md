@@ -2,7 +2,45 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode descriptor-table registers
+## Latest tranche: real-mode IVT-limit escalation and shutdown
+
+An interrupt vector outside IDTR.limit now attempts real-mode exception 8.
+Its frame saves the first instruction byte (including prefixes), even when
+the original request was INT, and contains no error-code word. If vector 8
+also lies outside the IVT, the core enters guest shutdown, signals its optional
+shutdown callback once and releases bus exclusion. Entry returns OK with a
+SHUTDOWN boundary and no delivered vector; subsequent steps return IDLE.
+INTR does not wake shutdown. HOLD remains serviceable.
+
+Real-mode NMI can leave shutdown when its vector and existing frame path work;
+successful entry deasserts the shutdown output and blocks further NMI until
+IRET. An out-of-limit NMI during shutdown leaves the CPU shut down and NMI
+blocked until reset. Reset also clears the shutdown output. Host bus errors
+are never converted to #8 or guest shutdown: they stop the diagnostic runner
+without replaying transfers, retaining completed endpoint writes.
+
+Sources: Intel 80286 PRM [5.2 / real-mode exception 8](https://manualsdump.com/en/manuals/intel-80287model-80286model/110730/107),
+[9.6.2 / failed delivery and NMI recovery](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=172)
+and [11.6 / shutdown signals](https://manualsdump.com/en/manuals/intel-80287model-80286model/110730/195).
+This implements the bounded **real-mode IVT-limit** rule, not the protected
+double-fault combination matrix. Register retention on shutdown, preflight
+ordering and combined lock/signal edges are functional policy, not silicon
+captures. Unusable stack frames and protected-mode NMI remain unsupported.
+
+Authored `cpu-table-faults` tests cover 262,144 vector/limit combinations,
+guest LIDT repair followed by IRET/retry, #13-to-#8 delivery, sampled-trap
+shutdown, NMI/reset/HOLD/INTR behavior, even/odd frames, and failures before
+or after each transfer. Existing tests now assert delivered exceptions or
+shutdown instead of the old unsupported result; they were not removed.
+All four GCC UCRT64/MSVC Debug/Release configurations pass 105 ordinary tests,
+with the same two explicit Headland/AT DMA skips. Existing SST and 30 Python
+tests pass; provenance covers 36 components/201 files and catalogue checks pass.
+
+Next: general real-mode memory/stack faults and their architectural restart
+boundaries. Invalid-opcode coverage, protected execution, untrapped ESC and
+physical timing remain unfinished; this does not make the PCS286 bootable.
+
+## Previous tranche: real-mode descriptor-table registers
 
 SGDT/SIDT and LGDT/LIDT (`0F 01 /0..3`) now store/load instance-owned GDTR
 and IDTR in real mode. The six-byte operand contains a 16-bit limit and a

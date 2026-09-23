@@ -250,6 +250,15 @@ static void failures(fixture_t *f)
         if (bad == 3) s.msw |= 1;
         if (bad == 4) f->ram[0x30100] = 0xf0; /* no LOCK */
         if (bad == 5) f->ram[0x30100] = 0xf3; /* no REP */
+        if (bad == 0) {
+            word(f, 32, 0x200); word(f, 34, 0x4000);
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            after = state(f);
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 8);
+            assert(after.ip == 0x200 && after.cs.base == 0x40000 && after.sp == s.sp-6);
+            assert(read_word(f, s.ss.base+s.sp-6) == s.ip && !f->acknowledgements);
+            continue;
+        }
         set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         after = state(f); same(&s, &after);
         for (unsigned j = 0; j < f->count; ++j) assert(f->trace[j].operation == BM_BUS_FETCH);

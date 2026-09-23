@@ -460,3 +460,12 @@ implementation, not the 386 legal-prefix rule or fabricated guest #UD.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.
+
+Real-mode out-of-limit interrupt vectors now attempt #8 with first-byte
+restart IP and no error word. An inaccessible #8 enters guest shutdown,
+not a host error or automatic reset. The diagnostic boundary reports shutdown,
+ignores INTR and allows HOLD; real-mode NMI can recover with a usable frame/IVT,
+otherwise an IVT failure leaves NMI blocked until reset. Pin/order choices
+are explicit functional policy, not measured timing. Tests exhaust 262,144
+vector/limit pairs and execute a guest-only IDTR repair/retry. Stack-fault
+escalation and protected double-fault delivery remain separate unfinished work.

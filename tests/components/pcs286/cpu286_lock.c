@@ -664,7 +664,8 @@ static void interrupt_lock(fixture_t *f)
         bm_286_arch_state_t s=prepare(f,code,sizeof(code),1); bm_286_boundary_t b;
         s.flags=0x202; if(invalid) s.ss.valid=0; else s.idtr.limit=0;
         set(f,&s); assert(f->cpu.ops.signal(f->cpu.context,BM_286_SIGNAL_INTR,1)==BM_STATUS_OK);
-        assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED);
+        assert(bm_286_step(&f->cpu,&b)==(invalid ? BM_STATUS_UNSUPPORTED : BM_STATUS_OK));
+        if(!invalid) assert(b.kind==BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
         assert(f->acknowledgements==2 && !f->count && !f->locked && f->lock_edges==2);
     }
 }
