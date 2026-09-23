@@ -162,7 +162,11 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
  * Real-mode far CALL 9A/FF /3 and RETF CA/CB preserve FLAGS/NMI blocking;
  * registers commit only after all pointer/stack accesses succeed.
  * LEA, LDS/LES and XLAT are available in real mode; memory XCHG/LOCK is not.
- * Memory strings support F2/F3 repetition, at most one element per step.
+ * Memory strings and INS/OUTS support F2/F3 repetition, one element per step.
+ * INS fixes ES:DI; OUTS uses DS:SI or override; DX and FLAGS are unchanged.
+ * Host I/O effects are irreversible, including input consumed before a failed
+ * memory write. Such failures stop without replay; segment-fault preflight
+ * before I/O is functional policy, not silicon fault-order certification.
  * CX=0 completes without data accesses. Incomplete REP retains prefix IP;
  * HOLD preserves decode, accepted interrupt/reset/import discards it.
  * Import may resume architecturally from CX/SI/DI/IP and unchanged code, but

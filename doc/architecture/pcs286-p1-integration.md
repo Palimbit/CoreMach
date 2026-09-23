@@ -386,8 +386,18 @@ All 100 ordinary tests pass on GCC UCRT64/MSVC Debug/Release, two device skips,
 30 Python checks and provenance 36 components / 196 files. Existing SST coverage
 still excludes strings/REP. Timing stays UNKNOWN; no machine boot claim.
 
-Next CPU tranche: INS/OUTS with repeated I/O and host failure handling;
-memory XCHG still needs its separate LOCK path.
+INSB/INSW/OUTSB/OUTSW now share the scalar port-transfer helper and existing
+REP continuation. Fixed ES destination, overridable source, unchanged DX/FLAGS,
+zero-count no access, DF/index wrap and ordered memory/port transactions are
+covered by 2,880 combinations, interruption/IRET/HOLD, limits and every-transfer
+failures before/after effects. Consumed input and partial writes are never
+rolled back or replayed. Segment preflight is a host-gap policy, not delivered
+guest exceptions or certified fault ordering. All 101 ordinary tests pass in
+GCC UCRT64/MSVC Debug/Release with the same two skips; 30 Python checks and
+provenance 36 components / 197 files pass. The unchanged SST selection does not
+cover these instructions; timing remains UNKNOWN, no BIOS/POST claim.
+
+Next CPU tranche: memory XCHG/LOCK with explicit bus ownership and atomicity.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.

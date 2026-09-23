@@ -2,7 +2,59 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: interruptible real-mode memory repetition
+## Latest tranche: real-mode string I/O
+
+INSB/INSW and OUTSB/OUTSW (6C-6F) now transfer one element per step, with
+optional F2/F3 count-only repetition through the existing continuation path.
+INS uses fixed ES:DI; OUTS uses DS:SI or the selected segment override. DX
+remains the port throughout the block. DF controls signed index movement;
+FLAGS, AX and the unused index remain unchanged. Without REP a single element
+executes even at CX=0, leaving CX unchanged. Repeated CX=0 accesses no data
+or ports and does not check unused data segments.
+
+Scalar IN/OUT and string I/O share one private logical port-transfer helper:
+aligned words use one word transaction, odd words two byte transactions, with
+16-bit port wrap at FFFF. OUTS reads the full memory operand before output;
+INS consumes the full input before writing memory. Registers and CX commit
+only after all transfers succeed. A host error can leave input consumed,
+partial output or partial memory written; the CPU stops and never retries
+those effects. Tests cover callbacks failing both before and after an effect.
+
+Invalid data segments/word limits are refused before any port access. This
+preflight is an explicit functional policy, not guest #GP/#SS delivery or a
+claim about 286 fault precedence. The inherited early-index/count updates on
+guest abort are not used to disguise missing guest exceptions. Repeated
+iterations reuse the existing interrupt/HOLD/TF and import/reset contracts.
+The previous F2 compatibility and STI/SS shadow policies remain unchanged.
+
+Evidence: Intel 210498-005 chapter 4 and Appendix B INS/OUTS entries,
+including [OUTS B-82](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf)
+and the [chapter 4 text mirror](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=92).
+The [Intel 386 INS](https://pdos.csail.mit.edu/6.828/2018/readings/i386/INS.htm)
+and [OUTS](https://pdos.csail.mit.edu/6.828/2018/readings/i386/OUTS.htm)
+descriptions corroborate shared 16-bit semantics, not 286 timing or privileges.
+Pinned inherited `x86_ops_io.h` and `x86_ops_rep_286_2386.h` were consulted at
+`87c3fb4876eaad086921bc3444569da026286c36`; derived-rewrite provenance and
+authors are preserved. No hardware timing constants were transplanted.
+
+`cpu286_string_io.c` checks 2,880 opcode/repeat/segment/DF/memory-alignment/
+port/count combinations, exact ordered transactions, per-element input/output
+values, unused invalid segments, first/later failures at every transfer before
+and after effects, INTR/NMI/TF/IRET, mid-element HOLD, segment/offset and 24-bit
+physical wrap. Scalar I/O, memory-string and REP regression suites remain active.
+The first compilation caught an unspaced hexadecimal literal ending in E next
+to a plus sign in the new test; corrected the token, with no production change.
+
+Validation: GCC UCRT64 and MSVC Debug/Release each pass 101 ordinary tests;
+Headland and AT DMA remain two explicit skips. GCC Debug adds the unchanged
+optional SST selection, which does not validate string I/O. Thirty Python
+tests, catalogue and provenance (36 components / 197 files) pass. No ABI,
+scheduler, GUI or other guest CPU changes. Timing remains UNKNOWN; strict
+clocked execution still rejects before fetch. No BIOS/POST or full-286 claim.
+
+Next CPU block: memory XCHG and LOCK, with explicit bus ownership/atomicity.
+
+## Previous tranche: interruptible real-mode memory repetition
 
 F3 REP/REPE and F2 REPNE now repeat MOVS/STOS/LODS/CMPS/SCAS byte/word
 forms, with at most one element per diagnostic step. CX=0 advances past the
@@ -350,16 +402,15 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 - Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
 - Decimal/multiply/divide edge cases still need expanded hardware-capture
   comparison; functional instruction implementations are present.
-- String I/O INS/OUTS; memory strings now support interruptible REP. Combined
+- Memory strings and INS/OUTS now support interruptible REP. Combined
   shadow/repetition and silicon fault-restart behavior need hardware comparison.
 - Guest faults beyond real-mode #DE, BOUND/invalid-opcode handling, protected segmentation, descriptors,
   privilege, tasks/gates and system instructions; correct double fault/shutdown.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is string I/O, including interruptible REP and host
-endpoint failure handling. The ordered CPU roadmap
-then covers memory XCHG/LOCK, remaining real-mode faults and 80287 interface,
+The next bounded block is memory XCHG/LOCK with explicit atomic bus ownership.
+The ordered CPU roadmap then covers remaining real-mode faults and 80287 interface,
 protected segmentation/system instructions, gates/tasks, and calibrated timing.
 Memory XCHG stays separate until
 the implicit LOCK/bus contract is implemented and tested. Completing real-mode
@@ -512,7 +563,7 @@ generic catch-all or NOP is not coverage.
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
-| Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Memory strings with interruptible REP implemented; string I/O, guest segment faults and physical timing pending |
+| Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h`, `x86_ops_io.h` | Memory strings and INS/OUTS with interruptible REP implemented; guest segment faults and physical timing pending |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
 | 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH/IMUL, ENTER/LEAVE and immediate shifts implemented; other forms and guest faults missing; timing unknown |

@@ -1520,22 +1520,15 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
     return execute_stack_control(decode, opcode);
 }
 
-static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
+/* Shared logical port transfer: odd words split, including FFFF -> 0000.
+ * Completed endpoint effects cannot be undone if a later fragment fails. */
+static bm_status_t io_access(decoded_286_t *decode, uint16_t port,
+                             unsigned size, int output, uint16_t *value)
 {
-    bm_286_arch_state_t *arch = &decode->state->arch;
     bm_bus_transaction_t t = {0};
-    uint16_t port = arch->dx, value = arch->ax, input = 0;
-    unsigned size = (opcode & 1U) ? 2U : 1U;
+    uint16_t input = 0;
     unsigned fragment_size, count;
-    int output = (opcode & 2U) != 0U;
     bm_status_t status;
-    if (opcode < 0xe8U) {
-        uint8_t immediate;
-        status = next_byte(decode, &immediate);
-        if (status != BM_STATUS_OK)
-            return status;
-        port = immediate; /* Immediate ports are zero-extended, not signed. */
-    }
     fragment_size = size == 2U && (port & 1U) ? 1U : size;
     count = size / fragment_size;
     for (unsigned i = 0; i < count; ++i) {
@@ -1547,7 +1540,7 @@ static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
         t.endianness = BM_ENDIAN_LITTLE;
         t.wait_states = 0;
         t.value = output ? (fragment_size == 1U ?
-            (uint8_t) (value >> (i * 8U)) : value) : 0U;
+            (uint8_t) (*value >> (i * 8U)) : *value) : 0U;
         status = decode->state->config.access(decode->state->config.access_context, &t);
         if (status != BM_STATUS_OK)
             return status; /* Completed endpoint effects are never retried. */
@@ -1556,12 +1549,67 @@ static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
             input |= fragment_size == 1U ?
                 (uint16_t) ((uint8_t) t.value << (i * 8U)) : (uint16_t) t.value;
     }
+    if (!output)
+        *value = input;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t port = arch->dx, value = arch->ax;
+    unsigned size = (opcode & 1U) ? 2U : 1U;
+    int output = (opcode & 2U) != 0U;
+    bm_status_t status;
+    if (opcode < 0xe8U) {
+        uint8_t immediate;
+        status = next_byte(decode, &immediate);
+        if (status != BM_STATUS_OK)
+            return status;
+        port = immediate;
+    }
+    status = io_access(decode, port, size, output, &value);
+    if (status != BM_STATUS_OK)
+        return status;
     if (!output) {
         if (size == 1U)
-            set_byte_register(arch, 0U, (uint8_t) input);
+            set_byte_register(arch, 0U, (uint8_t) value);
         else
-            arch->ax = input;
+            arch->ax = value;
     }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t execute_string_io(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    unsigned size = (opcode & 1U) ? 2U : 1U;
+    int output = (opcode & 2U) != 0U;
+    const bm_286_segment_state_t *segment = output ? segment_register(arch,
+        decode->override_segment >= 0 ? (unsigned) decode->override_segment : 3U) : &arch->es;
+    uint16_t offset = output ? arch->si : arch->di, value = 0;
+    uint16_t delta = (uint16_t) ((arch->flags & FLAG_DF) ? 0U - size : size);
+    bm_status_t status;
+    /* Refuse missing guest segment-fault paths before consuming an input.
+     * This preflight is functional policy, not certified fault precedence.
+     * Host callback failures may still consume input or commit partial output. */
+    if (!segment->valid || (uint32_t) offset + size - 1U > segment->limit)
+        return BM_STATUS_UNSUPPORTED;
+    if (output) {
+        status = data_access(decode, segment, offset, size, 0, &value);
+        if (status == BM_STATUS_OK)
+            status = io_access(decode, arch->dx, size, 1, &value);
+    } else {
+        status = io_access(decode, arch->dx, size, 0, &value);
+        if (status == BM_STATUS_OK)
+            status = data_access(decode, segment, offset, size, 1, &value);
+    }
+    if (status != BM_STATUS_OK)
+        return status;
+    if (output)
+        arch->si = (uint16_t) (offset + delta);
+    else
+        arch->di = (uint16_t) (offset + delta);
     return BM_STATUS_OK;
 }
 
@@ -1570,6 +1618,8 @@ static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
  * functional bus sequence is not a claim of physical 286 fault precedence. */
 static bm_status_t execute_string(decoded_286_t *decode, uint8_t opcode)
 {
+    if (opcode >= 0x6cU && opcode <= 0x6fU)
+        return execute_string_io(decode, opcode);
     bm_286_arch_state_t *arch = &decode->state->arch;
     const bm_286_segment_state_t *source_segment = segment_register(arch,
         decode->override_segment >= 0 ? (unsigned) decode->override_segment : 3U);
@@ -1626,7 +1676,8 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
-    if ((opcode >= 0xa4U && opcode <= 0xa7U) ||
+    if ((opcode >= 0x6cU && opcode <= 0x6fU) ||
+        (opcode >= 0xa4U && opcode <= 0xa7U) ||
         (opcode >= 0xaaU && opcode <= 0xafU))
         return execute_string(decode, opcode);
     if (opcode == 0x8dU || opcode == 0xc4U || opcode == 0xc5U) {
@@ -1902,7 +1953,8 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         if (opcode == 0xf0U)
             status = BM_STATUS_UNSUPPORTED; /* LOCK remains separate. */
         else if (repeat) {
-            if (!((opcode >= 0xa4U && opcode <= 0xa7U) ||
+            if (!((opcode >= 0x6cU && opcode <= 0x6fU) ||
+                  (opcode >= 0xa4U && opcode <= 0xa7U) ||
                   (opcode >= 0xaaU && opcode <= 0xafU)))
                 status = BM_STATUS_UNSUPPORTED; /* No ignored REP/nonstring policy yet. */
             else if (state->arch.cx != 0U) {
