@@ -98,7 +98,7 @@ typedef struct bm_286_boundary {
     uint8_t vector;
     /* INSTRUCTION + has_vector identifies a completed software interrupt;
      * EXCEPTION identifies sampled traps or delivered synchronous faults
-     * (real-mode #DE, BOUND #5 and BOUND register-operand #6);
+     * (real-mode #DE, BOUND #5/#6/#13 and processor-extension #7);
      * external interrupts use INTERRUPT. */
     uint8_t has_vector;
 } bm_286_boundary_t;
@@ -156,6 +156,10 @@ typedef struct bm_286_config {
  * engine's one-boundary-per-tick diagnostic convention; it is not CPU
  * clocks or nanoseconds and must not schedule a PCS 286 machine. Use the
  * strict clocked callback after instruction timing is established.
+ * The current extension interface is unpopulated, with BUSY/ERROR inactive.
+ * WAIT completes unless MP+TS requests #7. ESC with EM or TS delivers #7;
+ * untrapped ESC remains unsupported, not a fabricated no-op/store result.
+ * There is no populated 80287, handshake, arithmetic or extension pin API yet.
  * Configuration is copied;
  * callback contexts and host services remain valid until CPU destruction. */
 bm_status_t bm_286_create(const bm_host_services_t *host,

@@ -199,6 +199,16 @@ static void invalid_register(fixture_t *f)
 static void recovery(fixture_t *f)
 {
     const uint8_t code[] = {0x26,0x62,6,0,5};
+    { /* Repair an overrun EA after #13, then retry the same prefixed BOUND. */
+        const uint8_t indirect[] = {0x3e,0x62,7}; /* BOUND AX,[BX] */
+        bm_286_arch_state_t s = setup(f, indirect, sizeof(indirect)), a;
+        s.bx = 0xfffe; s.ax = 0; set(f, &s);
+        fault(f, &s, step(f), 13);
+        a = state(f); a.bx = 0x500; set(f, &a);
+        word(f, 0x500, 0xffff); word(f, 0x502, 1);
+        step(f); a = state(f); s.bx = 0x500; same(&a, &s);
+        assert(!step(f).has_vector && state(f).ip == s.ip + 3);
+    }
     for (unsigned tf = 0; tf < 2; ++tf) {
         bm_286_arch_state_t s = setup(f, code, sizeof(code)), a;
         s.ax = 2; s.flags = (uint16_t)(0x202 | tf << 8);
@@ -223,14 +233,15 @@ static void recovery(fixture_t *f)
 static void failures(fixture_t *f)
 {
     uint8_t *expected = malloc(0x100000); assert(expected);
-    for (unsigned invalid = 0; invalid < 2; ++invalid)
+    for (unsigned invalid = 0; invalid < 3; ++invalid)
         for (unsigned odd = 0; odd < 2; ++odd) {
-            uint8_t code[] = {0x62,(uint8_t)(invalid ? 0xc0 : 6),(uint8_t)odd,5};
+            uint8_t code[] = {0x62,(uint8_t)(invalid == 1 ? 0xc0 : 6),
+                (uint8_t)(invalid == 2 ? 0xfd : odd),(uint8_t)(invalid == 2 ? 0xff : 5)};
             bm_286_arch_state_t s = setup(f, code, sizeof(code));
             bm_bus_transaction_t trace[32]; unsigned count;
             s.ax = 2; s.sp += (uint16_t)odd;
             word(f, 0x500 + odd, 0); word(f, 0x502 + odd, 1);
-            set(f, &s); fault(f, &s, step(f), invalid ? 6 : 5);
+            set(f, &s); fault(f, &s, step(f), invalid == 2 ? 13 : invalid == 1 ? 6 : 5);
             count = f->count; memcpy(trace, f->trace, sizeof(trace));
             for (unsigned fail = 1; fail <= count; ++fail)
                 for (unsigned after = 0; after < 2; ++after) {
@@ -269,7 +280,13 @@ static void gaps(fixture_t *f)
             f->ram[0x30100] = (uint8_t)(bad == 8 ? 0xf0 : 0xf3);
             memcpy(f->ram + 0x30101, code, sizeof(code));
         }
-        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        set(f, &s);
+        if (bad < 3 || bad == 4) {
+            fault(f, &s, step(f), 13);
+            assert(f->count == 9); /* Fetches and frame/IVT, no bounds read. */
+            continue;
+        }
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state(f); same(&a, &s);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation != BM_BUS_WRITE);
         if (bad < 5) assert(f->count == 4); /* No partial bounds read/wrap. */

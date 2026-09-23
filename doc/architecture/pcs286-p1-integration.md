@@ -438,7 +438,14 @@ Four local configurations pass 103 ordinary tests with two device skips.
 BOUND segment-limit vector 13 remains a visible unsupported gap, as do general
 fault escalation and protected delivery. No measured timing or boot claim.
 
-Next CPU tranche: remaining real-mode exceptions and absent-80287 behavior.
+The following tranche delivers BOUND segment-limit #13 and processor-extension
+#7 (ESC EM/TS; WAIT MP+TS). WAIT can complete on the explicitly unpopulated
+interface, with BUSY/ERROR inactive. Untrapped ESC remains unsupported and
+does not fabricate stores or FPU results. Tests cover 144 control combinations,
+prefix restart, IRET/TF, fault-frame failures and BOUND EA repair/retry.
+
+Next CPU tranche: remaining real-mode exceptions/escalation and system
+instructions. Untrapped ESC handshake/absence detection also remains pending.
 Protected lock windows remain coupled to future protected execution.
 Current unsupported combinations are missing
 implementation, not the 386 legal-prefix rule or fabricated guest #UD.

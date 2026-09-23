@@ -49,6 +49,9 @@ enum {
     FLAG_STATUS = FLAG_CF | FLAG_PF | FLAG_AF | FLAG_ZF | FLAG_SF |
                   FLAG_OF,
     MSW_PE = 0x0001U,
+    MSW_MP = 0x0002U,
+    MSW_EM = 0x0004U,
+    MSW_TS = 0x0008U,
     ADDRESS_MASK = 0x00ffffffU
 };
 
@@ -1268,7 +1271,7 @@ static bm_status_t execute_multiply(decoded_286_t *decode, uint8_t opcode,
 
 static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector)
 {
-    /* Implemented real-mode #0/#5/#6 save initial IP, including prefixes,
+    /* Implemented real-mode faults save initial IP, including prefixes,
      * without error code or INTA. Mark complete only after frame/IVT success. */
     bm_status_t status = interrupt_frame(decode, vector, decode->state->arch.ip);
     if (status == BM_STATUS_OK) {
@@ -1739,18 +1742,32 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if (opcode == 0x9bU) {
+        if ((arch->msw & (MSW_MP | MSW_TS)) == (MSW_MP | MSW_TS))
+            return deliver_fault(decode, 7U);
+        /* This core currently models an unpopulated extension interface:
+         * BUSY/ERROR inactive. This is WAIT completion, not x87 execution. */
+        return BM_STATUS_OK;
+    }
+    if (opcode >= 0xd8U && opcode <= 0xdfU) {
+        if (arch->msw & (MSW_EM | MSW_TS))
+            return deliver_fault(decode, 7U);
+        /* No populated 80287 or untrapped ESC handshake model yet. Never
+         * manufacture floating-point results or pretend a store succeeded. */
+        return BM_STATUS_UNSUPPORTED;
+    }
     if (opcode == 0x62U) { /* BOUND r16, m16:16 (Intel PRM B-22). */
         status = decode_operand(decode, &operand);
         if (status != BM_STATUS_OK)
             return status;
         if (!operand.memory)
             return deliver_fault(decode, 6U);
-        /* The pair may not wrap at FFFF, unlike the separately observed
-         * far-pointer policy. Guest #13 delivery for this limit violation
-         * remains a gap. Preflight ordering is not physical bus evidence. */
-        if (!operand.segment->valid ||
-            (uint32_t) operand.offset + 3U > operand.segment->limit)
+        /* Preflight ordering is not physical bus evidence. Invalid imported
+         * caches remain a gap, not a fabricated guest protection fault. */
+        if (!operand.segment->valid)
             return BM_STATUS_UNSUPPORTED;
+        if ((uint32_t) operand.offset + 3U > operand.segment->limit)
+            return deliver_fault(decode, 13U);
         status = read_operand(decode, &operand, 2U, &value);
         if (status != BM_STATUS_OK)
             return status;

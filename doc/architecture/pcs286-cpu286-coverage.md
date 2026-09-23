@@ -2,7 +2,38 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode BOUND and bounded fault delivery
+## Latest tranche: BOUND overrun and processor-extension fault gates
+
+BOUND now delivers real-mode vector 13 when its complete memory pair exceeds
+the segment limit, with first-prefix return IP and no error-code word.
+An invalid imported segment cache still stops as unsupported. General data,
+fetch, stack and instruction-length #13 paths are not implemented by this change.
+
+The current CPU interface is explicitly **unpopulated** (BUSY/ERROR inactive).
+WAIT delivers #7 when MP and TS are both set; otherwise it completes without
+changing data registers or FLAGS. ESC D8..DF delivers #7 when EM or TS is set.
+Untrapped ESC still stops unsupported: no handshake, stores or x87 results are
+invented. This is not complete absence-detection support or an 80287 emulator.
+MSW is imported by the tests; guest LMSW/SMSW/CLTS remain pending.
+
+Sources: Intel PRM [5-7](https://manualsdump.com/en/manuals/intel-80287model-80286model/110730/107)
+and [10-4](https://manualsdump.com/en/manuals/intel-80287model-80286model/110730/182),
+plus BOUND B-22 cited below. Logical ESC #7 delivery occurs after opcode fetch,
+before fetching ModRM/displacement or touching extension operands; this is an
+explicit functional decode policy, not a physical-prefetch or fault-priority
+capture. Existing SS-deferred-trap clearing policy applies. LOCK/REP forms,
+protected delivery, bad-frame/IVT escalation and shutdown remain pending.
+
+Tests add 144 WAIT/ESC/MSW/prefix combinations, #7 frame/retry/TF checks,
+inhibited INTR, bad-frame/IVT refusals, and each-transfer failures before/after
+effects on even/odd stacks. BOUND extends its negative tests to delivered #13,
+tests all three offending offsets, retry after EA repair and frame failures.
+No rollback or retry of completed writes. Timing remains UNKNOWN.
+GCC UCRT64/MSVC Debug/Release pass 104 ordinary tests with two Headland/DMA
+skips; existing optional SST selection, 30 Python checks, catalogue and
+provenance (36 components/200 files) pass. No firmware or media executed.
+
+## Previous tranche: real-mode BOUND and bounded fault delivery
 
 `62 /r` reads two consecutive signed word bounds and checks its word register
 inclusively. Out-of-range (including inverted bounds) delivers vector 5;
@@ -754,10 +785,10 @@ generic catch-all or NOP is not coverage.
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h`, `x86_ops_io.h` | Memory strings and INS/OUTS with interruptible REP implemented; guest segment faults and physical timing pending |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
-| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode forms implemented including BOUND #5/register #6; BOUND limit #13 and ARPL pending; timing unknown |
+| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode forms implemented including BOUND #5/register #6/limit #13; ARPL pending; timing unknown |
 | Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Missing; timing descriptor/path-dependent |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
-| Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | Missing; no populated FPU contract; timing unknown |
+| Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | WAIT completion with inactive BUSY/ERROR and documented #7 gates implemented; untrapped ESC and populated interface pending; timing unknown |
 
 ## Protection, interrupt and fault matrix
 
@@ -765,7 +796,7 @@ These are independent checks, not consequences of decoding the opcodes above.
 Defined reset, real-mode caches, HOLD and bounded real-mode hardware/software
 interrupt entry/return are implemented as described above. Protected execution
 and general guest fault delivery remain missing; real-mode #DE and BOUND
-#5/register-operand #6 are implemented. The table lists required coverage,
+#5/register-operand #6/limit #13 and extension #7 are implemented. The table lists required coverage,
 not a claim that every case is implemented; it follows Intel manual
 chapters 8-10; exact frame/error-code and restart IP must be asserted through
 authored guest programs and bus traces.
