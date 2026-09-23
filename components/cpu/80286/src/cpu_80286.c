@@ -9,7 +9,8 @@
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h,
  * src/cpu/x86_ops_misc.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
  * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
- * src/cpu/x86_ops_ret_2386.h, src/cpu/x86_ops_flag.h and src/cpu/x86_ops_io.h. The inherited
+ * src/cpu/x86_ops_ret_2386.h, src/cpu/x86_ops_flag.h,
+ * src/cpu/x86_ops_flag_2386.h, src/cpu/x86_ops_int.h and src/cpu/x86_ops_io.h. The inherited
  * sources retain these notices:
  *
  * src/cpu/x86.c — Authors: Andrew Jenner, Miran Grca.
@@ -42,6 +43,7 @@ enum {
     FLAG_SF = 0x0080U,
     FLAG_TF = 0x0100U,
     FLAG_IF = 0x0200U,
+    FLAG_DF = 0x0400U,
     FLAG_OF = 0x0800U,
     FLAG_STATUS = FLAG_CF | FLAG_PF | FLAG_AF | FLAG_ZF | FLAG_SF |
                   FLAG_OF,
@@ -268,6 +270,8 @@ typedef struct decoded_286 {
     uint64_t waits;
     int override_segment; /* -1 or ES/CS/SS/DS in architectural order. */
     uint8_t next_shadow; /* Published only after a successful instruction. */
+    uint8_t software_interrupt; /* Completed INT/INT3/taken INTO, not INTA. */
+    uint8_t software_vector;
 } decoded_286_t;
 
 typedef struct operand_286 {
@@ -615,11 +619,12 @@ static bm_status_t far_jump(decoded_286_t *decode, uint16_t ip, uint16_t cs)
 
 /* Functional real-mode boundary only, not a pin-cycle/fault-order model.
  * Stage registers, never roll back completed endpoint writes. */
-static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector)
+static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector,
+                                   uint16_t return_ip)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
     bm_286_segment_state_t table = {0};
-    uint16_t words[3] = {arch->flags, arch->cs.selector, arch->ip};
+    uint16_t words[3] = {arch->flags, arch->cs.selector, return_ip};
     uint16_t ip, cs;
     uint16_t offset = (uint16_t) ((unsigned) vector * 4U);
     bm_status_t status;
@@ -696,7 +701,7 @@ static bm_status_t accept_interrupt(decoded_286_t *decode, unsigned event,
      * signalled from an access remains pending until a later IRET. */
     if (event == 2U)
         state->arch.nmi_pending = 0U;
-    status = interrupt_frame(decode, vector);
+    status = interrupt_frame(decode, vector, state->arch.ip);
     if (status != BM_STATUS_OK) {
         if (event == 2U)
             state->arch.nmi_pending = 1U;
@@ -713,6 +718,57 @@ static bm_status_t accept_interrupt(decoded_286_t *decode, unsigned event,
     boundary->bus_wait_cycles = decode->waits;
     boundary->cpu_cycles = decode->waits;
     return BM_STATUS_OK;
+}
+
+static bm_status_t software_interrupt(decoded_286_t *decode, uint8_t opcode)
+{
+    uint8_t vector = opcode == 0xccU ? 3U : 4U;
+    bm_status_t status;
+    if (opcode == 0xceU && !(decode->state->arch.flags & FLAG_OF))
+        return BM_STATUS_OK;
+    if (opcode == 0xcdU) {
+        status = next_byte(decode, &vector);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    status = interrupt_frame(decode, vector, (uint16_t) decode->cursor);
+    if (status == BM_STATUS_OK) {
+        decode->software_interrupt = 1U;
+        decode->software_vector = vector;
+    }
+    return status;
+}
+
+static bm_status_t execute_flags(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t value;
+    bm_status_t status;
+    switch (opcode) {
+    case 0x9cU: /* Canonical 286 FLAGS image, not 8086 high bits. */
+        return push_word(decode, (uint16_t) ((arch->flags & 0x7fd5U) | FLAG_FIXED_ONE));
+    case 0x9dU:
+        status = data_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        arch->flags = (uint16_t) ((arch->flags & 0x7000U) | (value & 0x0fd5U) | FLAG_FIXED_ONE);
+        arch->sp = (uint16_t) (arch->sp + 2U);
+        return BM_STATUS_OK; /* Unlike STI, POPF creates no INTR shadow. */
+    case 0x9eU:
+        arch->flags = (uint16_t) ((arch->flags & 0xff00U) |
+            ((arch->ax >> 8) & 0xd5U) | FLAG_FIXED_ONE);
+        return BM_STATUS_OK;
+    case 0x9fU:
+        arch->ax = (uint16_t) ((arch->ax & 0xffU) |
+            (((arch->flags & 0xd5U) | FLAG_FIXED_ONE) << 8));
+        return BM_STATUS_OK;
+    case 0xf5U: arch->flags ^= FLAG_CF; return BM_STATUS_OK;
+    case 0xf8U: arch->flags &= (uint16_t) ~FLAG_CF; return BM_STATUS_OK;
+    case 0xf9U: arch->flags |= FLAG_CF; return BM_STATUS_OK;
+    case 0xfcU: arch->flags &= (uint16_t) ~FLAG_DF; return BM_STATUS_OK;
+    case 0xfdU: arch->flags |= FLAG_DF; return BM_STATUS_OK;
+    default: return BM_STATUS_UNSUPPORTED;
+    }
 }
 
 static bm_status_t execute_ff_control(decoded_286_t *decode,
@@ -1188,6 +1244,11 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if (opcode >= 0xccU && opcode <= 0xceU)
+        return software_interrupt(decode, opcode);
+    if ((opcode >= 0x9cU && opcode <= 0x9fU) || opcode == 0xf5U ||
+        opcode == 0xf8U || opcode == 0xf9U || opcode == 0xfcU || opcode == 0xfdU)
+        return execute_flags(decode, opcode);
     if (opcode == 0xcfU)
         return interrupt_return(decode);
     if (opcode == 0xfaU || opcode == 0xfbU) {
@@ -1352,7 +1413,8 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         *out_boundary = boundary;
         return BM_STATUS_IDLE;
     }
-    decode = (decoded_286_t) {state, state->arch.ip, 0U, 0U, -1, BM_286_SHADOW_NONE};
+    decode = (decoded_286_t) {state, state->arch.ip, 0U, 0U, -1,
+                             BM_286_SHADOW_NONE, 0U, 0U};
     if (!state->arch.shutdown && state->arch.trap_pending &&
         state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD)
         event = 1U;
@@ -1407,12 +1469,17 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     }
     state->arch.ip = (uint16_t) decode.cursor;
     state->arch.interrupt_shadow = decode.next_shadow;
-    /* MOV/POP SS suppress their own sampled trap. The following completed
-     * instruction can raise #1 normally. A previously deferred trap is kept,
+    /* MOV/POP SS and taken software interrupts suppress their own sampled
+     * trap (documented B-2/later INT behavior, not an early-stepping model).
+     * The following instruction samples its incoming TF normally.
+     * A previously deferred trap is kept,
      * not lost when TF is clear or when SS is loaded again. */
     state->arch.trap_pending = (uint8_t) (state->arch.trap_pending ||
-        (trap_was_enabled && decode.next_shadow != BM_286_SHADOW_SS_LOAD));
+        (trap_was_enabled && decode.next_shadow != BM_286_SHADOW_SS_LOAD &&
+         !decode.software_interrupt));
     boundary.kind = BM_286_BOUNDARY_INSTRUCTION;
+    boundary.has_vector = decode.software_interrupt;
+    boundary.vector = decode.software_vector;
     boundary.bus_wait_cycles = decode.waits;
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock
      * claim. The strict clocked entry point never schedules this boundary. */

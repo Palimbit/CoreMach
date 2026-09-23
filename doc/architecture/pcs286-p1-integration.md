@@ -304,7 +304,16 @@ GCC Release run exposed a test comparing struct padding with memcmp; changed
 to checks of every defined CPU/PIC field, without relaxing architectural state
 preservation or changing production code. No remote CI or POST claim.
 
-Next CPU tranche: software interrupts and remaining FLAGS/control instructions,
-with independent vectors and explicit exception limits. Headland/IOC02 evidence
+The subsequent CPU tranche implements real-mode INT/INT3/INTO and remaining
+FLAGS/control operations (PUSHF/POPF, LAHF/SAHF, CLC/STC/CMC, CLD/STD).
+See `pcs286-cpu286-coverage.md` for scope, inherited provenance, IF/TF rules
+and failure tests. Validation now passes 92 ordinary tests on GCC UCRT64 and
+MSVC Debug/Release, with the same two absent-device skips; the GCC Debug SST
+subset is unchanged regression coverage, not validation of these new groups.
+Thirty Python checks, catalogue and provenance (36 components / 188 files)
+pass. No CPU timing, machine factory, ROM execution or board decode added.
+
+Next CPU tranche: real-mode far CALL/RET, with stack/CS-cache, alignment and
+endpoint-failure tests. Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.

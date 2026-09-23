@@ -391,8 +391,8 @@ static void failures(bm_cpu_t *cpu, fixture_t *f)
 static void limits_and_gaps(bm_cpu_t *cpu, fixture_t *f)
 {
     static const uint8_t gaps[][3] = {
-        {0x9c,0,0},{0x9d,0,0},{0x9a,0,0},{0xcb,0,0},
-        {0xcd,0,0},{0xff,0xd8,0},{0xff,0xe8,0},
+        {0x9a,0,0},{0xcb,0,0},
+        {0xff,0xd8,0},{0xff,0xe8,0},
         {0xff,0xf8,0},{0x8f,0xc8,0},{0xf0,0x50,0},{0xf3,0xc3,0}};
     unsigned i;
     for (i = 0; i < sizeof(gaps) / sizeof(gaps[0]); ++i) {

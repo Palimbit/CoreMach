@@ -96,6 +96,8 @@ typedef struct bm_286_boundary {
     uint32_t instruction_address;
     uint16_t instruction_ip;
     uint8_t vector;
+    /* INSTRUCTION + has_vector identifies a completed software interrupt;
+     * external interrupts and sampled traps have their own boundary kinds. */
     uint8_t has_vector;
 } bm_286_boundary_t;
 
@@ -154,10 +156,11 @@ bm_status_t bm_286_get_arch_state(const bm_cpu_t *cpu,
 bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
                                   const bm_286_arch_state_t *state);
 /* Real-mode INTR (two INTA phases), NMI and sampled #1 are accepted before
- * fetch, respecting SS/STI inhibition. CLI/STI/HLT/IRET are implemented.
+ * fetch, respecting SS/STI inhibition. Real-mode CLI/STI/HLT/IRET,
+ * INT/INT3/INTO, PUSHF/POPF, LAHF/SAHF and carry/direction control are implemented.
  * Entry and IRET stage registers until all accesses succeed; completed bus
  * writes/acknowledgements are not undone on host errors, and retry is latched
- * off. Software INT, guest faults, protected gates and shutdown recovery are
+ * off. Guest faults, protected gates and shutdown recovery are
  * pending, not approximated. Timing remains UNKNOWN for every boundary. */
 bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary);
 /* Exact existing engine callback: start_ns is virtual boundary time; returned

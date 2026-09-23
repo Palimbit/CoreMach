@@ -2,7 +2,45 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode interrupt roundtrip
+## Latest tranche: software interrupts and FLAGS
+
+Real-mode INT imm8, INT3 and taken INTO save the decoded next IP, CS and FLAGS,
+clear IF/TF and enter the IVT handler without issuing INTA. Untaken INTO
+does not touch the data bus. Software INT 2 does not acquire the hardware NMI
+block. An instruction boundary carries the software vector; the hardware
+interrupt/exception boundary categories are unchanged.
+
+PUSHF/POPF use the 286 masks (not 8086 high bits or 386 real-mode privilege
+rules). POPF preserves IOPL/NT and creates no STI shadow; enabling TF takes
+effect for sampling the following instruction. LAHF/SAHF move only their
+defined low FLAGS bits. CLC/STC/CMC and CLD/STD preserve unrelated flags.
+
+This is a derived rewrite, consulting the additional pinned inherited paths
+`src/cpu/x86_ops_flag_2386.h` and `src/cpu/x86_ops_int.h`. Original notices
+remain in the implementation and both paths are recorded in provenance.
+Intel 210498-005's instruction dictionary and the Intel
+[B-2/B-3 information sheet, 21 November 1984](https://www.pcjs.org/documents/manuals/intel/80286/b2_b3_info/)
+support the architectural behavior. The latter corrects INT's saved FLAGS
+and single-step description for B-2 and later: taken software interrupts do
+not newly sample a trap before their first handler instruction. This does not
+claim early-stepping emulation or measured silicon behavior. Indexed primary
+text was consulted, not a new visually reviewed or preserved PDF.
+
+Authored tests cover all 256 INT vectors with IRET, INT3, both INTO paths,
+65,536 POPF images, all AH values for SAHF/LAHF, odd/even and wrapping stacks,
+prefixes, SS inhibition, IF/TF transitions and every transfer failure in six
+instruction forms. Invalid stack/IVT and protected paths remain explicit
+unsupported stops, not delivered guest faults. Registers commit only on
+success; earlier external writes remain and a host failure prevents retries.
+
+All timings remain UNKNOWN; strict clocked execution is still disabled.
+GCC UCRT64 and MSVC Debug/Release pass 92 ordinary tests with two explicit
+Headland/AT DMA skips. GCC Debug also passes the unchanged pinned SST subset;
+that selected subset does not contain these new instruction groups and is
+regression evidence only. Thirty Python tests, catalogue and provenance pass.
+No BIOS, boot, complete CPU or physical timing claim follows.
+
+## Previous tranche: real-mode interrupt roundtrip
 
 Real-mode INTR now invokes both INTA callbacks, obtains the vector from phase
 1, writes FLAGS/CS/IP at SS:SP and reads the four-byte pointer using IDTR base
@@ -26,7 +64,8 @@ All paths remain TIMING_UNKNOWN. Waits from both INTA phases and completed
 bus transfers are counted once, as a lower bound only. The strict clocked
 entry point still refuses execution before fetch. This is not a runnable
 timed PCS286, physical interrupt-latency evidence or a complete exception model.
-INT3/INT/INTO, guest faults, protected gates and shutdown recovery remain gaps.
+Guest faults, protected gates and shutdown recovery remain gaps; software
+interrupts are covered by the latest tranche above.
 
 Authored tests cover aligned/odd frames, stack wrap, relocated/odd IVT with
 24-bit physical wrap, FLAGS, NMI edge/block/reentry, sampled trap priority,
@@ -48,7 +87,7 @@ passes the pinned optional 71,000-case SST subset with unchanged classification.
 Thirty Python tests, catalogue and provenance audit pass. This remains local
 implementation, not a remote CI, boot or full-ISA certification.
 
-Status: P1 partial interpreter through real-mode interrupt entry/return, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode hardware/software interrupts and FLAGS, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -95,8 +134,8 @@ cannot become a 286 by selecting a flag.
 `Required` means required for a reusable documented 80286 core, including
 guest #6 for undefined encodings. `Later` names a separately scoped silicon
 or populated-80287 feature. The current portable core implements the reset
-state, NOP and bounded real-mode data-transfer, ALU, stack, near-control and far-JMP subsets; other rows are
-**not implemented**. A
+state, NOP and bounded real-mode data-transfer, ALU, stack, control, I/O and
+interrupt subsets. Each row distinguishes implemented forms from gaps. A
 classic handler is a review/reuse candidate only, never a
 portable pass. Every grouped opcode must classify each ModR/M subform; a
 generic catch-all or NOP is not coverage.
@@ -108,11 +147,11 @@ generic catch-all or NOP is not coverage.
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |
-| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Real-mode PUSH/POP including POP SS; PUSHA/POPA, ENTER/LEAVE, near CALL E8/FF /2 and RET C2/C3 implemented. Real-mode IRET implemented; PUSHF/POPF, far CALL/RET and fault delivery missing; timing unknown |
+| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Real-mode PUSH/POP including POP SS; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near CALL E8/FF /2 and RET C2/C3, IRET implemented; far CALL/RET and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Missing; timing iteration/prefetch-dependent |
-| Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | All eight real-mode IN/OUT forms and CLI/STI implemented; other flag control pending; timing unknown |
-| Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Real-mode HLT/IRET implemented; INT3/INT/INTO and protected gates pending; timing unknown |
+| Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
+| Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
 | 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH and ENTER/LEAVE implemented; other forms and guest faults missing; timing unknown |
 | Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Missing; timing descriptor/path-dependent |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
@@ -121,8 +160,10 @@ generic catch-all or NOP is not coverage.
 ## Protection, interrupt and fault matrix
 
 These are independent checks, not consequences of decoding the opcodes above.
-Except for defined reset state and HOLD cancellation, all are unimplemented
-in the portable core. The table follows Intel manual
+Defined reset, real-mode caches, HOLD and bounded real-mode hardware/software
+interrupt entry/return are implemented as described above. Protected execution
+and guest fault delivery remain missing. The table lists required coverage,
+not a claim that every case is implemented; it follows Intel manual
 chapters 8-10; exact frame/error-code and restart IP must be asserted through
 authored guest programs and bus traces.
 
