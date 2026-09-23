@@ -28,11 +28,22 @@
     },
     {
       "id": "intel-80286-draft-contracts",
-      "destination": ["components/cpu/80286/**"],
+      "destination": ["components/cpu/80286/CMakeLists.txt", "components/cpu/80286/include/**"],
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
       "local_changes": "Draft C11 CPU interfaces for explicit 286 architectural state, protected-mode hidden caches, board-owned bus accesses, INTA, HOLD/LOCK/shutdown and the existing native-cycle clocked scheduler. Declarations only; no CPU implementation or timing tables copied or provided."
+    },
+    {
+      "id": "intel-80286-lifecycle",
+      "destination": ["components/cpu/80286/src/**"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "87c3fb4876eaad086921bc3444569da026286c36",
+      "origin_paths": ["src/cpu/x86.c", "src/cpu/386.c", "src/cpu/386_ops.h", "src/cpu/x86seg.c", "src/cpu/x86_ops_pmode.h", "src/cpu/x86_ops_rep_286_2386.h"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Andrew Jenner", "Sarah Walker", "Miran Grca", "Fred N. van Kempen", "leilei", "rtzor", "BluMach contributors"],
+      "local_changes": "Per-instance 80286 lifecycle, defined reset state, conformance-only architectural import, 24-bit reset fetch, NOP and boundary HOLD acknowledgement. Consulted inherited CPU state/reset/semantic code without embedding globals. Interrupt delivery, protected-mode execution, instruction families and physical timing remain unimplemented; strict clocked execution stops explicitly without fetching."
     },
     {
       "id": "headland-gc10x-draft-contracts",
