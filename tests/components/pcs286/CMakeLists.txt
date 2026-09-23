@@ -171,6 +171,17 @@ if(TARGET blumach_at_bus)
 endif()
 
 if(TARGET blumach_cpu_80286 AND TARGET blumach_at_bus)
+    if(TARGET blumach_at_pic)
+        add_executable(pcs286-board-interrupts board_interrupts_test.c)
+        target_link_libraries(pcs286-board-interrupts PRIVATE blumach_pcs286_memory
+            blumach_cpu_80286 blumach_at_bus blumach_at_pic
+            blumach_platform_null portable-failure-injection-host)
+        target_include_directories(pcs286-board-interrupts PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine")
+        pcs286_test_options(pcs286-board-interrupts)
+        add_test(NAME pcs286-component.board-interrupts COMMAND pcs286-board-interrupts)
+        set_tests_properties(pcs286-component.board-interrupts PROPERTIES
+            LABELS "pcs286-p0;component-integration" TIMEOUT 15)
+    endif()
     add_executable(pcs286-board-memory board_memory_test.c)
     target_link_libraries(pcs286-board-memory PRIVATE blumach_pcs286_memory
         blumach_cpu_80286 blumach_at_bus blumach_platform_null portable-failure-injection-host)

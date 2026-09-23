@@ -63,5 +63,12 @@ IRET back to the interrupted program. It also checks CLI/STI/HLT and NMI/trap
 inhibition. See `pcs286-cpu286-coverage.md`. Its flat synthetic endpoint is not
 yet a PCS286 RAM/ROM/AT board map. Protected delivery and timing remain gaps.
 
+`pcs286-component.board-interrupts` subsequently connects the same PIC and CPU
+to actual RAM/ROM backing and AT arbitration. Guest code initializes the IVT
+and PICs after a synthetic reset trampoline, then executes IRQ1/IRQ9 handlers.
+HOLD, DEBUG, failure/recovery and lifetime checks are described in
+`pcs286-p1-integration.md`. This test-only composition still does not implement
+the Headland/IOC02 board map or certify physical timings.
+
 Headland and AT DMA remain absent. No runtime registration, firmware POST,
 GUI launch or PCS286 hardware validation follows from the PIC tests.

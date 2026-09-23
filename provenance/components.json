@@ -35,7 +35,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Authored synthetic endpoint and architecture-neutral bus/memory checks, an existing-engine clock-math oracle and initial component acceptance sources for 286, Headland, AT arbitration, PIC and DMA, plus extended AT ownership, cleanup, error and debug-isolation tests. Unimplemented components are explicitly skipped, never replaced with success stubs. No firmware, third-party test vectors or chip implementation copied."
+      "local_changes": "Authored synthetic endpoint and architecture-neutral bus/memory checks, an existing-engine clock-math oracle and initial component acceptance sources for 286, Headland, AT arbitration, PIC and DMA, plus extended AT ownership, cleanup, error and debug-isolation tests. Unimplemented components are explicitly skipped, never replaced with success stubs. Added reset-ROM/RAM/AT/PIC/286 board-wiring diagnostic with guest IVT/PIC initialization, IRQ1/9 handlers, HOLD/HLDA, observational DEBUG, native-wait forwarding, interrupted INTA recovery, isolation and partial-construction cleanup; all windows and wait values are synthetic and not PCS286 chipset evidence. No firmware, third-party test vectors or chip implementation copied."
     },
     {
       "id": "intel-80286-draft-contracts",

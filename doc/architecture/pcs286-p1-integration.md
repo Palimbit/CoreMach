@@ -255,3 +255,56 @@ still needs evidence review; it is not unlocked by this synthetic test. Timed
 PIT/RTC/KBC integration additionally needs an explicit CPU timing policy. The
 machine factory and frontend registration remain absent, and no BIOS or media
 were executed. No engine/scheduler, PCS86 or M15 behavior changed.
+
+## Combined diagnostic: reset, RAM/ROM, AT and interrupts
+
+`pcs286-component.board-interrupts` now composes the actual partial 80286,
+`blumach_pcs286_memory`, `blumach_at_bus` and `blumach_at_pic`. Only wiring and
+test code are new; no production CPU/chip behavior or public ABI changes.
+This supersedes the earlier next-step gap for synthetic composition, not the
+missing physical PCS286 decoding, factory or device models.
+
+An authored five-byte trampoline is fetched from the high reset ROM. It jumps
+to a RAM program that initializes SS/SP, writes the IVT and programs both PICs
+via guest instructions through the AT interconnect. No CPU state import or
+host-preset PIC configuration supplies success. The CPU halts after STI, then
+handles slave IRQ9 and master IRQ1, writes distinct RAM signatures, sends the
+appropriate EOIs, restores AX and returns to the saved CS:IP/SP with IRET.
+
+The test also verifies:
+
+- Pending IRQ cannot be acknowledged while HOLD/HLDA grants the bus elsewhere.
+  An authored external ISA requester writes a scratch word while the CPU is
+  held; this validates arbitration, not an implemented DMA controller or card.
+- CPU accesses without ownership are side-effect-free IDLE. DEBUG observes
+  RAM/PIC during HOLD without consuming interrupts, generating waits, changing
+  ownership or permitting writes.
+- Synthetic memory/I/O/INTA waits reach each boundary exactly once. They are
+  deliberately chosen fixture values in requester clocks, not hardware timing;
+  boundary timing remains UNKNOWN and strict scheduling is still disabled.
+- A host failure on second INTA or first frame write latches CPU execution off
+  and does not repeat acknowledgement. PIC state already changed by first INTA
+  is not rolled back. CPU-only reset leaves that state; resetting the complete
+  test composition clears it and permits guest reinitialization and recovery.
+- RAM survives this explicit test reset policy. A second instance is isolated;
+  every one of six construction allocation failures cleans up; destroying a
+  held instance with pending IRQ disconnects live callbacks before consumers.
+
+The reset policy, 12/8 MHz requester metadata and two linear memory windows
+exist only in this test. They make no claim about PCS286 straps, A20, Headland,
+IOC02, RAM aliases, wait-state programming or physical reset nets. No original
+ROM, BIOS, disk or external document is copied or executed. A full historical
+implementation narrative remains deferred until there is a production machine.
+
+Validation: GCC UCRT64 and MSVC Debug/Release each pass 91 ordinary tests, with
+Headland and AT DMA still explicitly skipped (93 registered). GCC Debug adds
+the unchanged pinned SST regression (94 registered). Thirty Python checks,
+catalogue and provenance audit pass (36 components / 187 files). The first
+GCC Release run exposed a test comparing struct padding with memcmp; changed
+to checks of every defined CPU/PIC field, without relaxing architectural state
+preservation or changing production code. No remote CI or POST claim.
+
+Next CPU tranche: software interrupts and remaining FLAGS/control instructions,
+with independent vectors and explicit exception limits. Headland/IOC02 evidence
+and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
+remain separate gates before a real PCS286 boot profile can be validated.
