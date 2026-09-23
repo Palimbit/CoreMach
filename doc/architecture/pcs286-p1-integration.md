@@ -13,7 +13,10 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
 - Partial 80286: instance-owned reset state, high reset fetch, NOP, state
   import validation, HOLD acknowledgement and explicit unsupported-event stops.
 - A synthetic integration test connects these real components and checks
-  suspension, DMA access after grant, return to CPU ownership and reset.
+  suspension, DMA access after grant, return to CPU ownership and reset. It
+  also raises a DMA request during a fetch: the current instruction completes
+  before HLDA grants access. Endpoint errors propagate unchanged; the CPU
+  stops without advancing IP or retrying the failed access until reset.
 - Endpoint waits remain requester clocks and are counted once. CPU elapsed
   timing is UNKNOWN; strict clocked execution refuses before fetching.
 - Existing generic engine contracts, scheduler and PCS86/M15 implementations
@@ -25,6 +28,9 @@ Engine-only Debug builds with UCRT64 GCC and MSVC both execute 78 passing tests.
 Three more tests explicitly skip: Headland, AT PIC and AT DMA implementations
 are absent. Assertions remain enabled; new component code uses warnings as
 errors. The MSVC check exposed and corrected a size_t narrowing in a test.
+The full suite also passes in a UCRT64 GCC Release build (78 executed, three
+skipped). New component test assertions remain enabled with `-UNDEBUG`, even
+when the surrounding build uses `-O3 -DNDEBUG`.
 
 The portable CI path filters now include `tests/components/**`, so a change
 limited to these tests also triggers validation. These local results are not

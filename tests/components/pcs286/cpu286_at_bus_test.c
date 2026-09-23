@@ -15,6 +15,8 @@ typedef struct board {
     unsigned int debug_accesses;
     unsigned int hold_edges;
     unsigned int ack_edges;
+    int request_during_fetch;
+    bm_status_t endpoint_status;
     bm_clock_rate_t last_clock;
 } board_t;
 
@@ -44,13 +46,20 @@ static bm_status_t decode(void *context, bm_at_transfer_t *transfer)
         assert(transfer->bus.space == BM_ADDRESS_PROGRAM);
         assert(transfer->bus.address >= 0xfffff0U);
         ++board->cpu_fetches;
+        if (board->request_during_fetch) {
+            board->request_during_fetch = 0;
+            /* A peripheral raises HOLD while the current CPU boundary is
+             * in progress. Signalling must not recursively execute the CPU. */
+            assert(bm_at_bus_request(board->bus, BM_AT_MASTER_DMA16, 1) ==
+                   BM_STATUS_OK);
+        }
     } else {
         assert(transfer->master == BM_AT_MASTER_DMA16);
         ++board->dma_accesses;
     }
     transfer->bus.value = 0x90U; /* authored NOP, no firmware */
     transfer->bus.wait_states = 3U; /* synthetic, already requester clocks */
-    return BM_STATUS_OK;
+    return board->endpoint_status;
 }
 
 int main(void)
@@ -134,6 +143,37 @@ int main(void)
     assert(board.hold_edges == 4U && board.ack_edges == 4U);
     assert(bm_286_step(&board.cpu, &boundary) == BM_STATUS_OK);
     assert(boundary.instruction_address == 0xfffff0U);
+    /* A request raised inside a fetch must wait for the completed boundary. */
+    board.request_during_fetch = 1;
+    assert(bm_286_step(&board.cpu, &boundary) == BM_STATUS_OK);
+    assert(board.hold_edges == 5U && board.ack_edges == 4U);
+    assert(bm_286_get_arch_state(&board.cpu, &arch) == BM_STATUS_OK);
+    assert(arch.ip == 0xfff2U);
+    dma.bus.wait_states = 0U;
+    assert(bm_at_bus_access(board.bus, &dma) == BM_STATUS_IDLE);
+    assert(bm_286_step(&board.cpu, &boundary) == BM_STATUS_IDLE);
+    assert(board.ack_edges == 5U && board.cpu_fetches == 5U);
+    assert(bm_at_bus_access(board.bus, &dma) == BM_STATUS_OK);
+    assert(bm_at_bus_request(board.bus, BM_AT_MASTER_DMA16, 0) == BM_STATUS_OK);
+    assert(board.hold_edges == 6U && board.ack_edges == 6U);
+    assert(bm_286_step(&board.cpu, &boundary) == BM_STATUS_OK);
+    assert(board.cpu_fetches == 6U);
+
+    /* A real endpoint failure propagates through both adapters unchanged.
+     * The failed instruction never advances IP, and a retry cannot touch
+     * the endpoint again. Reset is required before resuming the CPU. */
+    board.endpoint_status = BM_STATUS_DEVICE_ERROR;
+    assert(bm_286_step(&board.cpu, &boundary) == BM_STATUS_DEVICE_ERROR);
+    assert(board.cpu_fetches == 7U);
+    assert(bm_286_get_arch_state(&board.cpu, &arch) == BM_STATUS_OK);
+    assert(arch.ip == 0xfff3U);
+    board.endpoint_status = BM_STATUS_OK;
+    assert(bm_286_step(&board.cpu, &boundary) == BM_STATUS_INVALID_STATE);
+    assert(board.cpu_fetches == 7U);
+    assert(board.cpu.ops.reset(board.cpu.context) == BM_STATUS_OK);
+    assert(bm_286_step(&board.cpu, &boundary) == BM_STATUS_OK);
+    assert(boundary.instruction_address == 0xfffff0U);
+    assert(board.cpu_fetches == 8U);
     /* Reset/disconnect pins before destroying callback recipients. */
     bm_at_bus_destroy(board.bus);
     board.cpu.ops.destroy(board.cpu.context);
