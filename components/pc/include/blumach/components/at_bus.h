@@ -23,6 +23,11 @@ typedef struct bm_at_transfer {
     bm_bus_transaction_t bus;
     bm_clock_rate_t requester_clock;
 } bm_at_transfer_t;
+/* Decode endpoints return waits ALREADY converted to requester_clock. The
+ * board-supplied decode adapter owns target-width splitting and conversion
+ * from its configured memory/ISA rates. at_bus must not convert them again.
+ * No guest-visible transfer occurs when returning IDLE (no grant).
+ */
 typedef bm_status_t (*bm_at_access_fn)(void *context, bm_at_transfer_t *transfer);
 typedef struct bm_at_bus_config {
     bm_clock_rate_t cpu_clock;
@@ -34,10 +39,15 @@ typedef struct bm_at_bus_config {
     void *hold_context;
 } bm_at_bus_config_t;
 
-/* Every returned wait_states value counts EXTRA requester clocks. Conversion
- * from ISA/memory clocks belongs to this interconnect; devices must not assume
- * equal CPU/ISA clocks. Debug cycles cannot acknowledge IRQs, consume FIFO
- * entries or advance clocks. Locked CPU windows defer DMA/ISA grants.
+/* Every returned wait_states value counts EXTRA requester clocks. Callers set
+ * it to zero; the interconnect returns the total, not an increment to old data.
+ * Conversion belongs to this interconnect's board-supplied decode adapter. Sum exact
+ * rational durations of sequential fragments within ONE transfer, then round
+ * up once to requester clocks. Do not reuse rounding credit to shorten a later
+ * independent transfer. Overflow is CAPACITY_EXCEEDED, never wrap/saturate.
+ * This duration policy is not physical clock-edge synchronization.
+ * Devices must not assume equal CPU/ISA clocks. Debug cycles cannot acknowledge
+ * IRQs, consume FIFO entries or advance clocks. Locked CPU windows defer grants.
  * CPU reset/A20, DMA pages, PIC vectors and card inventory are board-owned. */
 bm_status_t bm_at_bus_create(const bm_host_services_t *host,
                              const bm_at_bus_config_t *config,
@@ -53,6 +63,22 @@ bm_status_t bm_at_bus_cpu_access(void *context, bm_bus_transaction_t *transactio
 bm_status_t bm_at_bus_set_lock(bm_at_bus_t *bus, int asserted);
 bm_status_t bm_at_bus_request(bm_at_bus_t *bus, bm_at_master_t master, int asserted);
 bm_status_t bm_at_bus_hold_ack(bm_at_bus_t *bus, int asserted);
+
+/* P0 boundary arbitration: reset leaves the CPU owner, LOCK/HOLD/HLDA clear.
+ * request() records one external requester (DMA8, DMA16 or ISA); competing
+ * requests return UNSUPPORTED without changing state until an arbitration
+ * policy is implemented/tested. CPU is not a valid external requester.
+ * A pending request asserts HOLD only outside LOCK. HLDA may grant it only
+ * after the CPU finishes its current architectural boundary. LOCK cannot be
+ * asserted with HLDA high. Cancelling the request drops HOLD; CPU ownership
+ * resumes only after HLDA goes low. A stale HIGH HLDA without HOLD is invalid.
+ * Access by a non-owner returns IDLE with no callback or transaction mutation.
+ * DEBUG bypasses ownership read-only, never issuing grants or pin transitions.
+ * The CPU's synchronous callback must not be retried mid-instruction: its
+ * step adapter services HOLD at boundaries and performs no access while held.
+ * Reset/cancel/duplicate levels must not synthesize extra edges. Setters do not
+ * recursively execute CPUs/devices; the coordinator wires/advances them.
+ */
 
 /* Initial ISA cards are fixed during construction. No hotplug promise.
  * Full resource claims are checked before publication; failure retains none.

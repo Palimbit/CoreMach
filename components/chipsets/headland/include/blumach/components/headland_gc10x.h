@@ -23,12 +23,21 @@ typedef enum bm_gc10x_memory_target {
     BM_GC10X_EXTERNAL,
     BM_GC10X_OPEN_BUS
 } bm_gc10x_memory_target_t;
+typedef enum bm_gc10x_wait_quality {
+    BM_GC10X_WAIT_UNKNOWN = 0,
+    BM_GC10X_WAIT_DOCUMENTED,
+    BM_GC10X_WAIT_PROVISIONAL
+} bm_gc10x_wait_quality_t;
+
 typedef struct bm_gc10x_route {
     bm_gc10x_memory_target_t target;
     uint32_t offset;
     uint32_t contiguous_bytes;
     uint32_t extra_memory_clocks;
     int writable;
+    /* UNKNOWN is not zero wait. Strict board adapters must reject a route's
+     * timing until documented; provisional timing needs an explicit policy. */
+    bm_gc10x_wait_quality_t wait_quality;
 } bm_gc10x_route_t;
 typedef struct bm_gc10x_config {
     uint32_t size;
@@ -49,11 +58,13 @@ bm_status_t bm_gc10x_create(const bm_host_services_t *host,
 void bm_gc10x_destroy(bm_gc10x_t *chipset);
 void bm_gc10x_reset(bm_gc10x_t *chipset);
 bm_status_t bm_gc10x_io(void *context, bm_bus_transaction_t *transaction);
-/* Pure query, usable by debugger: resolve according to live register state,
+/* Pure query, usable by debugger: addresses above 0xffffff are invalid rather
+ * than silently masked. resolve according to live register state,
  * explicit requester and external CPU A20 input. Never hardwire the legacy
  * 60000h/80000h alias. contiguous_bytes stops before a decode boundary.
  * extra_memory_clocks are in the board memory-clock domain, not ns or CPU
- * clocks; board conversion must retain rational phase and check overflow.
+ * clocks; board conversion retains fractional duration within a transfer,
+ * rounds up once at completion and checks overflow (see at_bus.h/P0 policy).
  * Whether A20 affects each requester is a board policy, not a 20-bit mask. */
 bm_status_t bm_gc10x_resolve(const bm_gc10x_t *chipset,
                              bm_gc10x_requester_t requester, int cpu_a20,

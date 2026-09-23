@@ -27,3 +27,8 @@ Existing memory, floppy drives/media, PVGA1A and UART/SPP APIs remain reuse
 candidates; their present implementation does not imply full PCS286 fidelity.
 Build `blumach_pcs286_contract_check` to compile each header independently.
 This is structural validation, not component behaviour testing.
+
+The [P0 test foundation and agent boundaries](../../doc/architecture/pcs286-p0.md)
+now supply a running generic bus/memory/clock oracle and compiled initial
+acceptance tests. The five missing implementation targets are explicitly
+reported as skipped, not passing emulation tests. No firmware has been run.

@@ -6,9 +6,18 @@
     "components",
     "systems",
     "platforms",
-    "apps"
+    "apps",
+    "tests/components/pcs286"
   ],
   "components": [
+    {
+      "id": "pcs286-p0-test-foundation",
+      "destination": ["tests/components/pcs286/**"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Authored synthetic endpoint and architecture-neutral bus/memory checks, an existing-engine clock-math oracle and initial component acceptance sources for 286, Headland, AT arbitration, PIC and DMA. Unimplemented components are explicitly skipped, never replaced with success stubs. No firmware, third-party test vectors or chip implementation copied."
+    },
     {
       "id": "intel-80286-draft-contracts",
       "destination": ["components/cpu/80286/**"],

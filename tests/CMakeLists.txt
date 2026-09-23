@@ -73,4 +73,5 @@ endif()
 
 if(BLUMACH_BUILD_ENGINE)
     add_subdirectory(engine)
+    add_subdirectory(components/pcs286)
 endif()

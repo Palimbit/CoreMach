@@ -120,16 +120,22 @@ Inspection and DEBUG transactions have no guest side effects: no FIFO pop,
 status-C clear, IRQ acknowledgement, latch change or time advancement. A chip
 may reject a debug operation it cannot inspect safely. Guest-visible failure
 (empty drive, command abort, CPU exception) uses hardware state/protocol.
-`BM_STATUS_*` errors represent invalid host contract use, missing implementation
-or a host capability failure; they must not substitute for normal guest errors.
+At the CPU endpoint, errors represent invalid host contract use, missing
+implementation or a host capability failure; they must not substitute for normal
+guest errors. At the lower address-router boundary UNMAPPED/READ_ONLY remain
+routing outcomes. Board adapters resolve them into documented open-bus, ignored
+write or native-fault policy; there is no universal mapping to a CPU exception.
 
 ## Time and bus boundaries
 
 The existing engine contract remains unchanged: scheduler time is nanoseconds,
 each CPU/device has a rational native clock. CPU step reports elapsed native
 CPU cycles, including wait cycles exactly once. Headland reports memory-clock
-waits; the interconnect converts them, with retained phase, to the requesting
-CPU or DMA domain. Requests carry their master identity and requester rate.
+waits; the interconnect sums exact fractional durations of sequential fragments
+within a transfer and rounds up once to the requesting CPU or DMA domain.
+Independent transfers do not borrow rounding credit. This is a declared
+boundary-level duration policy, not synchronization to physical bus edges.
+Requests carry their master identity and requester rate.
 No floating-point wall time, arbitrary delay loop or guessed fixed CPU cycles.
 
 The initial scheduler is architectural-boundary based. This scaffold does not
@@ -180,7 +186,9 @@ future composition validates all claims before publishing any of them.
 
 ## Reuse and independent work packets
 
-Next step is a contract-test PR, followed by bounded implementation agents.
+The P0 test foundation is described in [P0 contracts and handoff](pcs286-p0.md).
+Its running harness checks and pending component acceptance checks are separate.
+Next step is review/integration of P0, followed by bounded implementation agents.
 No agents were launched for this scaffold. Their branches should start from
 the reviewed scaffold on the portable integration branch. An implementation
 must not merge merely because its headers compile or one BIOS reaches POST.

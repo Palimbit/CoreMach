@@ -92,7 +92,11 @@ typedef struct bm_286_config {
     uint32_t version;
     /* Logical bus transfers use 24-bit memory / 16-bit I/O addresses.
      * CPU splits unaligned words; the board splits accesses to 8-bit targets.
-     * access initializes each returned wait_states in native CPU clocks.
+     * CPU initializes wait_states to zero; access returns total extra native
+     * CPU clocks. They are counted once in cpu_cycles and bus_wait_cycles.
+     * The callback completes synchronously; IDLE is not a mid-instruction
+     * retry. Handle HOLD before the next boundary, without any bus access.
+     * Board resolves UNMAPPED/READ_ONLY into its documented hardware policy.
      * It receives DEBUG and LOCKED attributes without losing either. */
     bm_bus_access_fn access;
     void *access_context;
@@ -108,6 +112,7 @@ typedef struct bm_286_config {
 
 /* Produces bm_cpu_t with per-instance storage and normal reset/signal/inspect/
  * destroy operations. On failure, out_cpu is cleared and allocations released.
+ * Creation leaves reset architectural state but performs no fetch/INTA.
  * CPU owns no RAM, chipset, scheduler or host file. Configuration is copied;
  * callback contexts and host services remain valid until CPU destruction. */
 bm_status_t bm_286_create(const bm_host_services_t *host,
