@@ -363,8 +363,19 @@ Debug/Release, two component skips, 30 Python checks and provenance
 (36 components / 194 files). The unchanged SST selection excludes BCD;
 nondecimal/invalid-BCD edges still need 286 hardware-capture comparison.
 
-Next CPU tranche: unprefixed strings, then interruptible/restartable REP and
-string I/O; memory XCHG still needs its separate LOCK path.
+Unprefixed MOVS/STOS/LODS/CMPS/SCAS byte/word now execute a single element
+independently of CX, with source overrides, fixed ES destination, DF and
+16-bit index wrap. Registers/flags commit after accesses succeed; external
+writes already completed on a host failure persist without replay. CMPS uses
+inherited destination-first reads as a functional policy, not silicon ordering.
+The authored suite covers 3,600 matrix cases, 3,145,728 comparisons, 150 endpoint
+failures, overlap, segment/physical wrap, unused segments, TF and mid-read HOLD.
+All 99 ordinary tests pass on GCC UCRT64/MSVC Debug/Release, two device skips,
+30 Python checks and provenance 36 components / 195 files. The unchanged SST
+selection does not cover strings; no physical timing or BIOS/POST claim.
+
+Next CPU tranche: interruptible/restartable REP and string I/O;
+memory XCHG still needs its separate LOCK path.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.

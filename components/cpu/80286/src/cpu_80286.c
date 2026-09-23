@@ -8,7 +8,7 @@
  * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h,
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h, src/cpu/x86_ops_shift.h,
  * src/cpu/x86_ops_misc.h, src/cpu/x86_ops_mul.h, src/cpu/x86_ops_bcd.h,
- * src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
+ * src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h, src/cpu/x86_ops_string.h,
  * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
  * src/cpu/x86_ops_ret_2386.h, src/cpu/x86_ops_flag.h,
  * src/cpu/x86_ops_flag_2386.h, src/cpu/x86_ops_int.h and src/cpu/x86_ops_io.h. The inherited
@@ -1558,6 +1558,54 @@ static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
     return BM_STATUS_OK;
 }
 
+/* One real-mode string element. REP restart/interrupt semantics are separate.
+ * CMPS retains the inherited destination-before-source read order, but this
+ * functional bus sequence is not a claim of physical 286 fault precedence. */
+static bm_status_t execute_string(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    const bm_286_segment_state_t *source_segment = segment_register(arch,
+        decode->override_segment >= 0 ? (unsigned) decode->override_segment : 3U);
+    unsigned kind = opcode & 0xfeU, size = (opcode & 1U) ? 2U : 1U;
+    uint16_t source = size == 1U ? (uint8_t) arch->ax : arch->ax;
+    uint16_t destination = 0U, flags = arch->flags, discarded;
+    uint16_t delta = (uint16_t) ((arch->flags & FLAG_DF) ? 0U - size : size);
+    int uses_source = kind == 0xa4U || kind == 0xa6U || kind == 0xacU;
+    int uses_destination = kind != 0xacU;
+    bm_status_t status;
+    if (kind == 0xa6U || kind == 0xaeU) {
+        status = data_access(decode, &arch->es, arch->di, size, 0, &destination);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    if (uses_source) {
+        status = data_access(decode, source_segment, arch->si, size, 0, &source);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    if (kind == 0xa4U || kind == 0xaaU) {
+        status = data_access(decode, &arch->es, arch->di, size, 1, &source);
+        if (status != BM_STATUS_OK)
+            return status;
+    } else if (kind == 0xa6U || kind == 0xaeU)
+        alu_calculate(7U, size, source, destination, flags, 0, &discarded, &flags);
+    /* No potentially failing access remains. CX is never consumed without
+     * REP, even when zero. Index arithmetic wraps, individual words do not
+     * bypass segment limits. Completed endpoint writes are not rolled back. */
+    if (kind == 0xacU) {
+        if (size == 1U)
+            set_byte_register(arch, 0U, (uint8_t) source);
+        else
+            arch->ax = source;
+    }
+    if (uses_source)
+        arch->si = (uint16_t) (arch->si + delta);
+    if (uses_destination)
+        arch->di = (uint16_t) (arch->di + delta);
+    arch->flags = flags;
+    return BM_STATUS_OK;
+}
+
 static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -1571,6 +1619,9 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if ((opcode >= 0xa4U && opcode <= 0xa7U) ||
+        (opcode >= 0xaaU && opcode <= 0xafU))
+        return execute_string(decode, opcode);
     if (opcode == 0x8dU || opcode == 0xc4U || opcode == 0xc5U) {
         status = decode_operand(decode, &operand);
         if (status != BM_STATUS_OK)

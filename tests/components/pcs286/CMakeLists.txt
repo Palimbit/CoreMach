@@ -60,6 +60,13 @@ endfunction()
 
 pcs286_acceptance(cpu286 cpu286_acceptance.c blumach_cpu_80286)
 if(TARGET blumach_cpu_80286)
+    add_executable(pcs286-cpu-strings cpu286_strings.c)
+    target_link_libraries(pcs286-cpu-strings PRIVATE
+        blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-strings)
+    add_test(NAME pcs286-component.cpu-strings COMMAND pcs286-cpu-strings)
+    set_tests_properties(pcs286-component.cpu-strings PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 60)
     add_executable(pcs286-cpu-decimal cpu286_decimal.c)
     target_link_libraries(pcs286-cpu-decimal PRIVATE
         blumach_cpu_80286 blumach_platform_null)
