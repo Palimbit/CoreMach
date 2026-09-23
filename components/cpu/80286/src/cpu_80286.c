@@ -9,7 +9,7 @@
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h,
  * src/cpu/x86_ops_misc.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
  * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
- * src/cpu/x86_ops_ret_2386.h. The inherited
+ * src/cpu/x86_ops_ret_2386.h and src/cpu/x86_ops_io.h. The inherited
  * sources retain these notices:
  *
  * src/cpu/x86.c — Authors: Andrew Jenner, Miran Grca.
@@ -183,7 +183,7 @@ static int valid_architecture(const bm_286_arch_state_t *arch)
         ((arch->msw & MSW_PE) != 0U || arch->cpl == 0U) &&
         arch->halted <= 1U && arch->shutdown <= 1U &&
         !(arch->halted && arch->shutdown) &&
-        arch->interrupt_shadow <= 1U && arch->nmi_blocked <= 1U &&
+        arch->interrupt_shadow <= BM_286_SHADOW_SS_LOAD && arch->nmi_blocked <= 1U &&
         arch->nmi_pending <= 1U && arch->trap_pending <= 1U &&
         valid_segment(&arch->es) && valid_segment(&arch->cs) &&
         valid_segment(&arch->ss) && valid_segment(&arch->ds) &&
@@ -267,6 +267,7 @@ typedef struct decoded_286 {
     uint8_t length;
     uint64_t waits;
     int override_segment; /* -1 or ES/CS/SS/DS in architectural order. */
+    uint8_t next_shadow; /* Published only after a successful instruction. */
 } decoded_286_t;
 
 typedef struct operand_286 {
@@ -703,7 +704,7 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
         return status == BM_STATUS_OK ? push_word(decode, value) : status;
     }
     if ((opcode >= 0x58U && opcode <= 0x5fU) || opcode == 0x8fU ||
-        opcode == 0x07U || opcode == 0x1fU) {
+        opcode == 0x07U || opcode == 0x17U || opcode == 0x1fU) {
         if (opcode == 0x8fU) {
             status = decode_operand(decode, &operand);
             if (status != BM_STATUS_OK)
@@ -721,13 +722,15 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
             /* Mod=3 SP is loaded last, not incremented after replacement. */
             if (!operand.memory && operand.reg_number == 4U)
                 return BM_STATUS_OK;
-        } else if (opcode == 0x07U || opcode == 0x1fU) {
+        } else if (opcode == 0x07U || opcode == 0x17U || opcode == 0x1fU) {
             segment = segment_register(arch, opcode >> 3);
             segment->selector = value;
             segment->base = (uint32_t) value << 4;
             segment->limit = 0xffffU;
             segment->access = 0U;
             segment->valid = 1U;
+            if (opcode == 0x17U)
+                decode->next_shadow = BM_286_SHADOW_SS_LOAD;
         } else {
             if (opcode == 0x5cU) {
                 arch->sp = value;
@@ -786,7 +789,7 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
         arch->cx = next_cx;
         return BM_STATUS_OK;
     }
-    return BM_STATUS_UNSUPPORTED; /* Flags, SS and far control pending. */
+    return BM_STATUS_UNSUPPORTED; /* Flags and far CALL/returns pending. */
 }
 
 /* ALU kinds follow the three-bit opcode/ModR/M operation field. TEST uses
@@ -1025,6 +1028,51 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
     return execute_stack_control(decode, opcode);
 }
 
+static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    bm_bus_transaction_t t = {0};
+    uint16_t port = arch->dx, value = arch->ax, input = 0;
+    unsigned size = (opcode & 1U) ? 2U : 1U;
+    unsigned fragment_size, count;
+    int output = (opcode & 2U) != 0U;
+    bm_status_t status;
+    if (opcode < 0xe8U) {
+        uint8_t immediate;
+        status = next_byte(decode, &immediate);
+        if (status != BM_STATUS_OK)
+            return status;
+        port = immediate; /* Immediate ports are zero-extended, not signed. */
+    }
+    fragment_size = size == 2U && (port & 1U) ? 1U : size;
+    count = size / fragment_size;
+    for (unsigned i = 0; i < count; ++i) {
+        t.space = BM_ADDRESS_IO;
+        t.operation = output ? BM_BUS_WRITE : BM_BUS_READ;
+        t.address = (uint16_t) (port + i); /* 16-bit I/O address space. */
+        t.size = fragment_size;
+        t.alignment = fragment_size;
+        t.endianness = BM_ENDIAN_LITTLE;
+        t.wait_states = 0;
+        t.value = output ? (fragment_size == 1U ?
+            (uint8_t) (value >> (i * 8U)) : value) : 0U;
+        status = decode->state->config.access(decode->state->config.access_context, &t);
+        if (status != BM_STATUS_OK)
+            return status; /* Completed endpoint effects are never retried. */
+        decode->waits += t.wait_states;
+        if (!output)
+            input |= fragment_size == 1U ?
+                (uint16_t) ((uint8_t) t.value << (i * 8U)) : (uint16_t) t.value;
+    }
+    if (!output) {
+        if (size == 1U)
+            set_byte_register(arch, 0U, (uint8_t) input);
+        else
+            arch->ax = input;
+    }
+    return BM_STATUS_OK;
+}
+
 static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -1038,6 +1086,9 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if ((opcode >= 0xe4U && opcode <= 0xe7U) ||
+        (opcode >= 0xecU && opcode <= 0xefU))
+        return execute_io(decode, opcode);
     if (opcode >= 0x91U && opcode <= 0x97U) {
         uint16_t *reg = word_register(arch, opcode & 7U);
         value = arch->ax;
@@ -1109,9 +1160,8 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         }
         if (opcode == 0x8eU) {
             segment = segment_register(arch, operand.reg_field);
-            if (segment == NULL || operand.reg_field == 1U ||
-                operand.reg_field == 2U)
-                return BM_STATUS_UNSUPPORTED; /* CS invalid; SS shadow pending. */
+            if (segment == NULL || operand.reg_field == 1U)
+                return BM_STATUS_UNSUPPORTED; /* Invalid MOV CS: #6 pending. */
             status = read_operand(decode, &operand, 2U, &value);
             if (status != BM_STATUS_OK)
                 return status;
@@ -1120,6 +1170,8 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             segment->limit = 0xffffU;
             segment->access = 0U;
             segment->valid = 1U;
+            if (operand.reg_field == 2U)
+                decode->next_shadow = BM_286_SHADOW_SS_LOAD;
             return BM_STATUS_OK;
         }
         if (opcode == 0xc6U || opcode == 0xc7U) {
@@ -1183,12 +1235,12 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         return BM_STATUS_IDLE;
     }
     if (!state->arch.shutdown && state->arch.trap_pending &&
-        !state->arch.interrupt_shadow) {
+        state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD) {
         state->stopped = 1U;
         return BM_STATUS_UNSUPPORTED; /* #1 delivery is not implemented. */
     }
     if (state->arch.nmi_pending && !state->arch.nmi_blocked &&
-        !state->arch.interrupt_shadow) {
+        state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD) {
         state->stopped = 1U;
         return BM_STATUS_UNSUPPORTED; /* NMI delivery/recovery is missing. */
     }
@@ -1212,6 +1264,8 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     decode.length = 0U;
     decode.waits = 0U;
     decode.override_segment = -1;
+    decode.next_shadow = BM_286_SHADOW_NONE;
+    trap_was_enabled = (uint8_t) ((state->arch.flags & FLAG_TF) != 0U);
     for (;;) {
         status = next_byte(&decode, &opcode);
         if (status != BM_STATUS_OK)
@@ -1233,11 +1287,13 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         state->stopped = 1U;
         return status;
     }
-    trap_was_enabled = (uint8_t) (((state->arch.flags & FLAG_TF) != 0U) &&
-                                  !state->arch.interrupt_shadow);
     state->arch.ip = (uint16_t) decode.cursor;
-    state->arch.interrupt_shadow = 0U;
-    state->arch.trap_pending = trap_was_enabled;
+    state->arch.interrupt_shadow = decode.next_shadow;
+    /* MOV/POP SS suppress their own sampled trap. The following completed
+     * instruction can raise #1 normally. A previously deferred trap is kept,
+     * not lost when TF is clear or when SS is loaded again. */
+    state->arch.trap_pending = (uint8_t) (state->arch.trap_pending ||
+        (trap_was_enabled && decode.next_shadow != BM_286_SHADOW_SS_LOAD));
     boundary.kind = BM_286_BOUNDARY_INSTRUCTION;
     boundary.bus_wait_cycles = decode.waits;
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock

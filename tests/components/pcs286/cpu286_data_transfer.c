@@ -428,7 +428,6 @@ static void test_rejections_and_instances(void)
         {0xf0U, 0xa0U, 0x00U, 0U}, /* LOCK path not yet modelled */
         {0xf3U, 0xa0U, 0x00U, 0U}, /* REP path not yet modelled */
         {0xc7U, 0xc8U, 0x00U, 0U}, /* invalid C7 /1 */
-        {0x8eU, 0xd0U, 0x00U, 0U}, /* MOV SS shadow pending */
         {0x8eU, 0xc8U, 0x00U, 0U}, /* MOV CS invalid */
         {0x87U, 0x07U, 0x00U, 0U}, /* memory XCHG requires LOCK */
         {0x66U, 0xb8U, 0x00U, 0U}  /* not a 286 operand prefix */

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2026 BluMach contributors
- * Partial Intel 80286 real-mode data, ALU, stack, near-control and far-JMP core.
+ * Partial Intel 80286 real-mode data, ALU, stack, control and direct-I/O core.
  * Timing, remaining ISA, faults and protected-mode execution are pending.
  */
 #ifndef BLUMACH_COMPONENTS_CPU_80286_H
@@ -14,7 +14,17 @@ extern "C" {
 #endif
 
 #define BM_286_CONTRACT_VERSION 2U
-#define BM_286_STATE_VERSION 2U
+#define BM_286_STATE_VERSION 3U
+
+/* Inhibition for the next instruction boundary, not a clock count.
+ * INTR_ONLY is reserved for STI-style state; STI execution is still pending.
+ * SS_LOAD additionally inhibits NMI and single-step delivery. Faults are not
+ * suppressed. HOLD/idle/error paths do not consume either shadow. */
+typedef enum bm_286_interrupt_shadow {
+    BM_286_SHADOW_NONE = 0,
+    BM_286_SHADOW_INTR_ONLY = 1,
+    BM_286_SHADOW_SS_LOAD = 2
+} bm_286_interrupt_shadow_t;
 
 /* A20 gating belongs to the motherboard, not to segment translation. */
 typedef enum bm_286_signal {
@@ -67,8 +77,7 @@ typedef struct bm_286_arch_state {
     uint8_t cpl;
     uint8_t halted;
     uint8_t shutdown;
-    uint8_t interrupt_shadow; /* Draft inhibition latch; STI versus SS-load
-                               * distinctions remain unimplemented. */
+    uint8_t interrupt_shadow; /* bm_286_interrupt_shadow_t; state v3 */
     uint8_t nmi_blocked;
     uint8_t nmi_pending;
     /* A trap sampled from TF before a completed instruction can remain due
@@ -108,7 +117,10 @@ typedef struct bm_286_config {
      * The callback completes synchronously; IDLE is not a mid-instruction
      * retry. Handle HOLD before the next boundary, without any bus access.
      * Board resolves UNMAPPED/READ_ONLY into its documented hardware policy.
-     * It receives DEBUG and LOCKED attributes without losing either. */
+     * It receives DEBUG and LOCKED attributes without losing either.
+     * Signal changes may be reported during access. Reset, destroy, state
+     * import and nested execution must be deferred until the boundary returns;
+     * in particular an I/O-triggered board reset must not re-enter the CPU. */
     bm_bus_access_fn access;
     void *access_context;
     bm_286_inta_fn interrupt_ack;
@@ -135,7 +147,7 @@ bm_status_t bm_286_create(const bm_host_services_t *host,
 bm_status_t bm_286_get_arch_state(const bm_cpu_t *cpu,
                                   bm_286_arch_state_t *out_state);
 /* Conformance-only state import at a stopped boundary. Validates size,
- * version, Boolean fields and architectural invariants atomically, flushes
+ * version, Boolean fields, shadow enum and architectural invariants atomically, flushes
  * prefetch and discards any private REP/decode continuation. trap_pending is
  * imported as supplied, never synthesized from the current TF bit. It starts
  * a new microarchitectural observation interval, not a cycle-exact restore. */

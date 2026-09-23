@@ -108,3 +108,13 @@ core now checks each word independently, wrapping the offset between words.
 All three pass after correction, with an authored synthetic regression and
 unchanged eligibility, vectors and undefined-state masks. This is observed
 Harris behaviour, not a claim of validation against every Intel stepping.
+
+## Segment-load expansion, 2026-09-23
+
+Added 17 (POP SS) and 8E (MOV segment), still pinned to the same commit and
+SHA-256 lock. Fifteen files now contain 71,000 cases: **65,843 match, 5,156
+pending, one revoked, zero discrepancies** in GCC UCRT64/MSVC Debug/Release.
+17 adds 4,834 matches/166 pending; 8E adds 3,511 matches/1,489 pending.
+No new masks or exception exclusions were introduced. This comparison covers
+register/RAM results, not SS's multi-instruction event inhibition, IN/OUT
+endpoint traffic or physical timings. Those have separate authored tests.

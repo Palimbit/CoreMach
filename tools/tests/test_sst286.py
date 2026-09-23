@@ -89,6 +89,10 @@ class SST286Tests(unittest.TestCase):
         self.assertEqual(sst.pending_reason(test), 'instruction-outside-initial-scope')
         test['code'] = b'\xff\x1f'  # Far CALL is still outside this tranche.
         self.assertEqual(sst.pending_reason(test), 'instruction-outside-initial-scope')
+        test['code'] = b'\x17'
+        self.assertIsNone(sst.pending_reason(test))
+        test['code'] = b'\x8e\xd0'
+        self.assertIsNone(sst.pending_reason(test))
 
     def test_truncated_chunks_and_duplicate_identity(self):
         data = corpus()

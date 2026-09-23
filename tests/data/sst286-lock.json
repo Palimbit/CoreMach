@@ -10,11 +10,13 @@
   "test_files": [
     "v1_real_mode/00.MOO.gz",
     "v1_real_mode/01.MOO.gz",
+    "v1_real_mode/17.MOO.gz",
     "v1_real_mode/31.MOO.gz",
     "v1_real_mode/54.MOO.gz",
     "v1_real_mode/60.MOO.gz",
     "v1_real_mode/61.MOO.gz",
     "v1_real_mode/8B.MOO.gz",
+    "v1_real_mode/8E.MOO.gz",
     "v1_real_mode/90.MOO.gz",
     "v1_real_mode/C8.MOO.gz",
     "v1_real_mode/C9.MOO.gz",
@@ -23,6 +25,8 @@
     "v1_real_mode/FF.5.MOO.gz"
   ],
   "sha256": {
+    "v1_real_mode/17.MOO.gz": "b913ea5ff1a87f4ccab6857ea527638578c6daf973d1e1a570f0030f47a02d93",
+    "v1_real_mode/8E.MOO.gz": "182bd2faa9bf3fb8116398b7d9d60ade7d634be56bb46faa2f93695b1c8931bc",
     "v1_real_mode/EA.MOO.gz": "9a0842bce22511c0fd67b3d2b7c3a4c2b6cd7d068420ebd3660fe7bee983a1cf",
     "v1_real_mode/FF.5.MOO.gz": "b674ecaa6437545dcd9262758183c46403c20485ac2b6bee21bd04ef31442eec",
     "README.md": "0381eb13604e5b2cea6f3ede348146d28d129b8f5f6d4af3668cc54be83bf025",

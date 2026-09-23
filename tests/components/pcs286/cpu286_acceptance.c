@@ -260,7 +260,7 @@ static void test_halt_shutdown_and_pending_signals(void)
     state = state_of(&cpu);
     state.halted = 1U;
     state.nmi_pending = 1U;
-    state.interrupt_shadow = 1U;
+    state.interrupt_shadow = BM_286_SHADOW_SS_LOAD;
     assert(bm_286_set_arch_state(&cpu, &state) == BM_STATUS_OK);
     assert(bm_286_step(&cpu, &boundary) == BM_STATUS_IDLE);
     assert(boundary.kind == BM_286_BOUNDARY_HALT);

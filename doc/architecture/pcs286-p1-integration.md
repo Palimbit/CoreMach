@@ -13,12 +13,12 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
 - Partial 80286: instance-owned reset state, high reset fetch, NOP, state
   import validation, HOLD acknowledgement and explicit unsupported-event stops.
   Real-mode data transfer now includes basic byte/word MOV, register XCHG,
-  16-bit effective addresses, segment overrides and ES/DS reload. MOV SS,
-  memory XCHG and protected execution remain explicitly unsupported.
+  16-bit effective addresses, segment overrides and ES/DS/SS reload.
+  Memory XCHG and protected execution remain explicitly unsupported.
   Binary arithmetic/logical operations, CMP/TEST, INC/DEC and NEG/NOT now
   operate on byte/word operands with defined flag semantics. Logical AF is
   undefined by Intel; deterministic clearing is an emulator policy only.
-  Basic real-mode PUSH/POP (excluding POP SS and flags), near CALL/JMP/RET,
+  Basic real-mode PUSH/POP (including POP SS, excluding flags), near CALL/JMP/RET,
   short Jcc, LOOP/LOOPE/LOOPNE and JCXZ are implemented. PUSHA/POPA and
   ENTER/LEAVE now cover real-mode aggregate saves and procedure frames;
   real-mode far JMP EA and memory FF /5 reload CS and leave the high reset
@@ -104,9 +104,10 @@ see `pcs286-sst-validation.md`. The first 51,000-case pinned selection gives
 and one upstream revocation. It is not whole-ISA, timing or board validation.
 The core and its clock policy were not changed for this adapter.
 
-1. Prioritize SS reload and direct I/O to enable board
-   bring-up, then remaining ALU families and exception handling with authored tests. Resolve distinct
-   STI versus SS-load inhibition and LOCK before completing deferred transfers.
+1. SS reload and direct I/O are now available for board diagnostics. Build
+   the RAM/ROM lifecycle next, then remaining instruction families and exception
+   handling with authored tests. Complete STI execution and LOCK before relying
+   on those paths; the SS versus INTR-only shadow distinction is implemented.
    Keep valid-but-unimplemented, invalid guest encoding and unknown timing
    distinct. Do not substitute a success/NOP or invent elapsed cycles.
 2. Implement PIC cascade and DMA byte/word engines separately; the current
@@ -162,3 +163,46 @@ absent-chip gates skipped (87 registered). The optional external-corpus CTest
 also passes in GCC Debug. All four comparator runs agree: 61,000 cases,
 57,498 matches, 3,501 pending, one upstream revoked, zero discrepancies.
 These are functional register/RAM results, not timing or PCS286 boot evidence.
+
+## SS reload and direct I/O, 2026-09-23
+
+Real-mode MOV/POP SS reload the segment cache and acquire an explicit SS_LOAD
+shadow. Architectural state version 3 distinguishes it from INTR_ONLY: only
+SS_LOAD also defers NMI and single-step delivery. Old v2 imports are rejected,
+not silently reinterpreted. There is still no STI instruction implementation.
+Shadows expire on a completed instruction, not on HOLD, idle or a host error.
+Each successful SS reload rearms its shadow (functional policy, not a measured
+consecutive-instruction silicon guarantee). SS-load's own TF trap is suppressed;
+the following completed instruction samples TF normally, and any already
+deferred trap/NMI is retained. Actual event delivery remains unsupported.
+
+IN/OUT E4-E7/EC-EF use the existing bus callback, BM_ADDRESS_IO and 16-bit port
+addresses. Immediate ports are zero-extended. Aligned words use one logical
+word access; odd words split into low/high byte accesses, wrapping the port
+address at FFFF. This follows the logical 16-bit bus contract, not a physical
+pin capture. The board owns 8-bit endpoint splitting and unmapped-port policy.
+No guessed port values, chip IDs, fixed waits or native elapsed clocks are added.
+IN commits AL/AX only after successful reads; completed endpoint side effects
+on a later failure remain, and the stopped CPU cannot retry them.
+
+Authored tests exercise old/new SS addressing (POP SS; POP SP), MOV SS; MOV SP,
+prefixes, null real-mode SS, odd reads, failures, explicit unsupported limits,
+HOLD, pending NMI/INTR/#1, reset and state-import validation. I/O tests cover
+160 opcode/prefix/port combinations, every transfer failure in all eight forms,
+unmapped errors, unsupported LOCK/REP/protected execution and HOLD during I/O.
+Other segment loads do not acquire SS inhibition. Engine/scheduler ABI and
+PCS86/M15 code are unchanged; only the 286 inspection-state version changed.
+
+Validation: GCC UCRT64 and MSVC, Debug/Release, 86 ordinary tests pass and three
+absent-chip gates skip (89 registered); optional hardware CTest also passes in
+GCC Debug. Thirty Python tests pass. Provenance: 34 components/180 files.
+The expanded 15-file hardware subset gives 65,843 matches out of 71,000,
+5,156 pending, one upstream revoked, zero discrepancies. MOV-segment/POP-SS
+register/RAM captures do not test multi-instruction inhibition or I/O signals;
+those are authored contract tests, not additional hardware-certified cases.
+
+Sources: Intel 210498-005 (1987), Appendix B MOV/POP/IN/OUT and Chapter 2 flags;
+consulted inherited MOV-segment/stack/I/O code at the pinned provenance commit.
+Indexed primary manual: https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf
+No firmware was run. The next milestone is a board-owned RAM/ROM diagnostic,
+not a claim that a full PCS286 firmware boot is ready.

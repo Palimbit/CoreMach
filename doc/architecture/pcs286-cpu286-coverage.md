@@ -58,14 +58,14 @@ generic catch-all or NOP is not coverage.
 | Family / encodings | Required semantics and representative tests | Classic candidate | Portable / timing |
 |---|---|---|---|
 | Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
-| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Partial: listed basic MOV forms, ES/DS reload and register XCHG; MOV SS, memory XCHG, LEA/LDS/LES/XLAT and protection missing; timing unknown |
+| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Partial: listed basic MOV forms, ES/DS reload and register XCHG; MOV SS implemented with SS-load inhibition; memory XCHG, LEA/LDS/LES/XLAT and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |
-| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Real-mode PUSH/POP except POP SS; PUSHA/POPA, ENTER/LEAVE, near CALL E8/FF /2 and RET C2/C3 implemented. Flags, far CALL/RET/IRET, SS inhibition and fault delivery missing; timing unknown |
+| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Real-mode PUSH/POP including POP SS; PUSHA/POPA, ENTER/LEAVE, near CALL E8/FF /2 and RET C2/C3 implemented. Flags, far CALL/RET/IRET and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Missing; timing iteration/prefetch-dependent |
-| Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Missing; timing unknown |
+| Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | All eight real-mode IN/OUT forms implemented; flag control and STI execution pending; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Missing; timing gate/path-dependent |
 | 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH and ENTER/LEAVE implemented; other forms and guest faults missing; timing unknown |
 | Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Missing; timing descriptor/path-dependent |
@@ -142,9 +142,9 @@ or implicit zero-wait assumption closes the evidence gap.
    registers. It also tests invalid config/output clearing, atomic import
    rejection, bus failure stop/no retry, HOLD reset, and imported HALT/SHUTDOWN
    event eligibility. Eligible pending NMI/INTR is explicitly unsupported
-   before fetch; interrupt delivery is not claimed. The draft single
-   `interrupt_shadow` cannot distinguish STI's INTR delay from SS-load
-   trap/NMI inhibition; resolving those separate rules is a later tranche.
+   before fetch; interrupt delivery is not claimed. State version 3 now gives
+   `interrupt_shadow` explicit NONE, INTR_ONLY and SS_LOAD values. The last
+   inhibits NMI and #1 as well; STI instruction execution is still pending.
 
 ## Reuse decision and next bounded block
 
@@ -192,9 +192,9 @@ retains inherited author and GPL notices. Intel 210498-005, chapters 2, 3,
 5 and Appendix C, supplies address/segment and MOV/XCHG semantics; Intel
 210760-002 chapter 3 supplies the memory-XCHG LOCK requirement.
 
-This remains partial: MOV SS awaits a separate SS-load interruption/trap/NMI
-shadow contract (distinct from STI), memory XCHG awaits bus LOCK semantics,
-basic PUSH/POP is now available but full SS and stack-fault delivery remain
+This remains partial: MOV/POP SS now have separate SS-load interruption/trap/NMI
+inhibition, memory XCHG awaits bus LOCK semantics,
+basic PUSH/POP is now available but protected SS and stack-fault delivery remain
 missing, as do LOCK/REP, protected mode, guest faults/interrupts and strings.
 Known valid unimplemented forms return host `BM_STATUS_UNSUPPORTED`; an
 architecturally invalid encoding is likewise stopped for now, **not** falsely
@@ -269,7 +269,7 @@ to 0000 between the pointer's two words. This corrected three discrepancies;
 it does not certify every Intel stepping or physical bus ordering.
 
 See `pcs286-sst-validation.md` for the 61,000-case selected corpus and explicit
-pending/revoked counts. Far CALL/RET/IRET, SS inhibition, interrupts and timing
+pending/revoked counts. Far CALL/RET/IRET, interrupts and timing
 remain separate work. This tranche provides a synthetic reset-exit diagnostic,
 not a bootable PCS286.
 
