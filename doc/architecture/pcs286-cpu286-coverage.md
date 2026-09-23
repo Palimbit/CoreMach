@@ -2,7 +2,44 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode far procedures
+## Latest tranche: address and pointer loads
+
+Real-mode LEA 8D, LES C4, LDS C5 and XLAT D7 are implemented. LEA computes
+only the wrapped 16-bit EA, ignoring the data segment's base, validity and
+limit; instruction fetch still obeys CS. Register-source Mod=3 remains an
+unsupported invalid encoding, not a fabricated guest #6.
+
+LDS/LES read offset and selector completely before replacing the destination
+register and DS/ES cache. This preserves the old source when it aliases the
+destination register or segment. The real-mode reload sets base=selector<<4,
+limit=FFFF, with no SS-load shadow. Both words use the existing independently
+wrapped offset policy, also present in the consulted classic LDS handler;
+no independent hardware capture for C4/C5 at FFFE is claimed. Preflight checks
+are explicit unsupported-fault policy, not silicon fault precedence.
+XLAT reads one byte at the selected segment plus (BX+unsigned AL) modulo
+65536, replacing only AL. FLAGS remain unchanged in all four instructions.
+
+Primary reference: [Intel 210498-005, sections 3.7.1/3.8 and Appendix B
+LEA/LDS/LES/XLAT](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf).
+Indexed primary text and already pinned inherited `x86_ops_mov.h` /
+`x86_ops_mov_seg.h` were consulted. This is a derived rewrite with notices
+preserved, not a new clean-room implementation or new PDF acquisition.
+
+Authored `cpu286_address_loads.c` tests 1,920 LEA EA/override/destination
+cases, 384 LDS/LES destination/source/alignment cases, alias and cache reload,
+1,280 XLAT index/override cases, unsigned wrap and A20, invalid Mod=3 forms,
+segment/instruction limits, unsupported PE/LOCK/REP, and every fetch/read
+failure in all four families. Errors leave defined CPU state unchanged and
+latch execution off without retry. No writes or host-platform calls added.
+
+GCC UCRT64 and MSVC Debug/Release pass 94 ordinary tests, with two explicit
+Headland/AT DMA skips; GCC Debug also passes the unchanged selected SST
+regression. The selected corpus does not include these new groups.
+Thirty Python tests, catalogue and provenance (36 components / 190 files)
+pass. Timings remain UNKNOWN and clocked scheduling refuses execution.
+No protected segment loading, hardware timing or PCS286 boot claim follows.
+
+## Previous tranche: real-mode far procedures
 
 Far CALL 9A ptr16:16 and memory FF /3 save CS followed by the decoded next IP.
 Both pointer words are read before stack writes, including when the source
@@ -39,7 +76,7 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 
 ### Remaining CPU work (not motherboard work)
 
-- Data/address operations: LEA, LDS, LES, XLAT and memory XCHG/implicit LOCK.
+- Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
 - Multiply/divide, immediate IMUL, CBW/CWD and decimal adjustment instructions.
 - Shifts/rotates, including variable counts and their defined/undefined flags.
 - Strings, REP restart/interruption and string I/O.
@@ -48,7 +85,7 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is LEA/LDS/LES/XLAT. Memory XCHG stays separate until
+The next bounded block is shifts/rotates with count/flag tests. Memory XCHG stays separate until
 the implicit LOCK/bus contract is implemented and tested. Completing real-mode
 instructions does not certify a full 286 or eliminate the PCS286 chipset gates.
 
@@ -137,7 +174,7 @@ passes the pinned optional 71,000-case SST subset with unchanged classification.
 Thirty Python tests, catalogue and provenance audit pass. This remains local
 implementation, not a remote CI, boot or full-ISA certification.
 
-Status: P1 partial interpreter through real-mode far procedures, hardware/software interrupts and FLAGS, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode address loads, far procedures, interrupts and FLAGS, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -193,7 +230,7 @@ generic catch-all or NOP is not coverage.
 | Family / encodings | Required semantics and representative tests | Classic candidate | Portable / timing |
 |---|---|---|---|
 | Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
-| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Partial: listed basic MOV forms, ES/DS reload and register XCHG; MOV SS implemented with SS-load inhibition; memory XCHG, LEA/LDS/LES/XLAT and protection missing; timing unknown |
+| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register XCHG implemented; MOV SS has SS-load inhibition; memory XCHG and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |

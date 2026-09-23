@@ -1295,6 +1295,50 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     if (arch->msw & MSW_PE)
         return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if (opcode == 0x8dU || opcode == 0xc4U || opcode == 0xc5U) {
+        status = decode_operand(decode, &operand);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (!operand.memory)
+            return BM_STATUS_UNSUPPORTED; /* Invalid Mod=3: guest #6 pending. */
+        if (opcode == 0x8dU) {
+            /* LEA computes only an offset: no data access or segment check. */
+            *word_register(arch, operand.reg_field) = operand.offset;
+            return BM_STATUS_OK;
+        }
+        /* Same independently wrapped word-offset policy as far pointers.
+         * Preflight is a host-gap policy, not silicon fault precedence. */
+        if (!operand.segment->valid ||
+            (uint32_t) operand.offset + 1U > operand.segment->limit ||
+            (uint32_t) (uint16_t) (operand.offset + 2U) + 1U > operand.segment->limit)
+            return BM_STATUS_UNSUPPORTED;
+        status = read_operand(decode, &operand, 2U, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        status = data_access(decode, operand.segment,
+            (uint16_t) (operand.offset + 2U), 2U, 0, &other);
+        if (status != BM_STATUS_OK)
+            return status;
+        /* Source may itself use DS/ES or the destination register. Read it
+         * completely before replacing either part of the destination. */
+        segment = opcode == 0xc4U ? &arch->es : &arch->ds;
+        segment->selector = other;
+        segment->base = (uint32_t) other << 4;
+        segment->limit = 0xffffU;
+        segment->access = 0U;
+        segment->valid = 1U;
+        *word_register(arch, operand.reg_field) = value;
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0xd7U) {
+        segment = segment_register(arch, decode->override_segment >= 0 ?
+            (unsigned) decode->override_segment : 3U);
+        offset = (uint16_t) (arch->bx + (arch->ax & 0xffU));
+        status = data_access(decode, segment, offset, 1U, 0, &value);
+        if (status == BM_STATUS_OK)
+            set_byte_register(arch, 0U, (uint8_t) value);
+        return status;
+    }
     if (opcode >= 0xccU && opcode <= 0xceU)
         return software_interrupt(decode, opcode);
     if ((opcode >= 0x9cU && opcode <= 0x9fU) || opcode == 0xf5U ||

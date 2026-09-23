@@ -320,7 +320,13 @@ same two skips; provenance covers 36 components / 189 files. The selected SST
 regression does not yet include far CALL/RET groups. Shared FF pointer wrap and
 whole-frame preflight are explicitly bounded policies, not new silicon evidence.
 
-Next CPU tranche: LEA/LDS/LES/XLAT; memory XCHG needs its separate LOCK path.
+LEA/LDS/LES/XLAT are now implemented and covered by independent EA, source,
+destination, cache-reload, alignment, wrap and failure tests. All 94 ordinary
+tests pass in GCC/MSVC Debug/Release, with the same two skips; provenance
+covers 36 components / 190 files. The unchanged optional SST selection does
+not cover the new groups. Real-mode functional scope only, no clock/ABI change.
+
+Next CPU tranche: shifts/rotates; memory XCHG needs its separate LOCK path.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.
