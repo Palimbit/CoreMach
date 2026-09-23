@@ -619,6 +619,43 @@ static bm_status_t far_jump(decoded_286_t *decode, uint16_t ip, uint16_t cs)
 
 /* Functional real-mode boundary only, not a pin-cycle/fault-order model.
  * Stage registers, never roll back completed endpoint writes. */
+static bm_status_t far_call(decoded_286_t *decode, uint16_t ip, uint16_t cs)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t words[2] = {arch->cs.selector, (uint16_t) decode->cursor};
+    bm_status_t status;
+    for (unsigned i = 0; i < 2U; ++i)
+        if (!stack_word_valid(arch, (uint16_t) (arch->sp - 2U * (i + 1U))))
+            return BM_STATUS_UNSUPPORTED;
+    for (unsigned i = 0; i < 2U; ++i) {
+        status = data_access(decode, &arch->ss,
+            (uint16_t) (arch->sp - 2U * (i + 1U)), 2U, 1, &words[i]);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    arch->sp = (uint16_t) (arch->sp - 4U);
+    return far_jump(decode, ip, cs);
+}
+
+static bm_status_t far_return(decoded_286_t *decode, uint16_t discard)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t words[2];
+    bm_status_t status;
+    for (unsigned i = 0; i < 2U; ++i)
+        if (!stack_word_valid(arch, (uint16_t) (arch->sp + 2U * i)))
+            return BM_STATUS_UNSUPPORTED;
+    for (unsigned i = 0; i < 2U; ++i) {
+        status = data_access(decode, &arch->ss,
+            (uint16_t) (arch->sp + 2U * i), 2U, 0, &words[i]);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    arch->sp = (uint16_t) (arch->sp + 4U + discard);
+    /* Unlike IRET, RETF changes neither FLAGS nor NMI blocking. */
+    return far_jump(decode, words[0], words[1]);
+}
+
 static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector,
                                    uint16_t return_ip)
 {
@@ -776,7 +813,7 @@ static bm_status_t execute_ff_control(decoded_286_t *decode,
 {
     uint16_t value, selector;
     bm_status_t status;
-    if (operand->reg_field == 5U) {
+    if (operand->reg_field == 3U || operand->reg_field == 5U) {
         if (!operand->memory || !operand->segment->valid ||
             (uint32_t) operand->offset + 1U > operand->segment->limit ||
             (uint32_t) (uint16_t) (operand->offset + 2U) + 1U > operand->segment->limit)
@@ -788,11 +825,14 @@ static bm_status_t execute_ff_control(decoded_286_t *decode,
             return status;
         status = data_access(decode, operand->segment,
                              (uint16_t) (operand->offset + 2U), 2U, 0, &selector);
-        return status == BM_STATUS_OK ? far_jump(decode, value, selector) : status;
+        if (status != BM_STATUS_OK)
+            return status;
+        return operand->reg_field == 3U ? far_call(decode, value, selector) :
+                                          far_jump(decode, value, selector);
     }
     if (operand->reg_field != 2U && operand->reg_field != 4U &&
         operand->reg_field != 6U)
-        return BM_STATUS_UNSUPPORTED; /* Far call and /7 remain gaps. */
+        return BM_STATUS_UNSUPPORTED; /* Invalid /7: guest #6 pending. */
     status = read_operand(decode, operand, 2U, &value);
     if (status != BM_STATUS_OK)
         return status;
@@ -827,12 +867,23 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
     uint8_t byte;
     int take;
     bm_status_t status;
-    if (opcode == 0xeaU) {
+    if (opcode == 0x9aU || opcode == 0xeaU) {
         status = next_word(decode, &value);
         if (status != BM_STATUS_OK)
             return status;
         status = next_word(decode, &extra);
-        return status == BM_STATUS_OK ? far_jump(decode, value, extra) : status;
+        if (status != BM_STATUS_OK)
+            return status;
+        return opcode == 0x9aU ? far_call(decode, value, extra) :
+                                far_jump(decode, value, extra);
+    }
+    if (opcode == 0xcaU || opcode == 0xcbU) {
+        if (opcode == 0xcaU) {
+            status = next_word(decode, &extra);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+        return far_return(decode, extra);
     }
     if (opcode == 0x60U || opcode == 0x61U)
         return aggregate_stack(decode, opcode == 0x61U);

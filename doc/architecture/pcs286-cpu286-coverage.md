@@ -2,7 +2,57 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: software interrupts and FLAGS
+## Latest tranche: real-mode far procedures
+
+Far CALL 9A ptr16:16 and memory FF /3 save CS followed by the decoded next IP.
+Both pointer words are read before stack writes, including when the source
+overlaps the stack. RETF CB and CA imm16 pop IP then CS and discard the requested
+number of additional bytes, without reading those bytes. FLAGS and NMI blocking
+are unchanged; these are not IRET. Reloading CS discards the high reset cache,
+and the CPU leaves A20 to the board. Registers commit only after all accesses
+succeed; completed writes remain visible on host failure and cannot be retried.
+
+Source references already pinned in provenance: `x86_ops_call.h`,
+`x86_ops_ret_2386.h` and the existing segment reload helper. This remains a
+derived rewrite preserving inherited notices. Primary instruction reference:
+[Intel 210498-005, section 3.6.1 and Appendix B CALL/RET](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf),
+including RET B-94. Indexed text was consulted, not a new PDF acquisition.
+
+The shared FF /3,/5 pointer reader wraps between words at offset FFFE.
+The prior hardware captures establish that case for FF /5, not for FF /3;
+reusing that rule for CALL is an explicit functional policy awaiting independent
+FF /3 capture coverage. Whole-frame preflight rejects unsupported stack faults
+before writes; it is not measured fault precedence or shutdown emulation.
+Protected calls/returns, task and privilege transitions remain unsupported.
+No timing constant was adopted; all boundaries remain UNKNOWN and strict
+clocked scheduling stays disabled.
+
+`cpu286_far_procedures.c` covers immediate/indirect calls, all segment overrides,
+BP's SS default, independently odd/even pointers and stacks, overlapping operands,
+wrapping frames and return IP, high-reset CS and A20, unchanged FLAGS/NMI,
+sampled TF, all 65,536 RETF immediate values, invalid forms and every transfer
+failure in four forms at both alignments. Existing far-JMP/near-control tests
+remain active. GCC UCRT64 and MSVC Debug/Release: 93 ordinary passes, two explicit
+Headland/AT DMA skips. GCC Debug adds the unchanged pinned SST regression;
+it does not contain these new groups. Thirty Python checks, catalogue and
+provenance (36 components / 189 files) pass. No firmware or board boot claim.
+
+### Remaining CPU work (not motherboard work)
+
+- Data/address operations: LEA, LDS, LES, XLAT and memory XCHG/implicit LOCK.
+- Multiply/divide, immediate IMUL, CBW/CWD and decimal adjustment instructions.
+- Shifts/rotates, including variable counts and their defined/undefined flags.
+- Strings, REP restart/interruption and string I/O.
+- Guest faults/BOUND/invalid-opcode handling, protected segmentation, descriptors,
+  privilege, tasks/gates and system instructions; correct double fault/shutdown.
+- Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
+  undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
+
+The next bounded block is LEA/LDS/LES/XLAT. Memory XCHG stays separate until
+the implicit LOCK/bus contract is implemented and tested. Completing real-mode
+instructions does not certify a full 286 or eliminate the PCS286 chipset gates.
+
+## Previous tranche: software interrupts and FLAGS
 
 Real-mode INT imm8, INT3 and taken INTO save the decoded next IP, CS and FLAGS,
 clear IF/TF and enter the IVT handler without issuing INTA. Untaken INTO
@@ -87,7 +137,7 @@ passes the pinned optional 71,000-case SST subset with unchanged classification.
 Thirty Python tests, catalogue and provenance audit pass. This remains local
 implementation, not a remote CI, boot or full-ISA certification.
 
-Status: P1 partial interpreter through real-mode hardware/software interrupts and FLAGS, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode far procedures, hardware/software interrupts and FLAGS, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -147,7 +197,7 @@ generic catch-all or NOP is not coverage.
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |
-| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Real-mode PUSH/POP including POP SS; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near CALL E8/FF /2 and RET C2/C3, IRET implemented; far CALL/RET and fault delivery missing; timing unknown |
+| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Missing; timing iteration/prefetch-dependent |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |

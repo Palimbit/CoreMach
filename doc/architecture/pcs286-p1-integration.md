@@ -313,7 +313,14 @@ subset is unchanged regression coverage, not validation of these new groups.
 Thirty Python checks, catalogue and provenance (36 components / 188 files)
 pass. No CPU timing, machine factory, ROM execution or board decode added.
 
-Next CPU tranche: real-mode far CALL/RET, with stack/CS-cache, alignment and
-endpoint-failure tests. Headland/IOC02 evidence
+The next completed CPU tranche adds real-mode far CALL 9A/FF /3 and RETF CA/CB,
+with stack/CS-cache, A20, alignment, overlap, parameter discard and per-transfer
+failure tests. All 93 ordinary tests pass in GCC/MSVC Debug/Release, with the
+same two skips; provenance covers 36 components / 189 files. The selected SST
+regression does not yet include far CALL/RET groups. Shared FF pointer wrap and
+whole-frame preflight are explicitly bounded policies, not new silicon evidence.
+
+Next CPU tranche: LEA/LDS/LES/XLAT; memory XCHG needs its separate LOCK path.
+Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.

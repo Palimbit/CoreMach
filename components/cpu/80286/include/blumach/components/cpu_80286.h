@@ -158,6 +158,8 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
 /* Real-mode INTR (two INTA phases), NMI and sampled #1 are accepted before
  * fetch, respecting SS/STI inhibition. Real-mode CLI/STI/HLT/IRET,
  * INT/INT3/INTO, PUSHF/POPF, LAHF/SAHF and carry/direction control are implemented.
+ * Real-mode far CALL 9A/FF /3 and RETF CA/CB preserve FLAGS/NMI blocking;
+ * registers commit only after all pointer/stack accesses succeed.
  * Entry and IRET stage registers until all accesses succeed; completed bus
  * writes/acknowledgements are not undone on host errors, and retry is latched
  * off. Guest faults, protected gates and shutdown recovery are
