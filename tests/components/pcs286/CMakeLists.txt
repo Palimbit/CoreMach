@@ -81,6 +81,13 @@ if(TARGET blumach_cpu_80286)
     add_test(NAME pcs286-component.cpu-arithmetic COMMAND pcs286-cpu-arithmetic)
     set_tests_properties(pcs286-component.cpu-arithmetic PROPERTIES
         LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
+    add_executable(pcs286-cpu-stack-control cpu286_stack_control.c)
+    target_link_libraries(pcs286-cpu-stack-control PRIVATE
+        blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-stack-control)
+    add_test(NAME pcs286-component.cpu-stack-control COMMAND pcs286-cpu-stack-control)
+    set_tests_properties(pcs286-component.cpu-stack-control PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
 endif()
 pcs286_acceptance(headland headland_acceptance.c blumach_headland_gc10x)
 pcs286_acceptance(at-bus at_bus_acceptance.c blumach_at_bus)

@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: P1 partial interpreter through real-mode arithmetic, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode stack/near control, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -49,7 +49,7 @@ cannot become a 286 by selecting a flag.
 `Required` means required for a reusable documented 80286 core, including
 guest #6 for undefined encodings. `Later` names a separately scoped silicon
 or populated-80287 feature. The current portable core implements the reset
-state, NOP and bounded real-mode data-transfer and ALU subsets; all other rows are
+state, NOP and bounded real-mode data-transfer, ALU, stack and near-control subsets; other rows are
 **not implemented**. A
 classic handler is a review/reuse candidate only, never a
 portable pass. Every grouped opcode must classify each ModR/M subform; a
@@ -62,8 +62,8 @@ generic catch-all or NOP is not coverage.
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |
-| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Missing; timing path-dependent |
-| Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Missing; timing path-dependent |
+| Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Basic real-mode PUSH/POP except POP SS; near CALL E8/FF /2 and RET C2/C3 implemented. Flags, aggregate/frame operations, far control, SS inhibition and fault delivery missing; timing unknown |
+| Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 implemented; far/protected control and prefetch model missing; timing unknown |
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Missing; timing iteration/prefetch-dependent |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Missing; timing gate/path-dependent |
@@ -194,8 +194,8 @@ retains inherited author and GPL notices. Intel 210498-005, chapters 2, 3,
 
 This remains partial: MOV SS awaits a separate SS-load interruption/trap/NMI
 shadow contract (distinct from STI), memory XCHG awaits bus LOCK semantics,
-PUSH/POP awaits complete SS and stack-fault handling, and LOCK/REP, protected
-mode, guest faults/interrupts, strings and all remaining families are missing.
+basic PUSH/POP is now available but full SS and stack-fault delivery remain
+missing, as do LOCK/REP, protected mode, guest faults/interrupts and strings.
 Known valid unimplemented forms return host `BM_STATUS_UNSUPPORTED`; an
 architecturally invalid encoding is likewise stopped for now, **not** falsely
 reported as delivered guest #6. UNKNOWN timing remains unschedulable. This is
@@ -210,7 +210,8 @@ TEST 84/85/A8/A9 and F6/F7 /0, register INC/DEC 40-4F, FE/FF /0 and /1,
 and F6/F7 /2 NOT and /3 NEG. Opcode 82 remains an explicit unsupported gap:
 no primary Intel evidence used here establishes its documented status or exact
 behavior. F6/F7 /1 is not delivered as guest #6 because fault delivery is
-missing; /4-7 MUL/DIV and FF /2+ control/stack forms remain unsupported.
+missing; /4-7 MUL/DIV remain unsupported. FF /2,/4,/6 were added in the next
+stack/control tranche; /3,/5 far forms and /7 remain unsupported.
 No LOCK-prefixed arithmetic, protected-mode execution, shifts, BCD,
 multiply/divide, stack or control flow is claimed.
 
@@ -249,3 +250,41 @@ independent mathematical oracle covers 1,054,848 binary/unary cases, exhaustive
 for the selected byte operands/carry inputs and sampled at 16-bit boundaries.
 It does not certify timings, undocumented silicon or complete ISA coverage.
 Provenance audit: 34 components/175 files, zero errors. No firmware executed.
+
+## Bounded stack and near-control tranche
+
+Basic real-mode PUSH supports 50-57, 06/0E/16/1E, 68/6A and FF /6; POP
+supports 58-5F, 07/1F and 8F /0. SP is committed after successful transfers;
+POP SP loads the popped value without incrementing that replacement. Stack
+accesses always use SS; overrides affect only explicit memory operands. No
+POP SS, PUSHF/POPF, PUSHA/POPA or ENTER/LEAVE is claimed. PUSH at SP=1 stops
+as unsupported; Intel's shutdown/exception path is not implemented by wrapping
+the operand or pretending success.
+
+Near control covers E8, FF /2, C2/C3, EB/E9, FF /4, 70-7F and E0-E3.
+Displacements are relative to the decoded instruction end; near targets retain
+CS including its reset hidden base. Taken targets are checked before CALL
+stack writes and before committing RET/LOOP state. Fault detection remains a
+host unsupported stop, not guest #13 delivery or a certified fault precedence
+model. A RET or indirect operand read may already have occurred on failure.
+No far transfers, mode changes, interrupts, exception delivery or timings are
+implied. Register/IP rollback after host endpoint failure is an emulator
+contract, not a hardware bus-abort recovery claim.
+
+New synthetic tests cover 1,024 short-branch flag/direction combinations,
+LOOP zero/wrap/termination, stack operands, segments, SP aliases, limits and
+every endpoint-failure position for 14 instruction forms. A multi-instruction
+CALL/subroutine/RET sequence executes against synthetic RAM. All 82 executed
+tests pass under GCC UCRT64 and MSVC, Debug and Release, with three absent
+device gates skipped. Provenance: 34 components/176 files, zero errors.
+
+Additional consulted inherited paths at the pinned source commit above:
+`src/cpu/x86_ops_stack.h`, `src/cpu/x86_ops_jump.h`, `src/cpu/x86_ops_call.h`,
+`src/cpu/x86_ops_ret_2386.h`. The implementation stays a derived rewrite with
+the original notices, not an embedded global core. Intel 210498-005 chapter 3
+and Appendix B remain the primary instruction reference. This session used
+indexed extracts of [the Intel manual mirror](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf)
+for PUSH/POP, including B-87's PUSH SP and SP=1 distinction; full PDF retrieval
+was unavailable. The [1985 Intel edition](https://www.bitsavers.org/components/intel/80286/210498-003_iAPX_286_Programmers_Reference_1985.pdf)
+section 3.6.2.3 corroborates the LOOP/JCXZ distinction through indexed text.
+No document or firmware was added to Git.

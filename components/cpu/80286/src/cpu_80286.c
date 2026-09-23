@@ -7,7 +7,9 @@
  * src/cpu/x86_ops_pmode.h, src/cpu/x86_ops_rep_286_2386.h,
  * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h,
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h,
- * src/cpu/x86_ops_misc.h and src/cpu/x86_flags.h. The inherited
+ * src/cpu/x86_ops_misc.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
+ * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
+ * src/cpu/x86_ops_ret_2386.h. The inherited
  * sources retain these notices:
  *
  * src/cpu/x86.c — Authors: Andrew Jenner, Miran Grca.
@@ -482,6 +484,182 @@ static bm_status_t write_operand(decoded_286_t *decode,
     return BM_STATUS_OK;
 }
 
+/* Real-mode stack operations never use a segment override for the stack
+ * itself. A limit/shutdown condition remains an explicit unsupported gap
+ * until guest exception delivery exists. Completed bus writes are not undone. */
+static bm_status_t push_word(decoded_286_t *decode, uint16_t value)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint16_t sp = (uint16_t) (arch->sp - 2U);
+    bm_status_t status = data_access(decode, &arch->ss, sp, 2U, 1, &value);
+    if (status == BM_STATUS_OK)
+        arch->sp = sp;
+    return status;
+}
+
+static int valid_near_target(const bm_286_arch_state_t *arch, uint16_t ip)
+{
+    return arch->cs.valid && ip <= arch->cs.limit;
+}
+
+static bm_status_t near_branch(decoded_286_t *decode, uint16_t target, int call)
+{
+    bm_status_t status;
+    if (!valid_near_target(&decode->state->arch, target))
+        return BM_STATUS_UNSUPPORTED; /* #13, not a successful branch. */
+    if (call) {
+        status = push_word(decode, (uint16_t) decode->cursor);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    decode->cursor = target;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t execute_ff_control(decoded_286_t *decode,
+                                      const operand_286_t *operand)
+{
+    uint16_t value;
+    bm_status_t status;
+    if (operand->reg_field != 2U && operand->reg_field != 4U &&
+        operand->reg_field != 6U)
+        return BM_STATUS_UNSUPPORTED; /* Far control and /7 remain gaps. */
+    status = read_operand(decode, operand, 2U, &value);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (operand->reg_field == 6U)
+        return push_word(decode, value);
+    return near_branch(decode, value, operand->reg_field == 2U);
+}
+
+static int branch_condition(uint16_t flags, unsigned condition)
+{
+    int selected;
+    int signed_less = ((flags & FLAG_SF) != 0U) != ((flags & FLAG_OF) != 0U);
+    switch (condition >> 1) {
+    case 0U: selected = (flags & FLAG_OF) != 0U; break;
+    case 1U: selected = (flags & FLAG_CF) != 0U; break;
+    case 2U: selected = (flags & FLAG_ZF) != 0U; break;
+    case 3U: selected = (flags & (FLAG_CF | FLAG_ZF)) != 0U; break;
+    case 4U: selected = (flags & FLAG_SF) != 0U; break;
+    case 5U: selected = (flags & FLAG_PF) != 0U; break;
+    case 6U: selected = signed_less; break;
+    default: selected = signed_less || (flags & FLAG_ZF) != 0U; break;
+    }
+    return selected != ((condition & 1U) != 0U);
+}
+
+static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    operand_286_t operand;
+    bm_286_segment_state_t *segment;
+    uint16_t value = 0U, extra = 0U, target, next_cx;
+    uint8_t byte;
+    int take;
+    bm_status_t status;
+    if (opcode >= 0x50U && opcode <= 0x57U)
+        /* Including SP: the 286 pushes the pre-decrement value. */
+        return push_word(decode, *word_register(arch, opcode & 7U));
+    if (opcode == 0x06U || opcode == 0x0eU || opcode == 0x16U || opcode == 0x1eU)
+        return push_word(decode, segment_register(arch, opcode >> 3)->selector);
+    if (opcode == 0x68U || opcode == 0x6aU) {
+        if (opcode == 0x68U)
+            status = next_word(decode, &value);
+        else {
+            status = next_byte(decode, &byte);
+            if (status == BM_STATUS_OK)
+                value = (uint16_t) (int16_t) (int8_t) byte;
+        }
+        return status == BM_STATUS_OK ? push_word(decode, value) : status;
+    }
+    if ((opcode >= 0x58U && opcode <= 0x5fU) || opcode == 0x8fU ||
+        opcode == 0x07U || opcode == 0x1fU) {
+        if (opcode == 0x8fU) {
+            status = decode_operand(decode, &operand);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (operand.reg_field != 0U)
+                return BM_STATUS_UNSUPPORTED;
+        }
+        status = data_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (opcode == 0x8fU) {
+            status = write_operand(decode, &operand, 2U, value);
+            if (status != BM_STATUS_OK)
+                return status;
+            /* Mod=3 SP is loaded last, not incremented after replacement. */
+            if (!operand.memory && operand.reg_number == 4U)
+                return BM_STATUS_OK;
+        } else if (opcode == 0x07U || opcode == 0x1fU) {
+            segment = segment_register(arch, opcode >> 3);
+            segment->selector = value;
+            segment->base = (uint32_t) value << 4;
+            segment->limit = 0xffffU;
+            segment->access = 0U;
+            segment->valid = 1U;
+        } else {
+            if (opcode == 0x5cU) {
+                arch->sp = value;
+                return BM_STATUS_OK;
+            }
+            *word_register(arch, opcode & 7U) = value;
+        }
+        arch->sp = (uint16_t) (arch->sp + 2U);
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0xc2U || opcode == 0xc3U) {
+        if (opcode == 0xc2U) {
+            status = next_word(decode, &extra);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+        status = data_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (!valid_near_target(arch, value))
+            return BM_STATUS_UNSUPPORTED;
+        arch->sp = (uint16_t) (arch->sp + 2U + extra);
+        decode->cursor = value;
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0xe8U || opcode == 0xe9U) {
+        status = next_word(decode, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        target = (uint16_t) (decode->cursor + value);
+        return near_branch(decode, target, opcode == 0xe8U);
+    }
+    if (opcode == 0xebU || (opcode >= 0x70U && opcode <= 0x7fU) ||
+        (opcode >= 0xe0U && opcode <= 0xe3U)) {
+        status = next_byte(decode, &byte);
+        if (status != BM_STATUS_OK)
+            return status;
+        target = (uint16_t) (decode->cursor + (uint16_t) (int16_t) (int8_t) byte);
+        next_cx = arch->cx;
+        if (opcode == 0xebU)
+            take = 1;
+        else if (opcode <= 0x7fU)
+            take = branch_condition(arch->flags, opcode & 15U);
+        else if (opcode == 0xe3U)
+            take = arch->cx == 0U;
+        else {
+            next_cx = (uint16_t) (arch->cx - 1U);
+            take = next_cx != 0U && (opcode == 0xe2U ||
+                ((arch->flags & FLAG_ZF) != 0U) == (opcode == 0xe1U));
+        }
+        if (take) {
+            status = near_branch(decode, target, 0);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+        arch->cx = next_cx;
+        return BM_STATUS_OK;
+    }
+    return BM_STATUS_UNSUPPORTED; /* Flags, frames, SS and far control pending. */
+}
+
 /* ALU kinds follow the three-bit opcode/ModR/M operation field. TEST uses
  * the AND calculation but does not write the operand. All result/flag values
  * are private until the destination write has completed successfully. */
@@ -627,6 +805,8 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
         status = decode_operand(decode, &operand);
         if (status != BM_STATUS_OK)
             return status;
+        if (opcode == 0xffU && operand.reg_field > 1U)
+            return execute_ff_control(decode, &operand);
         size = (opcode == 0x80U || opcode == 0x84U ||
                 opcode == 0xf6U || opcode == 0xfeU) ? 1U : 2U;
         if (opcode == 0x80U || opcode == 0x81U || opcode == 0x83U) {
@@ -662,7 +842,7 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
                 return BM_STATUS_UNSUPPORTED; /* /1 invalid; /4-7 deferred. */
         } else {
             if (operand.reg_field > 1U)
-                return BM_STATUS_UNSUPPORTED; /* FF /2+ valid, deferred. */
+                return BM_STATUS_UNSUPPORTED; /* FE /2+ invalid; #6 pending. */
             operation = operand.reg_field == 0U ? 0U : 5U;
         }
         status = read_operand(decode, &operand, size, &destination);
@@ -713,7 +893,7 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
         arch->flags = flags;
         return BM_STATUS_OK;
     }
-    return BM_STATUS_UNSUPPORTED; /* 82 and all other families remain gaps. */
+    return execute_stack_control(decode, opcode);
 }
 
 static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)

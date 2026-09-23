@@ -14,10 +14,13 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
   import validation, HOLD acknowledgement and explicit unsupported-event stops.
   Real-mode data transfer now includes basic byte/word MOV, register XCHG,
   16-bit effective addresses, segment overrides and ES/DS reload. MOV SS,
-  memory XCHG, stack and protected execution remain explicitly unsupported.
+  memory XCHG and protected execution remain explicitly unsupported.
   Binary arithmetic/logical operations, CMP/TEST, INC/DEC and NEG/NOT now
   operate on byte/word operands with defined flag semantics. Logical AF is
   undefined by Intel; deterministic clearing is an emulator policy only.
+  Basic real-mode PUSH/POP (excluding POP SS and flags), near CALL/JMP/RET,
+  short Jcc, LOOP/LOOPE/LOOPNE and JCXZ are implemented. Aggregate/frame stack
+  operations and far control transfers are still missing.
 - A synthetic integration test connects these real components and checks
   suspension, DMA access after grant, return to CPU ownership and reset. It
   also raises a DMA request during a fetch: the current instruction completes
@@ -31,8 +34,8 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
 ## Validation, 2026-09-23
 
 Engine-only Debug and Release builds with UCRT64 GCC and MSVC each execute
-81 passing tests, including CPU data-transfer, arithmetic and independent
-ALU-oracle suites (84 registered, three skipped).
+82 passing tests, including CPU data-transfer, arithmetic, independent
+ALU-oracle and stack/control suites (85 registered, three skipped).
 Three more tests explicitly skip: Headland, AT PIC and AT DMA implementations
 are absent. Assertions remain enabled; new component code uses warnings as
 errors. The MSVC check exposed and corrected a size_t narrowing in a test.
@@ -54,8 +57,21 @@ sign extension, failed reads/fetches/writes and partial odd-word writes without
 retry or flag/IP commit. MSVC's possible-uninitialized-source warning was
 resolved with explicit initialization; successful unary paths still supply
 their own operand before calculation. All four configurations passed afterward.
-Provenance covers 34 components/175 files; 21 Python tests and the catalogue
+Provenance covers 34 components/176 files; 21 Python tests and the catalogue
 check pass. No timing or performance certification follows from these counts.
+
+The stack/control suite tests register and memory operands, sign extension,
+286 PUSH SP and POP SP behaviour, fixed SS stack addressing versus overridden
+explicit operands, near CALL/RET sequencing, and all 16 short conditions over
+32 relevant flag combinations in both displacement directions. LOOP variants
+cover CX=0/1/2/FFFF and both ZF values. An endpoint failure is injected at every
+transfer of 14 representative instructions, including odd-word fragments:
+CPU state remains unchanged, completed writes persist and cannot be retried.
+Stack/code limits reject explicitly; PUSH at SP=1 is an unsupported shutdown
+path, not a claimed guest exception or successful stack wrap. Tests include
+SP=0 push/pop, relative IP wrap, RET cleanup wrap, non-taken out-of-limit
+targets and deferred SS/far/flags/aggregate/frame instructions. No new public
+ABI or changes to the common scheduler were required.
 
 The portable CI path filters now include `tests/components/**`, so a change
 limited to these tests also triggers validation. These local results are not
@@ -67,8 +83,8 @@ the versioned provenance manifest. The AT interconnect is authored new code.
 
 ## Next work
 
-1. Extend the CPU through coherent instruction families: stack and control
-   flow, then remaining ALU families, with authored boundary/flag/bus tests. Resolve distinct
+1. Extend the CPU through remaining ALU families and aggregate/frame stack
+   operations, then far control and exception handling with authored tests. Resolve distinct
    STI versus SS-load inhibition and LOCK before completing deferred transfers.
    Keep valid-but-unimplemented, invalid guest encoding and unknown timing
    distinct. Do not substitute a success/NOP or invent elapsed cycles.
