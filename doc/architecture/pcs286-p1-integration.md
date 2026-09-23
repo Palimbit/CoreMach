@@ -1,0 +1,51 @@
+# PCS 286: initial CPU and AT integration
+
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+
+Local integration branch: `feature/pcs286-integration-p1`, based on portable
+merge `8e5cd917d95536fbdfe65ce2d5d658eda0633d20` (PR #208).
+This is a component milestone, not a bootable PCS 286 or completed P1/P3.
+
+## Implemented boundary
+
+- Independent AT interconnect: CPU/one external requester ownership,
+  LOCK/HOLD/HLDA, cancellation and explicit refusal of competing requests.
+- Partial 80286: instance-owned reset state, high reset fetch, NOP, state
+  import validation, HOLD acknowledgement and explicit unsupported-event stops.
+- A synthetic integration test connects these real components and checks
+  suspension, DMA access after grant, return to CPU ownership and reset.
+- Endpoint waits remain requester clocks and are counted once. CPU elapsed
+  timing is UNKNOWN; strict clocked execution refuses before fetching.
+- Existing generic engine contracts, scheduler and PCS86/M15 implementations
+  are unchanged. PCS286 is not registered as an available runtime machine.
+
+## Validation, 2026-09-23
+
+Engine-only Debug builds with UCRT64 GCC and MSVC both execute 78 passing tests.
+Three more tests explicitly skip: Headland, AT PIC and AT DMA implementations
+are absent. Assertions remain enabled; new component code uses warnings as
+errors. The MSVC check exposed and corrected a size_t narrowing in a test.
+
+The portable CI path filters now include `tests/components/**`, so a change
+limited to these tests also triggers validation. These local results are not
+a claim that remote Linux/macOS CI has already run.
+
+No firmware, disk images or manufacturer scans are included or executed.
+Authorship and exact inherited source references remain in the CPU source and
+the versioned provenance manifest. The AT interconnect is authored new code.
+
+## Next work
+
+1. Extend the CPU through coherent instruction families: real-mode addressing,
+   transfers, arithmetic and stack, with authored boundary/flag/bus tests.
+   Keep valid-but-unimplemented, invalid guest encoding and unknown timing
+   distinct. Do not substitute a success/NOP or invent elapsed cycles.
+2. Implement PIC cascade and DMA byte/word engines separately; the current
+   interconnect is not either controller. Preserve their inherited provenance.
+3. Review Headland register/decode evidence before implementation. Reference
+   schematic wiring must not be presented as observed PCS286 wiring.
+4. Compose board devices only after their contracts and ownership pass. No
+   BIOS patch, permanently enabled memory alias or forced POST result.
+
+See `pcs286-cpu286-coverage.md`, `pcs286-at-fabric-notes.md` and `pcs286-p0.md`
+for the larger pending coverage and acceptance gates.

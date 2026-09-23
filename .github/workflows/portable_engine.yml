@@ -12,6 +12,7 @@ on:
       - platforms/**
       - apps/**
       - tests/engine/**
+      - tests/components/**
       - provenance/**
       - doc/validation/**
       - doc/releases/portable-*.md
@@ -38,6 +39,7 @@ on:
       - platforms/**
       - apps/**
       - tests/engine/**
+      - tests/components/**
       - provenance/**
       - doc/validation/**
       - doc/releases/portable-*.md

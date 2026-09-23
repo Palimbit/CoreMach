@@ -228,7 +228,7 @@ static void test_halt_shutdown_and_pending_signals(void)
     bm_cpu_t cpu = {0};
     bm_286_arch_state_t state;
     bm_286_boundary_t boundary = {0};
-    unsigned fetches_before_shutdown;
+    size_t fetches_before_shutdown;
     fixture_init(&rom, 0xffff00U);
     rom.bytes[0xf0] = 0x90U;
     c = config_for(&rom);

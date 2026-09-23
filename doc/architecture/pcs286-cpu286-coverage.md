@@ -9,7 +9,7 @@ Status: P1 source review and first lifecycle tranche, 2026-09-23. Reviewed imple
 **PCS 286**, not the TI/OLIMCU PCS 286/S. No new CPU body is present at this
 base. The existing `cpu286_acceptance.c` was initially skipped because its
 target did not exist. The current branch adds source and expanded tests;
-coordinator-owned CMake/provenance wiring is under integration. No firmware or preserved media was
+coordinator-owned CMake/provenance wiring is integrated locally. No firmware or preserved media was
 used in this review or the authored tests.
 
 ## Evidence and scope
@@ -163,8 +163,11 @@ defined reset state, 24-bit fetch, NOP, state import validation, basic HOLD
 acknowledge, and a strict clocked refusal before fetch while timing is
 unknown. It does not deliver interrupts, exceptions, prefixes, strings or
 protected mode. A direct UCRT64 C11 warnings-as-errors build and execution of
-the strengthened `cpu286_acceptance.c` pass; CMake/CTest integration is
-coordinator-owned. The next bounded block, after baseline review,
+the strengthened `cpu286_acceptance.c` pass. The combined AT/CPU integration
+also builds with UCRT64 GCC and MSVC Debug: 78 executed tests pass on each,
+with three separate Headland/PIC/DMA gates explicitly skipped. This includes
+real CPU-to-AT HOLD/HLDA, LOCK, DMA grant, reset and resume wiring against a
+synthetic endpoint, not a real DMA controller. The next bounded block,
 is documented primary-opcode classification and a small authored real-mode
 instruction set sufficient to exercise decode, flags, stack and odd-word bus
 transfers. Valid but unimplemented opcodes must stop with an explicit emulator

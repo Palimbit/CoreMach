@@ -73,3 +73,13 @@ if(TARGET blumach_at_bus)
     set_tests_properties(pcs286-component.at-bus-contract PROPERTIES
         LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
 endif()
+
+if(TARGET blumach_cpu_80286 AND TARGET blumach_at_bus)
+    add_executable(pcs286-cpu-at-bus cpu286_at_bus_test.c)
+    target_link_libraries(pcs286-cpu-at-bus PRIVATE
+        blumach_cpu_80286 blumach_at_bus blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-at-bus)
+    add_test(NAME pcs286-component.cpu-at-bus COMMAND pcs286-cpu-at-bus)
+    set_tests_properties(pcs286-component.cpu-at-bus PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 15)
+endif()
