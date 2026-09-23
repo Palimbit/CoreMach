@@ -15,6 +15,12 @@ on:
       - provenance/**
       - doc/validation/**
       - doc/releases/portable-*.md
+      - src/qt/catalog/**
+      - src/qt/portable_catalog_images.qrc
+      - tools/catalog_audit.py
+      - tools/catalog_builder.py
+      - tools/tests/test_catalog_audit.py
+      - README-Portable.md
       - tools/provenance_audit.py
       - tools/portable_package_audit.py
       - tools/validate-pcs86-portable.ps1
@@ -35,6 +41,12 @@ on:
       - provenance/**
       - doc/validation/**
       - doc/releases/portable-*.md
+      - src/qt/catalog/**
+      - src/qt/portable_catalog_images.qrc
+      - tools/catalog_audit.py
+      - tools/catalog_builder.py
+      - tools/tests/test_catalog_audit.py
+      - README-Portable.md
       - tools/provenance_audit.py
       - tools/portable_package_audit.py
       - tools/validate-pcs86-portable.ps1
@@ -147,7 +159,7 @@ jobs:
           python -B tools/portable_package_audit.py
           --root build/portable-install
           --platform windows
-          --version 0.0.1-dev.1
+          --version 0.2.0-dev
           --max-size-mib 100
       - name: Create archive
         run: >-
