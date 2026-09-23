@@ -2,7 +2,44 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: memory XCHG and bounded LOCK RMW
+## Latest tranche: locked memory MOV and shifts/rotates
+
+F0 now supports real-mode memory MOV 88-8C/8E, A0-A3 and C6-C7,
+including segment-register transfers, and documented memory Group 2 operations
+C0/C1/D0-D3. Register-only forms and undocumented /6 remain host unsupported;
+this is not a claim that the 286 raises #UD for every unimplemented LOCK form.
+LOCK REP and automatic interrupt/descriptor windows still need separate work.
+
+Acquisition moved from the operand-read helper to validated memory access.
+This covers write-only MOV without inserting a destination read. Instruction
+bytes are fetched before acquisition; all odd-word fragments remain locked
+through architectural commit. Existing zero-count shifts still read but do not
+write, preserving flags: inherited functional policy, not physical bus evidence.
+Errors stop and release the bus, preserving any completed writes without retry.
+No ABI, scheduler, other CPU or AT arbiter implementation changed.
+
+The scope is supported by [Intel's 286 hardware reference, table 3-5](https://www.bitsavers.org/components/intel/80286/210760-002_80286_Hardware_Reference_Manual_1987.pdf),
+which includes locked MOV and memory rotates. The [286 PRM compatibility appendix](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=336)
+also distinguishes its wider LOCK scope from the 386. These are indexed manual
+extracts, not physical captures. No table timings were adopted. Existing pinned
+MOV/segment/shift provenance and author notices are retained.
+
+The real CPU/AT fixture adds 450 locked/unlocked MOV comparisons and 21,504
+shift comparisons (all 256 raw counts, seven documented groups, six opcode
+forms, both alignments and rotating segment overrides). It checks exclusion of
+a competing synthetic requester, LOCKED attributes, balanced pins, release
+after commit, no spurious MOV reads, masked-zero no-write, IRQ deferral and
+invalid-segment refusal. Eleven forms now inject failure at every transfer,
+both before and after effects, including write-only MOV and zero-count shifts.
+Existing independent arithmetic/data-transfer tests remain active.
+
+GCC UCRT64/MSVC Debug/Release pass 102 ordinary tests with the two explicit
+Headland/AT DMA skips. GCC Debug also passes the unchanged selected SST corpus;
+these additions are authored tests, not new SST certification. Thirty Python
+checks, catalogue and provenance pass (36 components / 198 files).
+Timing remains UNKNOWN. No firmware, BIOS/POST, or complete-machine claim.
+
+## Previous tranche: memory XCHG and bounded LOCK RMW
 
 Memory XCHG 86/87 now asserts a private bus-lock window automatically, including
 odd-word fragments. Explicit F0 is supported for memory-destination
@@ -603,11 +640,11 @@ generic catch-all or NOP is not coverage.
 
 | Family / encodings | Required semantics and representative tests | Classic candidate | Portable / timing |
 |---|---|---|---|
-| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch, bounded segment/REP/F0 decode and #DE implemented; LOCK RMW subset only, other fault delivery missing; timing unknown |
+| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch, bounded segment/REP/F0 decode and #DE implemented; LOCK memory MOV/RMW/shifts subset only, other fault delivery missing; timing unknown |
 | Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c`, `x86_ops_xchg.h` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register/memory XCHG implemented; memory XCHG needs bus_lock adapter; MOV SS has SS-load inhibition; protection missing, timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode functional forms implemented, including #DE for division and AAM zero; general fault escalation and expanded hardware captures pending; timings unknown |
-| Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |
+| Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, memory LOCK supported; /6 and register-only LOCK unsupported; timing unknown |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h`, `x86_ops_io.h` | Memory strings and INS/OUTS with interruptible REP implemented; guest segment faults and physical timing pending |

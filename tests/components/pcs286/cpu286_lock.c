@@ -243,15 +243,20 @@ static void rmw_equivalence(fixture_t *f)
 }
 static void failures(fixture_t *f)
 {
-    const uint8_t codes[][6]={{0x87,6,1,5,0,0},{0xf0,0x81,6,1,5,7},{0xf0,0xf7,0x16,1,5,0}};
-    const unsigned lengths[]={4,6,5};
-    for(unsigned k=0;k<3;++k)
+    const uint8_t codes[][7]={
+        {0x87,6,1,5}, {0xf0,0x81,6,1,5,7,0}, {0xf0,0xf7,0x16,1,5},
+        {0xf0,0xc7,6,1,5,0x34,0x12}, {0xf0,0xa1,1,5}, {0xf0,0xa3,1,5},
+        {0xf0,0x8e,0x16,1,5}, {0xf0,0x8c,0x16,1,5},
+        {0xf0,0xc1,0x26,1,5,17}, {0xf0,0xd3,0x1e,1,5},
+        {0xf0,0xc1,0x26,1,5,0}
+    };
+    const unsigned lengths[]={4,7,5,7,4,4,5,5,6,5,6};
+    for(unsigned k=0;k<sizeof(lengths)/sizeof(lengths[0]);++k)
         for(unsigned after=0;after<2;++after) {
             unsigned total=0;
             for(unsigned fail=0;fail<=total;++fail) {
-                /* ADD imm16 gets a seventh authored byte. */
                 uint8_t code[7]={0}; memcpy(code,codes[k],lengths[k]);
-                unsigned length=lengths[k]+(k==1 ? 1U : 0U);
+                unsigned length=lengths[k];
                 bm_286_arch_state_t s=prepare(f,code,length,3), a; bm_286_boundary_t b;
                 word(f,0x501,0xabcd); set(f,&s); f->fail_at=fail; f->error_after=after; f->request=1;
                 if(!fail) {step(f); total=f->count; continue;}
@@ -269,12 +274,85 @@ static void failures(fixture_t *f)
             }
         }
 }
+static void memory_equivalence(fixture_t *f, const uint8_t *body, unsigned n,
+                               unsigned pref, unsigned odd, unsigned count)
+{
+    bm_286_arch_state_t result={0}; uint16_t memory=0;
+    for(unsigned locked=0;locked<2;++locked) {
+        uint8_t code[10]; unsigned length=0;
+        if(locked) code[length++]=0xf0;
+        if(pref) code[length++]=(uint8_t)(0x26+8*(pref-1));
+        memcpy(code+length,body,n); length+=n;
+        bm_286_arch_state_t s=prepare(f,code,length,count), a;
+        s.ax=0x1234; s.flags=0x8d7;
+        uint32_t bases[]={s.es.base,s.cs.base,s.ss.base,s.ds.base};
+        uint32_t address=bases[pref ? pref-1 : 3]+0x500+odd;
+        word(f,address,0x93e7); set(f,&s); f->request=locked;
+        step(f); a=state(f);
+        assert(f->lock_edges==(locked ? 2U : 0U) && !f->locked);
+        assert(!f->dma_calls);
+        if(locked) assert(f->release_ip==a.ip && f->hold);
+        for(unsigned i=0;i<f->count;++i)
+            assert(f->trace[i].attributes==((locked && f->trace[i].operation!=BM_BUS_FETCH) ? BM_BUS_TRANSACTION_LOCKED : 0U));
+        if(!locked) {result=a; memory=read_word(f,address);}
+        else {--a.ip; same(&a,&result); assert(read_word(f,address)==memory);}
+    }
+}
+static void moves_and_shifts(fixture_t *f)
+{
+    /* MOV direction, byte/word aliases, segment registers and moffs/immediates.
+     * Compare the existing data-transfer oracle's implementation without LOCK;
+     * independently assert memory-only writes are not turned into RMW reads. */
+    for(unsigned pref=0;pref<5;++pref)
+        for(unsigned odd=0;odd<2;++odd) {
+            for(unsigned opcode=0x88;opcode<=0x8e;++opcode) {
+                if(opcode==0x8d) continue;
+                for(unsigned r=0;r<(opcode==0x8c || opcode==0x8e ? 4U : 8U);++r) {
+                    if(opcode==0x8e && r==1) continue;
+                    uint8_t body[]={(uint8_t)opcode,(uint8_t)(6+8*r),(uint8_t)odd,5};
+                    memory_equivalence(f,body,sizeof(body),pref,odd,3);
+                    if(opcode==0x88 || opcode==0x89 || opcode==0x8c)
+                        for(unsigned i=0;i<f->count;++i)
+                            assert(f->trace[i].operation!=BM_BUS_READ);
+                }
+            }
+            for(unsigned opcode=0xa0;opcode<=0xa3;++opcode) {
+                uint8_t body[]={(uint8_t)opcode,(uint8_t)odd,5};
+                memory_equivalence(f,body,sizeof(body),pref,odd,3);
+                for(unsigned i=0;i<f->count;++i)
+                    assert(f->trace[i].operation!=((opcode&2) ? BM_BUS_READ : BM_BUS_WRITE));
+            }
+            for(unsigned width=1;width<=2;++width) {
+                uint8_t body[]={(uint8_t)(0xc5+width),6,(uint8_t)odd,5,0x34,0x12};
+                memory_equivalence(f,body,4+width,pref,odd,3);
+                assert((read_word(f,0x500+odd+(pref==1 ? 0x20000 : pref==2 ? 0x30000 : pref==3 ? 0x10000 : 0)) &
+                        (width==1 ? 255U : 65535U))==(width==1 ? 0x34U : 0x1234U));
+                for(unsigned i=0;i<f->count;++i) assert(f->trace[i].operation!=BM_BUS_READ);
+            }
+        }
+    const uint8_t opcodes[]={0xc0,0xc1,0xd0,0xd1,0xd2,0xd3};
+    for(unsigned form=0;form<6;++form)
+        for(unsigned group=0;group<8;++group) {
+            if(group==6) continue;
+            for(unsigned count=0;count<256;++count)
+                for(unsigned odd=0;odd<2;++odd) {
+                    uint8_t body[]={opcodes[form],(uint8_t)(6+8*group),(uint8_t)odd,5,(uint8_t)count};
+                    memory_equivalence(f,body,form<2 ? 5U : 4U, count%5,odd,count);
+                    if((form<2 || form>=4) && !(count&31))
+                        for(unsigned i=0;i<f->count;++i) assert(f->trace[i].operation!=BM_BUS_WRITE);
+                }
+        }
+}
 static void rejection_and_interrupt(fixture_t *f)
 {
     const uint8_t rejected[][6]={
         {0xf0,0x87,0xc0}, {0xf0,0x03,6,0,5}, {0xf0,0x81,0x3e,0,5,1},
         {0xf0,0xf7,6,0,5,1}, {0xf0,0xff,0x36,0,5},
-        {0xf0,0xf3,0xa4}, {0xf3,0xf0,0xa4}, {0xf0,0xd1,0x26,0,5}, {0xf0,0x90}
+        {0xf0,0xf3,0xa4}, {0xf3,0xf0,0xa4}, {0xf0,0x90},
+        {0xf0,0xd1,0xe0}, {0xf0,0xc1,0x36,0,5,1},
+        {0xf0,0x89,0xc0}, {0xf0,0xc7,0xc0,1,0},
+        {0xf0,0x8e,0x0e,0,5}, {0xf0,0x8c,0x26,0,5},
+        {0xf0,0xc7,0x0e,0,5,1}
     };
     for(unsigned k=0;k<sizeof(rejected)/sizeof(rejected[0]);++k) {
         bm_286_arch_state_t s=prepare(f,rejected[k],sizeof(rejected[k]),3), a;
@@ -283,20 +361,36 @@ static void rejection_and_interrupt(fixture_t *f)
         a=state(f); same(&a,&s); assert(!f->lock_edges);
         for(unsigned i=0;i<f->count;++i) assert(f->trace[i].operation==BM_BUS_FETCH);
     }
-    for(unsigned invalid=0;invalid<2;++invalid) {
-        const uint8_t code[]={0x87,6,0xff,0xff};
-        bm_286_arch_state_t s=prepare(f,code,sizeof(code),1); bm_286_boundary_t b;
-        if(invalid) s.ds.valid=0;
-        set(f,&s); assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED && !f->lock_edges);
+    {
+        const uint8_t codes[][7]={
+            {0xf0,0x87,6,0xff,0xff}, {0xf0,0xa1,0xff,0xff},
+            {0xf0,0xa3,0xff,0xff}, {0xf0,0xc7,6,0xff,0xff,1,0},
+            {0xf0,0xd1,0x26,0xff,0xff}
+        };
+        for(unsigned k=0;k<sizeof(codes)/sizeof(codes[0]);++k)
+            for(unsigned invalid=0;invalid<2;++invalid) {
+                bm_286_arch_state_t s=prepare(f,codes[k],sizeof(codes[k]),1), a;
+                bm_286_boundary_t b;
+                if(invalid) s.ds.valid=0;
+                set(f,&s);
+                assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED && !f->lock_edges);
+                a=state(f); same(&a,&s);
+                for(unsigned i=0;i<f->count;++i) assert(f->trace[i].operation==BM_BUS_FETCH);
+            }
     }
-    { /* An IRQ raised by the first locked read is accepted only after commit/release. */
-        const uint8_t code[]={0xf0,0x87,6,1,5};
-        bm_286_arch_state_t s=prepare(f,code,sizeof(code),1);
-        s.flags=0x202; word(f,0x501,0x4567); set(f,&s); f->hold_at=6;
-        step(f); assert(!f->acknowledgements && !f->locked && f->lock_edges==2);
-        bm_286_boundary_t b=step(f);
-        assert(b.has_vector && b.vector==0x30 && f->acknowledgements==2);
-        assert(read_word(f,s.ss.base+s.sp-6)==s.ip+sizeof(code));
+    { /* IRQ from the first operand transfer waits for commit/release. */
+        const uint8_t codes[][5]={
+            {0xf0,0x87,6,1,5}, {0xf0,0x89,6,1,5},
+            {0xf0,0x8b,6,1,5}, {0xf0,0xd3,0x26,1,5}
+        };
+        for(unsigned k=0;k<sizeof(codes)/sizeof(codes[0]);++k) {
+            bm_286_arch_state_t s=prepare(f,codes[k],sizeof(codes[k]),1);
+            s.flags=0x202; word(f,0x501,0x4567); set(f,&s); f->hold_at=6;
+            step(f); assert(!f->acknowledgements && !f->locked && f->lock_edges==2);
+            bm_286_boundary_t b=step(f);
+            assert(b.has_vector && b.vector==0x30 && f->acknowledgements==2);
+            assert(read_word(f,s.ss.base+s.sp-6)==s.ip+sizeof(codes[k]));
+        }
     }
 }
 int main(void)
@@ -313,8 +407,8 @@ int main(void)
     cpu.bus_lock=lock_changed; cpu.hold_ack=hold_ack; cpu.pin_context=&f;
     cpu.interrupt_ack=ack; cpu.interrupt_context=&f; cpu.trace=trace_boundary; cpu.trace_context=&f;
     assert(bm_286_create(&host,&cpu,&f.cpu)==BM_STATUS_OK);
-    exchanged(&f); rmw_equivalence(&f); failures(&f); rejection_and_interrupt(&f);
+    exchanged(&f); rmw_equivalence(&f); moves_and_shifts(&f);
+    failures(&f); rejection_and_interrupt(&f);
     bm_at_bus_reset(f.bus); assert(f.cpu.ops.reset(f.cpu.context)==BM_STATUS_OK);
     bm_at_bus_destroy(f.bus); f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }
-

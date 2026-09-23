@@ -407,6 +407,16 @@ failures also pass. No DMA chip or timing is inferred from this integration.
 GCC UCRT64/MSVC Debug/Release pass 102 ordinary tests, two explicit device skips;
 30 Python checks and provenance 36 components / 198 files pass. No new SST claim.
 
+Memory MOV (register, immediate, moffs and segment-register forms) and memory
+Group 2 shifts/rotates now accept F0 through the validated data-access helper.
+No artificial read is introduced for write-only MOV. The test fixture adds
+450 MOV and 21,504 shift locked/unlocked comparisons, competing requester
+exclusion, IRQ deferral and failures at each transfer before/after effects.
+Register-only LOCK, undocumented shift /6 and LOCK REP remain unsupported.
+The same 102 ordinary tests pass in all four local configurations, two device
+skips, 30 Python checks and provenance 36 components / 198 files. Timing remains
+UNKNOWN and existing masked-zero read/no-write policy is not a bus capture.
+
 Next CPU tranche: broader 286-specific LOCK scopes, including LOCK REP and
 automatic interrupt windows. Current unsupported combinations are missing
 implementation, not the 386 legal-prefix rule or fabricated guest #UD.

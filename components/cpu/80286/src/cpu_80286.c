@@ -282,7 +282,7 @@ typedef struct decoded_286 {
     uint8_t software_interrupt; /* Completed INT/INT3/taken INTO, not INTA. */
     uint8_t software_vector;
     uint8_t divide_error; /* Completed synchronous #DE entry, not INT 0. */
-    uint8_t lock_prefix; /* Bounded RMW subset, not the full 286 LOCK space. */
+    uint8_t lock_prefix; /* Bounded memory forms, not the full 286 LOCK space. */
 } decoded_286_t;
 
 typedef struct operand_286 {
@@ -439,6 +439,15 @@ static bm_status_t data_access(decoded_286_t *decode,
     if (segment == NULL || !segment->valid ||
         (uint32_t) offset + size - 1U > segment->limit)
         return BM_STATUS_UNSUPPORTED; /* Segment fault delivery is pending. */
+    if (decode->lock_prefix && !decode->state->lock_active) {
+        bm_286_private_t *state = decode->state;
+        /* Bracket writes as well as reads (MOV need not read its destination).
+         * All instruction bytes and operand validation precede acquisition. */
+        if (state->config.bus_lock == NULL)
+            return BM_STATUS_UNSUPPORTED;
+        state->lock_active = 1U;
+        state->config.bus_lock(state->config.pin_context, 1);
+    }
     address = (segment->base + offset) & ADDRESS_MASK;
     transfer.space = BM_ADDRESS_DATA;
     transfer.operation = write ? BM_BUS_WRITE : BM_BUS_READ;
@@ -485,17 +494,8 @@ static bm_status_t read_operand(decoded_286_t *decode,
                                 const operand_286_t *operand,
                                 unsigned size, uint16_t *value)
 {
-    if (decode->lock_prefix && !decode->state->lock_active) {
-        bm_286_private_t *state = decode->state;
-        /* A pin adapter is required even for a single-master test host:
-         * transaction flags alone cannot delimit a multi-transfer window. */
-        if (!operand->memory || state->config.bus_lock == NULL ||
-            !operand->segment->valid ||
-            (uint32_t) operand->offset + size - 1U > operand->segment->limit)
-            return BM_STATUS_UNSUPPORTED;
-        state->lock_active = 1U;
-        state->config.bus_lock(state->config.pin_context, 1);
-    }
+    if (decode->lock_prefix && !operand->memory)
+        return BM_STATUS_UNSUPPORTED; /* Register-only LOCK is not modeled. */
     if (operand->memory)
         return data_access(decode, operand->segment, operand->offset,
                            size, 0, value);
@@ -509,6 +509,8 @@ static bm_status_t write_operand(decoded_286_t *decode,
                                  const operand_286_t *operand,
                                  unsigned size, uint16_t value)
 {
+    if (decode->lock_prefix && !operand->memory)
+        return BM_STATUS_UNSUPPORTED;
     if (operand->memory)
         return data_access(decode, operand->segment, operand->offset,
                            size, 1, &value);
@@ -1988,6 +1990,11 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         if (decode.lock_prefix && (repeat ||
             !((opcode <= 0x31U && (opcode & 7U) <= 1U) ||
               opcode == 0x80U || opcode == 0x81U || opcode == 0x83U ||
+              (opcode >= 0x88U && opcode <= 0x8cU) || opcode == 0x8eU ||
+              (opcode >= 0xa0U && opcode <= 0xa3U) ||
+              opcode == 0xc6U || opcode == 0xc7U ||
+              opcode == 0xc0U || opcode == 0xc1U ||
+              (opcode >= 0xd0U && opcode <= 0xd3U) ||
               opcode == 0x86U || opcode == 0x87U || opcode == 0xf6U ||
               opcode == 0xf7U || opcode == 0xfeU || opcode == 0xffU)))
             status = BM_STATUS_UNSUPPORTED; /* Other 286 LOCK forms remain pending. */

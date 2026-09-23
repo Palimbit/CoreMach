@@ -129,7 +129,7 @@ typedef struct bm_286_config {
     bm_286_inta_fn interrupt_ack;
     void *interrupt_context;
     bm_286_pin_fn hold_ack;
-    /* Required for memory XCHG / supported LOCK RMW forms. NULL rejects those
+    /* Required for memory XCHG / supported LOCK memory forms. NULL rejects those
      * forms before data access. Assert/deassert delimit all operand fragments;
      * adapter must establish exclusion synchronously (no failure return).
      * Signal changes are allowed; reset/import/destroy/execution are deferred.
@@ -168,7 +168,10 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
  * Real-mode far CALL 9A/FF /3 and RETF CA/CB preserve FLAGS/NMI blocking;
  * registers commit only after all pointer/stack accesses succeed.
  * Real-mode memory XCHG implicitly locks; F0 supports memory-destination
- * ADD/OR/ADC/SBB/AND/SUB/XOR, INC/DEC/NOT/NEG and XCHG. Other 286 LOCK forms
+ * ADD/OR/ADC/SBB/AND/SUB/XOR, INC/DEC/NOT/NEG, XCHG, MOV (including memory
+ * segment-register transfers), and documented memory shifts/rotates.
+ * Masked-zero shifts retain the unlocked read/no-write functional policy;
+ * register-only LOCK and undocumented shift /6 remain unsupported. Other forms
  * including LOCK REP remain UNSUPPORTED, not a fabricated guest #UD.
  * Memory strings and INS/OUTS support F2/F3 repetition, one element per step.
  * INS fixes ES:DI; OUTS uses DS:SI or override; DX and FLAGS are unchanged.
