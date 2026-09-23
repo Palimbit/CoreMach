@@ -151,6 +151,14 @@ if(TARGET blumach_at_bus)
 endif()
 
 if(TARGET blumach_cpu_80286 AND TARGET blumach_at_bus)
+    add_executable(pcs286-board-memory board_memory_test.c)
+    target_link_libraries(pcs286-board-memory PRIVATE blumach_pcs286_memory
+        blumach_cpu_80286 blumach_at_bus blumach_platform_null portable-failure-injection-host)
+    target_include_directories(pcs286-board-memory PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine")
+    pcs286_test_options(pcs286-board-memory)
+    add_test(NAME pcs286-component.board-memory COMMAND pcs286-board-memory)
+    set_tests_properties(pcs286-component.board-memory PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 15)
     add_executable(pcs286-cpu-at-bus cpu286_at_bus_test.c)
     target_link_libraries(pcs286-cpu-at-bus PRIVATE
         blumach_cpu_80286 blumach_at_bus blumach_platform_null)

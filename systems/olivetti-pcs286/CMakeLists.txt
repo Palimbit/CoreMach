@@ -30,6 +30,7 @@ set(pcs286_contract_headers
     blumach/components/uart16450.h
     blumach/components/lpt_spp.h
     blumach/systems/pcs286_board.h
+    blumach/systems/pcs286_memory.h
     blumach/systems/olivetti_pcs286.h)
 set(pcs286_contract_sources)
 foreach(header IN LISTS pcs286_contract_headers)
@@ -53,6 +54,17 @@ set_target_properties(blumach_pcs286_contract_check PROPERTIES C_EXTENSIONS OFF)
 if(CMAKE_CXX_COMPILER_LOADED)
     target_compile_features(blumach_pcs286_contract_check PRIVATE cxx_std_17)
     set_target_properties(blumach_pcs286_contract_check PROPERTIES CXX_EXTENSIONS OFF)
+endif()
+
+# Storage is real; the unresolved chipset and machine factory stay absent.
+add_library(blumach_pcs286_memory STATIC src/pcs286_memory.c)
+target_link_libraries(blumach_pcs286_memory PUBLIC blumach_system_olivetti_pcs286_contracts)
+target_compile_features(blumach_pcs286_memory PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_memory PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_memory PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_memory PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 if(MSVC)
     target_compile_options(blumach_pcs286_contract_check PRIVATE /W4 /WX)

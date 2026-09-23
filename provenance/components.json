@@ -91,11 +91,19 @@
     },
     {
       "id": "olivetti-pcs286-draft-contracts",
-      "destination": ["systems/olivetti-pcs286/**"],
+      "destination": ["systems/olivetti-pcs286/CMakeLists.txt", "systems/olivetti-pcs286/README.md", "systems/olivetti-pcs286/include/blumach/systems/pcs286_board.h", "systems/olivetti-pcs286/include/blumach/systems/olivetti_pcs286.h"],
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
       "local_changes": "New typed machine configuration, board-glue declarations and standalone C/C++ header compilation checks. Contract-only system is not registered or linked into frontends. Canonical evidence and inherited composition were consulted without porting behavioural code; future ports require their own exact provenance."
+    },
+    {
+      "id": "pcs286-backing-memory",
+      "destination": ["systems/olivetti-pcs286/include/blumach/systems/pcs286_memory.h", "systems/olivetti-pcs286/src/pcs286_memory.c"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Instance-owned RAM and copied/interleaved firmware storage, failure-safe construction and bounded resolved-offset transactions. No physical decode, A20, remap, chipset state or timing claims. Authored independently of inherited behavioural implementation; existing machine configuration contract supplies input layout."
     },
     {
       "id": "portable-engine-core",

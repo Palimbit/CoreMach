@@ -206,3 +206,50 @@ consulted inherited MOV-segment/stack/I/O code at the pinned provenance commit.
 Indexed primary manual: https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf
 No firmware was run. The next milestone is a board-owned RAM/ROM diagnostic,
 not a claim that a full PCS286 firmware boot is ready.
+
+## Backing memory and synthetic board path, 2026-09-23
+
+`blumach_pcs286_memory` now supplies instance-owned RAM and a private 128-KiB
+firmware snapshot, including explicit low/even and high/odd lane interleaving.
+It validates capacity/layout before allocation, publishes only a complete
+object and unwinds all three possible allocation failures. New RAM is zero by
+emulator initialization policy, not a measured power-on pattern. CPU reset
+does not clear it. No whole-machine reset semantics are introduced.
+
+Resolved-offset access validates the complete range before any write. Byte
+assembly is host-endian/alignment independent. ROM writes and DEBUG writes
+are rejected; success changes only read value or selected RAM bytes, never
+timing. Decoding, contiguity across mappings, write-enable, CPU A20 and
+requester-specific waits belong to the future board/chipset adapter.
+
+The new authored composition test uses the actual partial 286, AT interconnect
+and backing storage. It fetches a reset trampoline at FFFFF0h, far-jumps into
+test RAM, initializes SS/SP, pushes/pops 1234h and roundtrips it through a test
+I/O latch. A hole returns UNMAPPED, and CPU reset preserves stack bytes and
+returns to the high reset vector. The two linear windows and latch exist only
+in test code. They are not a production PCS286 profile, BIOS, POST or hardware
+timing evidence. All instruction boundaries remain TIMING_UNKNOWN.
+
+The reviewed Headland research note from `feature/pcs286-headland` distinguishes
+documented G-2 reference ROM chip-select ranges from unresolved PCS286 backing
+offsets, straps, remap control and register behavior. Consequently no permanent
+60000h/80000h alias, GC103 register model or invented reset latch is added.
+The note is evidence guidance only; this change copies no implementation or
+restricted document and does not modify that agent's worktree.
+
+Validation: GCC UCRT64 and MSVC, Debug/Release, 87 ordinary tests pass, three
+absent-chip gates skip (90 registered). GCC Debug also passes the optional
+pinned SST functional subset (91 registered). Thirty Python tests, catalogue
+check and provenance audit pass (35 components, 183 files). Storage tests check
+both firmware layouts byte-for-byte, 1..8-byte accesses in both byte orders,
+instance isolation, all allocation failures, invalid inputs, ROM protection,
+DEBUG restrictions, unchanged transactions on errors and no partial out-of-range
+writes. An initial test used one-based failure indices; corrected to the
+existing allocator's zero-based convention before the full validation run.
+
+The next independent implementation packet is AT PIC cascade and CPU interrupt
+delivery, with architectural tests first. Exact Headland/IOC02 board decoding
+still needs evidence review; it is not unlocked by this synthetic test. Timed
+PIT/RTC/KBC integration additionally needs an explicit CPU timing policy. The
+machine factory and frontend registration remain absent, and no BIOS or media
+were executed. No engine/scheduler, PCS86 or M15 behavior changed.
