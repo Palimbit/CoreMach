@@ -59,6 +59,15 @@ function(pcs286_acceptance name source implementation)
 endfunction()
 
 pcs286_acceptance(cpu286 cpu286_acceptance.c blumach_cpu_80286)
+if(TARGET blumach_cpu_80286)
+    add_executable(pcs286-cpu-data-transfer cpu286_data_transfer.c)
+    target_link_libraries(pcs286-cpu-data-transfer PRIVATE
+        blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-cpu-data-transfer)
+    add_test(NAME pcs286-component.cpu-data-transfer COMMAND pcs286-cpu-data-transfer)
+    set_tests_properties(pcs286-component.cpu-data-transfer PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
+endif()
 pcs286_acceptance(headland headland_acceptance.c blumach_headland_gc10x)
 pcs286_acceptance(at-bus at_bus_acceptance.c blumach_at_bus)
 pcs286_acceptance(at-pic at_pic_acceptance.c blumach_at_pic)

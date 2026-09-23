@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: P1 source review and first lifecycle tranche, 2026-09-23. Reviewed implementation base
+Status: P1 partial lifecycle and real-mode data-transfer tranche, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -15,8 +15,9 @@ used in this review or the authored tests.
 ## Evidence and scope
 
 The canonical `Z:/library/olivetti/pcs286` README, manifest and 2026-09-23
-worklogs establish the 12 MHz Intel 80286 identity and the *absence* of a
-portable implementation. They do not certify opcode or timing behaviour. The
+worklogs establish the 12 MHz Intel 80286 identity; at the initial P0 source
+review no portable CPU implementation existed. Current partial implementation
+results are recorded separately; they do not certify full opcode or timing behaviour. The
 two local Compaq files named `80286-reference-volume-{1,2}.pdf` identify
 themselves as **Compaq Portable 286/Deskpro 286 Technical Reference Guide**
 volumes. They are machine references, not the CPU programming authority.
@@ -177,7 +178,10 @@ unsupported failure latches stop without retry; no completed write is undone.
 all 16-bit EA forms and displacements, DS/SS defaults, all overrides, odd and
 aligned words, limit checks, failed second fragments, overlength prefixes,
 protected-mode rejection and independent instances. The first acceptance
-suite still passes. No firmware was run.
+suite still passes. Coordinator integration executes 79 passing tests under
+UCRT64 GCC and MSVC in Debug and Release; Headland/PIC/DMA remain three explicit
+skips. Provenance audit covers 34 components and 173 files without errors.
+No firmware was run.
 
 Consulted classic source for this block at exact commit
 `87c3fb4876eaad086921bc3444569da026286c36`:

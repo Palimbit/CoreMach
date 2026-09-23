@@ -6,7 +6,7 @@ target_include_directories(blumach_cpu_80286_contracts INTERFACE
 target_link_libraries(blumach_cpu_80286_contracts INTERFACE blumach_bus blumach_engine)
 target_compile_features(blumach_cpu_80286_contracts INTERFACE c_std_11)
 
-# Initial reset/fetch lifecycle; not a complete or timed 80286 interpreter.
+# Partial real-mode interpreter; not a complete or timed 80286 implementation.
 add_library(blumach_cpu_80286 STATIC src/cpu_80286.c)
 target_link_libraries(blumach_cpu_80286 PUBLIC blumach_cpu_80286_contracts)
 set_target_properties(blumach_cpu_80286 PROPERTIES C_EXTENSIONS OFF)

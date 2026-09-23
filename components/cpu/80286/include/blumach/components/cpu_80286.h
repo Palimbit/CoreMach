@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2026 BluMach contributors
- * Partial Intel 80286 reset/fetch/NOP interpreter; timing and full ISA pending.
+ * Partial Intel 80286 real-mode MOV/register XCHG interpreter.
+ * Timing, remaining ISA, faults and protected-mode execution are pending.
  */
 #ifndef BLUMACH_COMPONENTS_CPU_80286_H
 #define BLUMACH_COMPONENTS_CPU_80286_H

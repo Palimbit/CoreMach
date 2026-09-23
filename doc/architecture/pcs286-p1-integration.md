@@ -12,6 +12,9 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
   LOCK/HOLD/HLDA, cancellation and explicit refusal of competing requests.
 - Partial 80286: instance-owned reset state, high reset fetch, NOP, state
   import validation, HOLD acknowledgement and explicit unsupported-event stops.
+  Real-mode data transfer now includes basic byte/word MOV, register XCHG,
+  16-bit effective addresses, segment overrides and ES/DS reload. MOV SS,
+  memory XCHG, stack and protected execution remain explicitly unsupported.
 - A synthetic integration test connects these real components and checks
   suspension, DMA access after grant, return to CPU ownership and reset. It
   also raises a DMA request during a fetch: the current instruction completes
@@ -24,13 +27,18 @@ This is a component milestone, not a bootable PCS 286 or completed P1/P3.
 
 ## Validation, 2026-09-23
 
-Engine-only Debug builds with UCRT64 GCC and MSVC both execute 78 passing tests.
+Engine-only Debug and Release builds with UCRT64 GCC and MSVC each execute
+79 passing tests, including the new CPU data-transfer suite.
 Three more tests explicitly skip: Headland, AT PIC and AT DMA implementations
 are absent. Assertions remain enabled; new component code uses warnings as
 errors. The MSVC check exposed and corrected a size_t narrowing in a test.
-The full suite also passes in a UCRT64 GCC Release build (78 executed, three
-skipped). New component test assertions remain enabled with `-UNDEBUG`, even
-when the surrounding build uses `-O3 -DNDEBUG`.
+New component test assertions remain enabled with `-UNDEBUG` / `/UNDEBUG`,
+even in Release. Data-transfer tests exercise aliases and flag preservation,
+all 16-bit effective-address forms, overrides, aligned/odd words, failed
+second fragments, operand/immediate fetch errors and prefix-length limits.
+Review caught an uninitialized immediate read on fetch failure; it was fixed
+and covered before integration. Invalid CS and protected execution reject
+before bus access rather than pretending to provide missing fault semantics.
 
 The portable CI path filters now include `tests/components/**`, so a change
 limited to these tests also triggers validation. These local results are not
@@ -42,8 +50,9 @@ the versioned provenance manifest. The AT interconnect is authored new code.
 
 ## Next work
 
-1. Extend the CPU through coherent instruction families: real-mode addressing,
-   transfers, arithmetic and stack, with authored boundary/flag/bus tests.
+1. Extend the CPU through coherent instruction families: arithmetic and stack,
+   then control flow, with authored boundary/flag/bus tests. Resolve distinct
+   STI versus SS-load inhibition and LOCK before completing deferred transfers.
    Keep valid-but-unimplemented, invalid guest encoding and unknown timing
    distinct. Do not substitute a success/NOP or invent elapsed cycles.
 2. Implement PIC cascade and DMA byte/word engines separately; the current

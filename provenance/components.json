@@ -39,11 +39,11 @@
       "destination": ["components/cpu/80286/src/**"],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "87c3fb4876eaad086921bc3444569da026286c36",
-      "origin_paths": ["src/cpu/x86.c", "src/cpu/386.c", "src/cpu/386_ops.h", "src/cpu/x86seg.c", "src/cpu/x86_ops_pmode.h", "src/cpu/x86_ops_rep_286_2386.h"],
+      "origin_paths": ["src/cpu/x86.c", "src/cpu/386.c", "src/cpu/386_ops.h", "src/cpu/x86seg.c", "src/cpu/x86_ops_pmode.h", "src/cpu/x86_ops_rep_286_2386.h", "src/cpu/x86_ops_mov.h", "src/cpu/x86_ops_mov_seg.h"],
       "method": "derived-rewrite",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["Andrew Jenner", "Sarah Walker", "Miran Grca", "Fred N. van Kempen", "leilei", "rtzor", "BluMach contributors"],
-      "local_changes": "Per-instance 80286 lifecycle, defined reset state, conformance-only architectural import, 24-bit reset fetch, NOP and boundary HOLD acknowledgement. Consulted inherited CPU state/reset/semantic code without embedding globals. Interrupt delivery, protected-mode execution, instruction families and physical timing remain unimplemented; strict clocked execution stops explicitly without fetching."
+      "local_changes": "Per-instance 80286 lifecycle, defined reset state, architectural import, 24-bit reset fetch, NOP and boundary HOLD acknowledgement. Private real-mode prefix/ModR/M/address decoding, byte/word MOV, ES/DS reload and register XCHG with explicit partial-transfer failures. Consulted pinned inherited CPU algorithms without embedding globals. MOV SS, memory XCHG, stack, interrupts, protected mode, remaining ISA and physical timing remain pending; strict clocked execution stops without fetching."
     },
     {
       "id": "headland-gc10x-draft-contracts",
