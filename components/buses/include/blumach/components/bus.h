@@ -57,6 +57,22 @@ typedef struct bm_bus_transaction {
     uint32_t attributes;
 } bm_bus_transaction_t;
 
+/* This is a synchronous ADDRESS ROUTER, not a CPU-pin/ISA protocol. size is
+ * a contiguous byte count (1..8); the addressed target interprets endianness.
+ * The router neither swaps bytes nor splits a transfer across mappings.
+ * CPU/board adapters own width conversion, alignment policy and native faults.
+ *
+ * wait_states has no intrinsic clock domain at this layer. The endpoint
+ * contract must name one; callers initialize it and adapters convert before
+ * combining waits from different domains. DEBUG endpoints must not consume
+ * device state or time. The router does not enforce those device semantics.
+ *
+ * UNMAPPED/READ_ONLY are routing results, not portable guest exceptions.
+ * A board decides open-bus/ignored-write/native-fault policy before returning
+ * to its CPU. Never interpret DEVICE_ERROR as an architecture's bus-error pin.
+ * No pending/retry protocol, arbitration or electrical cycle timing is implied.
+ */
+
 /* A passive bus response has no device-owned state or side effects.  An OK
  * read/fetch repeats fill_value across the transaction; an OK write is
  * acknowledged and discarded.  A non-OK status is returned to the initiator.
