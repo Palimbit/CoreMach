@@ -506,7 +506,16 @@ static void test_memory_commit_and_rejections(void)
         assert(bus->count == 2U && state_of(&cpu).ip == 0U);
     }
     {
-        const uint8_t deferred_group[] = {0xf7U, 0xe0U}; /* MUL AX */
+        const uint8_t multiply_group[] = {0xf7U, 0xe0U}; /* MUL AX now implemented. */
+        state = load_code(&cpu, bus, multiply_group, sizeof(multiply_group));
+        state.ax = 0xffffU;
+        step_ok(&cpu, bus, &state);
+        assert(state_of(&cpu).ax == 1U && state_of(&cpu).dx == 0xfffeU);
+        assert(state_of(&cpu).flags == (state.flags | CF | OF));
+        assert(bus->count == 2U && state_of(&cpu).ip == 2U);
+    }
+    {
+        const uint8_t deferred_group[] = {0xf7U, 0xf0U}; /* DIV AX needs #DE. */
         state = load_code(&cpu, bus, deferred_group, sizeof(deferred_group));
         assert(bm_286_set_arch_state(&cpu, &state) == BM_STATUS_OK);
         assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNSUPPORTED);

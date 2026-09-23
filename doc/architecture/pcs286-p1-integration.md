@@ -335,8 +335,16 @@ and MSVC Debug/Release pass 95 ordinary tests with the same two skips;
 30 Python checks and provenance (36 components / 191 files) pass.
 The unchanged SST selection does not include Group 2. Timings remain UNKNOWN.
 
-Next CPU tranche: multiplication and CBW/CWD; division requires divide-error
-delivery, and memory XCHG needs its separate LOCK path.
+MUL/IMUL byte/word and immediate IMUL 69/6B, plus CBW/CWD, now pass an
+independent sign/magnitude oracle (4,327,680 scalar checks), register aliases,
+all segment selections, alignment and every fetch/read failure. Undefined
+multiplication flags are explicitly preserved as emulator policy. All 96
+ordinary tests pass in GCC UCRT64/MSVC Debug/Release with two device skips;
+30 Python tests and provenance (36 components / 192 files) pass. The unchanged
+SST selection excludes these groups. No CPU timing or board boot claim.
+
+Next CPU tranche: DIV/IDIV together with real-mode divide-error delivery;
+memory XCHG still needs its separate LOCK path.
 Headland/IOC02 evidence
 and implementation, AT DMA, timed PIT/RTC/KBC, CPU timing and protected execution
 remain separate gates before a real PCS286 boot profile can be validated.

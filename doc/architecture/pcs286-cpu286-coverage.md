@@ -2,7 +2,48 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode shifts and rotates
+## Latest tranche: real-mode multiply and sign conversion
+
+MUL/IMUL F6/F7 /4,/5 now multiply byte or word operands into AX or DX:AX.
+IMUL 69/6B supports every destination register and register/memory source;
+the 6B immediate is sign-extended, not zero-extended. CBW 98 and CWD 99
+extend AL into AX and AX into DX:AX without changing FLAGS.
+CF/OF indicate unsigned upper-half overflow or signed result truncation.
+Undefined multiplication S/Z/A/P flags are preserved as a deterministic
+emulator policy, not measured silicon behavior.
+
+Reference: [Intel 210498-005, sections 3.3.3 and 3.4.3, Appendix B
+MUL/IMUL/CBW/CWD](https://bitsavers.org/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf).
+Indexed primary text and pinned inherited `x86_ops_misc.h`/`x86_ops_mul.h`
+were consulted; no PDF acquired, timing constants copied or clean-room claim.
+The latter source is now explicitly recorded in provenance; authors retained.
+
+Sources are captured before destination changes, including AL/AH/AX/DX and
+immediate destinations that alias an address register. All fetches and data
+reads must succeed before committing results or flags. No memory writes occur.
+Signed values are converted mathematically into int32_t; no implementation-
+defined signed narrowing or signed right shifts are needed. The largest
+signed 16x16 product fits int32_t; unsigned multiplication uses uint32_t.
+Immediate bytes are fetched before the data read as a functional decoder
+policy, not a claim of physical bus or fault ordering.
+
+Authored `cpu286_multiply.c` uses a separate sign/magnitude uint64 oracle:
+4,327,680 scalar checks cover every byte pair, all word inputs against eleven
+edge factors, both initial flag backgrounds, all immediate-word values against
+nine patterns, immediate-byte sign extension and all AX values for CBW/CWD.
+Additional tests cover all register destinations and aliases, all segment
+overrides, BP's SS default, aligned/odd memory, every fetch/read failure,
+unsupported PE/LOCK/REP, segment bounds and pending DIV/IDIV. The old MUL
+unsupported test now asserts its exact result/overflow; DIV remains a negative
+case. No failing behavioral test was removed or masked.
+
+GCC UCRT64 and MSVC Debug/Release pass 96 ordinary tests, with two explicit
+Headland/AT DMA skips; GCC Debug adds the unchanged SST regression. That
+selection does not cover these new groups. Thirty Python checks, catalogue
+and provenance (36 components / 192 files) pass. Timing is still UNKNOWN;
+strict clocked execution still rejects. No BIOS, POST or protected-mode claim.
+
+## Previous tranche: real-mode shifts and rotates
 
 Group 2 ROL/ROR/RCL/RCR/SHL (SAL)/SHR/SAR now supports byte and word
 register/memory operands, count 1, CL and immediate byte (D0-D3/C0-C1).
@@ -117,15 +158,16 @@ provenance (36 components / 189 files) pass. No firmware or board boot claim.
 ### Remaining CPU work (not motherboard work)
 
 - Data operations: memory XCHG/implicit LOCK (LEA/LDS/LES/XLAT now implemented).
-- Multiply/divide, immediate IMUL, CBW/CWD and decimal adjustment instructions.
+- DIV/IDIV and decimal adjustment instructions (multiply and CBW/CWD implemented).
 - Strings, REP restart/interruption and string I/O.
 - Guest faults/BOUND/invalid-opcode handling, protected segmentation, descriptors,
   privilege, tasks/gates and system instructions; correct double fault/shutdown.
 - Unpopulated 80287 interface behavior (ESC/WAIT and MSW interaction), explicit
   undocumented-opcode policy, and calibrated timing/prefetch/bus behavior.
 
-The next bounded block is multiplication and CBW/CWD with signed/unsigned tests;
-division needs explicit divide-error delivery and must not fake success.
+The next bounded block is real-mode divide-error delivery plus DIV/IDIV;
+zero divisor and quotient overflow must deliver the fault without committing
+partial results, and the saved IP must identify the faulting instruction.
 Memory XCHG stays separate until
 the implicit LOCK/bus contract is implemented and tested. Completing real-mode
 instructions does not certify a full 286 or eliminate the PCS286 chipset gates.
@@ -215,7 +257,7 @@ passes the pinned optional 71,000-case SST subset with unchanged classification.
 Thirty Python tests, catalogue and provenance audit pass. This remains local
 implementation, not a remote CI, boot or full-ISA certification.
 
-Status: P1 partial interpreter through real-mode shifts/rotates, address loads, far procedures, interrupts and FLAGS, 2026-09-23. Reviewed source base
+Status: P1 partial interpreter through real-mode multiplication/conversion, shifts/rotates, address loads, far procedures, interrupts and FLAGS, 2026-09-23. Reviewed source base
 `87c3fb4876eaad086921bc3444569da026286c36` on
 `feature/pcs286-cpu286`, subsequently included unchanged in portable merge
 `8e5cd917d95536fbdfe65ce2d5d658eda0633d20`. This is the Olivetti
@@ -273,14 +315,14 @@ generic catch-all or NOP is not coverage.
 | Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
 | Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Listed real-mode MOV, LEA/LDS/LES/XLAT and register XCHG implemented; MOV SS has SS-load inhibition; memory XCHG and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_inc_dec.h`, `x86_ops_misc.h`, `x86_flags.h` | Real-mode 00-3D, 80/81/83, 84/85, A8/A9, 40-4F, FE/FF /0,/1 and F6/F7 /0,/2,/3 implemented; 82 and all other groups deferred; timing unknown |
-| Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
+| Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_misc.h`, `x86_ops_mul.h`, `x86_ops_bcd.h` | Real-mode MUL/IMUL F6/F7 /4,/5, IMUL 69/6B and CBW/CWD implemented; DIV/IDIV/#DE and BCD pending; timings unknown |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment | `x86_ops_shift.h` | All seven documented real-mode operations implemented; undefined flag policies explicit, /6 and LOCK unsupported; timing unknown |
 | Stack/procedures | PUSH/POP registers, segments, immediates and r/m; PUSHF/POPF, PUSHA/POPA, ENTER/LEAVE, near/far CALL/JMP/RET and IRET; 286 PUSH SP value, SP wrap, interlevel stacks | `x86_ops_stack.h`, `x86_ops_call.h`, `x86_ops_ret_2386.h`, `x86seg.c` | Listed real-mode stack/procedure forms implemented, including far CALL 9A/FF /3 and RET CA/CB; protected/interlevel execution and fault delivery missing; timing unknown |
 | Branch and loop | Jcc 70-7F, LOOP/LOOPE/LOOPNE/JCXZ E0-E3, short/near/far jumps; taken/not-taken, prefetch flush, segment privilege/limit | `x86_ops_jump.h`, `x86seg.c` | Real-mode Jcc 70-7F, E0-E3 and JMP EB/E9/FF /4 and far JMP EA/FF /5 implemented; protected control and prefetch model missing; timing unknown |
 | Strings and block I/O | MOVS/CMPS/STOS/LODS/SCAS A4-AF; INS/OUTS 6C-6F; REP/REPE/REPNE, zero count, DF, per-iteration interrupt/HOLD and restart state, segment-limit fault | `x86_ops_string.h`, `x86_ops_rep_286_2386.h` | Missing; timing iteration/prefetch-dependent |
 | Direct I/O and flag control | IN/OUT E4-E7/EC-EF, CLI/STI, CLD/STD, CLC/STC/CMC, LAHF/SAHF; 16-bit I/O port, CPL/IOPL checks and STI shadow | `x86_ops_io.h`, `x86_ops_flag_2386.h` | Listed real-mode forms implemented; protected privilege checks missing; timing unknown |
 | Software interrupts / halt | INT3/INT/INTO/IRET CC-CF, HLT F4; real IVT and protected gates, IF/TF effects, HLT wake conditions | `x86_ops_int.h`, `x86seg.c`, `386.c` | Listed real-mode forms implemented; protected gates and fault delivery pending; timing unknown |
-| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH, ENTER/LEAVE and immediate shifts implemented; other forms and guest faults missing; timing unknown |
+| 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode PUSHA/POPA, immediate PUSH/IMUL, ENTER/LEAVE and immediate shifts implemented; other forms and guest faults missing; timing unknown |
 | Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Missing; timing descriptor/path-dependent |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
 | Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | Missing; no populated FPU contract; timing unknown |

@@ -7,7 +7,7 @@
  * src/cpu/x86_ops_pmode.h, src/cpu/x86_ops_rep_286_2386.h,
  * src/cpu/x86_ops_mov.h, src/cpu/x86_ops_mov_seg.h,
  * src/cpu/x86_ops_arith.h, src/cpu/x86_ops_inc_dec.h, src/cpu/x86_ops_shift.h,
- * src/cpu/x86_ops_misc.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
+ * src/cpu/x86_ops_misc.h, src/cpu/x86_ops_mul.h, src/cpu/x86_flags.h, src/cpu/x86_ops_stack.h,
  * src/cpu/x86_ops_jump.h, src/cpu/x86_ops_call.h and
  * src/cpu/x86_ops_ret_2386.h, src/cpu/x86_ops_flag.h,
  * src/cpu/x86_ops_flag_2386.h, src/cpu/x86_ops_int.h and src/cpu/x86_ops_io.h. The inherited
@@ -1144,6 +1144,69 @@ static void alu_calculate(unsigned operation, unsigned size,
     *out_flags = flags;
 }
 
+/* Convert guest two's-complement values mathematically, without depending
+ * on implementation-defined unsigned-to-signed narrowing or signed shifts. */
+static int32_t signed_operand(uint16_t value, unsigned size)
+{
+    uint32_t sign = size == 1U ? 0x80U : 0x8000U;
+    uint32_t bits = value & (size == 1U ? 0xffU : 0xffffU);
+    return (int32_t) bits - ((bits & sign) ? (int32_t) (sign * 2U) : 0);
+}
+
+static bm_status_t execute_multiply(decoded_286_t *decode, uint8_t opcode,
+                                    const operand_286_t *operand)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    unsigned size = opcode == 0xf6U ? 1U : 2U;
+    int immediate_form = opcode == 0x69U || opcode == 0x6bU;
+    int is_signed = immediate_form || operand->reg_field == 5U;
+    uint16_t source, multiplier = arch->ax;
+    uint32_t product;
+    int overflow;
+    bm_status_t status;
+    if (immediate_form) {
+        if (opcode == 0x69U)
+            status = next_word(decode, &multiplier);
+        else {
+            uint8_t immediate;
+            status = next_byte(decode, &immediate);
+            if (status == BM_STATUS_OK)
+                multiplier = (uint16_t) signed_operand(immediate, 1U);
+        }
+        if (status != BM_STATUS_OK)
+            return status;
+    }
+    status = read_operand(decode, operand, size, &source);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (is_signed) {
+        /* Every signed 16x16 product fits int32_t, including -32768 squared. */
+        int32_t full = signed_operand(multiplier, size) * signed_operand(source, size);
+        int32_t lower = size == 1U ? -128 : -32768;
+        int32_t upper = size == 1U ? 127 : 32767;
+        product = (uint32_t) full;
+        overflow = full < lower || full > upper;
+    } else {
+        uint32_t mask = size == 1U ? 0xffU : 0xffffU;
+        product = ((uint32_t) multiplier & mask) * (uint32_t) source;
+        overflow = product > mask;
+    }
+    /* No externally failing access remains. Capture aliased sources before
+     * replacing AX/DX or the immediate form's selected destination. */
+    if (immediate_form)
+        *word_register(arch, operand->reg_field) = (uint16_t) product;
+    else {
+        arch->ax = (uint16_t) product;
+        if (size == 2U)
+            arch->dx = (uint16_t) (product >> 16U);
+    }
+    /* Intel leaves S/Z/A/P undefined: preserve them as emulator policy,
+     * not a claim about measured chip flags. Only CF/OF are defined here. */
+    arch->flags = (uint16_t) ((arch->flags & ~(FLAG_CF | FLAG_OF)) |
+                              (overflow ? FLAG_CF | FLAG_OF : 0U));
+    return BM_STATUS_OK;
+}
+
 static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -1152,6 +1215,17 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
     uint8_t immediate;
     unsigned operation, form, size;
     bm_status_t status;
+    if (opcode == 0x98U || opcode == 0x99U) { /* CBW, CWD; FLAGS unchanged. */
+        if (opcode == 0x98U)
+            arch->ax = (uint16_t) signed_operand(arch->ax, 1U);
+        else
+            arch->dx = (arch->ax & 0x8000U) ? 0xffffU : 0U;
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0x69U || opcode == 0x6bU) {
+        status = decode_operand(decode, &operand);
+        return status == BM_STATUS_OK ? execute_multiply(decode, opcode, &operand) : status;
+    }
     if (opcode == 0xc0U || opcode == 0xc1U ||
         (opcode >= 0xd0U && opcode <= 0xd3U))
         return execute_shift(decode, opcode);
@@ -1250,6 +1324,8 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
             source = size == 1U ? byte_register(arch, operand.reg_field) :
                 *word_register(arch, operand.reg_field);
         } else if (opcode == 0xf6U || opcode == 0xf7U) {
+            if (operand.reg_field == 4U || operand.reg_field == 5U)
+                return execute_multiply(decode, opcode, &operand);
             if (operand.reg_field == 0U) {
                 operation = 4U; /* TEST */
                 if (size == 1U) {
@@ -1263,7 +1339,7 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
             } else if (operand.reg_field == 2U || operand.reg_field == 3U) {
                 operation = operand.reg_field == 2U ? 8U : 5U;
             } else
-                return BM_STATUS_UNSUPPORTED; /* /1 invalid; /4-7 deferred. */
+                return BM_STATUS_UNSUPPORTED; /* /1 invalid; DIV/IDIV deferred. */
         } else {
             if (operand.reg_field > 1U)
                 return BM_STATUS_UNSUPPORTED; /* FE /2+ invalid; #6 pending. */
