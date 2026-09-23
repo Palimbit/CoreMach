@@ -14,6 +14,17 @@ else()
     target_compile_options(blumach_at_bus PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
+add_library(blumach_at_pic STATIC src/at_pic.c)
+target_include_directories(blumach_at_pic PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(blumach_at_pic PUBLIC blumach_bus blumach_engine)
+target_compile_features(blumach_at_pic PRIVATE c_std_11)
+set_target_properties(blumach_at_pic PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_at_pic PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_at_pic PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
 add_library(blumach_pc_components STATIC
     src/dma8237.c
     src/dma_page_registers.c

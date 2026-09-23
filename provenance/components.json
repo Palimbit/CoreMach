@@ -11,6 +11,17 @@
   ],
   "components": [
     {
+      "id": "portable-at-pic",
+      "destination": ["components/pc/src/at_pic.c"],
+      "origin_repository": "https://github.com/BluMach/BluMach",
+      "origin_commit": "ab5e8cbc527d615464bee0448a948846e8f4d1b0",
+      "origin_paths": ["components/pc/src/pic8259.c"],
+      "method": "derived-rewrite",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["Andrew Jenner", "Miran Grca", "BluMach contributors"],
+      "local_changes": "Separate instance-owned two-PIC x86 boundary model, ICW3 selection, two-phase acknowledgement, fully nested priorities, edge/level requests, separate EOI/AEOI, rotation, special masks and spurious master/slave vectors. Extended against Intel 231468-003; no XT behavior change. Poll, SFNM, buffered and MCS-80/85 explicitly unsupported. No physical timing claim."
+    },
+    {
       "id": "portable-at-interconnect",
       "destination": ["components/pc/src/at_bus.c"],
       "method": "new",

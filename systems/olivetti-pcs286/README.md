@@ -33,7 +33,8 @@ This is structural validation, not component behaviour testing.
 The [P0 test foundation and agent boundaries](../../doc/architecture/pcs286-p0.md)
 now supply a running generic bus/memory/clock oracle and compiled initial
 acceptance tests. The partial 286 and AT interconnect run real tests; the
-Headland, AT PIC and AT DMA gates still skip explicitly. No firmware has been run.
+AT PIC has its own bounded implementation and tests; Headland and AT DMA
+gates still skip explicitly. No firmware has been run.
 
 ## Backing storage and synthetic composition
 

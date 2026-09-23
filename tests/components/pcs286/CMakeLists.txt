@@ -138,6 +138,16 @@ endif()
 pcs286_acceptance(headland headland_acceptance.c blumach_headland_gc10x)
 pcs286_acceptance(at-bus at_bus_acceptance.c blumach_at_bus)
 pcs286_acceptance(at-pic at_pic_acceptance.c blumach_at_pic)
+if(TARGET blumach_at_pic)
+    add_executable(pcs286-at-pic-contract at_pic_test.c)
+    target_link_libraries(pcs286-at-pic-contract PRIVATE blumach_at_pic
+        portable-failure-injection-host blumach_platform_null)
+    target_include_directories(pcs286-at-pic-contract PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine")
+    pcs286_test_options(pcs286-at-pic-contract)
+    add_test(NAME pcs286-component.at-pic-contract COMMAND pcs286-at-pic-contract)
+    set_tests_properties(pcs286-component.at-pic-contract PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
+endif()
 pcs286_acceptance(at-dma at_dma_acceptance.c blumach_at_dma)
 
 if(TARGET blumach_at_bus)
