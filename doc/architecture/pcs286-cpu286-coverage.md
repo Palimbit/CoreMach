@@ -48,15 +48,16 @@ cannot become a 286 by selecting a flag.
 `Required` means required for a reusable documented 80286 core, including
 guest #6 for undefined encodings. `Later` names a separately scoped silicon
 or populated-80287 feature. The current portable core implements the reset
-state and functional NOP only; all other rows are **not implemented**. A
+state, NOP and a bounded real-mode data-transfer subset; all other rows are
+**not implemented**. A
 classic handler is a review/reuse candidate only, never a
 portable pass. Every grouped opcode must classify each ModR/M subform; a
 generic catch-all or NOP is not coverage.
 
 | Family / encodings | Required semantics and representative tests | Classic candidate | Portable / timing |
 |---|---|---|---|
-| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch/NOP implemented; prefixes and fault delivery missing; timing unknown |
-| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Missing; timing unknown |
+| Reset, fetch, prefixes | CS=F000, hidden base=FF0000, IP=FFF0, MSW=FFF0, FLAGS=0002; fetch at FFFFF0; segment overrides 26/2E/36/3E, LOCK F0, REP F2/F3; prefix-inclusive fault IP and illegal combinations | `x86.c`, `386_ops.h`, prefix handlers | Reset/fetch and 10-byte-bounded override decode implemented; LOCK/REP and fault delivery missing; timing unknown |
+| Data movement | MOV 88-8E/A0-A3/B0-BF/C6-C7, XCHG 86-87/90-97, LEA 8D, LDS/LES C4-C5, XLAT D7; register/memory, odd word, segment load permissions and cache | `x86_ops_mov.h`, `x86_ops_mov_seg.h`, `x86seg.c` | Partial: listed basic MOV forms, ES/DS reload and register XCHG; MOV SS, memory XCHG, LEA/LDS/LES/XLAT and protection missing; timing unknown |
 | Integer ALU / flags | ADD/ADC/SUB/SBB/CMP/AND/OR/XOR, TEST, INC/DEC, NEG/NOT, Group 1 80-83 and F6/F7; byte/word carry, overflow, auxiliary carry, parity, defined/undefined flags, memory read-modify-write | `x86_ops_arith.h`, `x86_ops_flag_2386.h`, `x86_ops_mul.h` | Missing; timing unknown |
 | Multiply/divide, BCD | MUL/IMUL/DIV/IDIV F6/F7, immediate IMUL 69/6B, DAA/DAS/AAA/AAS/AAM/AAD, CBW/CWD; divide #0 before destination mutation; result-dependent timing | `x86_ops_mul.h`, `x86_ops_bcd.h` | Missing; timing ranges unresolved |
 | Shifts/rotates | C0/C1/D0-D3 Groups 2; counts 0/1/>1, CF/OF, through-carry, memory alignment and LOCK where legal | `x86_ops_shift.h` | Missing; timing count-dependent |
@@ -158,20 +159,40 @@ Miran Grca, Fred N. van Kempen, leilei, rtzor and other notices in any derived s
 path to base `87c3fb4876eaad086921bc3444569da026286c36` and classify it as
 `selective-port` or `derived-rewrite`, never `new` or clean-room.
 
-The first authored source block now contains per-instance lifecycle, Intel's
-defined reset state, 24-bit fetch, NOP, state import validation, basic HOLD
-acknowledge, and a strict clocked refusal before fetch while timing is
-unknown. It does not deliver interrupts, exceptions, prefixes, strings or
-protected mode. A direct UCRT64 C11 warnings-as-errors build and execution of
-the strengthened `cpu286_acceptance.c` pass. The combined AT/CPU integration
-also builds with UCRT64 GCC and MSVC Debug: 78 executed tests pass on each,
-with three separate Headland/PIC/DMA gates explicitly skipped. This includes
-real CPU-to-AT HOLD/HLDA, LOCK, DMA grant, reset and resume wiring against a
-synthetic endpoint, not a real DMA controller. The next bounded block,
-is documented primary-opcode classification and a small authored real-mode
-instruction set sufficient to exercise decode, flags, stack and odd-word bus
-transfers. Valid but unimplemented opcodes must stop with an explicit emulator
-status; invalid encodings cannot claim guest #6 until fault delivery exists.
-Then proceed to the complete families and protected-mode matrix above before
-declaring P1 complete. This first block is not a bootable PCS 286 or an
-approved full CPU.
+The initial CPU/AT integration executed 78 passing tests under UCRT64 GCC
+and MSVC Debug, with three Headland/PIC/DMA gates explicitly skipped.
+Its real CPU-to-AT wiring test covers HOLD/HLDA, LOCK, grant, reset and resume
+against a synthetic endpoint, not a real DMA controller.
+
+The first source block established per-instance lifecycle, Intel's defined
+reset state, 24-bit fetch, NOP, state import validation, basic HOLD and strict
+clocked refusal while timing is unknown. The second bounded block adds a
+private real-mode prefix/ModR/M/16-bit-EA decoder, byte/word register and
+memory MOV (88-8B, 8C, 8E ES/DS, A0-A3, B0-BF, C6/C7 /0) and register
+XCHG (86/87 with Mod=3, 90-97). Real-mode ES/DS reload sets base to selector
+shifted four and limit to FFFF; the reset CS hidden base remains FF0000 until
+an actual future CS reload. Protected mode stops before fetch. Every bus or
+unsupported failure latches stop without retry; no completed write is undone.
+`cpu286_data_transfer.c` is an authored synthetic test for register aliases,
+all 16-bit EA forms and displacements, DS/SS defaults, all overrides, odd and
+aligned words, limit checks, failed second fragments, overlength prefixes,
+protected-mode rejection and independent instances. The first acceptance
+suite still passes. No firmware was run.
+
+Consulted classic source for this block at exact commit
+`87c3fb4876eaad086921bc3444569da026286c36`:
+`src/cpu/x86_ops_mov.h`, `src/cpu/x86_ops_mov_seg.h`, `src/cpu/x86seg.c`,
+and the earlier `src/cpu/x86.c` / `src/cpu/386_ops.h`. The new private decoder
+is a **derived rewrite**, not a direct embedded classic core; its source file
+retains inherited author and GPL notices. Intel 210498-005, chapters 2, 3,
+5 and Appendix C, supplies address/segment and MOV/XCHG semantics; Intel
+210760-002 chapter 3 supplies the memory-XCHG LOCK requirement.
+
+This remains partial: MOV SS awaits a separate SS-load interruption/trap/NMI
+shadow contract (distinct from STI), memory XCHG awaits bus LOCK semantics,
+PUSH/POP awaits complete SS and stack-fault handling, and LOCK/REP, protected
+mode, guest faults/interrupts, strings and all remaining families are missing.
+Known valid unimplemented forms return host `BM_STATUS_UNSUPPORTED`; an
+architecturally invalid encoding is likewise stopped for now, **not** falsely
+reported as delivered guest #6. UNKNOWN timing remains unschedulable. This is
+not a bootable PCS 286 or an approved full CPU.

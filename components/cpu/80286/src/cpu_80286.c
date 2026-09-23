@@ -4,7 +4,8 @@
  * Instance-owned 80286 lifecycle and initial execution boundary. Derived
  * rewrite references at BluMach 87c3fb4876eaad086921bc3444569da026286c36:
  * src/cpu/x86.c, src/cpu/386.c, src/cpu/386_ops.h, src/cpu/x86seg.c,
- * src/cpu/x86_ops_pmode.h and src/cpu/x86_ops_rep_286_2386.h. The inherited
+ * src/cpu/x86_ops_pmode.h, src/cpu/x86_ops_rep_286_2386.h,
+ * src/cpu/x86_ops_mov.h and src/cpu/x86_ops_mov_seg.h. The inherited
  * sources retain these notices:
  *
  * src/cpu/x86.c — Authors: Andrew Jenner, Miran Grca.
@@ -230,7 +231,7 @@ static bm_status_t fetch_byte(bm_286_private_t *state, uint16_t ip,
 {
     bm_bus_transaction_t transaction = {0};
     bm_status_t status;
-    if (ip > state->arch.cs.limit)
+    if (!state->arch.cs.valid || ip > state->arch.cs.limit)
         return BM_STATUS_UNSUPPORTED; /* #13 delivery is not implemented yet. */
     transaction.space = BM_ADDRESS_PROGRAM;
     transaction.operation = BM_BUS_FETCH;
@@ -246,13 +247,367 @@ static bm_status_t fetch_byte(bm_286_private_t *state, uint16_t ip,
     return BM_STATUS_OK;
 }
 
+/* The Intel 286 instruction dictionary, not the later 386 prefix map, bounds
+ * this private real-mode decoder. Failed decode never commits IP or a register. */
+typedef struct decoded_286 {
+    bm_286_private_t *state;
+    uint32_t cursor;
+    uint8_t length;
+    uint64_t waits;
+    int override_segment; /* -1 or ES/CS/SS/DS in architectural order. */
+} decoded_286_t;
+
+typedef struct operand_286 {
+    uint8_t reg_field;
+    uint8_t reg_number;
+    uint8_t memory;
+    uint16_t offset;
+    const bm_286_segment_state_t *segment;
+} operand_286_t;
+
+static uint16_t *word_register(bm_286_arch_state_t *arch, unsigned number)
+{
+    switch (number & 7U) {
+    case 0U: return &arch->ax;
+    case 1U: return &arch->cx;
+    case 2U: return &arch->dx;
+    case 3U: return &arch->bx;
+    case 4U: return &arch->sp;
+    case 5U: return &arch->bp;
+    case 6U: return &arch->si;
+    default: return &arch->di;
+    }
+}
+
+static uint8_t byte_register(bm_286_arch_state_t *arch, unsigned number)
+{
+    const uint16_t *word = word_register(arch, number & 3U);
+    return (uint8_t) (*word >> ((number & 4U) ? 8U : 0U));
+}
+
+static void set_byte_register(bm_286_arch_state_t *arch, unsigned number,
+                              uint8_t value)
+{
+    uint16_t *word = word_register(arch, number & 3U);
+    unsigned shift = (number & 4U) ? 8U : 0U;
+    *word = (uint16_t) ((*word & (shift ? 0x00ffU : 0xff00U)) |
+                        ((uint16_t) value << shift));
+}
+
+static bm_286_segment_state_t *segment_register(bm_286_arch_state_t *arch,
+                                                 unsigned number)
+{
+    switch (number) {
+    case 0U: return &arch->es;
+    case 1U: return &arch->cs;
+    case 2U: return &arch->ss;
+    case 3U: return &arch->ds;
+    default: return NULL;
+    }
+}
+
+static bm_status_t next_byte(decoded_286_t *decode, uint8_t *value)
+{
+    uint32_t waits;
+    bm_status_t status;
+    if (decode->length >= 10U || decode->cursor > 0xffffU)
+        return BM_STATUS_UNSUPPORTED; /* #6/#13 delivery is not available. */
+    status = fetch_byte(decode->state, (uint16_t) decode->cursor,
+                        value, &waits);
+    if (status != BM_STATUS_OK)
+        return status;
+    ++decode->cursor;
+    ++decode->length;
+    decode->waits += waits;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t next_word(decoded_286_t *decode, uint16_t *value)
+{
+    uint8_t low, high;
+    bm_status_t status = next_byte(decode, &low);
+    if (status != BM_STATUS_OK)
+        return status;
+    status = next_byte(decode, &high);
+    if (status != BM_STATUS_OK)
+        return status;
+    *value = (uint16_t) ((uint16_t) low | ((uint16_t) high << 8));
+    return BM_STATUS_OK;
+}
+
+static bm_status_t decode_operand(decoded_286_t *decode,
+                                  operand_286_t *operand)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    uint8_t modrm, displacement8;
+    uint16_t displacement16 = 0U;
+    uint32_t address = 0U;
+    unsigned mode, rm;
+    int uses_bp = 0;
+    bm_status_t status = next_byte(decode, &modrm);
+    if (status != BM_STATUS_OK)
+        return status;
+    mode = modrm >> 6;
+    rm = modrm & 7U;
+    operand->reg_field = (modrm >> 3) & 7U;
+    operand->reg_number = (uint8_t) rm;
+    operand->memory = (uint8_t) (mode != 3U);
+    operand->offset = 0U;
+    operand->segment = NULL;
+    if (mode == 3U)
+        return BM_STATUS_OK;
+    switch (rm) {
+    case 0U: address = (uint32_t) arch->bx + arch->si; break;
+    case 1U: address = (uint32_t) arch->bx + arch->di; break;
+    case 2U: address = (uint32_t) arch->bp + arch->si; uses_bp = 1; break;
+    case 3U: address = (uint32_t) arch->bp + arch->di; uses_bp = 1; break;
+    case 4U: address = arch->si; break;
+    case 5U: address = arch->di; break;
+    case 6U:
+        if (mode != 0U) { address = arch->bp; uses_bp = 1; }
+        break;
+    default: address = arch->bx; break;
+    }
+    if (mode == 0U && rm == 6U) {
+        status = next_word(decode, &displacement16);
+        if (status != BM_STATUS_OK)
+            return status;
+        address = displacement16;
+    } else if (mode == 1U) {
+        status = next_byte(decode, &displacement8);
+        if (status != BM_STATUS_OK)
+            return status;
+        address += (uint16_t) (int16_t) (int8_t) displacement8;
+    } else if (mode == 2U) {
+        status = next_word(decode, &displacement16);
+        if (status != BM_STATUS_OK)
+            return status;
+        address += displacement16;
+    }
+    operand->offset = (uint16_t) address;
+    operand->segment = segment_register(arch,
+        decode->override_segment >= 0 ?
+        (unsigned) decode->override_segment : (uses_bp ? 2U : 3U));
+    return BM_STATUS_OK;
+}
+
+static bm_status_t data_access(decoded_286_t *decode,
+                               const bm_286_segment_state_t *segment,
+                               uint16_t offset, unsigned size, int write,
+                               uint16_t *value)
+{
+    bm_bus_transaction_t transfer = {0};
+    uint32_t address;
+    unsigned fragment;
+    bm_status_t status;
+    if (segment == NULL || !segment->valid ||
+        (uint32_t) offset + size - 1U > segment->limit)
+        return BM_STATUS_UNSUPPORTED; /* Segment fault delivery is pending. */
+    address = (segment->base + offset) & ADDRESS_MASK;
+    transfer.space = BM_ADDRESS_DATA;
+    transfer.operation = write ? BM_BUS_WRITE : BM_BUS_READ;
+    transfer.endianness = BM_ENDIAN_LITTLE;
+    if (size == 1U || (address & 1U) == 0U) {
+        transfer.address = address;
+        transfer.size = size;
+        transfer.alignment = size;
+        transfer.value = write ? *value : 0U;
+        status = decode->state->config.access(
+            decode->state->config.access_context, &transfer);
+        if (status != BM_STATUS_OK)
+            return status;
+        decode->waits += transfer.wait_states;
+        if (!write)
+            *value = (uint16_t) transfer.value;
+        return BM_STATUS_OK;
+    }
+    /* An odd physical word uses two byte transactions. A failed second
+     * fragment leaves the first completed write intact and stops the CPU. */
+    for (fragment = 0U; fragment < 2U; ++fragment) {
+        transfer.address = (address + fragment) & ADDRESS_MASK;
+        transfer.size = 1U;
+        transfer.alignment = 1U;
+        transfer.wait_states = 0U;
+        transfer.value = write ? (uint8_t) (*value >> (8U * fragment)) : 0U;
+        status = decode->state->config.access(
+            decode->state->config.access_context, &transfer);
+        if (status != BM_STATUS_OK)
+            return status;
+        decode->waits += transfer.wait_states;
+        if (!write) {
+            if (fragment == 0U)
+                *value = (uint8_t) transfer.value;
+            else
+                *value |= (uint16_t) ((uint8_t) transfer.value << 8);
+        }
+    }
+    return BM_STATUS_OK;
+}
+
+static bm_status_t read_operand(decoded_286_t *decode,
+                                const operand_286_t *operand,
+                                unsigned size, uint16_t *value)
+{
+    if (operand->memory)
+        return data_access(decode, operand->segment, operand->offset,
+                           size, 0, value);
+    *value = size == 1U ? byte_register(&decode->state->arch,
+                                         operand->reg_number) :
+        *word_register(&decode->state->arch, operand->reg_number);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t write_operand(decoded_286_t *decode,
+                                 const operand_286_t *operand,
+                                 unsigned size, uint16_t value)
+{
+    if (operand->memory)
+        return data_access(decode, operand->segment, operand->offset,
+                           size, 1, &value);
+    if (size == 1U)
+        set_byte_register(&decode->state->arch, operand->reg_number,
+                          (uint8_t) value);
+    else
+        *word_register(&decode->state->arch, operand->reg_number) = value;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
+{
+    bm_286_arch_state_t *arch = &decode->state->arch;
+    operand_286_t operand;
+    bm_286_segment_state_t *segment;
+    uint16_t value, other, offset;
+    uint8_t immediate;
+    unsigned size;
+    bm_status_t status;
+    if (opcode == 0x90U)
+        return BM_STATUS_OK;
+    if (arch->msw & MSW_PE)
+        return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
+    if (opcode >= 0x91U && opcode <= 0x97U) {
+        uint16_t *reg = word_register(arch, opcode & 7U);
+        value = arch->ax;
+        arch->ax = *reg;
+        *reg = value;
+        return BM_STATUS_OK;
+    }
+    if (opcode >= 0xb0U && opcode <= 0xb7U) {
+        status = next_byte(decode, &immediate);
+        if (status == BM_STATUS_OK)
+            set_byte_register(arch, opcode & 7U, immediate);
+        return status;
+    }
+    if (opcode >= 0xb8U && opcode <= 0xbfU) {
+        status = next_word(decode, &value);
+        if (status == BM_STATUS_OK)
+            *word_register(arch, opcode & 7U) = value;
+        return status;
+    }
+    if (opcode >= 0xa0U && opcode <= 0xa3U) {
+        status = next_word(decode, &offset);
+        if (status != BM_STATUS_OK)
+            return status;
+        segment = segment_register(arch, decode->override_segment >= 0 ?
+            (unsigned) decode->override_segment : 3U);
+        size = (opcode & 1U) ? 2U : 1U;
+        value = size == 1U ? byte_register(arch, 0U) : arch->ax;
+        status = data_access(decode, segment, offset, size,
+                             (opcode & 2U) != 0U, &value);
+        if (status == BM_STATUS_OK && (opcode & 2U) == 0U) {
+            if (size == 1U)
+                set_byte_register(arch, 0U, (uint8_t) value);
+            else
+                arch->ax = value;
+        }
+        return status;
+    }
+    if ((opcode >= 0x88U && opcode <= 0x8bU) ||
+        opcode == 0x8cU || opcode == 0x8eU ||
+        opcode == 0xc6U || opcode == 0xc7U ||
+        opcode == 0x86U || opcode == 0x87U) {
+        status = decode_operand(decode, &operand);
+        if (status != BM_STATUS_OK)
+            return status;
+        size = ((opcode & 1U) || opcode == 0x8cU || opcode == 0x8eU)
+            ? 2U : 1U;
+        if (opcode == 0x86U || opcode == 0x87U) {
+            if (operand.memory)
+                return BM_STATUS_UNSUPPORTED; /* Requires implicit LOCK. */
+            status = read_operand(decode, &operand, size, &value);
+            if (status != BM_STATUS_OK)
+                return status;
+            other = size == 1U ? byte_register(arch, operand.reg_field) :
+                *word_register(arch, operand.reg_field);
+            status = write_operand(decode, &operand, size, other);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (size == 1U)
+                set_byte_register(arch, operand.reg_field, (uint8_t) value);
+            else
+                *word_register(arch, operand.reg_field) = value;
+            return BM_STATUS_OK;
+        }
+        if (opcode == 0x8cU) {
+            segment = segment_register(arch, operand.reg_field);
+            if (segment == NULL)
+                return BM_STATUS_UNSUPPORTED; /* Invalid field: #6 pending. */
+            return write_operand(decode, &operand, 2U, segment->selector);
+        }
+        if (opcode == 0x8eU) {
+            segment = segment_register(arch, operand.reg_field);
+            if (segment == NULL || operand.reg_field == 1U ||
+                operand.reg_field == 2U)
+                return BM_STATUS_UNSUPPORTED; /* CS invalid; SS shadow pending. */
+            status = read_operand(decode, &operand, 2U, &value);
+            if (status != BM_STATUS_OK)
+                return status;
+            segment->selector = value;
+            segment->base = (uint32_t) value << 4;
+            segment->limit = 0xffffU;
+            segment->access = 0U;
+            segment->valid = 1U;
+            return BM_STATUS_OK;
+        }
+        if (opcode == 0xc6U || opcode == 0xc7U) {
+            if (operand.reg_field != 0U)
+                return BM_STATUS_UNSUPPORTED; /* Invalid group encoding. */
+            if (size == 1U) {
+                status = next_byte(decode, &immediate);
+                if (status != BM_STATUS_OK)
+                    return status;
+                value = immediate;
+            } else {
+                status = next_word(decode, &value);
+            }
+            if (status != BM_STATUS_OK)
+                return status;
+            return write_operand(decode, &operand, size, value);
+        }
+        if ((opcode & 2U) != 0U) {
+            status = read_operand(decode, &operand, size, &value);
+            if (status == BM_STATUS_OK) {
+                if (size == 1U)
+                    set_byte_register(arch, operand.reg_field, (uint8_t) value);
+                else
+                    *word_register(arch, operand.reg_field) = value;
+            }
+            return status;
+        }
+        value = size == 1U ? byte_register(arch, operand.reg_field) :
+            *word_register(arch, operand.reg_field);
+        return write_operand(decode, &operand, size, value);
+    }
+    return BM_STATUS_UNSUPPORTED;
+}
+
 bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
 {
     bm_286_private_t *state;
     bm_286_boundary_t boundary = {0};
+    decoded_286_t decode;
     bm_status_t status;
     uint8_t opcode;
-    uint32_t waits;
     uint8_t trap_was_enabled;
     if (!is_286_cpu(cpu) || out_boundary == NULL)
         return BM_STATUS_INVALID_ARGUMENT;
@@ -295,25 +650,46 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         *out_boundary = boundary;
         return BM_STATUS_IDLE;
     }
-    status = fetch_byte(state, state->arch.ip, &opcode, &waits);
+    if (state->arch.msw & MSW_PE) {
+        state->stopped = 1U;
+        return BM_STATUS_UNSUPPORTED; /* No protected fetch/privilege model. */
+    }
+    decode.state = state;
+    decode.cursor = state->arch.ip;
+    decode.length = 0U;
+    decode.waits = 0U;
+    decode.override_segment = -1;
+    for (;;) {
+        status = next_byte(&decode, &opcode);
+        if (status != BM_STATUS_OK)
+            break;
+        if (opcode == 0x26U || opcode == 0x2eU ||
+            opcode == 0x36U || opcode == 0x3eU) {
+            decode.override_segment = (opcode >> 3) & 3U;
+            continue;
+        }
+        /* LOCK and repeat require their own instruction/atomicity rules.
+         * Stop before any guest data transaction, even for valid opcodes. */
+        if (opcode == 0xf0U || opcode == 0xf2U || opcode == 0xf3U)
+            status = BM_STATUS_UNSUPPORTED;
+        else
+            status = execute_data(&decode, opcode);
+        break;
+    }
     if (status != BM_STATUS_OK) {
         state->stopped = 1U;
         return status;
     }
-    if (opcode != 0x90U) {
-        state->stopped = 1U;
-        return BM_STATUS_UNSUPPORTED;
-    }
     trap_was_enabled = (uint8_t) (((state->arch.flags & FLAG_TF) != 0U) &&
                                   !state->arch.interrupt_shadow);
-    state->arch.ip = (uint16_t) (state->arch.ip + 1U);
+    state->arch.ip = (uint16_t) decode.cursor;
     state->arch.interrupt_shadow = 0U;
     state->arch.trap_pending = trap_was_enabled;
     boundary.kind = BM_286_BOUNDARY_INSTRUCTION;
-    boundary.bus_wait_cycles = waits;
+    boundary.bus_wait_cycles = decode.waits;
     /* UNKNOWN timing uses a known wait lower bound, not an elapsed-clock
      * claim. The strict clocked entry point never schedules this boundary. */
-    boundary.cpu_cycles = waits;
+    boundary.cpu_cycles = decode.waits;
     *out_boundary = boundary;
     if (state->config.trace != NULL)
         state->config.trace(state->config.trace_context, &boundary);
