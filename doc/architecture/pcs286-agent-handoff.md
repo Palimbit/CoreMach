@@ -7,6 +7,34 @@ Estado de código examinado: `bcaa691c8f0ebca4778e2d75113af9d4e3db71e1`.
 Este documento se añade después de ese commit; no describe funcionalidades
 futuras como si estuviesen implementadas. No requiere el historial del chat.
 
+## Aviso de entrega: PR documental y código en bundle
+
+GitHub rechazó el push del código porque las credenciales OAuth actuales no
+tienen permiso `workflow` para los cambios CI acumulados. No se modificaron
+credenciales ni se eliminaron esos cambios para sortear la restricción.
+Por ello la PR `docs/pcs286-agent-handoff` contiene SÓLO este documento y apunta
+a `architecture/portable-engine`. **No contiene los 49 commits de implementación.**
+Las referencias posteriores a la rama de trabajo son
+`feature/pcs286-integration-p1`, no la rama documental.
+
+Entrega completa local: `Z:/BluMach-pcs286-handoff-2026-09-24.bundle`.
+Es un bundle Git autocontenido de la rama de trabajo, no una copia de BIOS o
+medios locales. Llevarlo a la nueva máquina por un canal privado. Desde un
+clon de BluMach sin cambios pendientes, importar sin sobrescribir ramas:
+
+```text
+git bundle verify Z:/BluMach-pcs286-handoff-2026-09-24.bundle
+git fetch Z:/BluMach-pcs286-handoff-2026-09-24.bundle refs/heads/feature/pcs286-integration-p1:refs/heads/handoff/pcs286-20260924
+git switch handoff/pcs286-20260924
+git merge-base --is-ancestor bcaa691c8f0ebca4778e2d75113af9d4e3db71e1 HEAD
+```
+
+Adaptar Z al destino real del archivo. Si la rama de destino ya existe, revisar
+su contenido, no forzar. Si sólo se dispone de la PR documental y no del bundle,
+**falta código**: pedir el archivo antes de continuar A. Publicar luego una rama
+de implementación con credenciales propias autorizadas para los cambios CI y
+abrir su PR contra portable-engine, sin fusionar automáticamente.
+
 ## 1. Resumen ejecutivo
 
 La rama `feature/pcs286-integration-p1` contiene el desarrollo incremental del
