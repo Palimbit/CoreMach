@@ -60,6 +60,28 @@ static bm_286_arch_state_t state_of(bm_cpu_t *cpu)
     return s;
 }
 
+static void same_segment(const bm_286_segment_state_t *a, const bm_286_segment_state_t *b)
+{
+    assert(a->selector == b->selector && a->base == b->base && a->limit == b->limit);
+    assert(a->access == b->access && a->valid == b->valid);
+}
+
+/* Native structs contain unspecified padding, not architectural state. Check
+ * every field after a by-value return/import, including Release builds. */
+static void same(const bm_286_arch_state_t *a, const bm_286_arch_state_t *b)
+{
+#define EQ(x) assert(a->x == b->x)
+    EQ(size); EQ(version);
+    EQ(ax); EQ(cx); EQ(dx); EQ(bx); EQ(sp); EQ(bp); EQ(si); EQ(di);
+    EQ(ip); EQ(flags); EQ(msw); EQ(cpl); EQ(halted); EQ(shutdown);
+    EQ(interrupt_shadow); EQ(trap_pending); EQ(nmi_pending); EQ(nmi_blocked);
+    EQ(gdtr.base); EQ(gdtr.limit); EQ(idtr.base); EQ(idtr.limit);
+#undef EQ
+    same_segment(&a->cs, &b->cs); same_segment(&a->ds, &b->ds);
+    same_segment(&a->ss, &b->ss); same_segment(&a->es, &b->es);
+    same_segment(&a->ldtr, &b->ldtr); same_segment(&a->tr, &b->tr);
+}
+
 static bm_286_arch_state_t load(bm_cpu_t *cpu, fixture_t *f,
                                 const uint8_t *code, size_t length)
 {
@@ -123,7 +145,7 @@ static void stack_fault(bm_cpu_t *cpu, fixture_t *f,
         assert(read_word(f, STACK+expected.sp+2) == s->cs.selector);
         assert(read_word(f, STACK+expected.sp+4) == s->flags);
     }
-    assert(memcmp(&actual, &expected, sizeof(actual)) == 0);
+    same(&actual, &expected);
 }
 
 static bm_286_arch_state_t step(bm_cpu_t *cpu, fixture_t *f, const bm_286_arch_state_t *s)
@@ -139,7 +161,7 @@ static bm_286_arch_state_t step(bm_cpu_t *cpu, fixture_t *f, const bm_286_arch_s
     assert(b.bus_wait_cycles == (uint64_t) (f->count - before) * 2U);
     assert(b.cpu_cycles == b.bus_wait_cycles);
     assert(after.flags == s->flags);
-    assert(memcmp(&after.cs, &s->cs, sizeof(s->cs)) == 0);
+    same_segment(&after.cs, &s->cs);
     return after;
 }
 
@@ -362,7 +384,7 @@ static void aggregate_and_frames(bm_cpu_t *cpu, fixture_t *f)
         }
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
-        a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
+        a = state_of(cpu); same(&s, &a);
         for (unsigned j = 0U; j < f->count; ++j)
             assert(f->trace[j].operation == BM_BUS_FETCH);
     }
@@ -400,7 +422,7 @@ static void failures(bm_cpu_t *cpu, fixture_t *f)
                 unsigned i, j;
                 assert(bm_286_step(cpu, &b) == BM_STATUS_DEVICE_ERROR);
                 after = state_of(cpu);
-                assert(memcmp(&after, &s, sizeof(s)) == 0 && f->count == stop);
+                same(&after, &s); assert(f->count == stop);
                 for (i = 0; i + 1U < stop; ++i) {
                     const bm_bus_transaction_t *t = &f->trace[i];
                     if (t->operation == BM_BUS_WRITE)
@@ -436,7 +458,7 @@ static void limits_and_gaps(bm_cpu_t *cpu, fixture_t *f)
         }
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
-        a = state_of(cpu); assert(memcmp(&a, &s, sizeof(s)) == 0);
+        a = state_of(cpu); same(&a, &s);
         for (unsigned j = 0; j < f->count; ++j)
             assert(f->trace[j].operation == BM_BUS_FETCH);
     }
@@ -458,7 +480,7 @@ static void limits_and_gaps(bm_cpu_t *cpu, fixture_t *f)
         }
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
-        a = state_of(cpu); assert(memcmp(&a, &s, sizeof(s)) == 0);
+        a = state_of(cpu); same(&a, &s);
         for (unsigned j = 0; j < f->count; ++j)
             assert(f->trace[j].operation != BM_BUS_WRITE);
     }

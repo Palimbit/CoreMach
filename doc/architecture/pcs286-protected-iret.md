@@ -147,6 +147,11 @@ an incorrect call shape for `bm_null_host_services`; it was corrected without
 relaxing warnings or assertions. Public real-mode behavior is unchanged.
 The first remote MSVC build caught C4310 on narrowing the complemented IF
 constant. An explicit 16-bit clear mask fixes it; `/W4 /WX` remains enabled.
+Linux Dev CI also exposed a raw native-struct `memcmp` in the recovered
+stack/control suite. Its architectural comparisons now assert every field,
+including segment caches, without depending on unspecified C padding. Actual
+memory-byte comparisons remain intact. No emulation behavior is changed by
+this portability fix; it follows the existing SS-load test comparison policy.
 
 Final local GCC UCRT64 Debug and Release each pass **108 ordinary tests** with
 the same two explicit skips. The pinned optional SST selection still reports
