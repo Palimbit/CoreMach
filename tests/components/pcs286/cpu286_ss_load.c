@@ -38,6 +38,21 @@ static bm_286_arch_state_t state_of(bm_cpu_t *cpu)
     return s;
 }
 
+/* Compare architectural fields, not unspecified C structure padding. */
+static void same(const bm_286_arch_state_t *a, const bm_286_arch_state_t *b)
+{
+#define EQ(x) assert(a->x == b->x)
+    EQ(size); EQ(version);
+    EQ(ax); EQ(cx); EQ(dx); EQ(bx); EQ(sp); EQ(bp); EQ(si); EQ(di);
+    EQ(ip); EQ(flags); EQ(msw); EQ(cpl); EQ(halted); EQ(shutdown);
+    EQ(interrupt_shadow); EQ(trap_pending); EQ(nmi_pending); EQ(nmi_blocked);
+    EQ(gdtr.base); EQ(gdtr.limit); EQ(idtr.base); EQ(idtr.limit);
+#define SEG(x) EQ(x.selector); EQ(x.base); EQ(x.limit); EQ(x.valid); EQ(x.access)
+    SEG(cs); SEG(ds); SEG(ss); SEG(es); SEG(ldtr); SEG(tr);
+#undef SEG
+#undef EQ
+}
+
 static bm_286_arch_state_t setup(bm_cpu_t *cpu, fixture_t *f,
                                  const uint8_t *code, size_t size)
 {
@@ -82,7 +97,7 @@ static void reloads(bm_cpu_t *cpu, fixture_t *f)
             expected.ip = (uint16_t) lengths[form];
             expected.interrupt_shadow = BM_286_SHADOW_SS_LOAD;
             if (form == 4) expected.sp = (uint16_t) (s.sp + 2U);
-            assert(memcmp(&a, &expected, sizeof(a)) == 0);
+            same(&a, &expected);
             if (form) assert(f->trace[lengths[form]].address == address);
             assert(b.timing == BM_286_TIMING_UNKNOWN && b.bus_wait_cycles == 2U * f->count);
         }
@@ -189,7 +204,7 @@ static void errors_and_import(bm_cpu_t *cpu, fixture_t *f)
             f->fail_at = fail;
             assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
             assert(bm_286_step(cpu, &b) == BM_STATUS_DEVICE_ERROR);
-            a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
+            a = state_of(cpu); same(&s, &a);
             assert(bm_286_step(cpu, &b) == BM_STATUS_INVALID_STATE && f->count == fail);
         }
     {
@@ -199,7 +214,7 @@ static void errors_and_import(bm_cpu_t *cpu, fixture_t *f)
         assert(bm_286_set_arch_state(cpu, &bad) == BM_STATUS_INVALID_ARGUMENT);
         bad = s; bad.interrupt_shadow = 3;
         assert(bm_286_set_arch_state(cpu, &bad) == BM_STATUS_INVALID_ARGUMENT);
-        a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
+        a = state_of(cpu); same(&s, &a);
     }
     for (unsigned form = 0; form < 3; ++form) {
         bm_286_arch_state_t s = setup(cpu, f, codes[form], 3), a;
@@ -209,7 +224,7 @@ static void errors_and_import(bm_cpu_t *cpu, fixture_t *f)
         if (form == 2) s.msw |= 1;
         s.interrupt_shadow = BM_286_SHADOW_SS_LOAD;
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
-        if (form == 0) {
+        if (form < 2) {
             assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
             a = state_of(cpu);
             assert(b.has_vector && b.vector == 13 && b.kind == BM_286_BOUNDARY_EXCEPTION);
@@ -218,7 +233,7 @@ static void errors_and_import(bm_cpu_t *cpu, fixture_t *f)
             continue;
         }
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
-        a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
+        a = state_of(cpu); same(&s, &a);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);
     }
 }

@@ -250,6 +250,13 @@ static void failures(fixture_t *f)
         if (bad == 3) s.msw |= 1;
         if (bad == 4) f->ram[0x30100] = 0xf0; /* no LOCK */
         if (bad == 5) f->ram[0x30100] = 0xf3; /* no REP */
+        if (bad == 1) {
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            after = state(f); s.shutdown = 1; same(&s, &after);
+            assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector && f->count == 2);
+            assert(!f->acknowledgements);
+            continue;
+        }
         if (bad == 0) {
             word(f, 32, 0x200); word(f, 34, 0x4000);
             set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
@@ -272,6 +279,20 @@ static void failures(fixture_t *f)
             if (bad == 0) s.sp = (uint16_t)(pop ? 0xffff : 1);
             if (bad == 1) s.ss.valid = 0;
             if (bad == 2) s.ss.limit = 0x100;
+            if (bad != 1) {
+                set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+                after = state(f);
+                if (pop && bad == 0) {
+                    assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+                    assert(after.sp == (uint16_t)(s.sp-6));
+                    assert(read_word(f, s.ss.base+after.sp) == s.ip);
+                    assert(read_word(f, s.ss.base+after.sp+4) == s.flags);
+                } else {
+                    s.shutdown = 1; same(&s, &after);
+                    assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector && f->count == 1);
+                }
+                continue;
+            }
             set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
             after = state(f); same(&s, &after);
             assert(f->count == 1 && f->trace[0].operation == BM_BUS_FETCH);

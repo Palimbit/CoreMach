@@ -560,13 +560,13 @@ static bm_status_t write_operand(decoded_286_t *decode,
 }
 
 /* Real-mode stack operations never use a segment override for the stack
- * itself. A limit/shutdown condition remains an explicit unsupported gap
- * until guest exception delivery exists. Completed bus writes are not undone. */
+ * itself. Valid-cache overruns unwind to real-mode #13; an unusable exception
+ * stack shuts down the guest. Completed endpoint writes are never undone. */
 static bm_status_t push_word(decoded_286_t *decode, uint16_t value)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
     uint16_t sp = (uint16_t) (arch->sp - 2U);
-    bm_status_t status = data_access(decode, &arch->ss, sp, 2U, 1, &value);
+    bm_status_t status = operand_access(decode, &arch->ss, sp, 2U, 1, &value);
     if (status == BM_STATUS_OK)
         arch->sp = sp;
     return status;
@@ -577,9 +577,17 @@ static int stack_word_valid(const bm_286_arch_state_t *arch, uint16_t offset)
     return arch->ss.valid && (uint32_t) offset + 1U <= arch->ss.limit;
 }
 
+/* Invalid imported caches are not hardware segment faults. */
+static bm_status_t stack_limit_failure(decoded_286_t *decode)
+{
+    if (decode->state->arch.ss.valid)
+        decode->operand_limit_fault = 1U;
+    return BM_STATUS_UNSUPPORTED;
+}
+
 /* Multiword operations stage register changes, not external bus writes.
- * Preflight rejects unsupported exception/shutdown paths without claiming
- * silicon fault precedence or bus-cycle ordering on those paths. */
+ * Whole-operation preflight is a functional policy, not silicon fault
+ * precedence or physical bus-cycle ordering. */
 static bm_status_t aggregate_stack(decoded_286_t *decode, int pop)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -590,7 +598,7 @@ static bm_status_t aggregate_stack(decoded_286_t *decode, int pop)
         offsets[i] = (uint16_t) (pop ? arch->sp + 2U * i :
                                       arch->sp - 2U * (i + 1U));
         if (!stack_word_valid(arch, offsets[i]))
-            return BM_STATUS_UNSUPPORTED;
+            return stack_limit_failure(decode);
         values[i] = *word_register(arch, i);
     }
     for (i = 0U; i < 8U; ++i) {
@@ -625,13 +633,13 @@ static bm_status_t enter_frame(decoded_286_t *decode)
     words = nesting == 0U ? 1U : (unsigned) nesting + 1U;
     final_sp = (uint16_t) (sp - 2U * words - allocation);
     if (!arch->ss.valid || final_sp > arch->ss.limit)
-        return BM_STATUS_UNSUPPORTED;
+        return stack_limit_failure(decode);
     for (i = 0U; i < words; ++i)
         if (!stack_word_valid(arch, (uint16_t) (sp - 2U * (i + 1U))))
-            return BM_STATUS_UNSUPPORTED;
+            return stack_limit_failure(decode);
     for (i = 1U; i < nesting; ++i)
         if (!stack_word_valid(arch, (uint16_t) (bp - 2U * i)))
-            return BM_STATUS_UNSUPPORTED;
+            return stack_limit_failure(decode);
     for (i = 0U; i < words; ++i) {
         if (i == 0U)
             value = arch->bp;
@@ -696,7 +704,7 @@ static bm_status_t far_call(decoded_286_t *decode, uint16_t ip, uint16_t cs)
     bm_status_t status;
     for (unsigned i = 0; i < 2U; ++i)
         if (!stack_word_valid(arch, (uint16_t) (arch->sp - 2U * (i + 1U))))
-            return BM_STATUS_UNSUPPORTED;
+            return stack_limit_failure(decode);
     for (unsigned i = 0; i < 2U; ++i) {
         status = data_access(decode, &arch->ss,
             (uint16_t) (arch->sp - 2U * (i + 1U)), 2U, 1, &words[i]);
@@ -714,7 +722,7 @@ static bm_status_t far_return(decoded_286_t *decode, uint16_t discard)
     bm_status_t status;
     for (unsigned i = 0; i < 2U; ++i)
         if (!stack_word_valid(arch, (uint16_t) (arch->sp + 2U * i)))
-            return BM_STATUS_UNSUPPORTED;
+            return stack_limit_failure(decode);
     for (unsigned i = 0; i < 2U; ++i) {
         status = data_access(decode, &arch->ss,
             (uint16_t) (arch->sp + 2U * i), 2U, 0, &words[i]);
@@ -761,9 +769,13 @@ static bm_status_t interrupt_frame(decoded_286_t *decode, uint8_t vector,
         words[2] = arch->ip;
         decode->synchronous_fault = 1U;
     }
+    if (!arch->ss.valid)
+        return BM_STATUS_UNSUPPORTED; /* Invalid imported state, not #SS. */
     for (unsigned i = 0; i < 3U; ++i)
         if (!stack_word_valid(arch, (uint16_t) (arch->sp - 2U * (i + 1U))))
-            return BM_STATUS_UNSUPPORTED;
+            /* A real-mode exception needs the same six-byte stack frame.
+             * Do not recurse into fault delivery or synthesize partial pushes. */
+            return enter_shutdown(decode);
     for (unsigned i = 0; i < 3U; ++i) {
         status = data_access(decode, &arch->ss,
             (uint16_t) (arch->sp - 2U * (i + 1U)), 2U, 1, &words[i]);
@@ -800,7 +812,7 @@ static bm_status_t interrupt_return(decoded_286_t *decode)
     bm_status_t status;
     for (unsigned i = 0; i < 3U; ++i)
         if (!stack_word_valid(arch, (uint16_t) (arch->sp + 2U * i)))
-            return BM_STATUS_UNSUPPORTED;
+            return stack_limit_failure(decode);
     for (unsigned i = 0; i < 3U; ++i) {
         status = data_access(decode, &arch->ss,
             (uint16_t) (arch->sp + 2U * i), 2U, 0, &words[i]);
@@ -893,7 +905,7 @@ static bm_status_t execute_flags(decoded_286_t *decode, uint8_t opcode)
     case 0x9cU: /* Canonical 286 FLAGS image, not 8086 high bits. */
         return push_word(decode, (uint16_t) ((arch->flags & 0x7fd5U) | FLAG_FIXED_ONE));
     case 0x9dU:
-        status = data_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
+        status = operand_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
         if (status != BM_STATUS_OK)
             return status;
         arch->flags = (uint16_t) ((arch->flags & 0x7000U) | (value & 0x0fd5U) | FLAG_FIXED_ONE);
@@ -998,7 +1010,7 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
     if (opcode == 0xc8U)
         return enter_frame(decode);
     if (opcode == 0xc9U) {
-        status = data_access(decode, &arch->ss, arch->bp, 2U, 0, &value);
+        status = operand_access(decode, &arch->ss, arch->bp, 2U, 0, &value);
         if (status != BM_STATUS_OK)
             return status;
         arch->sp = (uint16_t) (arch->bp + 2U);
@@ -1029,7 +1041,7 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
             if (operand.reg_field != 0U)
                 return BM_STATUS_UNSUPPORTED;
         }
-        status = data_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
+        status = operand_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
         if (status != BM_STATUS_OK)
             return status;
         if (opcode == 0x8fU) {
@@ -1064,7 +1076,7 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
             if (status != BM_STATUS_OK)
                 return status;
         }
-        status = data_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
+        status = operand_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
         if (status != BM_STATUS_OK)
             return status;
         if (!valid_near_target(arch, value))

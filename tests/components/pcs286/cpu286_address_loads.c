@@ -221,6 +221,13 @@ static void failures(fixture_t *f)
             if (bad == 4) s.ds.valid = s.ss.valid = 0;
             if (bad == 5) s.ds.limit = s.ss.limit = 1;
             if (form == 0 && bad >= 4) continue; /* LEA needs no data segment. */
+            if (form == 3 && bad == 5) { /* XLAT #13 cannot build its stack frame. */
+                set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+                a = state(f); s.shutdown = 1; same(&s, &a);
+                assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
+                for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);
+                continue;
+            }
             set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
             a = state(f); same(&s, &a);
             for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);

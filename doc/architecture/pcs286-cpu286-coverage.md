@@ -2,7 +2,40 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: restartable scalar operand-limit faults
+## Latest tranche: real-mode implicit stack faults
+
+Supported PUSH/POP, PUSHF/POPF, near/far calls and returns, IRET,
+PUSHA/POPA and ENTER/LEAVE now unwind valid-stack limit failures to #13.
+An unusable six-byte exception frame enters guest shutdown without recursive
+delivery or fabricated successful execution. Invalid imported SS caches and
+host endpoint errors remain explicit errors, not guest exceptions.
+
+Intel documents [PUSH SP=1 shutdown](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=297),
+[PUSHA SP=1/3/5 shutdown and SP=7/9/11/13/15 #13](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=298),
+and [POP](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=294) /
+[POPA](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=295)
+word-overrun #13. Existing whole-operation preflight is retained, including
+POPA's discarded slot. Preflight order, unchanged registers/no partial pushes
+on shutdown and short imported segment limits are functional model policies,
+not measured silicon behavior. PUSH/CALL memory sources can be read before
+discovering a stack fault. No new physical timing or protected-fault claim.
+
+Tests cover 19 prefixed stack forms, every endpoint failing before/after
+external effects, the documented PUSHA odd-SP cases, short limits and invalid
+caches, NMI failure on an unusable recovery stack, INTA lock release and no
+repeat acknowledge after shutdown. A guest LEAVE fault handler repairs BP,
+IRETs and retries successfully before HLT. Faulting POP SS and IRET do not
+prematurely reload SS or unblock NMI. The SS-load suite compares architectural
+fields instead of unspecified structure padding (exposed by GCC Release).
+
+GCC UCRT64 and MSVC Debug/Release pass 105 ordinary tests, with the two
+existing Headland/AT DMA skips. The unchanged optional SST subset, 30 Python
+tests, catalogue and provenance checks also pass.
+
+Fetch/branch-target faults, strings, multiword pointer faults, protected-mode
+delivery and timing remain unfinished. The machine is not declared bootable.
+
+## Previous tranche: restartable scalar operand-limit faults
 
 Scalar ModR/M memory operands, accumulator moffs and XLAT now request real-mode
 #13 when a valid segment cache cannot contain their access. A private decode

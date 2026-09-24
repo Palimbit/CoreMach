@@ -210,6 +210,20 @@ static void failures(fixture_t *f)
             if (bad == 3) s.msw |= 1;
             if (bad == 4) f->ram[0x30100] = 0xf0;
             if (bad == 5) f->ram[0x30100] = 0xf3;
+            if (bad == 1 || bad == 2) {
+                set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+                a = state(f);
+                if (bad == 1 || form < 2) {
+                    s.shutdown = 1; same(&s, &a);
+                    assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
+                    for (unsigned j = 0; j < f->count; ++j) assert(f->trace[j].operation != BM_BUS_WRITE);
+                } else {
+                    assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+                    assert(a.sp == (uint16_t)(s.sp-6) && a.nmi_blocked == s.nmi_blocked);
+                    assert(f->ram[s.ss.base+a.sp] == (uint8_t)s.ip);
+                }
+                continue;
+            }
             set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
             a = state(f); same(&s, &a);
             for (unsigned j = 0; j < f->count; ++j) assert(f->trace[j].operation != BM_BUS_WRITE);

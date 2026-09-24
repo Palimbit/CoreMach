@@ -269,6 +269,104 @@ static void operand_faults(fixture_t *f)
     a = state(f); assert(a.halted && a.bx == 0x500 && a.sp == s.sp && a.flags == s.flags);
     assert(read_word(f, 0x500) == 0xbeef && a.ip == 0x104);
 }
+static void stack_faults(fixture_t *f)
+{
+    static const struct {
+        uint8_t code[5];
+        uint16_t sp, bp;
+        unsigned shutdown;
+    } cases[] = {
+        {{0x50},1,0x500,1}, {{0x16},1,0x500,1}, {{0x68,0x34,0x12},1,0x500,1},
+        {{0xff,0x37},1,0x500,1}, {{0x9c},1,0x500,1},
+        {{0xe8,0,0},1,0x500,1}, {{0x9a,0,2,0,4},3,0x500,1},
+        {{0xff,0x1f},3,0x500,1}, {{0x60},7,0x500,0},
+        {{0x61},0xfff1,0x500,0}, {{0x58},0xffff,0x500,0},
+        {{0x17},0xffff,0x500,0}, {{0x8f,7},0xffff,0x500,0},
+        {{0x9d},0xffff,0x500,0}, {{0xc3},0xffff,0x500,0},
+        {{0xcb},0xfffd,0x500,0}, {{0xcf},0xfffb,0x500,0},
+        {{0xc8,0,0,2},0x800,1,0}, {{0xc9},0x800,0xffff,0}
+    };
+    for (unsigned op = 0; op < sizeof(cases)/sizeof(cases[0]); ++op) {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 0x80), a, e;
+        bm_286_boundary_t b;
+        s.sp = cases[op].sp; s.bp = cases[op].bp; s.ax = 0xbeef; s.bx = 0x500;
+        s.nmi_blocked = 1; /* Faulting IRET must not unblock NMI. */
+        word(f, 0x500, 0x200); word(f, 0x502, 0x4000);
+        word(f, 0x6034, 0x200); word(f, 0x6036, 0x4000);
+        f->ram[0x30100] = 0x26; /* Restart includes an otherwise irrelevant prefix. */
+        memcpy(f->ram+0x30101, cases[op].code, sizeof(cases[op].code));
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); e = s;
+        if (cases[op].shutdown) {
+            e.shutdown = 1;
+            assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector && f->shut_on == 1);
+            for (unsigned t = 0; t < f->count; ++t) assert(f->trace[t].operation != BM_BUS_WRITE);
+            unsigned count = f->count;
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_IDLE && f->count == count);
+        } else {
+            e.sp = (uint16_t)(s.sp-6); e.flags &= 0xfcffU;
+            e.cs.base = 0x40000; e.cs.selector = 0x4000; e.ip = 0x200;
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+            assert(read_word(f, s.ss.base+e.sp) == s.ip);
+            assert(read_word(f, s.ss.base+e.sp+2) == s.cs.selector);
+            assert(read_word(f, s.ss.base+e.sp+4) == s.flags);
+            assert(!f->shut_on);
+        }
+        same(&a, &e);
+        bm_bus_transaction_t trace[32]; memcpy(trace, f->trace, sizeof(trace));
+        unsigned total = f->count;
+        /* Every endpoint may fail before or after its external effect. Neither
+         * turns into a guest fault, commits registers, or replays the transfer. */
+        for (unsigned fail = 1; fail <= total; ++fail) for (unsigned after = 0; after < 2; ++after) {
+            assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
+            f->count = f->shut_on = 0; f->fail_at = fail; f->after = after;
+            uint8_t expected[6]; memset(expected, 0xa5, sizeof(expected));
+            unsigned frame = s.ss.base+(uint16_t)(s.sp-6);
+            if (!cases[op].shutdown) memset(f->ram+frame, 0xa5, sizeof(expected));
+            for (unsigned t = 0; t < fail-1+after; ++t) if (trace[t].operation == BM_BUS_WRITE)
+                for (unsigned j = 0; j < trace[t].size; ++j)
+                    expected[(size_t)trace[t].address+j-frame] = (uint8_t)(trace[t].value >> (8*j));
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+            a = state(f); same(&a, &s);
+            assert(f->count == fail && !f->shut_on && !f->locked);
+            if (!cases[op].shutdown) assert(!memcmp(expected, f->ram+frame, sizeof(expected)));
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_INVALID_STATE && f->count == fail);
+        }
+    }
+    /* Guest-only repair of a bad LEAVE source; the exception stack itself
+     * remains usable. Repair BP, IRET, retry LEAVE, HLT. */
+    bm_286_arch_state_t s = setup(f, 0x3ff, 0x80), a;
+    bm_286_boundary_t b;
+    const uint8_t program[] = {0x26,0xc9,0xf4}, handler[] = {0xbd,0,5,0xcf};
+    memcpy(f->ram+0x30100, program, sizeof(program));
+    memcpy(f->ram+0x40200, handler, sizeof(handler));
+    word(f, 0x6034, 0x200); word(f, 0x6036, 0x4000);
+    s.bp = 0xffff; word(f, 0x10500, 0xbeef); set(f, &s);
+    for (unsigned i = 0; i < 5; ++i) {
+        f->count = 0; assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+    }
+    a = state(f);
+    assert(a.halted && a.bp == 0xbeef && a.sp == 0x502 && a.ip == 0x103 && a.flags == s.flags);
+    /* Failed NMI recovery on the same unusable stack does not re-notify or
+     * repeatedly accept NMI. Reset restores a usable CPU. */
+    s = setup(f, 0x3ff, 0x80); s.sp = 1; f->ram[0x30100] = 0x50; set(f, &s);
+    assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK && state(f).shutdown);
+    f->count = 0;
+    assert(f->cpu.ops.signal(f->cpu.context, BM_286_SIGNAL_NMI, 1) == BM_STATUS_OK);
+    assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+    assert(state(f).shutdown && state(f).nmi_blocked && !f->count && f->shut_on == 1);
+    assert(bm_286_step(&f->cpu, &b) == BM_STATUS_IDLE);
+    assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK && !state(f).shutdown);
+    for (unsigned sp = 1; sp <= 5; sp += 2) {
+        s = setup(f, 0x3ff, 0x80); s.sp = (uint16_t)sp; set(f, &s);
+        assert(f->cpu.ops.signal(f->cpu.context, BM_286_SIGNAL_INTR, 1) == BM_STATUS_OK);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); s.shutdown = 1; same(&a, &s);
+        assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
+        assert(!f->count && f->acks == 2 && f->lock_edges == 2 && !f->locked && f->shut_on == 1);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_IDLE && f->acks == 2);
+    }
+}
 int main(void)
 {
     fixture_t f = {0}; bm_286_config_t c = {0}; bm_host_services_t host = bm_null_host_services();
@@ -279,5 +377,6 @@ int main(void)
     c.bus_lock = lock_changed; c.shutdown = shutdown_changed; c.pin_context = &f;
     assert(bm_286_create(&host, &c, &f.cpu) == BM_STATUS_OK);
     matrix(&f); recovery(&f); fault_and_trap(&f); external_and_errors(&f); operand_faults(&f);
+    stack_faults(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }

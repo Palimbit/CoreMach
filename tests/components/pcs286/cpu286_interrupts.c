@@ -240,7 +240,7 @@ static void failures(fixture_t *f)
         if (bad == 2) s.ss.valid = 0;
         if (bad == 3) s.msw |= 1;
         set(f, &s);
-        if (bad == 0) {
+        if (bad == 0 || bad == 1) {
             assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK && !f->count && !f->acks);
             after = state(f); s.shutdown = 1; s.nmi_pending = 0; s.nmi_blocked = 1;
             assert(memcmp(&after, &s, sizeof(s)) == 0);

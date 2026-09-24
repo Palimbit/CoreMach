@@ -478,3 +478,13 @@ This does not yet generalize to implicit stack, fetch, strings or multiword
 pointer preflight faults. Earlier reads (such as POP's stack source) are not
 claimed absent. Generic transport still cannot manufacture a guest exception
 from a host error. Timing remains UNKNOWN.
+
+The next tranche extends this unwind path to supported implicit stack
+operations, including aggregate frames and IRET. Valid SS overruns deliver
+#13; inability to form the exception frame enters guest shutdown. Invalid
+imported caches and host errors still refuse. Tests include Intel's PUSHA
+odd-SP distinctions, 19 prefixed forms, per-transfer failures, guest-only
+LEAVE repair/retry, NMI recovery failure and INTA lock release. Architectural
+register retention and preflight order remain explicit functional policies.
+Fetch/target, strings, compound-pointer faults, protection and timing are
+still open; this is not BIOS/POST validation.

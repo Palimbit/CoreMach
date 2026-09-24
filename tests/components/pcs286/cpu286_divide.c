@@ -327,7 +327,7 @@ static void rejected(fixture_t *f)
             assert(a.ax == s.ax && a.dx == s.dx && a.sp == (uint16_t)(s.sp-6));
             continue;
         }
-        if (bad == 5) {
+        if (bad == 5 || bad == 7) {
             assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
             bm_286_arch_state_t a = state(f); s.shutdown = 1; same(&a, &s);
             assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);

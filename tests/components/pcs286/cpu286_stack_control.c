@@ -98,6 +98,33 @@ static uint16_t *reg_at(bm_286_arch_state_t *s, unsigned index)
     }
 }
 
+static void stack_fault(bm_cpu_t *cpu, fixture_t *f,
+                        const bm_286_arch_state_t *s, int shutdown)
+{
+    bm_286_boundary_t b;
+    bm_286_arch_state_t expected = *s, actual;
+    word_at(f, 52, 0x100); word_at(f, 54, 0x0800);
+    assert(bm_286_set_arch_state(cpu, s) == BM_STATUS_OK);
+    assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
+    actual = state_of(cpu);
+    if (shutdown) {
+        expected.shutdown = 1;
+        assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
+        for (unsigned i = 0; i < f->count; ++i)
+            assert(f->trace[i].operation == BM_BUS_FETCH);
+    } else {
+        expected.sp = (uint16_t)(s->sp-6);
+        expected.flags &= 0xfcffU;
+        expected.cs.selector = 0x0800; expected.cs.base = 0x8000;
+        expected.ip = 0x100;
+        assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+        assert(read_word(f, STACK+expected.sp) == s->ip);
+        assert(read_word(f, STACK+expected.sp+2) == s->cs.selector);
+        assert(read_word(f, STACK+expected.sp+4) == s->flags);
+    }
+    assert(memcmp(&actual, &expected, sizeof(actual)) == 0);
+}
+
 static bm_286_arch_state_t step(bm_cpu_t *cpu, fixture_t *f, const bm_286_arch_state_t *s)
 {
     bm_286_boundary_t b;
@@ -314,13 +341,9 @@ static void aggregate_and_frames(bm_cpu_t *cpu, fixture_t *f)
     }
     for (i = 0U; i < 8U; ++i) {
         const uint8_t code[] = {0x60};
-        bm_286_arch_state_t s = load(cpu, f, code, sizeof(code)), a;
-        bm_286_boundary_t b;
+        bm_286_arch_state_t s = load(cpu, f, code, sizeof(code));
         s.sp = (uint16_t) (2U * i + 1U);
-        assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
-        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
-        a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
-        assert(f->count == 1U); /* Explicit gap, not guest exception emulation. */
+        stack_fault(cpu, f, &s, i < 3U); /* Intel PUSHA: SP 1/3/5 shutdown, 7..15 #13. */
     }
     for (i = 0U; i < 5U; ++i) {
         const uint8_t enter[] = {0xc8,0,0,3}, popa[] = {0x61}, leave[] = {0xc9};
@@ -332,6 +355,10 @@ static void aggregate_and_frames(bm_cpu_t *cpu, fixture_t *f)
         if (i == 2U) s.ss.valid = 0U;
         if (i == 3U) s.sp = 0xfff9U; /* Discarded slot cannot hide a segment crossing. */
         if (i == 4U) s.bp = 0xffffU;
+        if (i != 2U) {
+            stack_fault(cpu, f, &s, i == 0U);
+            continue;
+        }
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state_of(cpu); assert(memcmp(&s, &a, sizeof(s)) == 0);
@@ -410,11 +437,15 @@ static void limits_and_gaps(bm_cpu_t *cpu, fixture_t *f)
                                      i == 4U ? call : i == 5U ? ret : loop,
                                      i == 4U ? 3U : i == 6U ? 2U : 1U), a;
         bm_286_boundary_t b;
-        if (i == 0U) s.sp = 1U; /* documented shutdown path remains a gap */
+        if (i == 0U) s.sp = 1U;
         if (i == 1U) s.ss.valid = 0U;
         if (i == 2U) s.sp = 0xffffU;
         if (i == 3U) s.ss.limit = s.sp;
         if (i >= 4U) { s.cs.limit = 8U; word_at(f, STACK + s.sp, 0x20U); }
+        if (i == 0U || i == 2U || i == 3U) {
+            stack_fault(cpu, f, &s, i == 0U);
+            continue;
+        }
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state_of(cpu); assert(memcmp(&a, &s, sizeof(s)) == 0);

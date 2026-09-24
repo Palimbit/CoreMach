@@ -281,7 +281,7 @@ static void gaps(fixture_t *f)
             memcpy(f->ram + 0x30101, code, sizeof(code));
         }
         set(f, &s);
-        if (bad == 6) {
+        if (bad == 6 || bad == 7) {
             assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
             a = state(f); s.shutdown = 1; same(&a, &s);
             assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector && f->count == 6);
