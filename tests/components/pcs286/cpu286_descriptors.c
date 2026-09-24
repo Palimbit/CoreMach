@@ -242,12 +242,116 @@ static void tables(void)
     assert(bm_286_pm_lookup_descriptor(&gdt, &ldt, 8, table_access, &f, NULL) == BM_STATUS_INVALID_ARGUMENT);
 }
 
+static void load_plans(void)
+{
+    bm_286_table_state_t gdt = {0x1000, 15};
+    bm_286_segment_state_t ldt = {8, 0x2000, 15, 0x82, 1};
+    bm_286_pm_load_plan_t plan;
+    table_fixture_t f = {0};
+    unsigned target, access, cpl, rpl, local, odd;
+    /* Allowed low-five-bit access classes, independently enumerated. */
+    static const bool data_types[32] = {
+        false,false,false,false,false,false,false,false,
+        false,false,false,false,false,false,false,false,
+        true,true,true,true,true,true,true,true,
+        false,false,true,true,false,false,true,true
+    };
+    f.bytes[0] = 0xcd; f.bytes[1] = 0xab;
+    f.bytes[2] = 0x56; f.bytes[3] = 0x34; f.bytes[4] = 0x12;
+    for (target = 0; target < 3; ++target)
+    for (access = 0; access < 256; ++access)
+    for (cpl = 0; cpl < 4; ++cpl)
+    for (rpl = 0; rpl < 4; ++rpl)
+    for (local = 0; local < 2; ++local)
+    for (odd = 0; odd < 2; ++odd) {
+        uint16_t selector = (uint16_t)(8u + local * 4u + rpl);
+        unsigned type = access % 32u, dpl = (access / 32u) % 4u;
+        bool readable_conforming = type == 30 || type == 31;
+        bool allowed;
+        unsigned vector = 0, error = 0;
+        bool early = target == BM_286_PM_LOAD_LDT && (cpl != 0 || local);
+        gdt.base = 0x1000u + odd; ldt.base = 0x2000u + odd;
+        f.first = (local ? ldt.base : gdt.base) + 8u;
+        f.calls = f.effects = 0;
+        f.bytes[5] = (uint8_t)access;
+        if (target == BM_286_PM_LOAD_DATA)
+            allowed = data_types[type] &&
+                (readable_conforming || (dpl >= cpl && dpl >= rpl));
+        else if (target == BM_286_PM_LOAD_STACK)
+            allowed = (type == 18 || type == 19 || type == 22 || type == 23) &&
+                dpl == cpl && rpl == cpl;
+        else
+            allowed = cpl == 0 && !local && type == 2;
+        if (!allowed) vector = 13;
+        else if (access < 128) vector = target == BM_286_PM_LOAD_STACK ? 12u : 11u;
+        if (vector != 0 && !(target == BM_286_PM_LOAD_LDT && cpl != 0))
+            error = 8u + local * 4u;
+        memset(&plan, 0xff, sizeof(plan));
+        assert(bm_286_pm_prepare_load(&gdt, &ldt, selector, (uint8_t)cpl,
+               (bm_286_pm_load_target_t)target, table_access, &f, &plan) == BM_STATUS_OK);
+        assert(plan.fault_vector == vector && plan.fault_error == error);
+        assert(plan.prepared == (vector == 0));
+        assert(f.calls == (early ? 0u : odd ? 8u : 4u));
+        assert(plan.waits == f.calls * 3u);
+        assert(f.bytes[5] == access); /* No accessed write hidden in prepare. */
+        if (plan.prepared) {
+            assert(plan.segment.selector == selector && plan.segment.valid);
+            assert(plan.segment.base == 0x123456 && plan.segment.limit == 0xabcd);
+            assert(plan.segment.access == access);
+            assert(plan.needs_accessed_write ==
+                   (target != BM_286_PM_LOAD_LDT && access % 2u == 0));
+        } else {
+            assert(!plan.segment.valid && !plan.needs_accessed_write);
+        }
+    }
+    for (target = 0; target < 3; ++target)
+    for (cpl = 0; cpl < 4; ++cpl)
+    for (rpl = 0; rpl < 4; ++rpl) {
+        bool reject = target == BM_286_PM_LOAD_STACK ||
+                      (target == BM_286_PM_LOAD_LDT && cpl != 0);
+        f.calls = 0;
+        assert(bm_286_pm_prepare_load(&gdt, &ldt, (uint16_t)rpl, (uint8_t)cpl,
+               (bm_286_pm_load_target_t)target, table_access, &f, &plan) == BM_STATUS_OK);
+        assert(plan.prepared == !reject && plan.fault_vector == (reject ? 13 : 0));
+        assert(plan.fault_error == 0 && !plan.segment.valid && f.calls == 0);
+        if (!reject) assert(plan.segment.selector == rpl);
+    }
+    for (odd = 0; odd < 2; ++odd) {
+        unsigned fail, after;
+        gdt.base = 0x1000u + odd;
+        f.first = gdt.base + 8;
+        f.bytes[5] = 0x92;
+        for (after = 0; after < 2; ++after)
+        for (fail = 1; fail <= (odd ? 8u : 4u); ++fail) {
+            f.calls = f.effects = 0; f.fail_at = fail;
+            f.after = after != 0; f.failure = BM_STATUS_DEVICE_ERROR;
+            assert(bm_286_pm_prepare_load(&gdt, &ldt, 8, 0, BM_286_PM_LOAD_DATA,
+                   table_access, &f, &plan) == BM_STATUS_DEVICE_ERROR);
+            assert(!plan.prepared && plan.fault_vector == 0 && !plan.segment.valid);
+            assert(plan.waits == (fail - 1u) * 3u);
+            assert(f.effects == fail - (after ? 0u : 1u));
+        }
+    }
+    f.fail_at = 0; f.calls = 0; gdt.limit = 14;
+    assert(bm_286_pm_prepare_load(&gdt, &ldt, 11, 0, BM_286_PM_LOAD_DATA,
+           table_access, &f, &plan) == BM_STATUS_OK);
+    assert(plan.fault_vector == 13 && plan.fault_error == 8 && f.calls == 0);
+    ldt.valid = 0;
+    assert(bm_286_pm_prepare_load(&gdt, &ldt, 15, 0, BM_286_PM_LOAD_STACK,
+           table_access, &f, &plan) == BM_STATUS_OK);
+    assert(plan.fault_vector == 13 && plan.fault_error == 12 && f.calls == 0);
+    assert(bm_286_pm_prepare_load(&gdt, &ldt, 8, 4, BM_286_PM_LOAD_DATA,
+           table_access, &f, &plan) == BM_STATUS_INVALID_ARGUMENT);
+    assert(!plan.prepared && !plan.fault_vector);
+}
+
 int main(void)
 {
     selectors();
     descriptors();
     ranges();
     tables();
+    load_plans();
     selectors();
     return 0;
 }

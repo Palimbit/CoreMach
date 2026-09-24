@@ -61,4 +61,30 @@ bm_status_t bm_286_pm_lookup_descriptor(const bm_286_table_state_t *gdt,
     const bm_286_segment_state_t *ldt, uint16_t selector,
     bm_bus_access_fn access, void *context, bm_286_pm_lookup_t *result);
 
+typedef enum bm_286_pm_load_target {
+    BM_286_PM_LOAD_DATA, /* Shared rules for DS and ES, not CS. */
+    BM_286_PM_LOAD_STACK,
+    BM_286_PM_LOAD_LDT
+} bm_286_pm_load_target_t;
+
+typedef struct bm_286_pm_load_plan {
+    bool prepared;
+    uint8_t fault_vector; /* 0, #NP 11, #SS 12 or #GP 13; not delivered here. */
+    uint16_t fault_error;
+    uint64_t waits;
+    bm_286_segment_state_t segment;
+    bool needs_accessed_write;
+} bm_286_pm_load_plan_t;
+
+/* Prepare only: reads descriptors but never writes memory or CPU registers.
+ * Caller must perform required accessed writeback BEFORE committing segment.
+ * Only ordinary DS/ES/SS loads and LLDT, NOT task switches or stack switches.
+ * Inputs are non-aliasing; host errors leave prepared=false/fault_vector=0.
+ * LLDT CPL check precedes lookup; operand-fetch precedence is caller-owned.
+ * Null-cache base/limit/access zeroing is an internal unusable-cache policy. */
+bm_status_t bm_286_pm_prepare_load(const bm_286_table_state_t *gdt,
+    const bm_286_segment_state_t *ldt, uint16_t selector, uint8_t cpl,
+    bm_286_pm_load_target_t target, bm_bus_access_fn access, void *context,
+    bm_286_pm_load_plan_t *plan);
+
 #endif

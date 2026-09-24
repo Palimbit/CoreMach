@@ -125,3 +125,76 @@ bm_status_t bm_286_pm_lookup_descriptor(const bm_286_table_state_t *gdt,
     result->reason = BM_286_PM_FOUND;
     return BM_STATUS_OK;
 }
+
+bm_status_t bm_286_pm_prepare_load(const bm_286_table_state_t *gdt,
+    const bm_286_segment_state_t *ldt, uint16_t selector, uint8_t cpl,
+    bm_286_pm_load_target_t target, bm_bus_access_fn access, void *context,
+    bm_286_pm_load_plan_t *plan)
+{
+    bm_286_pm_lookup_t lookup;
+    bm_286_pm_descriptor_t *d = &lookup.descriptor;
+    bm_286_pm_selector_t s = bm_286_pm_selector_decode(selector);
+    bm_status_t status;
+    if (plan == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    memset(plan, 0, sizeof(*plan));
+    if (gdt == NULL || ldt == NULL || access == NULL || cpl > 3 ||
+        (target != BM_286_PM_LOAD_DATA && target != BM_286_PM_LOAD_STACK &&
+         target != BM_286_PM_LOAD_LDT))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (target == BM_286_PM_LOAD_LDT && cpl != 0) {
+        plan->fault_vector = 13;
+        return BM_STATUS_OK;
+    }
+    if (s.null_selector) {
+        if (target == BM_286_PM_LOAD_STACK) {
+            plan->fault_vector = 13;
+        } else {
+            plan->segment.selector = selector;
+            plan->prepared = true;
+        }
+        return BM_STATUS_OK;
+    }
+    if (target == BM_286_PM_LOAD_LDT && s.local) {
+        plan->fault_vector = 13;
+        plan->fault_error = (uint16_t)(selector & 0xfffcu);
+        return BM_STATUS_OK;
+    }
+    status = bm_286_pm_lookup_descriptor(gdt, ldt, selector, access, context, &lookup);
+    plan->waits = lookup.waits;
+    if (status != BM_STATUS_OK)
+        return status;
+    /* Stage guest rejection independently of transport statuses. */
+    plan->fault_vector = 13;
+    plan->fault_error = lookup.selector_error;
+    if (lookup.reason != BM_286_PM_FOUND)
+        return BM_STATUS_OK;
+    if (target == BM_286_PM_LOAD_LDT) {
+        if (d->kind != BM_286_PM_LDT)
+            return BM_STATUS_OK;
+    } else if (target == BM_286_PM_LOAD_STACK) {
+        if (d->kind != BM_286_PM_DATA || !d->writable ||
+            s.rpl != cpl || d->dpl != cpl)
+            return BM_STATUS_OK;
+    } else {
+        if (d->kind != BM_286_PM_DATA &&
+            !(d->kind == BM_286_PM_CODE && d->readable))
+            return BM_STATUS_OK;
+        if (!d->conforming && (d->dpl < cpl || d->dpl < s.rpl))
+            return BM_STATUS_OK;
+    }
+    if (!d->present) {
+        plan->fault_vector = target == BM_286_PM_LOAD_STACK ? 12 : 11;
+        return BM_STATUS_OK;
+    }
+    plan->segment.selector = selector;
+    plan->segment.base = d->base;
+    plan->segment.limit = d->limit;
+    plan->segment.access = d->access;
+    plan->segment.valid = 1;
+    plan->needs_accessed_write = target != BM_286_PM_LOAD_LDT && !d->accessed;
+    plan->fault_vector = 0;
+    plan->fault_error = 0;
+    plan->prepared = true;
+    return BM_STATUS_OK;
+}

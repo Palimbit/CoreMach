@@ -14,7 +14,7 @@ accuracy claim, implicit 386 semantics or BIOS-specific success shortcuts.
 | --- | --- | --- | --- |
 | 1. Interpretation | Selectors, descriptor types and segment ranges | Exhaustive selectors/access bytes and boundary tests | Implemented, standalone helpers |
 | 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Implemented as private lookup; instruction integration in block 3 |
-| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Pending |
+| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | 3a preparation implemented; writeback/instruction integration pending |
 | 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Pending; enable only with block 5 |
 | 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Pending; gates block 4 activation |
 | 6. Privilege transfers | Call gates, conforming code, stack switching, parameter copying, RETF | Same/outer/inner privilege matrices and interrupted transfers | Pending |
@@ -73,7 +73,34 @@ Tests enumerate every selector and every limit for GDT/LDT, including LDT
 index zero; exercise odd/even transfers, physical wrap, and five host statuses
 at every transfer before/after effects. Protected execution remains disabled.
 
-## Next block: segment loads
+## Block 3a: segment-load preparation
+
+`bm_286_pm_prepare_load` connects lookup to ordinary DS/ES, SS and LLDT rules.
+It returns either a prepared cache, a guest #GP/#NP/#SS with error code, or an
+unchanged host status. It never delivers an exception or modifies CPU state.
+It is NOT suitable for task switches or privilege-level stack switches, which
+have different checks/faults. The instruction caller still owns operand-fetch
+ordering and the SS interrupt shadow.
+
+DS/ES accept data or readable code. Readable conforming code does not use the
+ordinary data privilege comparison. SS requires writable data and matching
+privilege levels. LLDT requires CPL zero and a GDT LDT descriptor; it ignores
+descriptor DPL. Null DS/ES/LDTR produce an unusable prepared cache; null SS
+requests #GP(0). Null hidden-field zeroing is emulator policy, not silicon
+retention evidence. Type/privilege rejection takes precedence over presence.
+
+The access byte is preserved; `needs_accessed_write` explicitly prevents a
+prepared data/stack cache from being mistaken for a completed load. Accessed
+writeback, exclusion, instruction dispatch, commit and protected fault delivery
+are still pending. Tests enumerate 49,152 type/CPL/RPL/table/alignment cases,
+48 null cases, before/after transfer failures, and invalid table/cache inputs.
+Reference: Intel PRM B-61 (LDS/LES), B-66 (LLDT), sections 7.4 and exception
+12 definition. See [LDS/LES](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=271),
+[LLDT](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=276),
+[segment types](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=138),
+[stack faults](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=221).
+
+## Next: block 3b, writeback and integration
 
 Connect lookup to DS/ES/SS and LLDT validation, with explicit permission and
 presence checks, fault metadata and staged architectural state. Add accessed

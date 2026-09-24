@@ -2,7 +2,16 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: protected-mode table lookup
+## Latest tranche: protected-mode segment preparation (block 3a)
+
+Private DS/ES/SS and LLDT preparation now uses GDT/LDT lookup and validates
+types, CPL/RPL/DPL, null selectors and presence. It returns a staged cache or
+#GP/#NP/#SS metadata without writing memory/registers or delivering exceptions.
+49,152 matrix cases plus null and transfer-failure tests pass. Accessed-bit
+writeback, instruction integration and PE execution remain pending: block 3
+is NOT complete. See the [plan](pcs286-protected-mode-plan.md).
+
+## Previous tranche: protected-mode table lookup
 
 Block 2 adds private GDT/LDT reads over the existing bus callback contract,
 whole-entry limits, null/unavailable-table reasons, selector error metadata,
