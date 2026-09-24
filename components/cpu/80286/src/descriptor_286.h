@@ -130,4 +130,18 @@ bm_status_t bm_286_pm_enter_event(bm_286_arch_state_t *arch,
     const bm_286_config_t *config, const bm_286_pm_event_t *event,
     bm_286_segment_load_result_t *result);
 
+/* Private ordinary same-CPL IRET, Intel 286 PRM B-51/B-52 and 10.1.
+ * result.loaded means returned; guest faults are metadata, not delivered.
+ * Current NT and outer returns remain UNSUPPORTED. The handler must already
+ * have removed any error code. Requires consistent running protected state,
+ * serialized non-aliasing inputs and no held LOCK, as for event entry.
+ * CS/IP/SP/FLAGS and NMI unblock commit only on success. Failed host transfers
+ * retain their status and external effects; the caller must stop, never retry.
+ * Successful return preserves pending NMI/trap and the interrupt shadow:
+ * instruction-boundary sampling/consumption belongs to the future dispatcher.
+ * Faulting-IRET NMI unblock ordering is not certified by this private helper.
+ * This is not a public PE execution bypass or a task/privilege-switch path. */
+bm_status_t bm_286_pm_iret(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, bm_286_segment_load_result_t *result);
+
 #endif

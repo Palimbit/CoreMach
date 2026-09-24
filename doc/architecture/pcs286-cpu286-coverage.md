@@ -2,7 +2,21 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: private same-CPL protected event entry
+## Latest tranche: private same-CPL protected IRET
+
+The private return helper validates the stack, return CS type/privilege/presence
+and IP, restores 286 FLAGS with CPL/IOPL restrictions, updates A under LOCK and
+commits CS/IP/SP/FLAGS with successful NMI unblock. Current NT/task returns and
+outer privilege returns remain explicitly unsupported. Tests cover exhaustive
+saved FLAGS, SP boundaries, selector/type matrices, every-transfer host failures
+and private entry/handler/return roundtrips. Both public PE barriers remain:
+these are helper tests, not executed protected programs or machine acceptance.
+
+See [IRET source review, contract and validation](pcs286-protected-iret.md).
+Faulting-IRET NMI timing, exception escalation, protected accesses and dispatch
+remain open; timing is UNKNOWN. No firmware or restricted documents enter Git.
+
+## Previous tranche: private same-CPL protected event entry
 
 IDT interrupt/trap gates now validate target code and the current stack,
 prepare FLAGS/CS/IP and optional error-code frames, update the accessed bit

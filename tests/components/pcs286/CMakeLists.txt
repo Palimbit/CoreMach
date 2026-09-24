@@ -60,6 +60,13 @@ endfunction()
 
 pcs286_acceptance(cpu286 cpu286_acceptance.c blumach_cpu_80286)
 if(TARGET blumach_cpu_80286)
+    add_executable(pcs286-protected-iret cpu286_protected_iret.c)
+    target_include_directories(pcs286-protected-iret PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    target_link_libraries(pcs286-protected-iret PRIVATE blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-protected-iret)
+    add_test(NAME pcs286-component.protected-iret COMMAND pcs286-protected-iret)
+    set_tests_properties(pcs286-component.protected-iret PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 60)
     add_executable(pcs286-protected-entry cpu286_protected_entry.c)
     target_include_directories(pcs286-protected-entry PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
     target_link_libraries(pcs286-protected-entry PRIVATE blumach_cpu_80286)

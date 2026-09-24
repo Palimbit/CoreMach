@@ -16,7 +16,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Private same-CPL IDT interrupt/trap entry based on Intel 80286/80287 PRM 1987 chapter 9 and appendix B INT algorithm. Staged architectural commit, descriptor accessed update, frame preflight and structured rejection metadata. No external emulator implementation copied. Bus order and transport failure handling are functional policies, not silicon trace evidence. Task/inner transfers unsupported; public PE dispatch remains disabled."
+      "local_changes": "Private same-CPL IDT interrupt/trap entry and ordinary IRET based on Intel 80286/80287 PRM 1987 chapters 9/10 and appendix B INT/IRET algorithms. IRET B-52 and section 10.1 scanned pages visually checked for privilege inequalities and FLAGS restrictions. Staged architectural commit, descriptor accessed update, frame preflight and structured rejection metadata. IRET checks the second stack word and RPL before the whole frame, restores FLAGS under CPL/IOPL rules and unblocks NMI on success; caller owns event sampling and fault-time NMI behavior remains an evidence gate. Authored exhaustive FLAGS/range/type matrices, private entry/return roundtrips and per-transfer before/after failures. No external emulator implementation copied. Bus order and transport failure handling are functional policies, not silicon trace evidence. Task/inner/outer transfers unsupported; public PE dispatch remains disabled."
     },
     {
       "id": "intel-80286-descriptor-foundation",
