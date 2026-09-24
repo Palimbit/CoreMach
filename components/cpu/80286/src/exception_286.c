@@ -35,9 +35,9 @@ static bm_status_t reject(bm_286_segment_load_result_t *r, uint8_t vector, uint1
     return BM_STATUS_OK;
 }
 
-bm_status_t bm_286_pm_enter_event(bm_286_arch_state_t *arch,
+static bm_status_t enter_event(bm_286_arch_state_t *arch,
     const bm_286_config_t *config, const bm_286_pm_event_t *event,
-    bm_286_segment_load_result_t *result)
+    bm_286_segment_load_result_t *result, bool *inta_locked)
 {
     uint8_t bytes[8];
     bm_286_pm_descriptor_t gate, stack;
@@ -113,6 +113,10 @@ bm_status_t bm_286_pm_enter_event(bm_286_arch_state_t *arch,
         sp = (uint16_t)(sp - 2u);
         status = word_transfer(config, arch->ss.base + sp, true, &words[i], &result->waits);
         if (status != BM_STATUS_OK) return status;
+        if (i == 0 && inta_locked != NULL && *inta_locked) {
+            config->bus_lock(config->pin_context, 0);
+            *inta_locked = false;
+        }
     }
     arch->cs = new_cs; arch->ip = ip; arch->sp = sp;
     arch->flags &= (uint16_t)~(0x0100u | 0x4000u |
@@ -120,6 +124,13 @@ bm_status_t bm_286_pm_enter_event(bm_286_arch_state_t *arch,
     arch->halted = 0; arch->trap_pending = 0; arch->interrupt_shadow = BM_286_SHADOW_NONE;
     result->loaded = true;
     return BM_STATUS_OK;
+}
+
+bm_status_t bm_286_pm_enter_event(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, const bm_286_pm_event_t *event,
+    bm_286_segment_load_result_t *result)
+{
+    return enter_event(arch, config, event, result, NULL);
 }
 
 bm_status_t bm_286_pm_iret(bm_286_arch_state_t *arch,
@@ -201,4 +212,171 @@ bm_status_t bm_286_pm_iret(bm_286_arch_state_t *arch,
     arch->flags = flags; arch->nmi_blocked = 0;
     result->loaded = true;
     return BM_STATUS_OK;
+}
+
+/* Local adapter joins INTA through the first stack word, including escalation.
+ * An accessed-byte RMW can nest inside this exclusion without toggling the pin.
+ * This is the existing B-2/later functional lock policy, not timed bus edges. */
+typedef struct delivery_bus {
+    const bm_286_config_t *config;
+    unsigned depth;
+} delivery_bus_t;
+
+static void delivery_lock(void *context, int asserted)
+{
+    delivery_bus_t *bus = context;
+    if (asserted) {
+        if (bus->depth++ == 0) bus->config->bus_lock(bus->config->pin_context, 1);
+    } else if (--bus->depth == 0) {
+        bus->config->bus_lock(bus->config->pin_context, 0);
+    }
+}
+
+static bm_status_t delivery_access(void *context, bm_bus_transaction_t *transaction)
+{
+    delivery_bus_t *bus = context;
+    if (bus->depth) transaction->attributes |= BM_BUS_TRANSACTION_LOCKED;
+    return bus->config->access(bus->config->access_context, transaction);
+}
+
+static bool contributes_double_fault(uint8_t vector)
+{
+    /* Intel 286 9.6.2, not the later 386 page-fault/contributory matrix. */
+    return vector == 0 || (vector >= 10 && vector <= 13);
+}
+
+bm_status_t bm_286_pm_deliver(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, bm_286_pm_delivery_state_t *state,
+    const bm_286_pm_request_t *request, bm_286_pm_delivery_result_t *result)
+{
+    bm_286_pm_event_t event = {0};
+    bm_286_config_t routed;
+    delivery_bus_t bus;
+    bm_status_t status = BM_STATUS_OK;
+    bool nmi = false, intr = false, exception = false, inta_locked = false;
+    bool was_shutdown;
+    uint16_t restart_ip;
+    if (result == NULL) return BM_STATUS_INVALID_ARGUMENT;
+    memset(result, 0, sizeof(*result));
+    if (arch == NULL || config == NULL || state == NULL || request == NULL ||
+        config->access == NULL) return BM_STATUS_INVALID_ARGUMENT;
+    if (state->stopped || !(arch->msw & 1u) || arch->cpl > 3 ||
+        arch->idtr.base > 0xffffffu || arch->shutdown > 1 || arch->halted > 1 ||
+        (arch->shutdown && arch->halted) || arch->nmi_pending > 1 ||
+        arch->nmi_blocked > 1 || arch->trap_pending > 1 ||
+        arch->interrupt_shadow > BM_286_SHADOW_SS_LOAD) return BM_STATUS_INVALID_STATE;
+    was_shutdown = arch->shutdown != 0;
+    restart_ip = request->restart_ip;
+    switch (request->source) {
+    case BM_286_PM_EXCEPTION:
+        if (was_shutdown || arch->halted) return BM_STATUS_INVALID_STATE;
+        event.vector = request->vector;
+        switch (event.vector) {
+        case 0: case 5: case 6: case 7: case 8:
+        case 10: case 11: case 12: case 13: case 16: break;
+        default: return BM_STATUS_UNSUPPORTED;
+        }
+        exception = true;
+        event.has_error = event.vector == 8 || (event.vector >= 10 && event.vector <= 13);
+        event.error_code = event.vector == 8 ? 0 : request->error_code;
+        event.external = event.vector == 7 || event.vector == 16;
+        event.return_ip = restart_ip;
+        break;
+    case BM_286_PM_SOFTWARE:
+        if (was_shutdown || arch->halted) return BM_STATUS_INVALID_STATE;
+        event.vector = request->vector; event.software = true;
+        event.return_ip = request->next_ip;
+        break;
+    case BM_286_PM_BOUNDARY:
+        restart_ip = arch->ip; event.return_ip = arch->ip; event.external = true;
+        if (!was_shutdown && arch->trap_pending &&
+            arch->interrupt_shadow != BM_286_SHADOW_SS_LOAD) {
+            event.vector = 1; exception = true;
+        } else if (arch->nmi_pending && !arch->nmi_blocked &&
+                   arch->interrupt_shadow != BM_286_SHADOW_SS_LOAD) {
+            event.vector = 2; nmi = true;
+        } else if (!was_shutdown && request->extension_overrun &&
+                   arch->interrupt_shadow != BM_286_SHADOW_SS_LOAD) {
+            event.vector = 9; exception = true;
+        } else if (!was_shutdown && request->intr_line && (arch->flags & 0x200u) &&
+                   arch->interrupt_shadow == BM_286_SHADOW_NONE) {
+            intr = true;
+        } else {
+            return BM_STATUS_IDLE;
+        }
+        break;
+    default: return BM_STATUS_INVALID_ARGUMENT;
+    }
+    /* A missing lock is an implementation/callback gap, not a guest #DF. */
+    if (config->bus_lock == NULL || (intr && config->interrupt_ack == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    bus.config = config; bus.depth = 0;
+    routed = *config;
+    routed.access = delivery_access; routed.access_context = &bus;
+    routed.bus_lock = delivery_lock; routed.pin_context = &bus;
+    result->accepted = true;
+    if (intr) {
+        delivery_lock(&bus, 1); inta_locked = true;
+        for (unsigned phase = 0; phase < 2; ++phase) {
+            uint32_t waits = 0;
+            status = config->interrupt_ack(config->interrupt_context, phase,
+                &event.vector, &waits);
+            if (status != BM_STATUS_OK) goto done;
+            result->waits += waits;
+        }
+    }
+    /* Consume before callbacks: a newly signalled NMI remains pending. */
+    if (nmi) arch->nmi_pending = 0;
+    for (unsigned attempt = 0; attempt < 3; ++attempt) {
+        bm_286_arch_state_t candidate = *arch;
+        bm_286_segment_load_result_t entered;
+        candidate.shutdown = 0; /* Recovery is staged; external state stays asserted. */
+        result->vectors[attempt] = event.vector;
+        result->errors[attempt] = event.has_error ? event.error_code : 0;
+        result->has_error[attempt] = event.has_error;
+        ++result->attempts;
+        status = enter_event(&candidate, &routed, &event, &entered, &inta_locked);
+        result->waits += entered.waits;
+        if (status != BM_STATUS_OK) goto done;
+        if (entered.loaded) {
+            /* Copy only entry-owned fields: callbacks may have latched an NMI. */
+            arch->cs = candidate.cs; arch->ip = candidate.ip; arch->sp = candidate.sp;
+            arch->flags = candidate.flags; arch->halted = 0; arch->shutdown = 0;
+            arch->trap_pending = 0; arch->interrupt_shadow = BM_286_SHADOW_NONE;
+            if (nmi) arch->nmi_blocked = 1;
+            result->entered = true; result->vector = event.vector;
+            if (was_shutdown && config->shutdown != NULL)
+                config->shutdown(config->pin_context, 0);
+            goto done;
+        }
+        /* No writes occur on guest rejection. A bus error after any write
+         * already exited above, so escalation cannot replay a partial frame. */
+        if (was_shutdown || (exception && event.vector == 8)) {
+            if (inta_locked) { delivery_lock(&bus, 0); inta_locked = false; }
+            arch->shutdown = 1; arch->halted = 0; arch->trap_pending = 0;
+            arch->interrupt_shadow = BM_286_SHADOW_NONE;
+            if (nmi) arch->nmi_blocked = 1;
+            result->shutdown = true;
+            if (!was_shutdown && config->shutdown != NULL)
+                config->shutdown(config->pin_context, 1);
+            goto done;
+        }
+        if (exception && contributes_double_fault(event.vector)) {
+            event.vector = 8; event.error_code = 0;
+        } else {
+            event.vector = entered.fault_vector; event.error_code = entered.fault_error;
+        }
+        exception = true; event.software = false; event.has_error = true;
+        event.return_ip = restart_ip;
+    }
+    /* Unreachable under same-CPL entry's #NP/#SS/#GP-only rejection contract.
+     * A future unhandled cause must stop the host, never fabricate shutdown. */
+    status = BM_STATUS_INVALID_STATE;
+done:
+    if (inta_locked) delivery_lock(&bus, 0);
+    if (status != BM_STATUS_OK) {
+        state->stopped = true;
+        if (nmi) arch->nmi_pending = 1;
+    }
+    return status;
 }

@@ -144,4 +144,57 @@ bm_status_t bm_286_pm_enter_event(bm_286_arch_state_t *arch,
 bm_status_t bm_286_pm_iret(bm_286_arch_state_t *arch,
     const bm_286_config_t *config, bm_286_segment_load_result_t *result);
 
+typedef enum bm_286_pm_source {
+    BM_286_PM_EXCEPTION, /* Already detected cause; caller has unwound instruction. */
+    BM_286_PM_SOFTWARE,  /* INT/INT3/INTO; vector alone never implies an error word. */
+    BM_286_PM_BOUNDARY   /* Sample #1, NMI, #9, then INTR; no instruction fetch. */
+} bm_286_pm_source_t;
+
+typedef struct bm_286_pm_request {
+    bm_286_pm_source_t source;
+    uint8_t vector;       /* Ignored for BOUNDARY; INTR vector comes from INTA. */
+    uint16_t error_code;  /* Only explicit #TS/#NP/#SS/#GP use this word. */
+    uint16_t restart_ip;  /* First prefix for a fault/failed software interrupt. */
+    uint16_t next_ip;     /* Completed software interrupt. */
+    bool intr_line;       /* Sampled input, never acknowledged just by observing it. */
+    bool extension_overrun; /* Caller-owned pending #9; synthetic until NPX exists. */
+} bm_286_pm_request_t;
+
+typedef struct bm_286_pm_delivery_state {
+    /* Instance-owned host-error latch. Zero initially; clear only on CPU reset
+     * or explicit stopped-state import, never to retry a failed transfer. */
+    bool stopped;
+} bm_286_pm_delivery_state_t;
+
+typedef struct bm_286_pm_delivery_result {
+    uint64_t waits;
+    uint8_t attempts, vectors[3];
+    uint16_t errors[3];
+    bool has_error[3];
+    bool accepted, entered, shutdown;
+    uint8_t vector; /* Delivered vector only when entered, never on shutdown. */
+} bm_286_pm_delivery_result_t;
+
+/* Private bounded protected delivery, not an enabled instruction dispatcher.
+ * EXCEPTION accepts 0,5,6,7,8,10,11,12,13,16; other causes are UNSUPPORTED.
+ * #9 is asynchronous and only selected at BOUNDARY, below NMI and above INTR.
+ * Its caller-owned pending indication is consumed only if accepted with
+ * vectors[0]==9. #9/#16 metadata creates no coprocessor/signal interface. Task/inner
+ * entries stay unsupported. Same-CPL #DF frames are testable but do not replace
+ * Intel's task-gate recommendation for a usable double-fault recovery context.
+ * BOUNDARY respects sampled TF, SS/STI shadows and NMI blocking, then performs
+ * exactly two INTA phases if INTR is accepted. No event returns IDLE without
+ * consuming shadows. Caller owns HOLD, instruction unwind and TF sampling.
+ * At most original -> protection fault -> #DF; guest failure entering #DF
+ * asserts shutdown. In shutdown only an eligible NMI may attempt entry; a
+ * guest failure leaves it blocked until reset. Host errors are never escalated.
+ * CPU frame commits are staged; accepted NMI edges and completed endpoint
+ * effects have explicit ownership. New NMI edges from callbacks survive.
+ * Non-OK after acceptance latches stopped, releases LOCK and forbids replay.
+ * Requires consistent protected state, non-aliasing serialized inputs, no
+ * caller-owned LOCK. Existing public/internal PE gates are NOT changed. */
+bm_status_t bm_286_pm_deliver(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, bm_286_pm_delivery_state_t *state,
+    const bm_286_pm_request_t *request, bm_286_pm_delivery_result_t *result);
+
 #endif

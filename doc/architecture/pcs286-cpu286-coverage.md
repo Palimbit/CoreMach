@@ -2,7 +2,23 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: private same-CPL protected IRET
+## Latest tranche: private protected exception delivery and shutdown
+
+The bounded private coordinator classifies source/return/error policy, handles
+entry rejection and #DF/shutdown, and arbitrates sampled #1/NMI/#9/INTR with
+SS/STI inhibition. INTR has exactly two INTA phases, with inherited exclusion
+through the first stack word; escalation never re-acknowledges the controller.
+Host errors stop per instance without guest escalation or repeated writes.
+Shutdown recovery by eligible NMI is staged and failures remain blocked.
+
+Tests include 11,800 before/after transfer failures with exact retained memory,
+576 arbitration combinations, origin/vector matrices, error metadata, shutdown
+and private repair/IRET/retry. #9/#16 metadata supplies no NPX implementation.
+Task/inner transitions remain unsupported, including a task-gate #DF handler.
+Both PE gates remain closed: C protected accesses and D dispatcher integration
+are still required. See [source, contract and evidence](pcs286-protected-delivery.md).
+
+## Previous tranche: private same-CPL protected IRET
 
 The private return helper validates the stack, return CS type/privilege/presence
 and IP, restores 286 FLAGS with CPL/IOPL restrictions, updates A under LOCK and

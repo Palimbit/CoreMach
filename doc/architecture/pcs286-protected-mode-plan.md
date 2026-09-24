@@ -16,7 +16,7 @@ accuracy claim, implicit 386 semantics or BIOS-specific success shortcuts.
 | 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Implemented as private lookup; instruction integration in block 3 |
 | 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Common MOV/POP/LDS/LES state path implemented; PE dispatch and LLDT opcode pending |
 | 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Pending; enable only with block 5 |
-| 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Private same-CPL interrupt/trap entry and ordinary IRET implemented; escalation and dispatch pending; gates block 4 activation |
+| 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Private same-CPL entry/IRET and bounded escalation, arbitration and shutdown implemented; instruction dispatch pending; gates block 4 activation |
 | 6. Privilege transfers | Call gates, conforming code, stack switching, parameter copying, RETF | Same/outer/inner privilege matrices and interrupted transfers | Pending |
 | 7. Tasks | TSS, LTR, busy/backlink, task gates, task switches, NT return | Synthetic tasks, invalid TSS and nested-task tests | Pending |
 
@@ -28,7 +28,21 @@ than remain disconnected success stubs. IOPL-sensitive instructions and system
 instruction privilege checks belong to block 4. Task-switch fault ordering
 belongs to block 7. Keep a per-instruction coverage ledger as each block lands.
 
-## Current block 5 foundation (not public activation)
+## Block B continuation: private bounded delivery (not public activation)
+
+`bm_286_pm_deliver` connects the private entry helper to source classification,
+return IP/error policy, #DF/shutdown and a bounded three-attempt coordinator.
+It arbitrates pending #1/NMI/#9/INTR, preserves shadows and edges, acknowledges
+INTR only once and stages eligible NMI recovery from shutdown. A host-error
+latch forbids replay; endpoint errors and unsupported task/inner paths never
+become guest faults. The #9 input is synthetic pending metadata, not an NPX.
+
+[Source and validation](pcs286-protected-delivery.md) describe the exact origin
+matrix, error words, functional lock/commit policy and remaining gates. Private
+repair/IRET/retry is tested; actual protected program execution is still gated.
+Handoff C protected accesses and D instruction/event integration come next.
+
+## Earlier block 5 entry foundation
 
 `bm_286_pm_enter_event` validates a complete IDT gate, software gate DPL,
 presence, target selector/code, current stack capacity and target IP. It handles
@@ -188,21 +202,17 @@ loads), test protected read/write failures before/after effects for each target,
 and preserve SP/IP/registers/shadow while checking cache commit. Existing real
 MOV/POP/LDS/LES and LOCK suites exercise the actual connected instruction path.
 
-## Next: protected execution and exception-entry integration
+## Next: handoff C access protection and D dispatcher integration
 
-Connect lookup to DS/ES/SS and LLDT validation, with explicit permission and
-presence checks, fault metadata and staged architectural state. Add accessed
-writeback with the required exclusion rules only after their source review.
-Keep public execution gated until protected fault entry is available.
-
-Use the existing CPU bus path, not direct RAM access. Validate the complete
-eight-byte entry against the table limit before any descriptor transfer. Use
-the cached LDTR state and distinguish null/unusable selectors, architectural
-fault metadata and host transport failure. Preserve error codes and transfer
-ordering; never roll back external side effects or disguise a host failure as
-a guest protection fault. Table reads do not themselves load a segment or set
-its accessed bit. Test even/odd locations, final valid/invalid entries,
-24-bit addressing, before/after transfer errors and session isolation.
+Protect complete CS fetches, DS/ES data operands and SS stack ranges, including
+null caches, permissions, privileges, expand-down and multibyte/REP boundaries.
+Connect the resulting guest metadata to the private delivery coordinator while
+preserving instruction unwind, accepted signals, INTA and host-stop ownership.
+Complete LLDT/system/query and privilege checks, then demonstrate a synthetic
+program entering PE, faulting, repairing and returning with IRQ/NMI/TF tests.
+Do not remove either public/internal PE barrier before that joint gate passes.
+Task/privilege transitions remain separate E/F work; no direct-RAM bypass,
+automatic transport replay or timing invention is permitted.
 
 ## Evidence and completion
 
