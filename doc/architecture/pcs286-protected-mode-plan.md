@@ -1,0 +1,84 @@
+# Intel 80286 protected-mode implementation plan
+
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+
+## Scope and integration gates
+
+Implement architectural behavior inside the instance-owned 80286 component.
+Do not extend the generic CPU or bus ABI with x86 descriptor concepts. Preserve
+real-mode regressions, structured host errors, observable bus transactions and
+explicit unsupported results until a path is actually implemented. No timing
+accuracy claim, implicit 386 semantics or BIOS-specific success shortcuts.
+
+| Block | Deliverable | Acceptance gate | Status |
+| --- | --- | --- | --- |
+| 1. Interpretation | Selectors, descriptor types and segment ranges | Exhaustive selectors/access bytes and boundary tests | Implemented, standalone helpers |
+| 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Next |
+| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Pending |
+| 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Pending; enable only with block 5 |
+| 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Pending; gates block 4 activation |
+| 6. Privilege transfers | Call gates, conforming code, stack switching, parameter copying, RETF | Same/outer/inner privilege matrices and interrupted transfers | Pending |
+| 7. Tasks | TSS, LTR, busy/backlink, task gates, task switches, NT return | Synthetic tasks, invalid TSS and nested-task tests | Pending |
+
+The ordering is incremental development, not permission to expose broken
+intermediate execution: blocks 4 and 5 share a public activation gate. Full
+protected-mode support is not claimed until all seven blocks pass. Instructions
+such as LAR/LSL/VERR/VERW must join the relevant table/privilege blocks rather
+than remain disconnected success stubs. IOPL-sensitive instructions and system
+instruction privilege checks belong to block 4. Task-switch fault ordering
+belongs to block 7. Keep a per-instruction coverage ledger as each block lands.
+
+## Block 1 contract
+
+`descriptor_286.h` is private, not installed. Parsing accepts eight readable
+bytes without alignment requirements and never changes them. It classifies
+segment/system descriptors independently of presence, extracts 24-bit segment
+bases and 16-bit limits, and preserves the final reserved word for diagnostics.
+Gate payloads are intentionally deferred. Reserved bits do not acquire 386
+meanings or invented fault semantics. Null selector detection is distinct from
+LDT index zero.
+
+The range helper checks a nonempty contiguous segment-relative range, without
+16-bit wrapping. It does not check presence, read/write permission, CPL, RPL,
+DPL, physical address formation or A20. It rejects non-segment descriptors.
+Callers must perform the remaining access checks when integrated in later blocks.
+No global mutable state, allocations, host calls, bus accesses or CPU changes.
+
+Tests cover all 65,536 selectors, 256 access bytes, 65,536 reserved words,
+all segment limits at boundaries, all offsets for five selected limits in
+both growth directions, byte ranges against a separate wide per-byte oracle,
+overflow, zero length, source preservation and a full 64-KiB code range.
+Windows host tests are not evidence of execution on PowerPC big-endian.
+
+## Next block: table access
+
+Use the existing CPU bus path, not direct RAM access. Validate the complete
+eight-byte entry against the table limit before any descriptor transfer. Use
+the cached LDTR state and distinguish null/unusable selectors, architectural
+fault metadata and host transport failure. Preserve error codes and transfer
+ordering; never roll back external side effects or disguise a host failure as
+a guest protection fault. Table reads do not themselves load a segment or set
+its accessed bit. Test even/odd locations, final valid/invalid entries,
+24-bit addressing, before/after transfer errors and session isolation.
+
+## Evidence and completion
+
+Use authored synthetic programs first: construct a GDT, request PE, far jump,
+load segments, write an observable result and recover from a deliberate fault.
+Then extend to interrupts, privilege transitions and tasks. Firmware boot is a
+later integration check, not a substitute for these tests. Continue optional
+real-mode SingleStepTests; they do not certify protected behavior.
+
+Primary reference: Intel, *80286 and 80287 Programmer's Reference Manual*,
+1987, 210498-005: chapters 6/7 (selectors/descriptors), 9 (interrupts),
+11 (protection), appendix B (instruction/type tables), appendix C (386 differences).
+
+- [Intel PRM scan](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf)
+- [Descriptor layout, section 6.5](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=118)
+- [Table bounds](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=131)
+- [Expand-down segment rules](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=190)
+- [286/386 descriptor distinctions](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=335)
+
+Reused CPU implementation retains its existing authors and derived-rewrite
+provenance. The new helpers have separate provenance; this is not a claim that
+the complete emulator is independent of its historical source.

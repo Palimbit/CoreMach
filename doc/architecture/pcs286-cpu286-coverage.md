@@ -2,7 +2,14 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: invalid CS loads and far register transfers
+## Latest tranche: protected-mode descriptor foundation
+
+Block 1 of the [protected-mode plan](pcs286-protected-mode-plan.md) adds private,
+pure selector/descriptor decoding and segment bounds checks with synthetic tests.
+It does not enable protected execution, table lookup, permissions or fault delivery.
+Existing PE execution refusal and timing limitations remain unchanged.
+
+## Previous tranche: invalid CS loads and far register transfers
 
 Without LOCK/REP, MOV CS,r/m16 and register-source far CALL/JMP now deliver
 real-mode #6. Intel PRM [B-12](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=222)

@@ -11,6 +11,14 @@
   ],
   "components": [
     {
+      "id": "intel-80286-descriptor-foundation",
+      "destination": ["components/cpu/80286/src/descriptor_286.c", "components/cpu/80286/src/descriptor_286.h"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "New private selector and descriptor interpretation and segment-range helpers based on Intel 80286/80287 PRM 1987 chapters 6, 7, 11 and appendix B. No emulator implementation copied. No table access, privilege validation, gate payload decoding, guest faults or protected execution enabled. Not a clean-room claim for the CPU or product."
+    },
+    {
       "id": "portable-at-pic",
       "destination": ["components/pc/src/at_pic.c"],
       "origin_repository": "https://github.com/BluMach/BluMach",
@@ -47,7 +55,7 @@
     },
     {
       "id": "intel-80286-lifecycle",
-      "destination": ["components/cpu/80286/src/**"],
+      "destination": ["components/cpu/80286/src/cpu_80286.c"],
       "origin_repository": "https://github.com/BluMach/BluMach",
       "origin_commit": "87c3fb4876eaad086921bc3444569da026286c36",
       "origin_paths": ["src/cpu/x86.c", "src/cpu/386.c", "src/cpu/386_ops.h", "src/cpu/x86seg.c", "src/cpu/x86_ops_pmode.h", "src/cpu/x86_ops_rep_286_2386.h", "src/cpu/x86_ops_xchg.h", "src/cpu/x86_ops_mov.h", "src/cpu/x86_ops_mov_seg.h", "src/cpu/x86_ops_arith.h", "src/cpu/x86_ops_inc_dec.h", "src/cpu/x86_ops_misc.h", "src/cpu/x86_flags.h", "src/cpu/x86_ops_stack.h", "src/cpu/x86_ops_jump.h", "src/cpu/x86_ops_call.h", "src/cpu/x86_ops_ret_2386.h", "src/cpu/x86_ops_io.h", "src/cpu/x86_ops_flag.h", "src/cpu/x86_ops_flag_2386.h", "src/cpu/x86_ops_int.h", "src/cpu/x86_ops_shift.h", "src/cpu/x86_ops_mul.h", "src/cpu/x86_ops_bcd.h", "src/cpu/x86_ops_string.h"],
