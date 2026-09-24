@@ -40,8 +40,11 @@ explicitly concerns protected-mode violations and stepping-dependent final
 iterations of MOVS/INS/OUTS. It must not be silently generalized to every
 real-mode overrun, nor replaced with 386-style restart behavior.
 
-Next: establish a fault-stage/register matrix with precise stepping and mode
-coverage before changing string exceptions. Normal strings/REP and external
+The [restart evidence matrix](pcs286-string-fault-restart.md) now records the
+original scans and the per-operation acquisition/implementation gates. The
+SCAS/SI inconsistency is present in the original, not merely the transcription;
+LODS and the real-mode fault-state oracle remain unresolved. No production
+behavior changed during this research. Normal strings/REP and external
 interrupt restart retain their existing behavior and tests; limit failures
 remain explicit unsupported gaps. Fetch/branch-target faults, invalid forms,
 protected execution and CPU timing also remain pending. No boot claim.

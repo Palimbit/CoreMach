@@ -501,3 +501,8 @@ protected mode and specific steppings. These are not safely replaced by a
 generic atomic retry. See the latest coverage section for sources and the
 required mode/stepping/fault-stage matrix. Strings themselves remain usable;
 their segment-fault paths still refuse explicitly.
+
+The original scans have now been checked; the concrete fault-stage evidence
+and implementation plan is in `pcs286-string-fault-restart.md`. This research
+does not certify a PCS286 CPU stepping or change CPU behavior. Fetch/control
+target limit faults can proceed independently while string evidence remains open.
