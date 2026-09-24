@@ -126,11 +126,128 @@ static void ranges(void)
     assert(!bm_286_pm_segment_contains(&d, 0, 1));
 }
 
+typedef struct table_fixture {
+    uint32_t first;
+    unsigned calls, effects, fail_at;
+    bool after;
+    bm_status_t failure;
+    uint8_t bytes[8];
+} table_fixture_t;
+
+static bm_status_t table_access(void *context, bm_bus_transaction_t *t)
+{
+    table_fixture_t *f = context;
+    unsigned size = (f->first & 1u) ? 1u : 2u;
+    unsigned offset = f->calls * size;
+    assert(offset < 8u);
+    assert(t->address == ((f->first + offset) & 0xffffffu));
+    assert(t->size == size && t->alignment == size);
+    assert(t->space == BM_ADDRESS_DATA && t->operation == BM_BUS_READ);
+    assert(t->endianness == BM_ENDIAN_LITTLE && t->attributes == 0);
+    assert(t->wait_states == 0 && t->value == 0);
+    ++f->calls;
+    if (f->calls == f->fail_at && !f->after)
+        return f->failure;
+    ++f->effects;
+    t->value = f->bytes[offset];
+    if (size == 2u)
+        t->value |= (uint32_t)f->bytes[offset + 1u] << 8;
+    t->wait_states = 3;
+    return f->calls == f->fail_at ? f->failure : BM_STATUS_OK;
+}
+
+static void tables(void)
+{
+    bm_286_table_state_t gdt = {0x1000, 0xffff};
+    bm_286_segment_state_t ldt = {8, 0x2000, 0xffff, 0x82, 1};
+    bm_286_pm_lookup_t result;
+    table_fixture_t f = {0};
+    uint32_t raw, limit;
+    unsigned odd, local, failure, after, kind;
+    static const bm_status_t failures[] = {
+        BM_STATUS_DEVICE_ERROR, BM_STATUS_UNMAPPED, BM_STATUS_UNSUPPORTED,
+        BM_STATUS_IDLE, BM_STATUS_READ_ONLY
+    };
+    for (raw = 0; raw < 65536u; ++raw) {
+        bool is_local = (raw % 8u) >= 4u;
+        f.calls = f.effects = 0;
+        f.first = (is_local ? ldt.base : gdt.base) + (raw / 8u) * 8u;
+        assert(bm_286_pm_lookup_descriptor(&gdt, &ldt, (uint16_t)raw,
+               table_access, &f, &result) == BM_STATUS_OK);
+        assert(result.selector_error == (raw / 4u) * 4u);
+        assert(result.reason == (raw < 4u ? BM_286_PM_NULL_SELECTOR : BM_286_PM_FOUND));
+        assert(f.calls == (raw < 4u ? 0u : 4u));
+        assert(result.waits == f.calls * 3u);
+    }
+    for (local = 0; local < 2; ++local) {
+        for (limit = 0; limit < 65536u; ++limit) {
+            uint16_t selector = (uint16_t)((limit & 0xfff8u) | (local ? 4u : 0u));
+            bool fits = limit % 8u == 7u;
+            gdt.limit = ldt.limit = (uint16_t)limit;
+            f.first = (local ? ldt.base : gdt.base) + (selector & 0xfff8u);
+            f.calls = f.effects = 0;
+            assert(bm_286_pm_lookup_descriptor(&gdt, &ldt, selector,
+                   table_access, &f, &result) == BM_STATUS_OK);
+            assert(result.reason == (selector == 0 ? BM_286_PM_NULL_SELECTOR :
+                   fits ? BM_286_PM_FOUND : BM_286_PM_TABLE_LIMIT));
+            assert(f.calls == ((selector != 0 && fits) ? 4u : 0u));
+        }
+    }
+    gdt.limit = ldt.limit = 0xffff;
+    ldt.valid = 0;
+    f.calls = 0;
+    assert(bm_286_pm_lookup_descriptor(&gdt, &ldt, 7, table_access, &f, &result) == BM_STATUS_OK);
+    assert(result.reason == BM_286_PM_NO_LDT && result.selector_error == 4 && f.calls == 0);
+    ldt.valid = 1;
+    for (local = 0; local < 2; ++local) {
+        for (odd = 0; odd < 2; ++odd) {
+            unsigned count = odd ? 8u : 4u;
+            /* Entry crosses physical 24-bit wrap; A20 must remain untouched. */
+            gdt.base = ldt.base = 0xfffff4u + odd;
+            f.first = 0xfffffcu + odd;
+            for (kind = 0; kind < sizeof(failures) / sizeof(failures[0]); ++kind)
+                for (after = 0; after < 2; ++after)
+                    for (failure = 1; failure <= count; ++failure) {
+                        unsigned i;
+                        f.calls = f.effects = 0;
+                        f.fail_at = failure;
+                        f.after = after != 0;
+                        f.failure = failures[kind];
+                        memset(&result, 0xff, sizeof(result));
+                        assert(bm_286_pm_lookup_descriptor(&gdt, &ldt,
+                               (uint16_t)(local ? 12 : 8), table_access, &f, &result) == failures[kind]);
+                        assert(result.reason == BM_286_PM_NOT_READ);
+                        assert(result.waits == (failure - 1u) * 3u);
+                        assert(f.calls == failure && f.effects == failure - (after ? 0u : 1u));
+                        for (i = 0; i < 8; ++i) assert(result.bytes[i] == 0);
+                        assert(result.descriptor.kind == BM_286_PM_INVALID);
+                    }
+            f.fail_at = 0;
+            f.calls = f.effects = 0;
+            f.bytes[0] = 0x34; f.bytes[1] = 0x12;
+            f.bytes[2] = 0x78; f.bytes[3] = 0x56; f.bytes[4] = 0x34; f.bytes[5] = 0x92;
+            assert(bm_286_pm_lookup_descriptor(&gdt, &ldt,
+                   (uint16_t)(local ? 12 : 8), table_access, &f, &result) == BM_STATUS_OK);
+            assert(result.reason == BM_286_PM_FOUND && result.waits == count * 3u);
+            assert(result.descriptor.base == 0x345678 && result.descriptor.limit == 0x1234);
+            assert(memcmp(result.bytes, f.bytes, 8) == 0);
+        }
+    }
+    gdt.base = 0x1000000;
+    f.calls = 0;
+    assert(bm_286_pm_lookup_descriptor(&gdt, &ldt, 8, table_access, &f, &result) == BM_STATUS_INVALID_STATE);
+    assert(f.calls == 0 && result.reason == BM_286_PM_NOT_READ);
+    assert(bm_286_pm_lookup_descriptor(NULL, &ldt, 8, table_access, &f, &result) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_286_pm_lookup_descriptor(&gdt, &ldt, 8, NULL, &f, &result) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_286_pm_lookup_descriptor(&gdt, &ldt, 8, table_access, &f, NULL) == BM_STATUS_INVALID_ARGUMENT);
+}
+
 int main(void)
 {
     selectors();
     descriptors();
     ranges();
+    tables();
     selectors();
     return 0;
 }

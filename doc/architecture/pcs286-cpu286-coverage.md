@@ -2,7 +2,15 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: protected-mode descriptor foundation
+## Latest tranche: protected-mode table lookup
+
+Block 2 adds private GDT/LDT reads over the existing bus callback contract,
+whole-entry limits, null/unavailable-table reasons, selector error metadata,
+24-bit address wrap and unchanged host-error propagation. Synthetic tests cover
+all selectors/limits and before/after errors at every aligned/odd transfer.
+No instruction integration, segment reload, fault delivery or PE execution yet.
+
+## Previous tranche: protected-mode descriptor foundation
 
 Block 1 of the [protected-mode plan](pcs286-protected-mode-plan.md) adds private,
 pure selector/descriptor decoding and segment bounds checks with synthetic tests.

@@ -13,7 +13,7 @@ accuracy claim, implicit 386 semantics or BIOS-specific success shortcuts.
 | Block | Deliverable | Acceptance gate | Status |
 | --- | --- | --- | --- |
 | 1. Interpretation | Selectors, descriptor types and segment ranges | Exhaustive selectors/access bytes and boundary tests | Implemented, standalone helpers |
-| 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Next |
+| 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Implemented as private lookup; instruction integration in block 3 |
 | 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Pending |
 | 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Pending; enable only with block 5 |
 | 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Pending; gates block 4 activation |
@@ -50,7 +50,35 @@ both growth directions, byte ranges against a separate wide per-byte oracle,
 overflow, zero length, source preservation and a full 64-KiB code range.
 Windows host tests are not evidence of execution on PowerPC big-endian.
 
-## Next block: table access
+## Block 2: table access
+
+Private `bm_286_pm_lookup_descriptor` uses the existing `bm_bus_access_fn`
+transaction contract with DATA reads, little-endian aligned words or split
+bytes on odd bases. No direct RAM pointer, writes, accessed-bit update or LOCK.
+Increasing-address transfer order is a functional policy, not a physical bus
+trace. Addresses wrap to 24 bits; A20 remains a motherboard responsibility.
+Only successful transfers contribute reported waits, matching the CPU path.
+No partial descriptor is published on host failure; endpoint effects are not
+rolled back and the helper does not retry.
+
+The return status preserves host errors, including IDLE (not a continuation).
+On OK, a separate reason distinguishes found, null selector, unavailable LDT
+and table overrun. These are not automatically #GP: later instruction/task
+callers choose fault vector or non-faulting query semantics. Selector error
+metadata clears RPL; EXT is supplied by the caller. Cached LDTR.valid is
+authoritative; this helper neither reloads nor validates the LDTR descriptor.
+Presence/type/permissions of the fetched descriptor are left to block 3.
+
+Tests enumerate every selector and every limit for GDT/LDT, including LDT
+index zero; exercise odd/even transfers, physical wrap, and five host statuses
+at every transfer before/after effects. Protected execution remains disabled.
+
+## Next block: segment loads
+
+Connect lookup to DS/ES/SS and LLDT validation, with explicit permission and
+presence checks, fault metadata and staged architectural state. Add accessed
+writeback with the required exclusion rules only after their source review.
+Keep public execution gated until protected fault entry is available.
 
 Use the existing CPU bus path, not direct RAM access. Validate the complete
 eight-byte entry against the table limit before any descriptor transfer. Use

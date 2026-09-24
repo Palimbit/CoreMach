@@ -4,6 +4,7 @@
  * 11 and appendix B. See doc/architecture/pcs286-protected-mode-plan.md.
  */
 #include "descriptor_286.h"
+#include <string.h>
 
 bm_286_pm_selector_t bm_286_pm_selector_decode(uint16_t raw)
 {
@@ -62,4 +63,65 @@ bool bm_286_pm_segment_contains(const bm_286_pm_descriptor_t *descriptor,
     if (descriptor->expand_down)
         return offset > descriptor->limit;
     return offset + length - 1u <= descriptor->limit;
+}
+
+bm_status_t bm_286_pm_lookup_descriptor(const bm_286_table_state_t *gdt,
+    const bm_286_segment_state_t *ldt, uint16_t selector,
+    bm_bus_access_fn access, void *context, bm_286_pm_lookup_t *result)
+{
+    bm_286_pm_selector_t selected = bm_286_pm_selector_decode(selector);
+    uint32_t base, limit, position;
+    uint8_t bytes[8];
+    if (result == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    memset(result, 0, sizeof(*result));
+    if (gdt == NULL || ldt == NULL || access == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    result->selector_error = (uint16_t)(selector & 0xfffcu);
+    if (selected.null_selector) {
+        result->reason = BM_286_PM_NULL_SELECTOR;
+        return BM_STATUS_OK;
+    }
+    if (selected.local && !ldt->valid) {
+        result->reason = BM_286_PM_NO_LDT;
+        return BM_STATUS_OK;
+    }
+    base = selected.local ? ldt->base : gdt->base;
+    limit = selected.local ? ldt->limit : gdt->limit;
+    if (base > 0xffffffu)
+        return BM_STATUS_INVALID_STATE;
+    if ((uint32_t)selected.table_offset + 7u > limit) {
+        result->reason = BM_286_PM_TABLE_LIMIT;
+        return BM_STATUS_OK;
+    }
+    /* Logical increasing-address reads. Not a silicon bus ordering claim.
+     * Physical 24-bit wrap is distinct from descriptor-table limit checks;
+     * motherboard A20 gating remains in the endpoint. */
+    for (position = 0; position < 8u;) {
+        bm_bus_transaction_t transfer = {0};
+        bm_status_t status;
+        uint32_t address = (base + selected.table_offset + position) & 0xffffffu;
+        unsigned size = (address & 1u) ? 1u : 2u;
+        /* Preserve the CPU's odd logical-word split: all bytes on odd base. */
+        if ((base & 1u) != 0)
+            size = 1u;
+        transfer.address = address;
+        transfer.space = BM_ADDRESS_DATA;
+        transfer.operation = BM_BUS_READ;
+        transfer.endianness = BM_ENDIAN_LITTLE;
+        transfer.size = size;
+        transfer.alignment = size;
+        status = access(context, &transfer);
+        if (status != BM_STATUS_OK)
+            return status;
+        result->waits += transfer.wait_states;
+        bytes[position] = (uint8_t)transfer.value;
+        if (size == 2u)
+            bytes[position + 1u] = (uint8_t)(transfer.value >> 8);
+        position += size;
+    }
+    memcpy(result->bytes, bytes, sizeof(bytes));
+    result->descriptor = bm_286_pm_descriptor_decode(bytes);
+    result->reason = BM_286_PM_FOUND;
+    return BM_STATUS_OK;
 }

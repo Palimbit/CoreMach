@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <blumach/components/cpu_80286.h>
 
 /* Private 80286 interpretation helpers, not an engine or runtime ABI. */
 typedef enum bm_286_pm_kind {
@@ -37,5 +38,27 @@ bm_286_pm_descriptor_t bm_286_pm_descriptor_decode(const uint8_t bytes[8]);
  * descriptor must be non-NULL. Empty ranges are rejected. */
 bool bm_286_pm_segment_contains(const bm_286_pm_descriptor_t *descriptor,
                                 uint32_t offset, uint32_t length);
+
+typedef enum bm_286_pm_lookup_reason {
+    BM_286_PM_NOT_READ, BM_286_PM_FOUND, BM_286_PM_NULL_SELECTOR,
+    BM_286_PM_NO_LDT, BM_286_PM_TABLE_LIMIT
+} bm_286_pm_lookup_reason_t;
+
+typedef struct bm_286_pm_lookup {
+    bm_286_pm_lookup_reason_t reason;
+    uint16_t selector_error; /* Selector with RPL cleared; caller supplies EXT. */
+    uint64_t waits;         /* Successful transfers only, as in the CPU path. */
+    uint8_t bytes[8];       /* Published only after all reads succeed. */
+    bm_286_pm_descriptor_t descriptor;
+} bm_286_pm_lookup_t;
+
+/* Private lookup, not a segment load. BM_STATUS_OK may carry a selector/table
+ * rejection: caller decides #GP/#TS/etc or a non-faulting query result.
+ * Non-OK is a host error, never an architectural fault. No writes/LOCK/retry.
+ * Cached LDTR.valid is authoritative; loading/validating LDTR is a later step.
+ * result is required and cleared on entry; other inputs must not alias it. */
+bm_status_t bm_286_pm_lookup_descriptor(const bm_286_table_state_t *gdt,
+    const bm_286_segment_state_t *ldt, uint16_t selector,
+    bm_bus_access_fn access, void *context, bm_286_pm_lookup_t *result);
 
 #endif
