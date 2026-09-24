@@ -2,7 +2,18 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: common instruction segment-load path
+## Latest tranche: private same-CPL protected event entry
+
+IDT interrupt/trap gates now validate target code and the current stack,
+prepare FLAGS/CS/IP and optional error-code frames, update the accessed bit
+and commit registers only after successful writes. Tests cover all CPLs,
+aligned/odd transfers, before/after transport failures, conforming code,
+LDT index zero, expand-down stack boundaries and rejection metadata.
+This is a private foundation, not enabled protected execution: task gates,
+inner-privilege stack switches, escalation, protected IRET and dispatch remain
+pending. No firmware boot or cycle-accuracy claim.
+
+## Previous tranche: common instruction segment-load path
 
 MOV, POP and LDS/LES now share real/protected state load logic instead of
 duplicating real-mode cache updates. Real instruction regressions pass; private

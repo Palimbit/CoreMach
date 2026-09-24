@@ -114,4 +114,20 @@ bm_status_t bm_286_load_segment_state(bm_286_arch_state_t *arch,
     const bm_286_config_t *config, unsigned reg, uint16_t selector,
     bm_286_segment_load_result_t *result);
 
+typedef struct bm_286_pm_event {
+    uint16_t return_ip, error_code;
+    uint8_t vector;
+    bool software, external, has_error;
+} bm_286_pm_event_t;
+
+/* Private same-CPL entry. result.loaded means entered; a returned fault is
+ * metadata for future escalation, NOT recursively delivered here. Caller owns
+ * event sampling, INTA, NMI blocking and instruction unwind. No LOCK on entry.
+ * Host failures retain CPU state but not external memory effects; no replay.
+ * Caller supplies a running (not shutdown), internally consistent cached state;
+ * inputs must not alias. Task/inner transfers return UNSUPPORTED. Public PE gated. */
+bm_status_t bm_286_pm_enter_event(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, const bm_286_pm_event_t *event,
+    bm_286_segment_load_result_t *result);
+
 #endif

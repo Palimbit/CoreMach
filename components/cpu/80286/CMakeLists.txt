@@ -7,7 +7,7 @@ target_link_libraries(blumach_cpu_80286_contracts INTERFACE blumach_bus blumach_
 target_compile_features(blumach_cpu_80286_contracts INTERFACE c_std_11)
 
 # Partial real-mode interpreter; not a complete or timed 80286 implementation.
-add_library(blumach_cpu_80286 STATIC src/cpu_80286.c src/descriptor_286.c)
+add_library(blumach_cpu_80286 STATIC src/cpu_80286.c src/descriptor_286.c src/exception_286.c)
 target_link_libraries(blumach_cpu_80286 PUBLIC blumach_cpu_80286_contracts)
 set_target_properties(blumach_cpu_80286 PROPERTIES C_EXTENSIONS OFF)
 if(MSVC)

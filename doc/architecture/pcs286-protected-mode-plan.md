@@ -14,9 +14,9 @@ accuracy claim, implicit 386 semantics or BIOS-specific success shortcuts.
 | --- | --- | --- | --- |
 | 1. Interpretation | Selectors, descriptor types and segment ranges | Exhaustive selectors/access bytes and boundary tests | Implemented, standalone helpers |
 | 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Implemented as private lookup; instruction integration in block 3 |
-| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Preparation and locked writeback/commit helpers implemented; instruction integration pending |
+| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Common MOV/POP/LDS/LES state path implemented; PE dispatch and LLDT opcode pending |
 | 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Pending; enable only with block 5 |
-| 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Pending; gates block 4 activation |
+| 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Private same-CPL interrupt/trap entry implemented; escalation, IRET and dispatch pending; gates block 4 activation |
 | 6. Privilege transfers | Call gates, conforming code, stack switching, parameter copying, RETF | Same/outer/inner privilege matrices and interrupted transfers | Pending |
 | 7. Tasks | TSS, LTR, busy/backlink, task gates, task switches, NT return | Synthetic tasks, invalid TSS and nested-task tests | Pending |
 
@@ -27,6 +27,33 @@ such as LAR/LSL/VERR/VERW must join the relevant table/privilege blocks rather
 than remain disconnected success stubs. IOPL-sensitive instructions and system
 instruction privilege checks belong to block 4. Task-switch fault ordering
 belongs to block 7. Keep a per-instruction coverage ledger as each block lands.
+
+## Current block 5 foundation (not public activation)
+
+`bm_286_pm_enter_event` validates a complete IDT gate, software gate DPL,
+presence, target selector/code, current stack capacity and target IP. It handles
+same-CPL nonconforming code and conforming code at DPL <= CPL. CS RPL becomes
+CPL. FLAGS/CS/return-IP and optional error code are pushed; TF/NT are cleared,
+and interrupt gates additionally clear IF. SS is the existing cached stack,
+not reloaded from its descriptor. SP zero can allocate at the top of 64 KiB;
+frames crossing the segment boundary are rejected, including expand-down bounds.
+
+The private caller supplies return IP, EXT/software origin and error-code
+presence; it owns event arbitration, NMI blocking, INTA and instruction unwind.
+Returned guest fault metadata is NOT delivered recursively. Task gates and
+inner privilege transfers explicitly return unsupported. Public PE execution
+still refuses before fetch. No protection checks, escalation or IRET are implied.
+
+Architectural preflight precedes all writes. Accessed-byte RMW precedes frame
+writes as a functional transaction policy, not a pin-level ordering claim.
+CPU registers commit only on success. Host failures preserve status and release
+LOCK; partial descriptor/stack memory effects survive and must not be replayed.
+Only successful bus transfers contribute waits. Timing remains unknown.
+The helper requires serialized, non-aliasing inputs and no existing bus lock.
+
+Source: [Intel 80286/80287 PRM, chapter 9 and INT appendix B](https://bitsavers.trailing-edge.com/components/intel/80286/210498-005_80286_and_80287_Programmers_Reference_Manual_1987.pdf).
+Tests are synthetic, including every transfer failure before/after effects;
+they are not hardware traces or evidence that the PCS286 boots in protected mode.
 
 ## Block 1 contract
 

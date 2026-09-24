@@ -11,6 +11,14 @@
   ],
   "components": [
     {
+      "id": "intel-80286-protected-entry",
+      "destination": ["components/cpu/80286/src/exception_286.c"],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Private same-CPL IDT interrupt/trap entry based on Intel 80286/80287 PRM 1987 chapter 9 and appendix B INT algorithm. Staged architectural commit, descriptor accessed update, frame preflight and structured rejection metadata. No external emulator implementation copied. Bus order and transport failure handling are functional policies, not silicon trace evidence. Task/inner transfers unsupported; public PE dispatch remains disabled."
+    },
+    {
       "id": "intel-80286-descriptor-foundation",
       "destination": ["components/cpu/80286/src/descriptor_286.c", "components/cpu/80286/src/descriptor_286.h"],
       "method": "new",
