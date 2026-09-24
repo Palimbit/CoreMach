@@ -258,7 +258,7 @@ static void rejected(fixture_t *f)
         if (bad == 4) s.ds.valid = 0;
         if (bad == 5) s.bx = 0xffff;
         if (bad == 6) s.cs.limit = s.ip + 2;
-        if (bad == 5) {
+        if (bad == 5 || bad == 6) {
             f->allow_fault_frame = 1; set(f, &s);
             assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
             f->allow_fault_frame = 0; a = state(f);

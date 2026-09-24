@@ -2,7 +2,36 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: compound-pointer limit faults
+## Latest tranche: instruction fetch, length and near-target faults
+
+An instruction requiring a byte past a valid CS limit, or more than ten bytes,
+now unwinds to real-mode #13. Taken near CALL/JMP/Jcc/LOOP/JCXZ and near RET
+targets use the same private fault marker. Invalid imported CS caches and host
+transport errors still refuse explicitly. No public ABI or scheduler change.
+
+Evidence: Intel PRM table 5-2 lists execution beyond a segment under vector 13;
+its section 5.2 describes first-byte restart and no real-mode error word.
+[Intel's 21 November 1984 correction, page 5, item 3](https://docs.pcjs.org/manuals/intel/80286/80286_B2_B3_Errata-1984-11-21.pdf)
+specifies #13, not #6, for excessive instruction length in both modes.
+This tranche implements only the existing real-mode decoder. Short imported
+CS limits, preflight order and retained LOOP count on failure are functional
+model policies, not new silicon captures. Physical prefetch, competing-fault
+precedence and sequential wrap between complete instructions are not certified.
+
+Authored tests add 14 decode-cut/alignment cases, three instruction crossings
+at FFFD/FFFE/FFFF, fourteen prefixed control forms, every-transfer host failures
+before/after effects, and guest-only overlong-stream repair/IRET/retry/HLT.
+CALL creates no return frame before a rejected target; RET retains SP and
+untaken branches retain the existing no-target-check behavior. Previously
+unsupported fixtures now assert actual #13 instead of accepting a host stop.
+
+Four GCC UCRT64/MSVC Debug/Release suites pass 105 ordinary tests with two
+explicit Headland/AT DMA skips; the unchanged optional SST selection passes
+on UCRT64 Debug. Thirty Python tests, catalogue and provenance pass. No ROM,
+BIOS, hardware timing or POST validation. Next: documented invalid instruction
+forms, while the separate string-fault evidence gate remains open.
+
+## Previous tranche: compound-pointer limit faults
 
 LDS/LES and indirect far CALL/JMP share a private two-word preflight.
 A valid segment that cannot contain either individual word requests #13 through

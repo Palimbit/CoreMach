@@ -158,12 +158,12 @@ static void failures_and_limits(bm_cpu_t *cpu, fixture_t *f)
         if (which == 5U) s.msw |= 1U;
         if (which == 6U) s.cs.valid = 0U;
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
-        if (which < 2U) {
+        if (which < 2U || which == 4U) {
             f->allow_frame = 1;
             assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
             assert(bm_286_get_arch_state(cpu, &a) == BM_STATUS_OK);
             assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
-            assert(a.sp == (uint16_t)(s.sp-6) && f->count == 7);
+            assert(a.sp == (uint16_t)(s.sp-6) && f->count == (which == 4U ? 9U : 7U));
             assert(f->ram[s.ss.base+a.sp] == (uint8_t)s.ip);
             continue;
         }

@@ -457,6 +457,90 @@ static void pointer_faults(fixture_t *f)
         else assert(a.ip == 0x301 && a.cs.base == 0x40000);
     }
 }
+static void instruction_faults(fixture_t *f)
+{
+    /* Each decode byte can be the first rejected byte. No operand effects. */
+    const uint8_t code[] = {0x26,0xc7,0x06,0,5,0xef,0xbe};
+    for (unsigned cut = 0; cut < sizeof(code); ++cut)
+        for (unsigned odd = 0; odd < 2; ++odd) {
+            bm_286_arch_state_t s = setup(f, 0x3ff, 13), a, e;
+            bm_286_boundary_t b;
+            memcpy(f->ram+0x30100, code, sizeof(code));
+            s.cs.limit = (uint16_t)(s.ip+cut-1); s.sp += (uint16_t)odd;
+            word(f, 0x20500, 0x1234); set(f, &s);
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK); a = state(f); e = s;
+            e.sp -= 6; e.flags &= 0xfcffU; e.cs.selector = 0x4000;
+            e.cs.base = 0x40000; e.cs.limit = 0xffff; e.ip = 0x300;
+            same(&a, &e);
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.vector == 13 && b.has_vector);
+            assert(f->count == cut + (odd ? 8U : 5U));
+            assert(read_word(f, s.ss.base+a.sp) == s.ip && read_word(f, 0x20500) == 0x1234);
+            for (unsigned i = 0; i < cut; ++i)
+                assert(f->trace[i].operation == BM_BUS_FETCH && f->trace[i].address == 0x30100+i);
+        }
+    /* Direct/indirect CALL/JMP, RET and taken conditional/loop targets. */
+    for (unsigned end = 0; end < 3; ++end) {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 13), a;
+        bm_286_boundary_t b;
+        s.ip = (uint16_t)(0xfffd+end);
+        memcpy(f->ram+s.cs.base+s.ip, code, 0x10000U-s.ip);
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK); a = state(f);
+        assert(b.has_vector && b.vector == 13 && read_word(f, s.ss.base+a.sp) == s.ip);
+        assert(f->count == 0x10000U-s.ip+5);
+    }
+    static const uint8_t branches[][4] = {
+        {0xe8,0x7f,0}, {0xe9,0x7f,0}, {0xeb,0x7f},
+        {0xff,0xd0}, {0xff,0xe0}, {0xff,0x17}, {0xff,0x27},
+        {0xc3}, {0xc2,8,0}, {0x74,0x7f}, {0xe0,0x7f},
+        {0xe1,0x7f}, {0xe2,0x7f}, {0xe3,0x7f}};
+    for (unsigned op = 0; op < sizeof(branches)/sizeof(branches[0]); ++op) {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 13), a, e;
+        bm_286_boundary_t b;
+        f->ram[0x30100] = 0x3e; memcpy(f->ram+0x30101, branches[op], 4);
+        s.cs.limit = 0x110; s.ax = 0x200; s.bx = 0x500;
+        s.cx = (uint16_t)(op == 13 ? 0 : 2);
+        if (op == 9 || op == 11) s.flags |= 0x40;
+        word(f, 0x500, 0x200); word(f, s.ss.base+s.sp, 0x200); set(f, &s);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK); a = state(f); e = s;
+        e.sp -= 6; e.flags &= 0xfcffU; e.cs.selector = 0x4000;
+        e.cs.base = 0x40000; e.cs.limit = 0xffff; e.ip = 0x300;
+        same(&a, &e); /* LOOP count/RET pop/CALL push not committed. */
+        assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+        assert(read_word(f, s.ss.base+a.sp) == s.ip);
+        unsigned writes = 0;
+        for (unsigned i = 0; i < f->count; ++i) writes += f->trace[i].operation == BM_BUS_WRITE;
+        assert(writes == 3); /* Exception frame only. */
+    }
+    /* Truncated instruction and overlong prefix stream: host failures at
+     * every completed fetch/frame transfer, before and after effects. */
+    for (unsigned kind = 0; kind < 2; ++kind) {
+        unsigned transfers = kind ? 15 : 7;
+        for (unsigned after = 0; after < 2; ++after)
+            for (unsigned fail = 1; fail <= transfers; ++fail) {
+                bm_286_arch_state_t s = setup(f, 0x3ff, 13), a;
+                bm_286_boundary_t b;
+                if (kind) memset(f->ram+0x30100, 0x26, 11);
+                else {f->ram[0x30100] = 0xb8; s.cs.limit = 0x101;}
+                f->fail_at = fail; f->after = after; set(f, &s);
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+                a = state(f); same(&a, &s); assert(f->count == fail);
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_INVALID_STATE && f->count == fail);
+            }
+    }
+    /* Guest handler replaces an overlong prefix stream, then IRET retries
+     * the original prefix address. No state imports during recovery. */
+    {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 13), a;
+        bm_286_boundary_t b;
+        const uint8_t handler[] = {0xc6,0x06,0,1,0xf4,0xcf};
+        memset(f->ram+0x30100, 0x26, 11); memcpy(f->ram+0x40300, handler, sizeof(handler));
+        s.ds = s.cs; set(f, &s);
+        for (unsigned i = 0; i < 4; ++i) {
+            f->count = 0; assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        }
+        a = state(f); assert(a.halted && a.ip == 0x101 && a.sp == s.sp && a.flags == s.flags);
+    }
+}
 int main(void)
 {
     fixture_t f = {0}; bm_286_config_t c = {0}; bm_host_services_t host = bm_null_host_services();
@@ -469,5 +553,6 @@ int main(void)
     matrix(&f); recovery(&f); fault_and_trap(&f); external_and_errors(&f); operand_faults(&f);
     stack_faults(&f);
     pointer_faults(&f);
+    instruction_faults(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }

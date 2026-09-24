@@ -116,6 +116,7 @@ static void stack_fault(bm_cpu_t *cpu, fixture_t *f,
         expected.sp = (uint16_t)(s->sp-6);
         expected.flags &= 0xfcffU;
         expected.cs.selector = 0x0800; expected.cs.base = 0x8000;
+        expected.cs.limit = 0xffff;
         expected.ip = 0x100;
         assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
         assert(read_word(f, STACK+expected.sp) == s->ip);
@@ -442,7 +443,7 @@ static void limits_and_gaps(bm_cpu_t *cpu, fixture_t *f)
         if (i == 2U) s.sp = 0xffffU;
         if (i == 3U) s.ss.limit = s.sp;
         if (i >= 4U) { s.cs.limit = 8U; word_at(f, STACK + s.sp, 0x20U); }
-        if (i == 0U || i == 2U || i == 3U) {
+        if (i == 0U || i == 2U || i == 3U || i >= 4U) {
             stack_fault(cpu, f, &s, i == 0U);
             continue;
         }

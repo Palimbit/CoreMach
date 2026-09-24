@@ -224,6 +224,14 @@ static void failures(fixture_t *f)
             if (bad == 3) s.cs.limit = 0x100;
             if (bad == 4) s.ds.valid = s.ss.valid = 0;
             if (bad == 5) s.ds.limit = s.ss.limit = 1;
+            if (bad == 3) {
+                f->allow_frame = 1;
+                set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+                a = state(f);
+                assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+                assert(a.ax == s.ax && a.sp == (uint16_t)(s.sp-6));
+                continue;
+            }
             if (form == 0 && bad >= 4) continue; /* LEA needs no data segment. */
             if (form != 0 && bad == 5) { /* Operand #13 cannot build its stack frame. */
                 set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);

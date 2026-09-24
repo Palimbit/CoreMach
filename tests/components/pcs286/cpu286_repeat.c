@@ -356,13 +356,13 @@ static void prefixes_and_hold(fixture_t *f)
         bm_286_arch_state_t s=prepare(f,code,sizeof(code),1);
         set(f,&s); bm_286_boundary_t b;
         if(legal) {step(f); assert(state(f).ip==s.ip+10);}
-        else {assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED); assert(f->count==10);}
+        else {assert(bm_286_step(&f->cpu,&b)==BM_STATUS_OK); assert(b.has_vector && b.vector==13);}
     }
     { /* REP opcode straddling segment end is refused, not wrapped on fetch. */
         const uint8_t code[]={0x90};
         bm_286_arch_state_t s=prepare(f,code,sizeof(code),1); s.ip=0xffff;
         f->ram[s.cs.base+s.ip]=0xf3; set(f,&s); bm_286_boundary_t b;
-        assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED && f->count==1);
+        assert(bm_286_step(&f->cpu,&b)==BM_STATUS_OK && b.has_vector && b.vector==13);
     }
     { /* Diagnostic run budgets repetitions, not an entire 65535-element block. */
         const uint8_t code[]={0xf3,0xaa};

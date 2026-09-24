@@ -265,7 +265,7 @@ static bm_status_t fetch_byte(bm_286_private_t *state, uint16_t ip,
     bm_bus_transaction_t transaction = {0};
     bm_status_t status;
     if (!state->arch.cs.valid || ip > state->arch.cs.limit)
-        return BM_STATUS_UNSUPPORTED; /* #13 delivery is not implemented yet. */
+        return BM_STATUS_UNSUPPORTED; /* Caller classifies guest limit faults. */
     transaction.space = BM_ADDRESS_PROGRAM;
     transaction.operation = BM_BUS_FETCH;
     transaction.address = (state->arch.cs.base + ip) & ADDRESS_MASK;
@@ -293,7 +293,7 @@ typedef struct decoded_286 {
     uint8_t software_vector;
     uint8_t synchronous_fault; /* Completed fault entry, not software INT. */
     uint8_t lock_prefix; /* Bounded memory forms, not the full 286 LOCK space. */
-    uint8_t operand_limit_fault; /* Unwind an instruction before delivering #13. */
+    uint8_t operand_limit_fault; /* Operand, fetch, length or target: unwind to #13. */
 } decoded_286_t;
 
 typedef struct operand_286 {
@@ -349,8 +349,12 @@ static bm_status_t next_byte(decoded_286_t *decode, uint8_t *value)
 {
     uint32_t waits;
     bm_status_t status;
-    if (decode->length >= 10U || decode->cursor > 0xffffU)
-        return BM_STATUS_UNSUPPORTED; /* #6/#13 delivery is not available. */
+    if (!decode->state->arch.cs.valid)
+        return BM_STATUS_UNSUPPORTED; /* Invalid imported cache is not modeled. */
+    if (decode->length >= 10U || decode->cursor > decode->state->arch.cs.limit) {
+        decode->operand_limit_fault = 1U;
+        return BM_STATUS_UNSUPPORTED;
+    }
     status = fetch_byte(decode->state, (uint16_t) decode->cursor,
                         value, &waits);
     if (status != BM_STATUS_OK)
@@ -678,16 +682,23 @@ static bm_status_t enter_frame(decoded_286_t *decode)
     return BM_STATUS_OK;
 }
 
-static int valid_near_target(const bm_286_arch_state_t *arch, uint16_t ip)
+static bm_status_t check_near_target(decoded_286_t *decode, uint16_t ip)
 {
-    return arch->cs.valid && ip <= arch->cs.limit;
+    const bm_286_arch_state_t *arch = &decode->state->arch;
+    if (!arch->cs.valid)
+        return BM_STATUS_UNSUPPORTED;
+    if (ip > arch->cs.limit) {
+        decode->operand_limit_fault = 1U;
+        return BM_STATUS_UNSUPPORTED;
+    }
+    return BM_STATUS_OK;
 }
 
 static bm_status_t near_branch(decoded_286_t *decode, uint16_t target, int call)
 {
-    bm_status_t status;
-    if (!valid_near_target(&decode->state->arch, target))
-        return BM_STATUS_UNSUPPORTED; /* #13, not a successful branch. */
+    bm_status_t status = check_near_target(decode, target);
+    if (status != BM_STATUS_OK)
+        return status;
     if (call) {
         status = push_word(decode, (uint16_t) decode->cursor);
         if (status != BM_STATUS_OK)
@@ -1095,8 +1106,9 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
         status = operand_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
         if (status != BM_STATUS_OK)
             return status;
-        if (!valid_near_target(arch, value))
-            return BM_STATUS_UNSUPPORTED;
+        status = check_near_target(decode, value);
+        if (status != BM_STATUS_OK)
+            return status;
         arch->sp = (uint16_t) (arch->sp + 2U + extra);
         decode->cursor = value;
         return BM_STATUS_OK;

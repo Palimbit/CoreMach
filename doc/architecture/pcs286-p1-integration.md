@@ -506,3 +506,9 @@ The original scans have now been checked; the concrete fault-stage evidence
 and implementation plan is in `pcs286-string-fault-restart.md`. This research
 does not certify a PCS286 CPU stepping or change CPU behavior. Fetch/control
 target limit faults can proceed independently while string evidence remains open.
+
+That bounded block now delivers real-mode #13 for instruction-byte limit,
+ten-byte-length and taken near-target violations. Prefixed restart, no premature
+CALL/RET/LOOP commit, endpoint failures and guest repair/retry are tested.
+Physical prefetch and sequential boundary behavior are not certified; see the
+latest CPU coverage section. Invalid encodings and protection remain unfinished.

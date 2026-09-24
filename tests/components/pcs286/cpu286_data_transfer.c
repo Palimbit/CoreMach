@@ -466,9 +466,10 @@ static void test_rejections_and_instances(void)
         prepare(&ca, a, truncated_fetch, sizeof(truncated_fetch), &state);
         state.ax = 0x9999U;
         state.cs.limit = 1U;
+        state.sp = 0x200U;
         assert(bm_286_set_arch_state(&ca, &state) == BM_STATUS_OK);
-        assert(bm_286_step(&ca, &boundary) == BM_STATUS_UNSUPPORTED);
-        assert(a->count == 2U && state_of(&ca).ip == 0U);
+        assert(bm_286_step(&ca, &boundary) == BM_STATUS_OK);
+        assert(a->count == 7U && boundary.has_vector && boundary.vector == 13);
         assert(state_of(&ca).ax == 0x9999U);
     }
     {
@@ -483,9 +484,10 @@ static void test_rejections_and_instances(void)
         const uint8_t too_long[] = {0x26U, 0x26U, 0x26U, 0x26U, 0x26U,
                                     0x26U, 0x26U, 0x26U, 0x26U, 0x26U, 0x90U};
         prepare(&ca, a, too_long, sizeof(too_long), &state);
+        state.sp = 0x200U;
         assert(bm_286_set_arch_state(&ca, &state) == BM_STATUS_OK);
-        assert(bm_286_step(&ca, &boundary) == BM_STATUS_UNSUPPORTED);
-        assert(a->count == 10U && state_of(&ca).ip == 0U);
+        assert(bm_286_step(&ca, &boundary) == BM_STATUS_OK);
+        assert(a->count == 15U && boundary.has_vector && boundary.vector == 13);
     }
     {
         const uint8_t left[] = {0xb8U, 0x11U, 0x11U};

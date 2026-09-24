@@ -251,7 +251,7 @@ static void failures(fixture_t *f)
         if (bad == 5) s.ds.limit = s.bx;
         if (bad == 6) s.bx = 0xffff;
         if (bad == 7) s.cs.limit = s.ip + 1;
-        if (bad == 5 || bad == 6) {
+        if (bad == 5 || bad == 6 || bad == 7) {
             set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
             a = state(f);
             assert(b.has_vector && b.vector == 13 && b.kind == BM_286_BOUNDARY_EXCEPTION);
