@@ -299,7 +299,7 @@ static void load_plans(void)
             assert(plan.segment.base == 0x123456 && plan.segment.limit == 0xabcd);
             assert(plan.segment.access == access);
             assert(plan.needs_accessed_write ==
-                   (target != BM_286_PM_LOAD_LDT && access % 2u == 0));
+                   (target != BM_286_PM_LOAD_LDT));
         } else {
             assert(!plan.segment.valid && !plan.needs_accessed_write);
         }
@@ -345,6 +345,124 @@ static void load_plans(void)
     assert(!plan.prepared && !plan.fault_vector);
 }
 
+typedef struct accessed_fixture {
+    uint32_t address;
+    uint8_t byte;
+    unsigned calls, effects, fail_at, locks, unlocks;
+    bool locked, after;
+    bm_status_t failure;
+    bm_286_segment_state_t *destination;
+    uint16_t old_selector;
+} accessed_fixture_t;
+
+static void accessed_lock(void *context, int asserted)
+{
+    accessed_fixture_t *f = context;
+    assert(f->destination->selector == f->old_selector);
+    if (asserted) {
+        assert(!f->locked);
+        f->locked = true; ++f->locks;
+    } else {
+        assert(f->locked);
+        f->locked = false; ++f->unlocks;
+    }
+}
+
+static bm_status_t accessed_bus(void *context, bm_bus_transaction_t *t)
+{
+    accessed_fixture_t *f = context;
+    assert(f->locked && f->destination->selector == f->old_selector);
+    assert(t->address == f->address && t->space == BM_ADDRESS_DATA);
+    assert(t->size == 1 && t->alignment == 1 && t->endianness == BM_ENDIAN_LITTLE);
+    assert(t->attributes == BM_BUS_TRANSACTION_LOCKED && t->wait_states == 0);
+    assert(t->operation == (f->calls == 0 ? BM_BUS_READ : BM_BUS_WRITE));
+    ++f->calls;
+    if (f->calls == f->fail_at && !f->after) return f->failure;
+    ++f->effects;
+    if (t->operation == BM_BUS_READ) t->value = f->byte;
+    else { assert(t->value == (unsigned)(f->byte | 1u)); f->byte = (uint8_t)t->value; }
+    t->wait_states = 7;
+    return f->calls == f->fail_at ? f->failure : BM_STATUS_OK;
+}
+
+static void accessed_commit(void)
+{
+    bm_286_table_state_t gdt = {0, 15};
+    bm_286_segment_state_t ldt = {0}, destination, original;
+    bm_286_pm_load_plan_t plan;
+    table_fixture_t source = {0};
+    accessed_fixture_t f = {0};
+    unsigned byte, odd, already, failure, after, kind;
+    static const bm_status_t errors[] = {BM_STATUS_DEVICE_ERROR, BM_STATUS_UNMAPPED,
+        BM_STATUS_READ_ONLY, BM_STATUS_IDLE, BM_STATUS_UNSUPPORTED};
+    source.bytes[0] = 0xff; source.bytes[1] = 0xff;
+    source.bytes[2] = 0x34; source.bytes[3] = 0x12;
+    memset(&original, 0, sizeof(original));
+    original.selector = 0xbeef; original.base = 0xaabbcc;
+    original.limit = 0x9876; original.access = 0xf3; original.valid = 1;
+    for (odd = 0; odd < 2; ++odd)
+    for (already = 0; already < 2; ++already)
+    for (byte = 0; byte < 256; ++byte) {
+        gdt.base = 0xfffff4u + odd;
+        source.first = 0xfffffcu + odd; source.calls = source.effects = 0;
+        source.bytes[5] = (uint8_t)(0x92u + already);
+        assert(bm_286_pm_prepare_load(&gdt, &ldt, 8, 0, BM_286_PM_LOAD_DATA,
+               table_access, &source, &plan) == BM_STATUS_OK && plan.prepared);
+        assert(plan.access_address == 1u + odd && plan.needs_accessed_write);
+        destination = original;
+        memset(&f, 0, sizeof(f));
+        f.address = plan.access_address; f.byte = (uint8_t)byte;
+        f.destination = &destination; f.old_selector = original.selector;
+        assert(bm_286_pm_commit_load(&plan, accessed_bus, &f, accessed_lock, &f,
+               &destination) == BM_STATUS_OK);
+        assert(f.byte == (byte | 1u) && f.calls == 2 && f.effects == 2);
+        assert(f.locks == 1 && f.unlocks == 1 && !f.locked);
+        assert(destination.selector == 8 && destination.base == 0x1234);
+        assert(destination.access == 0x93 && destination.limit == 0xffff);
+        assert(plan.waits == source.calls * 3u + 14u && !plan.prepared);
+        assert(bm_286_pm_commit_load(&plan, accessed_bus, &f, accessed_lock, &f,
+               &destination) == BM_STATUS_INVALID_STATE && f.calls == 2);
+    }
+    for (kind = 0; kind < sizeof(errors) / sizeof(errors[0]); ++kind)
+    for (after = 0; after < 2; ++after)
+    for (failure = 1; failure <= 2; ++failure) {
+        source.calls = source.effects = 0;
+        assert(bm_286_pm_prepare_load(&gdt, &ldt, 8, 0, BM_286_PM_LOAD_STACK,
+               table_access, &source, &plan) == BM_STATUS_OK && plan.prepared);
+        destination = original; memset(&f, 0, sizeof(f));
+        f.address = plan.access_address; f.byte = 0x92; f.destination = &destination;
+        f.old_selector = original.selector; f.fail_at = failure;
+        f.failure = errors[kind]; f.after = after != 0;
+        assert(bm_286_pm_commit_load(&plan, accessed_bus, &f, accessed_lock, &f,
+               &destination) == errors[kind]);
+        assert(memcmp(&destination, &original, sizeof(original)) == 0);
+        assert(f.calls == failure && f.effects == failure - (after ? 0u : 1u));
+        assert(f.byte == (failure == 2 && after ? 0x93 : 0x92));
+        assert(f.locks == 1 && f.unlocks == 1 && !f.locked);
+        assert(plan.waits == source.calls * 3u + (failure - 1u) * 7u);
+        assert(!plan.prepared && !plan.fault_vector);
+        assert(bm_286_pm_commit_load(&plan, accessed_bus, &f, accessed_lock, &f,
+               &destination) == BM_STATUS_INVALID_STATE && f.calls == failure);
+    }
+    source.calls = source.effects = 0;
+    assert(bm_286_pm_prepare_load(&gdt, &ldt, 8, 0, BM_286_PM_LOAD_DATA,
+           table_access, &source, &plan) == BM_STATUS_OK);
+    destination = original;
+    assert(bm_286_pm_commit_load(&plan, accessed_bus, &f, NULL, &f,
+           &destination) == BM_STATUS_UNSUPPORTED);
+    assert(memcmp(&destination, &original, sizeof(original)) == 0 && !plan.prepared);
+    /* Null and LDT descriptors must never acquire a lock or set bit zero. */
+    for (byte = 0; byte < 2; ++byte) {
+        source.bytes[5] = 0x82; source.calls = source.effects = 0;
+        assert(bm_286_pm_prepare_load(&gdt, &ldt, (uint16_t)(byte ? 8 : 3), 0,
+               BM_286_PM_LOAD_LDT, table_access, &source, &plan) == BM_STATUS_OK);
+        assert(plan.prepared && !plan.needs_accessed_write);
+        assert(bm_286_pm_commit_load(&plan, NULL, NULL, NULL, NULL,
+               &destination) == BM_STATUS_OK);
+        assert(destination.valid == byte && destination.access == (byte ? 0x82 : 0));
+    }
+}
+
 int main(void)
 {
     selectors();
@@ -352,6 +470,7 @@ int main(void)
     ranges();
     tables();
     load_plans();
+    accessed_commit();
     selectors();
     return 0;
 }

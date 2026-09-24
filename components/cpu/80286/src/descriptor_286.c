@@ -192,9 +192,63 @@ bm_status_t bm_286_pm_prepare_load(const bm_286_table_state_t *gdt,
     plan->segment.limit = d->limit;
     plan->segment.access = d->access;
     plan->segment.valid = 1;
-    plan->needs_accessed_write = target != BM_286_PM_LOAD_LDT && !d->accessed;
+    plan->access_address = ((s.local ? ldt->base : gdt->base) +
+                            s.table_offset + 5u) & 0xffffffu;
+    /* Intel PRM 11.1 specifies the locked RMW. Do not elide it based on the
+     * earlier snapshot: another bus master may have cleared A meanwhile. */
+    plan->needs_accessed_write = target != BM_286_PM_LOAD_LDT;
     plan->fault_vector = 0;
     plan->fault_error = 0;
     plan->prepared = true;
+    return BM_STATUS_OK;
+}
+
+bm_status_t bm_286_pm_commit_load(bm_286_pm_load_plan_t *plan,
+    bm_bus_access_fn access, void *context, bm_286_pin_fn bus_lock,
+    void *pin_context, bm_286_segment_state_t *destination)
+{
+    bm_status_t status = BM_STATUS_OK;
+    if (plan == NULL || destination == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (!plan->prepared || plan->fault_vector != 0)
+        return BM_STATUS_INVALID_STATE;
+    /* Consume before any callback; neither recursive use nor a host failure
+     * may replay a possibly completed device write. */
+    plan->prepared = false;
+    if (plan->needs_accessed_write) {
+        bm_bus_transaction_t transfer = {0};
+        uint8_t access_byte;
+        if (access == NULL || bus_lock == NULL)
+            return BM_STATUS_UNSUPPORTED;
+        if (plan->access_address > 0xffffffu || !plan->segment.valid ||
+            !(plan->segment.access & 0x10u))
+            return BM_STATUS_INVALID_STATE;
+        bus_lock(pin_context, 1);
+        transfer.space = BM_ADDRESS_DATA;
+        transfer.address = plan->access_address;
+        transfer.operation = BM_BUS_READ;
+        transfer.endianness = BM_ENDIAN_LITTLE;
+        transfer.size = transfer.alignment = 1;
+        transfer.attributes = BM_BUS_TRANSACTION_LOCKED;
+        status = access(context, &transfer);
+        if (status == BM_STATUS_OK) {
+            plan->waits += transfer.wait_states;
+            access_byte = (uint8_t)transfer.value;
+            /* Preserve all other bits from the locked read, not the snapshot.
+             * Concurrent descriptor replacement is not made transactional. */
+            transfer.operation = BM_BUS_WRITE;
+            transfer.value = access_byte | 1u;
+            transfer.wait_states = 0;
+            status = access(context, &transfer);
+            if (status == BM_STATUS_OK)
+                plan->waits += transfer.wait_states;
+        }
+        bus_lock(pin_context, 0);
+        if (status != BM_STATUS_OK)
+            return status;
+        plan->segment.access |= 1u;
+        plan->needs_accessed_write = false;
+    }
+    *destination = plan->segment;
     return BM_STATUS_OK;
 }

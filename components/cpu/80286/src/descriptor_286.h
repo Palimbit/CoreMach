@@ -73,6 +73,7 @@ typedef struct bm_286_pm_load_plan {
     uint16_t fault_error;
     uint64_t waits;
     bm_286_segment_state_t segment;
+    uint32_t access_address; /* Captured physical descriptor byte, before A20. */
     bool needs_accessed_write;
 } bm_286_pm_load_plan_t;
 
@@ -86,5 +87,16 @@ bm_status_t bm_286_pm_prepare_load(const bm_286_table_state_t *gdt,
     const bm_286_segment_state_t *ldt, uint16_t selector, uint8_t cpl,
     bm_286_pm_load_target_t target, bm_bus_access_fn access, void *context,
     bm_286_pm_load_plan_t *plan);
+
+/* Consume a freshly prepared plan synchronously, without an intervening guest
+ * boundary. Caller owns serialization and must not already hold bus_lock.
+ * Commits destination only after the locked access-byte RMW succeeds. Always
+ * releases an acquired lock, including host IDLE/error. Failed plans cannot be
+ * replayed: external effects may already have happened. Inputs must not alias.
+ * Null/LDTR loads require neither access nor lock callbacks. This is not an
+ * instruction dispatcher and does not set the SS shadow or deliver faults. */
+bm_status_t bm_286_pm_commit_load(bm_286_pm_load_plan_t *plan,
+    bm_bus_access_fn access, void *context, bm_286_pin_fn bus_lock,
+    void *pin_context, bm_286_segment_state_t *destination);
 
 #endif

@@ -14,7 +14,7 @@ accuracy claim, implicit 386 semantics or BIOS-specific success shortcuts.
 | --- | --- | --- | --- |
 | 1. Interpretation | Selectors, descriptor types and segment ranges | Exhaustive selectors/access bytes and boundary tests | Implemented, standalone helpers |
 | 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Implemented as private lookup; instruction integration in block 3 |
-| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | 3a preparation implemented; writeback/instruction integration pending |
+| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Preparation and locked writeback/commit helpers implemented; instruction integration pending |
 | 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Pending; enable only with block 5 |
 | 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Pending; gates block 4 activation |
 | 6. Privilege transfers | Call gates, conforming code, stack switching, parameter copying, RETF | Same/outer/inner privilege matrices and interrupted transfers | Pending |
@@ -91,8 +91,8 @@ retention evidence. Type/privilege rejection takes precedence over presence.
 
 The access byte is preserved; `needs_accessed_write` explicitly prevents a
 prepared data/stack cache from being mistaken for a completed load. Accessed
-writeback, exclusion, instruction dispatch, commit and protected fault delivery
-are still pending. Tests enumerate 49,152 type/CPL/RPL/table/alignment cases,
+writeback/exclusion and cache commit are supplied by block 3b below; instruction
+dispatch and protected fault delivery remain pending. Tests enumerate 49,152 type/CPL/RPL/table/alignment cases,
 48 null cases, before/after transfer failures, and invalid table/cache inputs.
 Reference: Intel PRM B-61 (LDS/LES), B-66 (LLDT), sections 7.4 and exception
 12 definition. See [LDS/LES](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=271),
@@ -100,7 +100,31 @@ Reference: Intel PRM B-61 (LDS/LES), B-66 (LLDT), sections 7.4 and exception
 [segment types](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=138),
 [stack faults](https://kitchen.manualsonline.com/manuals/mfg/intel/80287.html?p=221).
 
-## Next: block 3b, writeback and integration
+## Block 3b: accessed writeback and cache commit
+
+`bm_286_pm_commit_load` consumes a prepared plan, performs an access-byte
+read/OR-one/write under the existing lock callback, releases exclusion and
+only then commits the destination cache. Null/LDTR plans do not write A.
+All valid data/code plans request the RMW, even when the initial descriptor
+snapshot had A set: a bus master might clear it before the locked read.
+This corrects the earlier preparation-only optimization. The captured physical
+access-byte address is independent of later table-register changes.
+
+Intel PRM [11.1](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=189)
+specifies an indivisible locked access-byte update. Byte-sized RMW after the
+descriptor reads is our functional transaction policy, not measured pin timing.
+The locked read preserves the current byte's other bits. It does not make
+concurrent replacement of an entire descriptor transactional; the caller must
+serialize the same instruction and must not nest an already-owned bus lock.
+
+All non-OK statuses release the lock, preserve the destination and consume the
+plan, preventing replay after possible endpoint effects. Only successful
+transfers add waits. Missing lock support refuses before accessing the byte.
+Tests cover 1,024 combinations of byte contents, initial A and alignment,
+physical wrap, five errors before/after read/write, no replay, and no-write
+null/LDTR loads. PE dispatch, SS shadow and fault delivery remain pending.
+
+## Next: instruction integration and protected execution/fault gate
 
 Connect lookup to DS/ES/SS and LLDT validation, with explicit permission and
 presence checks, fault metadata and staged architectural state. Add accessed

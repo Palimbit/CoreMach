@@ -2,7 +2,16 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: protected-mode segment preparation (block 3a)
+## Latest tranche: locked accessed update and staged cache commit
+
+Private load plans now capture the access-byte address and are consumed by a
+locked byte RMW followed by cache commit. Host errors release exclusion, retain
+the old cache and forbid replay. Null/LDTR loads never write A. Tests include
+1,024 RMW combinations and every read/write failure before/after effects.
+This remains helper-level integration: PE instruction dispatch and protected
+fault delivery are not enabled. Block 3 is still incomplete at instruction level.
+
+## Previous tranche: protected-mode segment preparation (block 3a)
 
 Private DS/ES/SS and LLDT preparation now uses GDT/LDT lookup and validates
 types, CPL/RPL/DPL, null selectors and presence. It returns a staged cache or
