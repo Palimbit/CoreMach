@@ -2,7 +2,51 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: real-mode implicit stack faults
+## Latest tranche: compound-pointer limit faults
+
+LDS/LES and indirect far CALL/JMP share a private two-word preflight.
+A valid segment that cannot contain either individual word requests #13 through
+the existing unwind marker, before pointer reads, destination reload or CALL
+stack writes. Invalid imported caches/register encodings remain unsupported.
+Each word is checked independently: FFFD and FFFF fault, while FFFE retains
+the existing wrap to offset 0000 for the selector.
+
+Intel explicitly lists FFFD/FFFF for
+[LDS/LES, Appendix B-62](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=272).
+The existing Harris FF.5 wrap evidence remains unchanged; extending the
+shared word-offset policy across the four operations is not four new
+hardware captures. Preflight/access ordering remains functional policy.
+
+Tests add 96 opcode/segment/limit/stack-alignment fault cases, 32 valid
+end-of-segment pairs, per-transfer before/after host failures and four
+guest-only address repair/IRET/retry programs. The CALL recovery also RETFs
+before HLT. Fault frames preserve prefix IP; no partial pointer loads or
+return frames are invented. Read-only instruction fixtures permit writes
+only in their explicit exception-frame cases.
+
+GCC UCRT64/MSVC Debug/Release pass 105 ordinary tests and retain the two
+Headland/AT DMA skips. The unchanged optional SST subset, 30 Python tests,
+catalogue (32 machines/five locales) and provenance (36 components/201 files)
+also pass.
+
+### String-fault evidence gate
+
+String limit faults are deliberately not changed into a generic atomic
+retry. Intel's [LOADALL-related exception notes](https://www.pcjs.org/documents/manuals/intel/80286/exceptions/)
+describe partial SI/DI/CX updates; their scope and apparent transcription/
+document inconsistencies need checking against original pages and captures.
+The [15 October 1984 restart erratum](https://www.pcjs.org/documents/manuals/intel/80286/rep_restart/)
+explicitly concerns protected-mode violations and stepping-dependent final
+iterations of MOVS/INS/OUTS. It must not be silently generalized to every
+real-mode overrun, nor replaced with 386-style restart behavior.
+
+Next: establish a fault-stage/register matrix with precise stepping and mode
+coverage before changing string exceptions. Normal strings/REP and external
+interrupt restart retain their existing behavior and tests; limit failures
+remain explicit unsupported gaps. Fetch/branch-target faults, invalid forms,
+protected execution and CPU timing also remain pending. No boot claim.
+
+## Previous tranche: real-mode implicit stack faults
 
 Supported PUSH/POP, PUSHF/POPF, near/far calls and returns, IRET,
 PUSHA/POPA and ENTER/LEAVE now unwind valid-stack limit failures to #13.

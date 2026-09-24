@@ -527,6 +527,23 @@ static bm_status_t operand_access(decoded_286_t *decode,
     return data_access(decode, segment, offset, size, write, value);
 }
 
+/* Far pointers keep independently wrapped word offsets (including FFFE ->
+ * 0000), but neither individual word may straddle a valid segment limit.
+ * Check both before any pointer read or destination/stack commit. This is
+ * functional preflight policy, not a physical bus/fault precedence claim. */
+static bm_status_t pointer_preflight(decoded_286_t *decode,
+                                    const operand_286_t *operand)
+{
+    if (!operand->memory || !operand->segment->valid)
+        return BM_STATUS_UNSUPPORTED;
+    if ((uint32_t) operand->offset + 1U > operand->segment->limit ||
+        (uint32_t) (uint16_t) (operand->offset + 2U) + 1U > operand->segment->limit) {
+        decode->operand_limit_fault = 1U;
+        return BM_STATUS_UNSUPPORTED;
+    }
+    return BM_STATUS_OK;
+}
+
 static bm_status_t read_operand(decoded_286_t *decode,
                                 const operand_286_t *operand,
                                 unsigned size, uint16_t *value)
@@ -934,10 +951,9 @@ static bm_status_t execute_ff_control(decoded_286_t *decode,
     uint16_t value, selector;
     bm_status_t status;
     if (operand->reg_field == 3U || operand->reg_field == 5U) {
-        if (!operand->memory || !operand->segment->valid ||
-            (uint32_t) operand->offset + 1U > operand->segment->limit ||
-            (uint32_t) (uint16_t) (operand->offset + 2U) + 1U > operand->segment->limit)
-            return BM_STATUS_UNSUPPORTED; /* Invalid form/#13 not yet delivered. */
+        status = pointer_preflight(decode, operand);
+        if (status != BM_STATUS_OK)
+            return status;
         /* The two word offsets wrap independently. SST Harris captures
          * FF.5 cases 2914/3652/4550 read the selector at 0000 after FFFE. */
         status = read_operand(decode, operand, 2U, &value);
@@ -1922,12 +1938,9 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             *word_register(arch, operand.reg_field) = operand.offset;
             return BM_STATUS_OK;
         }
-        /* Same independently wrapped word-offset policy as far pointers.
-         * Preflight is a host-gap policy, not silicon fault precedence. */
-        if (!operand.segment->valid ||
-            (uint32_t) operand.offset + 1U > operand.segment->limit ||
-            (uint32_t) (uint16_t) (operand.offset + 2U) + 1U > operand.segment->limit)
-            return BM_STATUS_UNSUPPORTED;
+        status = pointer_preflight(decode, &operand);
+        if (status != BM_STATUS_OK)
+            return status;
         status = read_operand(decode, &operand, 2U, &value);
         if (status != BM_STATUS_OK)
             return status;

@@ -11,7 +11,7 @@
 typedef struct fixture {
     uint8_t *ram;
     bm_bus_transaction_t trace[32];
-    unsigned count, fail_at;
+    unsigned count, fail_at, allow_frame;
 } fixture_t;
 
 static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
@@ -19,14 +19,18 @@ static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
     fixture_t *f = context;
     unsigned i;
     assert(f->count < 32U && (t->size == 1U || t->size == 2U));
-    assert(t->address <= 0x1000000U - t->size && t->operation != BM_BUS_WRITE);
+    assert(t->address <= 0x1000000U - t->size);
+    assert(t->operation != BM_BUS_WRITE || f->allow_frame);
     assert(t->wait_states == 0U && t->endianness == BM_ENDIAN_LITTLE);
     assert(t->space == (t->operation == BM_BUS_FETCH ? BM_ADDRESS_PROGRAM : BM_ADDRESS_DATA));
     f->trace[f->count++] = *t;
     if (f->count == f->fail_at) return BM_STATUS_DEVICE_ERROR;
-    t->value = 0U;
+    if (t->operation != BM_BUS_WRITE) t->value = 0U;
     for (i = 0U; i < t->size; ++i)
-        t->value |= (uint64_t) f->ram[(size_t) t->address + i] << (8U * i);
+        if (t->operation == BM_BUS_WRITE)
+            f->ram[(size_t)t->address+i] = (uint8_t)(t->value >> (8U*i));
+        else
+            t->value |= (uint64_t) f->ram[(size_t) t->address + i] << (8U * i);
     t->wait_states = 3U;
     return BM_STATUS_OK;
 }
@@ -38,7 +42,7 @@ static bm_286_arch_state_t setup(bm_cpu_t *cpu, fixture_t *f,
     assert(cpu->ops.reset(cpu->context) == BM_STATUS_OK);
     assert(bm_286_get_arch_state(cpu, &s) == BM_STATUS_OK);
     memset(f->ram, 0, 0x1000000U);
-    f->count = f->fail_at = 0U;
+    f->count = f->fail_at = f->allow_frame = 0U;
     if (!reset) {
         s.cs.selector = 0x3000U; s.cs.base = 0x30000U; s.ip = 0U;
     }
@@ -154,6 +158,15 @@ static void failures_and_limits(bm_cpu_t *cpu, fixture_t *f)
         if (which == 5U) s.msw |= 1U;
         if (which == 6U) s.cs.valid = 0U;
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
+        if (which < 2U) {
+            f->allow_frame = 1;
+            assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
+            assert(bm_286_get_arch_state(cpu, &a) == BM_STATUS_OK);
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+            assert(a.sp == (uint16_t)(s.sp-6) && f->count == 7);
+            assert(f->ram[s.ss.base+a.sp] == (uint8_t)s.ip);
+            continue;
+        }
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
         assert(bm_286_get_arch_state(cpu, &a) == BM_STATUS_OK);
         assert(memcmp(&s, &a, sizeof(s)) == 0);

@@ -488,3 +488,16 @@ LEAVE repair/retry, NMI recovery failure and INTA lock release. Architectural
 register retention and preflight order remain explicit functional policies.
 Fetch/target, strings, compound-pointer faults, protection and timing are
 still open; this is not BIOS/POST validation.
+
+Compound-pointer preflights now deliver #13 for valid-cache word overruns
+in LDS/LES and indirect far CALL/JMP, retaining independent word-offset
+wrap. Tests cover 96 fault combinations, 32 valid boundary pairs, failure
+injection and four guest repair/retry programs. No pointer/return frame
+is partially committed on preflight failure.
+
+String faults need a separate evidence gate: Intel's exception notes describe
+partial index/count updates and its 1984 restart erratum explicitly concerns
+protected mode and specific steppings. These are not safely replaced by a
+generic atomic retry. See the latest coverage section for sources and the
+required mode/stepping/fault-stage matrix. Strings themselves remain usable;
+their segment-fault paths still refuse explicitly.

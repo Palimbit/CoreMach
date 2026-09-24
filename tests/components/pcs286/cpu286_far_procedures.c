@@ -234,6 +234,14 @@ static void failures(fixture_t *f)
         if (bad == 0) f->ram[0x30101] = 0xd8; /* invalid register far CALL */
         if (bad == 1) s.ds.valid = 0;
         if (bad == 2) s.bx = 0xffff;
+        if (bad == 2) {
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            a = state(f);
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+            assert(a.sp == (uint16_t)(s.sp-6) && f->count == 7);
+            assert(f->ram[s.ss.base+a.sp] == (uint8_t)s.ip);
+            continue;
+        }
         set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state(f); same(&s, &a);
         assert(f->count == 2 && f->trace[1].operation == BM_BUS_FETCH);

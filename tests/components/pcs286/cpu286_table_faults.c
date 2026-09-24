@@ -367,6 +367,96 @@ static void stack_faults(fixture_t *f)
         assert(bm_286_step(&f->cpu, &b) == BM_STATUS_IDLE && f->acks == 2);
     }
 }
+static void pointer_faults(fixture_t *f)
+{
+    static const uint8_t codes[][2] = {{0xc4,7},{0xc5,7},{0xff,0x1f},{0xff,0x2f}};
+    const uint8_t prefixes[] = {0x26,0x2e,0x36,0x3e};
+    /* Last contiguous pair and independently wrapped second word both remain
+     * valid. Do not turn every pair crossing FFFF into a fabricated fault. */
+    for (unsigned op = 0; op < 4; ++op) for (unsigned seg = 0; seg < 4; ++seg)
+    for (unsigned wrap = 0; wrap < 2; ++wrap) {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 0x80), a;
+        bm_286_boundary_t b;
+        s.es.base = 0x20000; s.es.selector = 0x2000;
+        s.bx = (uint16_t)(wrap ? 0xfffe : 0xfffc);
+        unsigned base = seg == 0 ? s.es.base : seg == 1 ? s.cs.base : seg == 2 ? s.ss.base : s.ds.base;
+        word(f, base+s.bx, 0x300); word(f, base+(uint16_t)(s.bx+2), 0x4000);
+        f->ram[0x30100] = prefixes[seg]; memcpy(f->ram+0x30101, codes[op], 2);
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK); a = state(f);
+        assert(b.kind == BM_286_BOUNDARY_INSTRUCTION && !b.has_vector);
+        assert(f->trace[3].address == base+s.bx);
+        assert(f->trace[4].address == base+(uint16_t)(s.bx+2));
+        if (op < 2) {
+            assert(a.ax == 0x300 && (op == 0 ? a.es.base : a.ds.base) == 0x40000);
+            assert(a.ip == 0x103 && a.sp == s.sp && a.cs.base == s.cs.base);
+        } else {
+            assert(a.ip == 0x300 && a.cs.base == 0x40000);
+            assert(a.sp == (uint16_t)(s.sp-(op == 2 ? 4 : 0)));
+            if (op == 2) assert(read_word(f, s.ss.base+a.sp) == 0x103);
+        }
+    }
+    for (unsigned op = 0; op < 4; ++op) for (unsigned seg = 0; seg < 4; ++seg)
+    for (unsigned edge = 0; edge < 3; ++edge) for (unsigned odd = 0; odd < 2; ++odd) {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 0x80), a, e;
+        bm_286_boundary_t b;
+        s.sp = (uint16_t)(0x400+odd); s.ax = 0xbeef;
+        s.es.base = 0x20000; s.es.selector = 0x2000;
+        s.bx = (uint16_t)(edge == 0 ? 0xfffd : edge == 1 ? 0xffff : 0x500);
+        bm_286_segment_state_t *source = seg == 0 ? &s.es : seg == 1 ? &s.cs : seg == 2 ? &s.ss : &s.ds;
+        if (edge == 2) source->limit = 0x502; /* Second word, not first, is invalid. */
+        f->ram[0x30100] = prefixes[seg]; memcpy(f->ram+0x30101, codes[op], 2);
+        word(f, 0x6034, 0x200); word(f, 0x6036, 0x4000);
+        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); e = s; e.sp -= 6; e.flags &= 0xfcffU;
+        e.cs.selector = 0x4000; e.cs.base = 0x40000; e.cs.limit = 0xffff; e.ip = 0x200;
+        same(&a, &e);
+        assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+        assert(read_word(f, s.ss.base+e.sp) == s.ip);
+        assert(read_word(f, s.ss.base+e.sp+2) == s.cs.selector);
+        assert(read_word(f, s.ss.base+e.sp+4) == s.flags);
+        assert(f->count == 8+3*odd && !f->locked && !f->acks);
+        /* Only instruction fetch, three frame words and IVT: no pointer
+         * read, partial segment reload or far-CALL return frame. */
+        for (unsigned t = 3; t < f->count-2; ++t) assert(f->trace[t].operation == BM_BUS_WRITE);
+        assert(f->trace[f->count-2].address == 0x6034 && f->trace[f->count-1].address == 0x6036);
+        bm_bus_transaction_t trace[32]; memcpy(trace, f->trace, sizeof(trace));
+        unsigned total = f->count, frame = s.ss.base+e.sp;
+        for (unsigned fail = 1; fail <= total; ++fail) for (unsigned after = 0; after < 2; ++after) {
+            assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
+            f->count = 0; f->fail_at = fail; f->after = after;
+            uint8_t expected[6]; memset(expected, 0xa5, sizeof(expected));
+            memset(f->ram+frame, 0xa5, sizeof(expected));
+            for (unsigned t = 0; t < fail-1+after; ++t) if (trace[t].operation == BM_BUS_WRITE)
+                for (unsigned j = 0; j < trace[t].size; ++j)
+                    expected[(size_t)trace[t].address+j-frame] = (uint8_t)(trace[t].value >> (8*j));
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+            a = state(f); same(&a, &s);
+            assert(f->count == fail && !memcmp(expected, f->ram+frame, sizeof(expected)));
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_INVALID_STATE && f->count == fail);
+        }
+    }
+    for (unsigned op = 0; op < 4; ++op) {
+        bm_286_arch_state_t s = setup(f, 0x3ff, 0x80), a;
+        bm_286_boundary_t b;
+        f->ram[0x30100] = 0x26; memcpy(f->ram+0x30101, codes[op], 2); f->ram[0x30103] = 0xf4;
+        const uint8_t handler[] = {0xbb,0,5,0xcf}; /* Repair BX, IRET. */
+        memcpy(f->ram+0x40200, handler, sizeof(handler));
+        word(f, 0x6034, 0x200); word(f, 0x6036, 0x4000);
+        word(f, 0x500, 0x300); word(f, 0x502, 0x4000);
+        f->ram[0x40300] = (uint8_t)(op == 2 ? 0xcb : 0xf4);
+        s.bx = 0xffff; set(f, &s);
+        for (unsigned i = 0; i < (op == 2 ? 6U : 5U); ++i) {
+            f->count = 0; assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        }
+        a = state(f);
+        assert(a.halted && a.sp == s.sp && a.flags == s.flags && a.bx == 0x500);
+        if (op < 2) {
+            assert(a.ax == 0x300 && a.ip == 0x104 && a.cs.base == s.cs.base);
+            assert((op == 0 ? a.es.base : a.ds.base) == 0x40000);
+        } else if (op == 2) assert(a.ip == 0x104 && a.cs.base == s.cs.base);
+        else assert(a.ip == 0x301 && a.cs.base == 0x40000);
+    }
+}
 int main(void)
 {
     fixture_t f = {0}; bm_286_config_t c = {0}; bm_host_services_t host = bm_null_host_services();
@@ -378,5 +468,6 @@ int main(void)
     assert(bm_286_create(&host, &c, &f.cpu) == BM_STATUS_OK);
     matrix(&f); recovery(&f); fault_and_trap(&f); external_and_errors(&f); operand_faults(&f);
     stack_faults(&f);
+    pointer_faults(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }

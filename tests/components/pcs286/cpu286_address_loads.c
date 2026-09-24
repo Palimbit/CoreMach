@@ -12,20 +12,24 @@ typedef struct fixture {
     bm_cpu_t cpu;
     uint8_t *ram;
     bm_bus_transaction_t trace[32];
-    unsigned count, fail_at;
+    unsigned count, fail_at, allow_frame;
 } fixture_t;
 static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
 {
     fixture_t *f = context;
     assert(f->count < 32 && t->address + t->size <= 0x1000000U);
-    assert(t->operation != BM_BUS_WRITE && (t->size == 1 || t->size == 2));
+    assert(t->operation != BM_BUS_WRITE || f->allow_frame);
+    assert(t->size == 1 || t->size == 2);
     assert(t->endianness == BM_ENDIAN_LITTLE && !t->wait_states);
     assert(t->space == (t->operation == BM_BUS_FETCH ? BM_ADDRESS_PROGRAM : BM_ADDRESS_DATA));
     f->trace[f->count++] = *t;
     if (f->fail_at == f->count) return BM_STATUS_DEVICE_ERROR;
-    t->value = 0;
+    if (t->operation != BM_BUS_WRITE) t->value = 0;
     for (unsigned i = 0; i < t->size; ++i)
-        t->value |= (uint64_t)f->ram[(size_t)t->address + i] << (8U * i);
+        if (t->operation == BM_BUS_WRITE)
+            f->ram[(size_t)t->address+i] = (uint8_t)(t->value >> (8U*i));
+        else
+            t->value |= (uint64_t)f->ram[(size_t)t->address + i] << (8U * i);
     t->wait_states = 2; return BM_STATUS_OK;
 }
 static bm_286_arch_state_t state(fixture_t *f)
@@ -64,7 +68,7 @@ static bm_286_arch_state_t setup(fixture_t *f, const uint8_t *code, size_t size)
 {
     bm_286_arch_state_t s;
     assert(f->cpu.ops.reset(f->cpu.context) == BM_STATUS_OK);
-    f->count = f->fail_at = 0; s = state(f); s.ip = 0x100;
+    f->count = f->fail_at = f->allow_frame = 0; s = state(f); s.ip = 0x100;
     s.cs.selector = 0x3000; s.cs.base = 0x30000;
     s.ds.selector = 0x1000; s.ds.base = 0x10000;
     s.ss.selector = 0x2000; s.ss.base = 0x20000;
@@ -221,7 +225,7 @@ static void failures(fixture_t *f)
             if (bad == 4) s.ds.valid = s.ss.valid = 0;
             if (bad == 5) s.ds.limit = s.ss.limit = 1;
             if (form == 0 && bad >= 4) continue; /* LEA needs no data segment. */
-            if (form == 3 && bad == 5) { /* XLAT #13 cannot build its stack frame. */
+            if (form != 0 && bad == 5) { /* Operand #13 cannot build its stack frame. */
                 set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
                 a = state(f); s.shutdown = 1; same(&s, &a);
                 assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
@@ -238,8 +242,13 @@ static void failures(fixture_t *f)
             bm_286_arch_state_t s = setup(f, code, 2), a; bm_286_boundary_t b;
             s.bx = (uint16_t)(bad == 0 ? 0xfffd : bad == 1 ? 0xffff : 0x500);
             if (bad == 2) s.ds.limit = 0x502; /* second word crosses limit */
-            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
-            a = state(f); same(&s, &a); assert(f->count == 2);
+            f->allow_frame = 1;
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            a = state(f);
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 13);
+            assert(a.ax == s.ax && a.ds.base == s.ds.base && a.es.base == s.es.base);
+            assert(a.sp == (uint16_t)(s.sp-6) && f->count == 7);
+            assert(f->ram[s.ss.base+a.sp] == (uint8_t)s.ip);
         }
 }
 int main(void)
