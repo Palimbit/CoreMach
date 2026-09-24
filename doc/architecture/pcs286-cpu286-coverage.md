@@ -2,7 +2,23 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: register-source address-load #6
+## Latest tranche: invalid CS loads and far register transfers
+
+Without LOCK/REP, MOV CS,r/m16 and register-source far CALL/JMP now deliver
+real-mode #6. Intel PRM [B-12](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=222)
+identifies MOV CS as invalid; [9.6.1](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=172)
+describes invalid memory-only operands and prefix-inclusive restart frames.
+EA displacement bytes are decoded before rejection; no operand read or call
+return frame is issued. That ordering remains functional policy, not measured
+fault precedence. Reserved segment fields, opcode-extension aliases and
+combined LOCK/REP cases are not reclassified without further evidence.
+
+New tests cover 96 encoding/alignment cases, 48 before/after transfer failures,
+and three guest ModR/M repair/IRET/retry programs. Valid MOV-from-CS and near
+register transfers retain their previous coverage. No ABI, timing or scheduler
+change. Protected mode and other invalid forms remain separate work.
+
+## Previous tranche: register-source address-load #6
 
 LEA/LDS/LES with Mod=3 now deliver real-mode #6 through existing fault entry,
 instead of stopping as unsupported. This is explicitly documented in Intel

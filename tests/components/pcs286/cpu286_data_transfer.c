@@ -438,6 +438,14 @@ static void test_rejections_and_instances(void)
     ca = make_cpu(a); cb = make_cpu(b);
     for (i = 0U; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
         prepare(&ca, a, rejected[i], sizeof(rejected[i]), &state);
+        if (i == 3U) {
+            state.sp = 0x200;
+            assert(bm_286_set_arch_state(&ca, &state) == BM_STATUS_OK);
+            assert(bm_286_step(&ca, &boundary) == BM_STATUS_OK);
+            assert(boundary.has_vector && boundary.vector == 6 && a->count == 7);
+            assert(state_of(&ca).sp == 0x1fa);
+            continue;
+        }
         assert(bm_286_set_arch_state(&ca, &state) == BM_STATUS_OK);
         assert(bm_286_step(&ca, &boundary) == BM_STATUS_UNSUPPORTED);
         assert(state_of(&ca).ip == 0U);

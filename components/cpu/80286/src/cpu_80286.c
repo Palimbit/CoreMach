@@ -296,6 +296,8 @@ typedef struct decoded_286 {
     uint8_t operand_limit_fault; /* Operand, fetch, length or target: unwind to #13. */
 } decoded_286_t;
 
+static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector);
+
 typedef struct operand_286 {
     uint8_t reg_field;
     uint8_t reg_number;
@@ -962,6 +964,9 @@ static bm_status_t execute_ff_control(decoded_286_t *decode,
     uint16_t value, selector;
     bm_status_t status;
     if (operand->reg_field == 3U || operand->reg_field == 5U) {
+        if (!operand->memory)
+            return decode->lock_prefix ? BM_STATUS_UNSUPPORTED :
+                deliver_fault(decode, 6U); /* Combined LOCK precedence pending. */
         status = pointer_preflight(decode, operand);
         if (status != BM_STATUS_OK)
             return status;
@@ -2074,8 +2079,11 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         }
         if (opcode == 0x8eU) {
             segment = segment_register(arch, operand.reg_field);
-            if (segment == NULL || operand.reg_field == 1U)
-                return BM_STATUS_UNSUPPORTED; /* Invalid MOV CS: #6 pending. */
+            if (operand.reg_field == 1U)
+                return decode->lock_prefix ? BM_STATUS_UNSUPPORTED :
+                    deliver_fault(decode, 6U); /* MOV CS; LOCK precedence pending. */
+            if (segment == NULL)
+                return BM_STATUS_UNSUPPORTED; /* Reserved-field aliases unverified. */
             status = read_operand(decode, &operand, 2U, &value);
             if (status != BM_STATUS_OK)
                 return status;

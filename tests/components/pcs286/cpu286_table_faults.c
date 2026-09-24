@@ -585,6 +585,53 @@ static void invalid_address_forms(fixture_t *f)
         assert(a.ax == (op == 0 ? 0x500 : 0xbeef));
     }
 }
+static void invalid_control_forms(fixture_t *f)
+{
+    /* MOV CS across all EA forms; far CALL/JMP across all register sources. */
+    for (unsigned op = 0; op < 3; ++op)
+        for (unsigned mode = (op ? 3U : 0U); mode < 4; ++mode)
+            for (unsigned rm = 0; rm < 8; ++rm)
+                for (unsigned odd = 0; odd < 2; ++odd) {
+                    bm_286_arch_state_t s = setup(f, 0x3ff, 6), a, e;
+                    bm_286_boundary_t b;
+                    uint8_t code[] = {0x26, (uint8_t)(op ? 0xff : 0x8e),
+                        (uint8_t)((mode<<6) | ((op == 0 ? 1U : op == 1 ? 3U : 5U)<<3) | rm), 0, 5};
+                    unsigned n = 3 + (mode == 1 ? 1 : mode == 2 || (mode == 0 && rm == 6) ? 2 : 0);
+                    memcpy(f->ram+0x30100, code, sizeof(code)); s.sp += (uint16_t)odd;
+                    s.ax = 0x1234; s.bx = 0xffff; set(f, &s);
+                    assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK); a = state(f); e = s;
+                    e.sp -= 6; e.flags &= 0xfcffU; e.cs.selector = 0x4000; e.cs.base = 0x40000; e.ip = 0x300;
+                    same(&a, &e); assert(b.has_vector && b.vector == 6 && b.kind == BM_286_BOUNDARY_EXCEPTION);
+                    assert(read_word(f, s.ss.base+a.sp) == s.ip && f->count == n+(odd ? 8U : 5U));
+                    for (unsigned i = 0; i < n; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);
+                }
+    for (unsigned op = 0; op < 3; ++op) {
+        for (unsigned after = 0; after < 2; ++after)
+            for (unsigned fail = 1; fail <= 8; ++fail) {
+                bm_286_arch_state_t s = setup(f, 0x3ff, 6), a; bm_286_boundary_t b;
+                f->ram[0x30101] = (uint8_t)(op ? 0xff : 0x8e);
+                f->ram[0x30102] = (uint8_t)(op == 0 ? 0xc8 : op == 1 ? 0xd8 : 0xe8);
+                f->fail_at = fail; f->after = after; set(f, &s);
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+                a = state(f); same(&a, &s);
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_INVALID_STATE && f->count == fail);
+            }
+        /* Guest repairs MOV CS to MOV ES, far register CALL/JMP to near AX. */
+        bm_286_arch_state_t s = setup(f, 0x3ff, 6), a; bm_286_boundary_t b;
+        uint8_t handler[] = {0xc6,0x06,2,1,(uint8_t)(op == 0 ? 0xc0 : op == 1 ? 0xd0 : 0xe0),0xcf};
+        f->ram[0x30101] = (uint8_t)(op ? 0xff : 0x8e);
+        f->ram[0x30102] = (uint8_t)(op == 0 ? 0xc8 : op == 1 ? 0xd8 : 0xe8);
+        memcpy(f->ram+0x40300, handler, sizeof(handler));
+        f->ram[0x30500] = (uint8_t)(op == 1 ? 0xc3 : 0xf4);
+        s.ds = s.cs; s.ax = 0x500; set(f, &s);
+        for (unsigned i = 0; i < (op == 1 ? 6U : 5U); ++i) {
+            f->count = 0; assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        }
+        a = state(f); assert(a.halted && a.sp == s.sp && a.cs.selector == s.cs.selector);
+        assert(a.ip == (op == 2 ? 0x501 : 0x104));
+        if (!op) assert(a.es.selector == 0x500);
+    }
+}
 int main(void)
 {
     fixture_t f = {0}; bm_286_config_t c = {0}; bm_host_services_t host = bm_null_host_services();
@@ -599,5 +646,6 @@ int main(void)
     pointer_faults(&f);
     instruction_faults(&f);
     invalid_address_forms(&f);
+    invalid_control_forms(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }

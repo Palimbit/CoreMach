@@ -425,6 +425,15 @@ static void limits_and_gaps(bm_cpu_t *cpu, fixture_t *f)
     for (i = 0; i < sizeof(gaps) / sizeof(gaps[0]); ++i) {
         bm_286_arch_state_t s = load(cpu, f, gaps[i], 3U), a;
         bm_286_boundary_t b;
+        if (i < 2U) {
+            word_at(f, 24, 0x100); word_at(f, 26, 0x0800);
+            assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
+            assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
+            a = state_of(cpu);
+            assert(b.has_vector && b.vector == 6 && a.sp == (uint16_t)(s.sp-6));
+            assert(read_word(f, STACK+a.sp) == s.ip);
+            continue;
+        }
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
         assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
         a = state_of(cpu); assert(memcmp(&a, &s, sizeof(s)) == 0);
