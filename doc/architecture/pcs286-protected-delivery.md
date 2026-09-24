@@ -155,6 +155,9 @@ zero errors, and the catalogue remains valid at 32 machines/five locales.
 Local MSVC remains unavailable; current remote CI is reported separately on
 draft PR #210. Tests use authored synthetic data only. The preceding optional
 SST run is historical real-mode evidence, not a test of this protected tranche.
+The first remote MSVC build caught C4244 in the test trace's narrowing address
+parameter. The trace now retains the bus contract's 64-bit address and separately
+asserts the CPU's 24-bit limit; `/W4 /WX` and all assertions remain enabled.
 
 Next is handoff C: protected fetch/data/stack access checks. D must join those
 checks, instruction restart, TF/HOLD/event sampling and these delivery helpers

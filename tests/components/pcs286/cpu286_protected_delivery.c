@@ -7,7 +7,7 @@
 #include <string.h>
 
 typedef struct transfer {
-    uint32_t address;
+    uint64_t address;
     unsigned size, kind; /* read, write, INTA */
     bool locked;
     uint16_t value;
@@ -47,7 +47,7 @@ static void same_frame(const bm_286_arch_state_t *a, const bm_286_arch_state_t *
     assert(a->nmi_blocked == b->nmi_blocked);
 }
 
-static bool begin(fixture_t *f, unsigned kind, uint32_t address, unsigned size, uint16_t value)
+static bool begin(fixture_t *f, unsigned kind, uint64_t address, unsigned size, uint16_t value)
 {
     same_frame(f->observed, &f->before); /* No early architectural frame commit. */
     assert(f->calls < sizeof(f->trace) / sizeof(f->trace[0]));
@@ -69,6 +69,7 @@ static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
     fixture_t *f = context;
     unsigned i;
     assert(t->space == BM_ADDRESS_DATA && t->endianness == BM_ENDIAN_LITTLE);
+    assert(t->address <= 0xffffffu);
     assert(t->size == 1 || (t->size == 2 && !(t->address & 1u)));
     assert(t->alignment == t->size && t->wait_states == 0);
     assert(t->attributes == (f->locked ? BM_BUS_TRANSACTION_LOCKED : 0u));
