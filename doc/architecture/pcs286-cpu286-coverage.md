@@ -2,7 +2,22 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: instruction fetch, length and near-target faults
+## Latest tranche: register-source address-load #6
+
+LEA/LDS/LES with Mod=3 now deliver real-mode #6 through existing fault entry,
+instead of stopping as unsupported. This is explicitly documented in Intel
+PRM [B-62](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=272)
+and [B-63](https://tv.manualsonline.com/manuals/mfg/intel/80286.html?p=273).
+Other unsupported forms are not automatically classified as invalid; LOCK,
+REP and protected-mode limitations remain unchanged.
+
+Tests cover all 192 register-source encodings, another 384 prefixed/even-odd
+stack cases, before/after errors at every transfer, and three guest-only
+ModR/M repair/IRET/retry programs. Destination registers/segments are untouched
+before #6; the frame saves the prefix address. No new hardware capture or
+timing claim. Remaining invalid-form groups require separate evidence.
+
+## Previous tranche: instruction fetch, length and near-target faults
 
 An instruction requiring a byte past a valid CS limit, or more than ten bytes,
 now unwinds to real-mode #13. Taken near CALL/JMP/Jcc/LOOP/JCXZ and near RET

@@ -211,8 +211,13 @@ static void failures(fixture_t *f)
         for (unsigned mr = 192; mr < 256; ++mr) {
             uint8_t code[] = {(uint8_t)(op == 0 ? 0x8d : op == 1 ? 0xc4 : 0xc5),(uint8_t)mr};
             bm_286_arch_state_t s = setup(f, code, 2), a; bm_286_boundary_t b;
-            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
-            a = state(f); same(&s, &a); assert(f->count == 2);
+            f->allow_frame = 1;
+            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            a = state(f);
+            assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 6);
+            s.sp -= 6; s.flags &= 0xfcffU; s.trap_pending = 0;
+            s.cs.selector = 0; s.cs.base = 0; s.cs.access = 0; s.ip = 0;
+            same(&s, &a); assert(f->count == 7);
         }
     for (unsigned form = 0; form < 4; ++form)
         for (unsigned bad = 0; bad < 6; ++bad) {

@@ -1944,7 +1944,7 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         if (status != BM_STATUS_OK)
             return status;
         if (!operand.memory)
-            return BM_STATUS_UNSUPPORTED; /* Invalid Mod=3: guest #6 pending. */
+            return deliver_fault(decode, 6U); /* LEA/LDS/LES require memory. */
         if (opcode == 0x8dU) {
             /* LEA computes only an offset: no data access or segment check. */
             *word_register(arch, operand.reg_field) = operand.offset;

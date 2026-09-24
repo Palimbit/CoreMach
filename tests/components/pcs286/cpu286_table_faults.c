@@ -541,6 +541,50 @@ static void instruction_faults(fixture_t *f)
         a = state(f); assert(a.halted && a.ip == 0x101 && a.sp == s.sp && a.flags == s.flags);
     }
 }
+static void invalid_address_forms(fixture_t *f)
+{
+    const uint8_t ops[] = {0x8d,0xc4,0xc5};
+    for (unsigned op = 0; op < 3; ++op)
+        for (unsigned mr = 0xc0; mr <= 0xff; ++mr)
+            for (unsigned odd = 0; odd < 2; ++odd) {
+                bm_286_arch_state_t s = setup(f, 0x3ff, 6), e, a;
+                bm_286_boundary_t b;
+                f->ram[0x30100] = 0x26; f->ram[0x30101] = ops[op];
+                f->ram[0x30102] = (uint8_t)mr; s.sp += (uint16_t)odd;
+                set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+                a = state(f); e = s; e.sp -= 6; e.flags &= 0xfcffU;
+                e.cs.selector = 0x4000; e.cs.base = 0x40000; e.ip = 0x300;
+                same(&a, &e);
+                assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 6);
+                assert(read_word(f, s.ss.base+a.sp) == s.ip);
+                assert(f->count == (odd ? 11U : 8U));
+            }
+    for (unsigned op = 0; op < 3; ++op) {
+        for (unsigned after = 0; after < 2; ++after)
+            for (unsigned fail = 1; fail <= 8; ++fail) {
+                bm_286_arch_state_t s = setup(f, 0x3ff, 6), a;
+                bm_286_boundary_t b;
+                f->ram[0x30101] = ops[op]; f->ram[0x30102] = 0xc0;
+                f->fail_at = fail; f->after = after; set(f, &s);
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+                a = state(f); same(&s, &a);
+                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_INVALID_STATE && f->count == fail);
+            }
+        /* Repair ModR/M in guest memory, IRET and execute the legal form. */
+        bm_286_arch_state_t s = setup(f, 0x3ff, 6), a;
+        bm_286_boundary_t b;
+        const uint8_t handler[] = {0xc6,0x06,2,1,7,0xcf};
+        f->ram[0x30101] = ops[op]; f->ram[0x30102] = 0xc0;
+        memcpy(f->ram+0x40300, handler, sizeof(handler));
+        s.ds = s.cs; s.bx = 0x500; word(f, 0x500, 0xbeef); word(f, 0x502, 0x1234);
+        set(f, &s);
+        for (unsigned i = 0; i < 5; ++i) {
+            f->count = 0; assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        }
+        a = state(f); assert(a.halted && a.ip == 0x104 && a.sp == s.sp && a.flags == s.flags);
+        assert(a.ax == (op == 0 ? 0x500 : 0xbeef));
+    }
+}
 int main(void)
 {
     fixture_t f = {0}; bm_286_config_t c = {0}; bm_host_services_t host = bm_null_host_services();
@@ -554,5 +598,6 @@ int main(void)
     stack_faults(&f);
     pointer_faults(&f);
     instruction_faults(&f);
+    invalid_address_forms(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;
 }
