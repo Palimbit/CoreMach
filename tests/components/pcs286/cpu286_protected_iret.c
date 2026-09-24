@@ -174,7 +174,7 @@ static uint16_t restored_flags(uint16_t old, uint16_t saved, unsigned cpl)
         if (bit == 1 || bit == 3 || bit == 5 || bit == 15) continue;
         value = (saved & (1u << bit)) != 0;
         if ((bit == 12 || bit == 13) && cpl != 0) value = (old & (1u << bit)) != 0;
-        if (bit == 9 && cpl > ((old >> 12) & 3)) value = (old & (1u << bit)) != 0;
+        if (bit == 9 && cpl > ((old >> 12) & 3u)) value = (old & (1u << bit)) != 0;
         if (value) result |= (uint16_t)(1u << bit);
     }
     return result;
