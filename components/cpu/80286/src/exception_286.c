@@ -181,7 +181,7 @@ bm_status_t bm_286_pm_iret(bm_286_arch_state_t *arch,
      * IF only when CPL <= the incoming IOPL. Bits 15/5/3 are reserved zero,
      * bit 1 reserved one, retaining the core's canonical 286 FLAGS policy. */
     if (arch->cpl == 0) mask |= 0x3000u;
-    if (arch->cpl > ((arch->flags >> 12) & 3u)) mask &= (uint16_t)~0x0200u;
+    if (arch->cpl > ((arch->flags >> 12) & 3u)) mask &= 0xfdffu;
     flags = (uint16_t)(((flags & mask) | (arch->flags & (uint16_t)~mask)) & 0x7fd5u);
     flags |= 2u;
     /* All guest checks and frame reads precede the accessed RMW. Reuse its

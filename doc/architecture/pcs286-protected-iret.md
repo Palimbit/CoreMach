@@ -145,6 +145,8 @@ The prior workstation's MSVC results are historical evidence, not a local pass.
 Tests use authored synthetic memory only. The initial test compilation caught
 an incorrect call shape for `bm_null_host_services`; it was corrected without
 relaxing warnings or assertions. Public real-mode behavior is unchanged.
+The first remote MSVC build caught C4310 on narrowing the complemented IF
+constant. An explicit 16-bit clear mask fixes it; `/W4 /WX` remains enabled.
 
 Final local GCC UCRT64 Debug and Release each pass **108 ordinary tests** with
 the same two explicit skips. The pinned optional SST selection still reports
