@@ -124,7 +124,28 @@ Tests cover 1,024 combinations of byte contents, initial A and alignment,
 physical wrap, five errors before/after read/write, no replay, and no-write
 null/LDTR loads. PE dispatch, SS shadow and fault delivery remain pending.
 
-## Next: instruction integration and protected execution/fault gate
+## Common load-path integration
+
+MOV-to-ES/SS/DS, POP ES/SS/DS and LDS/LES now call the same private
+`bm_286_load_segment_state` path. Real mode retains its previous cache values
+and never invokes descriptor callbacks. Protected state uses preparation and
+locked writeback/commit. LDS/LES general-register and POP stack-pointer changes
+remain after successful segment loading; SS shadow stays instruction-owned.
+No new public API or protected-step bypass exists.
+
+The public PE gate remains before fetch, and the instruction execution helper
+also still refuses PE. Tests exercise protected architectural states through
+the common load path, not protected opcodes. Guest rejection metadata must not
+be delivered through the existing real-mode frame. LLDT is supported by the
+private state load path but its opcode dispatcher remains pending. Block 3
+is therefore not complete as a protected instruction feature.
+
+Added tests sweep all selectors for three real-mode destinations (196,608
+loads), test protected read/write failures before/after effects for each target,
+and preserve SP/IP/registers/shadow while checking cache commit. Existing real
+MOV/POP/LDS/LES and LOCK suites exercise the actual connected instruction path.
+
+## Next: protected execution and exception-entry integration
 
 Connect lookup to DS/ES/SS and LLDT validation, with explicit permission and
 presence checks, fault metadata and staged architectural state. Add accessed

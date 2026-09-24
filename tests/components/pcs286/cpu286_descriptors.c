@@ -463,6 +463,85 @@ static void accessed_commit(void)
     }
 }
 
+typedef struct load_fixture {
+    table_fixture_t table;
+    accessed_fixture_t accessed;
+} load_fixture_t;
+
+static bm_status_t load_bus(void *context, bm_bus_transaction_t *t)
+{
+    load_fixture_t *f = context;
+    return (t->attributes & BM_BUS_TRANSACTION_LOCKED) ?
+        accessed_bus(&f->accessed, t) : table_access(&f->table, t);
+}
+
+static void state_loads(void)
+{
+    bm_286_arch_state_t arch = {0}, before;
+    bm_286_config_t config = {0};
+    bm_286_segment_load_result_t result;
+    static const unsigned registers[] = {0, 2, 3};
+    unsigned n, selector, failure, after;
+    load_fixture_t f;
+    /* Real loads must remain independent of all host callbacks. */
+    for (n = 0; n < 3; ++n) {
+        bm_286_segment_state_t *s = n == 0 ? &arch.es : n == 1 ? &arch.ss : &arch.ds;
+        for (selector = 0; selector < 65536; ++selector) {
+            assert(bm_286_load_segment_state(&arch, &config, registers[n],
+                   (uint16_t)selector, &result) == BM_STATUS_OK);
+            assert(result.loaded && !result.waits && !result.fault_vector);
+            assert(s->selector == selector && s->base == selector * 16u);
+            assert(s->limit == 0xffff && !s->access && s->valid);
+        }
+    }
+    memcpy(&before, &arch, sizeof(arch));
+    assert(bm_286_load_segment_state(&arch, &config, 4, 8, &result) == BM_STATUS_OK);
+    assert(result.fault_vector == 6 && !result.loaded);
+    assert(memcmp(&arch, &before, sizeof(arch)) == 0);
+    for (n = 0; n < 3; ++n)
+    for (after = 0; after < 2; ++after)
+    for (failure = 0; failure <= 6; ++failure) {
+        bm_286_segment_state_t *s;
+        memset(&arch, 0, sizeof(arch)); memset(&f, 0, sizeof(f));
+        arch.msw = 1; arch.gdtr.base = 0x1000; arch.gdtr.limit = 15;
+        arch.ax = 0xface; arch.ip = 0x1234; arch.sp = 0x9876;
+        arch.flags = 0x202; arch.interrupt_shadow = BM_286_SHADOW_INTR_ONLY;
+        s = n == 0 ? &arch.es : n == 1 ? &arch.ss : &arch.ds;
+        s->selector = 0xbeef; s->valid = 1;
+        memcpy(&before, &arch, sizeof(arch));
+        f.table.first = 0x1008; f.table.bytes[0] = 0xff; f.table.bytes[1] = 0xff;
+        f.table.bytes[3] = 0x20; f.table.bytes[5] = 0x92;
+        f.table.failure = BM_STATUS_DEVICE_ERROR; f.table.after = after != 0;
+        f.table.fail_at = failure <= 4 ? failure : 0;
+        f.accessed.address = 0x100d; f.accessed.byte = 0x92;
+        f.accessed.destination = s; f.accessed.old_selector = 0xbeef;
+        f.accessed.failure = BM_STATUS_DEVICE_ERROR; f.accessed.after = after != 0;
+        f.accessed.fail_at = failure > 4 ? failure - 4 : 0;
+        config.access = load_bus; config.access_context = &f;
+        config.bus_lock = accessed_lock; config.pin_context = &f.accessed;
+        assert(bm_286_load_segment_state(&arch, &config, registers[n], 8,
+               &result) == (failure ? BM_STATUS_DEVICE_ERROR : BM_STATUS_OK));
+        assert(!result.fault_vector && result.loaded == (failure == 0));
+        assert(!f.accessed.locked && f.accessed.locks == f.accessed.unlocks);
+        if (failure) assert(memcmp(&arch, &before, sizeof(arch)) == 0);
+        else {
+            assert(s->selector == 8 && s->base == 0x2000 && s->limit == 0xffff);
+            assert(s->access == 0x93 && s->valid && result.waits == 26);
+            /* Check the common path does not commit instruction-owned state. */
+            assert(arch.sp == before.sp && arch.ip == before.ip && arch.ax == before.ax);
+            assert(arch.flags == before.flags && arch.interrupt_shadow == before.interrupt_shadow);
+        }
+    }
+    memset(&f, 0, sizeof(f)); arch.gdtr.limit = 14;
+    memcpy(&before, &arch, sizeof(arch));
+    assert(bm_286_load_segment_state(&arch, &config, 3, 8, &result) == BM_STATUS_OK);
+    assert(!result.loaded && result.fault_vector == 13 && result.fault_error == 8);
+    assert(memcmp(&arch, &before, sizeof(arch)) == 0 && f.table.calls == 0);
+    assert(bm_286_load_segment_state(&arch, &config, 1, 8, &result) == BM_STATUS_INVALID_ARGUMENT);
+    assert(!result.loaded && !result.fault_vector);
+    assert(memcmp(&arch, &before, sizeof(arch)) == 0);
+}
+
 int main(void)
 {
     selectors();
@@ -471,6 +550,7 @@ int main(void)
     tables();
     load_plans();
     accessed_commit();
+    state_loads();
     selectors();
     return 0;
 }

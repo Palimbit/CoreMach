@@ -252,3 +252,50 @@ bm_status_t bm_286_pm_commit_load(bm_286_pm_load_plan_t *plan,
     *destination = plan->segment;
     return BM_STATUS_OK;
 }
+
+bm_status_t bm_286_load_segment_state(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, unsigned reg, uint16_t selector,
+    bm_286_segment_load_result_t *result)
+{
+    bm_286_segment_state_t *destination;
+    bm_286_pm_load_plan_t plan;
+    bm_status_t status;
+    if (result == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    memset(result, 0, sizeof(*result));
+    if (arch == NULL || config == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    switch (reg) {
+    case 0: destination = &arch->es; break;
+    case 2: destination = &arch->ss; break;
+    case 3: destination = &arch->ds; break;
+    case 4: destination = &arch->ldtr; break;
+    default: return BM_STATUS_INVALID_ARGUMENT;
+    }
+    if (!(arch->msw & 1u)) {
+        if (reg == 4) {
+            result->fault_vector = 6;
+            return BM_STATUS_OK;
+        }
+        destination->selector = selector;
+        destination->base = (uint32_t)selector << 4;
+        destination->limit = 0xffff;
+        destination->access = 0;
+        destination->valid = 1;
+        result->loaded = true;
+        return BM_STATUS_OK;
+    }
+    status = bm_286_pm_prepare_load(&arch->gdtr, &arch->ldtr, selector, arch->cpl,
+        reg == 4 ? BM_286_PM_LOAD_LDT : reg == 2 ? BM_286_PM_LOAD_STACK : BM_286_PM_LOAD_DATA,
+        config->access, config->access_context, &plan);
+    result->waits = plan.waits;
+    result->fault_vector = plan.fault_vector;
+    result->fault_error = plan.fault_error;
+    if (status != BM_STATUS_OK || !plan.prepared)
+        return status;
+    status = bm_286_pm_commit_load(&plan, config->access, config->access_context,
+        config->bus_lock, config->pin_context, destination);
+    result->waits = plan.waits;
+    result->loaded = status == BM_STATUS_OK;
+    return status;
+}

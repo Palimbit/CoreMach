@@ -16,7 +16,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "New private selector/descriptor interpretation, segment bounds, GDT/LDT lookup, ordinary DS/ES/SS/LLDT preparation and locked accessed-byte update/cache commit based on Intel 80286/80287 PRM 1987 chapters 6, 7, 11 and appendix B. Type/privilege/presence fault metadata remains separate from host errors. Consumed plans prevent failed write replay; no emulator implementation copied. Byte RMW ordering and null-cache zeroing are functional policies, not silicon evidence. No instruction integration, gate payloads, guest fault delivery or protected execution enabled. Not a clean-room claim for the CPU or product."
+      "local_changes": "New private selector/descriptor interpretation, segment bounds, GDT/LDT lookup, ordinary DS/ES/SS/LLDT preparation and locked accessed-byte update/cache commit based on Intel 80286/80287 PRM 1987 chapters 6, 7, 11 and appendix B. Common state load connects existing real-mode MOV/POP/LDS/LES to protected preparation; public PE execution and fault delivery remain gated. Type/privilege/presence metadata stays separate from host errors. Consumed plans prevent failed write replay; no external emulator implementation copied. Byte RMW ordering and null-cache zeroing are functional policies, not silicon evidence. Not a clean-room claim for the CPU or product."
     },
     {
       "id": "portable-at-pic",

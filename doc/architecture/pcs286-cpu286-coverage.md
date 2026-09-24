@@ -2,7 +2,15 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: locked accessed update and staged cache commit
+## Latest tranche: common instruction segment-load path
+
+MOV, POP and LDS/LES now share real/protected state load logic instead of
+duplicating real-mode cache updates. Real instruction regressions pass; private
+protected-state tests cover staged failures without committing CPU state.
+Public PE execution and protected fault frames remain gated. LLDT opcode
+dispatch is pending; this does not claim execution of protected programs.
+
+## Previous tranche: locked accessed update and staged cache commit
 
 Private load plans now capture the access-byte address and are consumed by a
 locked byte RMW followed by cache commit. Host errors release exclusion, retain

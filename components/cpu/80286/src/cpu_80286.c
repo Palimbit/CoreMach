@@ -32,6 +32,7 @@
  * These inherited works are GPL-2.0-or-later. No global core is embedded.
  */
 #include <blumach/components/cpu_80286.h>
+#include "descriptor_286.h"
 
 #include <string.h>
 
@@ -297,6 +298,29 @@ typedef struct decoded_286 {
 } decoded_286_t;
 
 static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector);
+
+static bm_status_t load_data_segment(decoded_286_t *decode, unsigned reg,
+                                      uint16_t selector)
+{
+    bm_286_segment_load_result_t result;
+    bm_status_t status;
+    /* Public PE execution remains gated until protected fault entry exists.
+     * Never nest automatic descriptor exclusion inside instruction LOCK. */
+    if ((decode->state->arch.msw & MSW_PE) &&
+        (decode->state->lock_active || decode->lock_prefix))
+        return BM_STATUS_UNSUPPORTED;
+    status = bm_286_load_segment_state(&decode->state->arch,
+        &decode->state->config, reg, selector, &result);
+    decode->waits += result.waits;
+    if (status != BM_STATUS_OK)
+        return status;
+    if (result.fault_vector != 0) {
+        if (decode->state->arch.msw & MSW_PE)
+            return BM_STATUS_UNSUPPORTED; /* Do not use a real-mode frame. */
+        return deliver_fault(decode, result.fault_vector);
+    }
+    return result.loaded ? BM_STATUS_OK : BM_STATUS_INVALID_STATE;
+}
 
 typedef struct operand_286 {
     uint8_t reg_field;
@@ -1014,7 +1038,6 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
     operand_286_t operand;
-    bm_286_segment_state_t *segment;
     uint16_t value = 0U, extra = 0U, target, next_cx;
     uint8_t byte;
     int take;
@@ -1084,12 +1107,9 @@ static bm_status_t execute_stack_control(decoded_286_t *decode, uint8_t opcode)
             if (!operand.memory && operand.reg_number == 4U)
                 return BM_STATUS_OK;
         } else if (opcode == 0x07U || opcode == 0x17U || opcode == 0x1fU) {
-            segment = segment_register(arch, opcode >> 3);
-            segment->selector = value;
-            segment->base = (uint32_t) value << 4;
-            segment->limit = 0xffffU;
-            segment->access = 0U;
-            segment->valid = 1U;
+            status = load_data_segment(decode, opcode >> 3, value);
+            if (status != BM_STATUS_OK)
+                return status;
             if (opcode == 0x17U)
                 decode->next_shadow = BM_286_SHADOW_SS_LOAD;
         } else {
@@ -1967,12 +1987,9 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             return status;
         /* Source may itself use DS/ES or the destination register. Read it
          * completely before replacing either part of the destination. */
-        segment = opcode == 0xc4U ? &arch->es : &arch->ds;
-        segment->selector = other;
-        segment->base = (uint32_t) other << 4;
-        segment->limit = 0xffffU;
-        segment->access = 0U;
-        segment->valid = 1U;
+        status = load_data_segment(decode, opcode == 0xc4U ? 0U : 3U, other);
+        if (status != BM_STATUS_OK)
+            return status;
         *word_register(arch, operand.reg_field) = value;
         return BM_STATUS_OK;
     }
@@ -2087,11 +2104,9 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             status = read_operand(decode, &operand, 2U, &value);
             if (status != BM_STATUS_OK)
                 return status;
-            segment->selector = value;
-            segment->base = (uint32_t) value << 4;
-            segment->limit = 0xffffU;
-            segment->access = 0U;
-            segment->valid = 1U;
+            status = load_data_segment(decode, operand.reg_field, value);
+            if (status != BM_STATUS_OK)
+                return status;
             if (operand.reg_field == 2U)
                 decode->next_shadow = BM_286_SHADOW_SS_LOAD;
             return BM_STATUS_OK;

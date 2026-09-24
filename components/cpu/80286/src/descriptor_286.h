@@ -99,4 +99,19 @@ bm_status_t bm_286_pm_commit_load(bm_286_pm_load_plan_t *plan,
     bm_bus_access_fn access, void *context, bm_286_pin_fn bus_lock,
     void *pin_context, bm_286_segment_state_t *destination);
 
+typedef struct bm_286_segment_load_result {
+    uint64_t waits;
+    uint16_t fault_error;
+    uint8_t fault_vector;
+    bool loaded;
+} bm_286_segment_load_result_t;
+
+/* CPU-internal common load path: encoded register 0=ES, 2=SS, 3=DS, 4=LDTR.
+ * No CS or task/privilege-switch loads. Instruction callers own operand reads,
+ * SP/general-register commits, IP and SS shadow. No held LOCK is permitted on
+ * entry to the protected path. No public protected-step bypass is provided. */
+bm_status_t bm_286_load_segment_state(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, unsigned reg, uint16_t selector,
+    bm_286_segment_load_result_t *result);
+
 #endif
