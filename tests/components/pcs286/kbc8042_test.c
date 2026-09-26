@@ -731,7 +731,7 @@ static void command_byte_latches(void)
         assert(bm_kbc8042_create(&h,&c,&f.k)==BM_STATUS_OK);
         ccb(&f,v);
         assert(state(&f).command_byte==v);
-        assert((state(&f).status&4)==(v&4));
+        assert(((state(&f).status & 4U) != 0) == ((v & 4U) != 0));
         assert(f.levels[INHIBIT]==((v&0x10)!=0));
         assert(!f.levels[IRQ] && !f.levels[A20] && !f.levels[RESET]);
         cmd(&f,0x20); assert(response(&f)==v);
@@ -794,18 +794,18 @@ static void olivetti_auxiliary_channel(void)
     assert(f.auxiliary_count == 2);
     done(&f);
 
-    for (int after = 0; after < 2; ++after) {
+    for (int failure_after = 0; failure_after < 2; ++failure_after) {
         memset(&f, 0, sizeof(f)); f.levels[INHIBIT] = 1; c = config(&f);
         c.command_profile = BM_KBC8042_COMMANDS_OLIVETTI_PCS286;
         c.auxiliary_command = auxiliary; c.auxiliary_context = &f;
         assert(bm_kbc8042_create(&h, &c, &f.k) == BM_STATUS_OK);
         cmd(&f, 0xa8); cmd(&f, 0xd4);
-        f.failure = BM_STATUS_DEVICE_ERROR; f.fail_line = KEYBOARD; f.after = after;
+        f.failure = BM_STATUS_DEVICE_ERROR; f.fail_line = KEYBOARD; f.after = failure_after;
         assert(wr(&f, 0x60, 0xf2) == BM_STATUS_OK);
         assert(bm_kbc8042_advance(f.k, 2) == BM_STATUS_DEVICE_ERROR);
         assert(state(&f).failure == BM_STATUS_DEVICE_ERROR);
         assert((state(&f).status & 2) && state(&f).parameter == 0xd4);
-        assert(f.auxiliary_count == (unsigned)after);
+        assert(f.auxiliary_count == (unsigned)failure_after);
         assert(wr(&f, 0x64, 0xa7) == BM_STATUS_DEVICE_ERROR);
         f.failure = BM_STATUS_OK;
         assert(bm_kbc8042_reset(f.k) == BM_STATUS_OK);

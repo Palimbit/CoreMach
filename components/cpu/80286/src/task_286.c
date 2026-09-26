@@ -154,7 +154,7 @@ bm_status_t bm_286_pm_switch_task(const bm_286_arch_state_t *arch,
     }
     bm_286_arch_state_t *a=&r->candidate;
     a->ip=values[0]; a->flags=(uint16_t)((values[1]&0x7fd5u)|2u);
-    if(nest) a->flags|=0x4000u; else if(!returning) a->flags&=(uint16_t)~0x4000u;
+    if(nest) a->flags|=0x4000u; else if(!returning) a->flags&=0xbfffu;
     a->ax=values[2]; a->cx=values[3]; a->dx=values[4]; a->bx=values[5];
     a->sp=values[6]; a->bp=values[7]; a->si=values[8]; a->di=values[9];
     unloaded(&a->es,values[10]); unloaded(&a->cs,values[11]);

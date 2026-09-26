@@ -426,7 +426,7 @@ static bm_status_t mem2mem_service(bm_at_dma_t *dma, uint64_t *cycles)
         /* Intel pp7/9 per-channel count/status rules, restricted to matched
          * underflow or EOP observed on BOTH phases (p6). This explicit profile
          * is a functional interpretation, not proof of source-TC silicon. */
-        unit->tc |= 3U; unit->software &= (uint8_t)~3U;
+        unit->tc |= 3U; unit->software &= 0xfcU;
         if (unit->mode[0] & 16U) {
             for (unsigned ch = 0; ch < 2; ++ch) {
                 unit->address[ch] = unit->base_address[ch];

@@ -119,7 +119,7 @@ static bm_status_t protected_transfer(bm_286_arch_state_t *arch,
 {
     bm_286_pm_lookup_t selected, code;
     bm_286_pm_load_plan_t cs_plan, ss_plan = {0};
-    bm_286_segment_state_t new_cs, new_ss;
+    bm_286_segment_state_t new_cs = {0}, new_ss = {0};
     uint16_t sp, value;
     uint32_t top, frame = 4, stack_base;
     uint8_t cpl;
@@ -263,7 +263,7 @@ static bm_status_t enter_event(bm_286_arch_state_t *arch,
     bm_286_pm_descriptor_t gate, stack;
     bm_286_pm_lookup_t code;
     bm_286_pm_load_plan_t plan = {0}, ss_plan = {0};
-    bm_286_segment_state_t new_cs, new_ss;
+    bm_286_segment_state_t new_cs = {0}, new_ss = {0};
     uint16_t selector, ip, words[6], sp;
     uint32_t offset, top, frame, stack_base;
     uint16_t gate_error, code_error;
@@ -402,7 +402,7 @@ static bm_status_t protected_return(bm_286_arch_state_t *arch,
 {
     bm_286_pm_descriptor_t stack;
     bm_286_pm_selector_t selected;
-    bm_286_pm_lookup_t code, outer_stack;
+    bm_286_pm_lookup_t code, outer_stack = {0};
     bm_286_pm_load_plan_t plan = {0}, stack_plan = {0};
     bm_286_segment_state_t new_cs, new_ss;
     uint16_t selector = 0, ip = 0, flags = 0, mask = 0x4fd5u;

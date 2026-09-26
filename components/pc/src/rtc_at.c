@@ -195,7 +195,7 @@ bm_status_t bm_at_rtc_create(const bm_host_services_t *host,
     if (config->initial_cmos) memcpy(rtc->regs, config->initial_cmos, config->cmos_size);
     else { rtc->regs[REGA] = 0x60U; rtc->regs[REGB] = SET; }
     rtc->regs[SEC] &= 0x7fU; rtc->regs[REGA] &= 0x7fU;
-    rtc->regs[REGB] &= (uint8_t)~0x78U; rtc->regs[REGC] = 0;
+    rtc->regs[REGB] &= 0x87U; rtc->regs[REGC] = 0;
     rtc->regs[REGD] = config->battery_valid ? 0x80U : 0;
     rtc->state.nmi_mask = 1; *out_rtc = rtc;
     return BM_STATUS_OK;
@@ -210,7 +210,7 @@ bm_status_t bm_at_rtc_reset(bm_at_rtc_t *rtc)
     if (!rtc) return BM_STATUS_INVALID_ARGUMENT;
     if (rtc->busy) return BM_STATUS_INVALID_STATE;
     rtc->busy = 1; rtc->state.failure = BM_STATUS_OK;
-    rtc->regs[REGB] &= (uint8_t)~0x78U; rtc->regs[REGC] = 0;
+    rtc->regs[REGB] &= 0x87U; rtc->regs[REGC] = 0;
     rtc->state.index = 0; rtc->state.nmi_mask = 1;
     /* Accepted internal reset is complete; stop at the first failed endpoint. */
     rtc->state.irq = 0;
@@ -268,7 +268,7 @@ bm_status_t bm_at_rtc_io(void *context, bm_bus_transaction_t *t)
     } else if (index == REGB) {
         rtc->regs[REGB] = value;
         if (value & SET) {
-            rtc->regs[REGB] &= (uint8_t)~0x10U;
+            rtc->regs[REGB] &= 0xefU;
             rtc->state.uip = 0; rtc->state.updating = 0;
         }
         result = irq_update(rtc, 0);

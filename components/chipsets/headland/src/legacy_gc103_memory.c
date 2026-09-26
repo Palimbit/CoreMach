@@ -98,7 +98,7 @@ static void map_update(bm_gc103_memory_t *m)
         } else {
             access_set(m, 0x100000U, 0x60000U, INTERNAL);
         }
-        cr0 &= (uint8_t)~0x18U;
+        cr0 &= 0xe7U;
     }
     switch (cr0 & 0x18U) {
     case 0x08: shadow_base = 0xe0000U; shadow_size = 0x10000U; break;

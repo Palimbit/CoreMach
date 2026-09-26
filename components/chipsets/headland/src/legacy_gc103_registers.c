@@ -22,7 +22,7 @@ static uint8_t strapped_readback(const bm_gc103_registers_t *r)
 {
     uint8_t value = r->cr_written;
     if (r->pins.ram1m != BM_GC103_PIN_FLOATING) {
-        value &= (uint8_t)~0x80U;
+        value &= 0x7fU;
         if (r->pins.ram1m == BM_GC103_PIN_LOW) value |= 0x80U;
     }
     if (r->pins.ramsw1 == BM_GC103_PIN_LOW) value |= 0x20U;
