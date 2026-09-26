@@ -174,7 +174,7 @@ static bm_status_t begin_rw(bm_wd37c65_t *fdc, int write)
     bm_floppy_drive_t *drive;
     const bm_floppy_geometry_t *geometry;
     uint8_t st0;
-    bm_status_t status;
+    bm_status_t status = BM_STATUS_INVALID_ARGUMENT;
 
     fdc->transfer_drive = fdc->params[0] & 3U;
     fdc->cylinder = fdc->params[1];
