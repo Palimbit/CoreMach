@@ -227,7 +227,8 @@ static void branches(void)
         uint8_t bytes[]={(uint8_t)op,0xfe};code(&f,bytes,2);a.cx=(uint16_t)cx;a.flags=(uint16_t)(2|(z<<6));
         assert(bm_286_set_arch_state(&cpu,&a)==BM_STATUS_OK);step(&cpu);b=get(&cpu);e=a;
         if(op!=0xe3U)e.cx--;
-        e.ip=(op==0xe3U?cx==0:e.cx!=0&&(op==0xe2U||(op==0xe1U)==z))?0x100:0x102;
+        e.ip=(op==0xe3U?cx==0:e.cx!=0&&(op==0xe2U||
+            (op==0xe1U)==(z!=0U)))?0x100:0x102;
         same(&e,&b);cpu.ops.destroy(cpu.context);++total;
     }
     printf("%u Jcc/LOOP/JCXZ cases\n",total);

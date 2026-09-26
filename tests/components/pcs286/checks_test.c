@@ -83,9 +83,11 @@ static void truth_tables(void)
         assert(f.calls==(unsigned)state(&f).nmi); /* OR doesn't create extra edges. */
         assert(bm_pcs286_checks_memory_sample(&f.checks,0)==BM_STATUS_OK);
         assert(bm_pcs286_checks_io_input(&f.checks,0)==BM_STATUS_OK);
-        assert(status(&f)==((ram && bad?0x80:0)|(io && active?0x40:0)));
+        assert(status(&f) == (uint8_t)((ram && bad ? 0x80 : 0) |
+            (io && active ? 0x40 : 0)));
         assert(bm_pcs286_checks_mask(&f.checks,1)==BM_STATUS_OK);
-        assert(status(&f)==((ram && bad?0x80:0)|(io && active?0x40:0)));
+        assert(status(&f) == (uint8_t)((ram && bad ? 0x80 : 0) |
+            (io && active ? 0x40 : 0)));
         assert(!state(&f).nmi);
         assert(bm_pcs286_checks_enable(&f.checks,0,0)==BM_STATUS_OK);
         assert(!status(&f));
@@ -140,8 +142,9 @@ static void failures(void)
         f.fail_after=after; f.failure=BM_STATUS_DEVICE_ERROR;
         if(falling) assert(bm_pcs286_checks_enable(&f.checks,0,1)==BM_STATUS_DEVICE_ERROR);
         else assert(bm_pcs286_checks_memory_sample(&f.checks,1)==BM_STATUS_DEVICE_ERROR);
-        assert(state(&f).nmi==!falling && status(&f)==(falling?0:0x80));
-        assert(f.delivered==(after?!falling:falling));
+        assert(!!state(&f).nmi == !falling &&
+            status(&f) == (uint8_t)(falling ? 0 : 0x80));
+        assert(f.delivered == (after ? (int)!falling : (int)falling));
         assert(state(&f).failure==BM_STATUS_DEVICE_ERROR);
         calls=f.calls;
         assert(bm_pcs286_checks_mask(&f.checks,1)==BM_STATUS_DEVICE_ERROR);
@@ -339,7 +342,7 @@ static void nmi_roundtrip(void)
     assert(cpu_state(&f).nmi_pending); /* A mask cannot retract an accepted edge. */
     b=step(&f); assert(b.kind==BM_286_BOUNDARY_INTERRUPT && b.vector==2);
     assert(cpu_state(&f).nmi_blocked && cpu_state(&f).sp==0x0ffa);
-    assert(peek(&f,0x20ffa)==(resume&255));
+    assert(peek(&f,0x20ffa) == (uint8_t)(resume & 255U));
     for(unsigned i=0;cpu_state(&f).nmi_blocked;++i) { assert(i<20); step(&f); }
     assert(cpu_state(&f).ip==resume && cpu_state(&f).sp==0x1000);
     assert(peek(&f,0x600)==0x90 && peek(&f,0x602)==1); /* RAM fault + real REF DET. */

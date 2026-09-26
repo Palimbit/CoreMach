@@ -69,6 +69,9 @@ target_compile_features(pcs286-boot-probe PRIVATE c_std_11)
 set_target_properties(pcs286-boot-probe PROPERTIES C_EXTENSIONS OFF)
 if(MSVC)
     target_compile_options(pcs286-boot-probe PRIVATE /W4 /WX)
+    # fopen is the portable C API used for immutable local inputs and
+    # diagnostic outputs; do not require Microsoft's incompatible fopen_s.
+    target_compile_definitions(pcs286-boot-probe PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(pcs286-boot-probe PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
