@@ -328,7 +328,7 @@ static void failures(void)
 
 int main(void)
 {
-    setbuf(stdout,NULL);
+    setvbuf(stdout,NULL,_IONBF,0);
     query_matrix();edges();memory_faults();repair_and_retry();failures();
     puts("private descriptor queries, ZF/destination preservation and faults passed");
     return 0;

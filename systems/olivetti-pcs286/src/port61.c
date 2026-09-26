@@ -39,7 +39,7 @@ bm_status_t bm_pcs286_port61_initialize(bm_pcs286_port61_t *port,
 
 bm_status_t bm_pcs286_port61_reset(bm_pcs286_port61_t *port)
 {
-    int out2;
+    int out2 = 0;
     bm_status_t status;
     if (!port) return BM_STATUS_INVALID_ARGUMENT;
     if (port->busy || port->notifying || port->sampling) return BM_STATUS_INVALID_STATE;

@@ -164,7 +164,7 @@ static void prepare(fixture_t *f, bm_cpu_t *cpu, unsigned which, unsigned wide,
     a.si=0xf000; a.di=0xe000; a.cx=(uint16_t)count; a.dx=0xffff;
     a.flags=(uint16_t)(2|(cpl<<12)|(df?0x400:0)|0x45);
     if(test->site==IOPL) {
-        assert(cpl); a.flags&=(uint16_t)~0x3000u;
+        assert(cpl); a.flags&=0xcfffu;
     } else {
         bm_286_segment_state_t *segment=test->site==DESTINATION?&a.es:ss?&a.ss:reason==2?&a.cs:&a.ds;
         unsigned at=test->site==DESTINATION?a.di:a.si;
@@ -381,6 +381,6 @@ static void fault_edges(void)
 }
 int main(void)
 {
-    setbuf(stdout,NULL);fault_matrix();guest_repair();lock_forms();failures();fault_edges();
+    setvbuf(stdout,NULL,_IONBF,0);fault_matrix();guest_repair();lock_forms();failures();fault_edges();
     puts("protected instruction PRM-profile fault checks passed");return 0;
 }

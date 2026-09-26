@@ -358,7 +358,8 @@ static bm_status_t cpu_step(void *context,bm_tick_t start,uint64_t *cycles)
     assert(start==(uint64_t)cpu->steps*UINT64_C(1000000000)/65536);
     wr_port(cpu->f,0x70,0x8c);
     assert(cpu->f->rtc->state.cycles==expected);
-    assert(rd(cpu->f,12)==(expected && expected%4==0 && !(cpu->steps&1) ? 0xc0 : 0));
+    assert(rd(cpu->f,12) == (uint8_t)(expected && expected%4==0 &&
+        !(cpu->steps&1) ? 0xc0 : 0));
     ++cpu->steps; *cycles=1; return BM_STATUS_OK;
 }
 static void cpu_boundaries(void)

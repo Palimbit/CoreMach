@@ -251,5 +251,5 @@ static void repair_and_signal(void)
 }
 int main(void)
 {
-    setbuf(stdout,NULL);matrix();boundaries();failures();repair_and_signal();puts("private protected ENTER tests passed");return 0;
+    setvbuf(stdout,NULL,_IONBF,0);matrix();boundaries();failures();repair_and_signal();puts("private protected ENTER tests passed");return 0;
 }

@@ -120,7 +120,8 @@ static void failures(void)
         if(phase==2) assert(bm_at_dma_pair_step(&f.pair,&clocks)==BM_STATUS_OK);
         assert(bm_at_dma_pair_step(&f.pair,&clocks)==(errors[err]==BM_STATUS_IDLE?BM_STATUS_INVALID_STATE:errors[err]) && !clocks);
         assert(f.pair.phase==BM_AT_DMA_PAIR_STOPPED && f.calls==phase);
-        assert(f.reads==(phase==2 || after) && f.writes==(phase==2 && after));
+        assert(f.reads == (phase == 2 || after ? 1U : 0U) &&
+            f.writes == (phase == 2 && after ? 1U : 0U));
         assert(f.ram[f.destination]==(alias || (phase==2 && after)?0x35:0x76));
         assert(f.pair.read_complete==(phase==2) && !f.pair.write_complete);
         assert(f.pair.temporary==(phase==2?0x35:0));

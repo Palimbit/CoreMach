@@ -386,9 +386,11 @@ static void partial_words_and_lifecycle(void)
         assert(channel(&f,ch).current_address==65535 && !channel(&f,ch).current_count && !f.pulses[ch]);
         unsigned completed=fail-1+after;
         if(type==4) {
-            assert(f.device_reads==(completed>0) && f.memory_writes==(completed?completed-1:0));
+            assert(f.device_reads == (completed > 0 ? 1U : 0U) &&
+                f.memory_writes == (completed ? completed - 1U : 0U));
             assert(f.written[0]==(completed>1?0xdc:0) && f.written[1]==(completed>2?0xfe:0));
-        } else assert(f.memory_reads==(completed<2?completed:2) && f.device_writes==(completed==3));
+        } else assert(f.memory_reads == (completed < 2 ? completed : 2U) &&
+            f.device_writes == (completed == 3 ? 1U : 0U));
         assert(f.calls==fail && state(&f).stopped && !f.hrq && !f.dack[ch]);destroy(&f);++cases;
     }
     fixture_t f,peer;create(&f);create(&peer);
@@ -620,9 +622,9 @@ static void compressed_boundaries(void)
         assert(s.terminal_count==terminated && s.masked==(terminated&&!aut));
         assert(s.current_address==(terminated&&aut?65535:0));
         assert(s.current_count==(terminated&&aut?initial:(uint16_t)(initial-1)));
-        assert(f.pulses[ch]==(ending==0) && f.calls==(type?2U:0U));
+        assert(f.pulses[ch] == (ending == 0 ? 1U : 0U) && f.calls==(type?2U:0U));
         assert(f.hrq==(!terminated && kind==2));
-        assert(state(&f).command[ch/4]==(8|(ext?32:0)));
+        assert(state(&f).command[ch/4] == (uint8_t)(8 | (ext ? 32 : 0)));
         if(f.hrq) { /* block ignores DREQ drop; EOP ends the next unit */
             assert(bm_at_dma_set_eop(f.dma,ch/4,1)==BM_STATUS_OK);
             assert(step(&f)==3ULL+(type?f.waits:0) && !f.hrq && !f.pulses[ch]);
@@ -731,7 +733,7 @@ static void timing_commands(void)
             }
             release(&f);
         }
-        assert(state(&f).command[ch/4]==command);destroy(&f);++cases;
+        assert(state(&f).command[ch/4] == (uint8_t)command);destroy(&f);++cases;
     }
     puts("AT DMA timing: all 1792 channel/command combinations; disable, polarity/hold, normal/extended/compressed and retained unsupported gates");
     assert(cases==1792);

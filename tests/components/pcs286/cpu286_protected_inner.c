@@ -497,7 +497,7 @@ static void shadows_and_shutdown(void)
 {
     for(unsigned odd=0;odd<2;++odd) for(unsigned ss=0;ss<2;++ss) {
         fixture_t f; bm_cpu_t cpu=setup(&f,3,0,odd); bm_286_arch_state_t a=get(&cpu); bm_286_boundary_t b;
-        a.ax=19; if(!ss) a.flags&=(uint16_t)~0x200u;
+        a.ax=19; if(!ss) a.flags&=0xfdffu;
         code(&f,ss?(const uint8_t[]){0x8e,0xd0,0x90,0x90}:(const uint8_t[]){0xfb,0x90,0x90},ss?4:3);
         assert(bm_286_set_arch_state(&cpu,&a)==BM_STATUS_OK); step(&cpu);
         assert(get(&cpu).interrupt_shadow);

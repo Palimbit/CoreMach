@@ -457,7 +457,7 @@ static void doublewords(void)
         a.bx=0x1234;word(&f,base+offset,op==2?0x8000:0xabcd);word(&f,base+(uint16_t)(offset+2),op==2?0x7fff:24+cpl);
         code(&f,bytes,5);assert(bm_286_set_arch_state(&cpu,&a)==BM_STATUS_OK);bm_286_boundary_t boundary=step(&cpu);b=get(&cpu);
         if(edge>1){assert(boundary.vector==(ss?12:13) && b.bx==a.bx && b.ip==0x400);assert(getword(&f,b.ss.base+b.sp+2)==0x100);}
-        else {assert(b.ip==0x105 && b.flags==a.flags);if(op<2){assert(b.bx==0xabcd);assert((op==0?b.ds.selector:b.es.selector)==24+cpl);}else assert(b.bx==a.bx);}
+        else {assert(b.ip==0x105 && b.flags==a.flags);if(op<2){assert(b.bx==0xabcd);assert((op==0?b.ds.selector:b.es.selector)==(uint16_t)(24+cpl));}else assert(b.bx==a.bx);}
         cpu.ops.destroy(cpu.context);
     }
     /* Source register/segment aliases destination; full pointer is read first. */
@@ -474,7 +474,7 @@ static void arpl_and_stores(void)
         fixture_t f;bm_cpu_t cpu=create(&f,cpl,odd);bm_286_arch_state_t a=get(&cpu),b;
         const uint8_t bytes[]={0x63,(uint8_t)(memory?7:0xc1)};a.ax=(uint16_t)(0x100+src);a.cx=(uint16_t)(0x200+rpl);a.flags=0x4cd7;
         code(&f,bytes,2);word(&f,a.ds.base+a.bx,a.cx);assert(bm_286_set_arch_state(&cpu,&a)==BM_STATUS_OK);step(&cpu);b=get(&cpu);
-        unsigned v=0x200+(rpl<src?src:rpl);assert((memory?getword(&f,a.ds.base+a.bx):b.cx)==v);
+        unsigned v=0x200+(rpl<src?src:rpl);assert((memory?getword(&f,a.ds.base+a.bx):b.cx)==(uint16_t)v);
         assert(b.flags==(uint16_t)((a.flags&~0x40)|(rpl<src?0x40:0)));cpu.ops.destroy(cpu.context);
     }
     for(unsigned cpl=0;cpl<4;++cpl)for(unsigned op=0;op<2;++op)for(unsigned odd=0;odd<2;++odd) {
@@ -494,7 +494,7 @@ static void fault_setup(fixture_t *f,bm_cpu_t *cpu,unsigned route,unsigned odd)
     if(route<2)a.cx=0;
     if(route==2)a.ax=21;
     if(route==5)f->ram[a.gdtr.base+29]&=0x7f;
-    if(route==6)a.ds.access&=(uint8_t)~2u;
+    if(route==6)a.ds.access&=0xfdu;
     if(route==7)a.msw|=10;
     if(route==8)a.msw|=4;
     if(route==11)a.flags|=0x800;
@@ -642,7 +642,7 @@ static void failures(void)
 }
 int main(void)
 {
-    setbuf(stdout,NULL);scalar_integration();doublewords();arpl_and_stores();faults_and_software();
+    setvbuf(stdout,NULL,_IONBF,0);scalar_integration();doublewords();arpl_and_stores();faults_and_software();
     write_permissions();software_vectors();bound_and_pointer_recovery();failures();
     puts("protected scalar, doubleword and software-event integration passed");return 0;
 }

@@ -7,7 +7,9 @@ function(pcs286_test_options target)
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /UNDEBUG)
+        # MSVC accepts C11 compound literals but diagnoses array members of
+        # returned compound values as its non-lvalue extension (C4223).
+        target_compile_options(${target} PRIVATE /W4 /WX /wd4223 /UNDEBUG)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
     endif()
@@ -202,6 +204,10 @@ target_include_directories(pcs286-headland-registers PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(pcs286-headland-registers PRIVATE blumach_headland_legacy_registers blumach_bus)
 pcs286_test_options(pcs286-headland-registers)
+if(MSVC)
+    # The generated oracle is an intentionally unedited classic source slice.
+    target_compile_options(pcs286-headland-registers PRIVATE /wd4244)
+endif()
 add_test(NAME pcs286-component.headland-registers COMMAND pcs286-headland-registers)
 set_tests_properties(pcs286-component.headland-registers PROPERTIES
     LABELS "pcs286-p0;component-acceptance" TIMEOUT 30)
@@ -232,6 +238,10 @@ target_include_directories(pcs286-headland-memory PRIVATE
 target_link_libraries(pcs286-headland-memory PRIVATE blumach_headland_legacy_registers
     blumach_headland_gc10x_contracts blumach_pcs286_memory blumach_platform_null)
 pcs286_test_options(pcs286-headland-memory)
+if(MSVC)
+    # The generated oracle is an intentionally unedited classic source slice.
+    target_compile_options(pcs286-headland-memory PRIVATE /wd4244)
+endif()
 add_test(NAME pcs286-component.headland-memory COMMAND pcs286-headland-memory)
 set_tests_properties(pcs286-component.headland-memory PROPERTIES
     LABELS "pcs286-p0;component-integration" TIMEOUT 120)

@@ -124,7 +124,7 @@ static void controls(void)
                 assert(bm_at_dma_channel_timing(f.dma,ch,&t)==BM_STATUS_UNSUPPORTED && !t.transfer_clocks && !t.read_pulse_clocks && !t.write_pulse_clocks);
                 assert(bm_at_dma_set_bus_grant(f.dma,0)==BM_STATUS_INVALID_STATE);
                 withdraw(&f,ch);idle(&f);assert(f.lows[ch]==1);
-                assert(state(&f).priority_first[ch/4]==(cmd&16?(ch+1)%4:0));release(&f);
+                assert(state(&f).priority_first[ch/4]==(uint8_t)(cmd&16?(ch+1)%4:0));release(&f);
                 assert(state(&f).eop[0] && state(&f).eop[1] && !f.hrq);
             }
         }
@@ -144,7 +144,8 @@ static void boundaries(void)
             if(when==1)assert(bm_at_dma_set_dreq(f.dma,ch,0)==BM_STATUS_OK);
             if(when==2)f.drop_on_ack=1;
             idle(&f);
-            if(when<=2) {assert(!f.hrq && !state(&f).cascade_active && f.highs[ch]==(when==2));release(&f);}
+            if(when<=2) {assert(!f.hrq && !state(&f).cascade_active &&
+                f.highs[ch] == (when == 2 ? 1U : 0U));release(&f);}
             else if(when==3) {
                 bm_at_dma_reset(f.dma);assert(!f.hrq && !state(&f).cascade_active && state(&f).bus_grant);
                 assert(state(&f).dreq&(1U<<ch));release(&f);

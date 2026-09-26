@@ -131,7 +131,8 @@ static void registers_and_addresses(void)
             assert(s.base_count==count && s.current_address==(!count && autoinit?(ch?0:65535):(ch?1:0)));
             assert(s.masked==(!count && !autoinit) && s.terminal_count==(!count));
         }
-        assert(f.pulses==(!count) && state(&f).software_request[0]==(count?1:0));
+        assert(f.pulses == (!count ? 1U : 0U) &&
+            state(&f).software_request[0] == (count ? 1U : 0U));
         assert(state(&f).mem2mem_active==(count!=0));destroy(&f);++cases;
     }
     printf("AT DMA matched mem2mem: %u address/count cases, every count/auto, offset/page, directions/source-hold, TEMP/status/mask, default page87 ignored\n",cases);
@@ -182,7 +183,8 @@ static void eop_and_controls(void)
             assert(channel(&f,0).current_count==count && channel(&f,1).current_address==0x200 && !f.pulses && !channel(&f,0).terminal_count);
         } else {
             assert(result==BM_STATUS_OK && cycles==8ULL+2ULL*UINT32_MAX);
-            int ended=!count || pattern==1;assert((!f.hrq)==ended && f.pulses==(!count));
+            int ended=!count || pattern==1;assert((!f.hrq)==ended &&
+                f.pulses == (!count ? 1U : 0U));
             for(unsigned ch=0;ch<2;++ch)assert(channel(&f,ch).terminal_count==ended);
             assert(state(&f).last_pair_completed_clocks==cycles);
         }
@@ -216,7 +218,8 @@ static void failures_and_gates(void)
         assert(channel(&f,0).current_address==0x101 && channel(&f,1).current_address==0x201);
         assert(channel(&f,0).current_count==1 && channel(&f,1).current_count==1 && !f.pulses && !channel(&f,0).terminal_count);
         assert(f.ram[0x200]==0x41 && f.ram[0x201]==(phase && after?0x52:0));
-        assert(peek(&f,13,1)==(phase?0x52:0x41) && state(&f).stopped && !f.hrq && !state(&f).mem2mem_active);
+        assert(peek(&f,13,1) == (uint8_t)(phase ? 0x52 : 0x41) &&
+            state(&f).stopped && !f.hrq && !state(&f).mem2mem_active);
         assert(state(&f).last_pair_read_complete==(int)phase && !state(&f).last_pair_write_complete);
         assert(state(&f).last_pair_completed_clocks==(phase?4ULL+UINT32_MAX:0));
         unsigned calls=f.calls;assert(bm_at_dma_service(f.dma,&cycles)==BM_STATUS_INVALID_STATE && f.calls==calls);

@@ -201,7 +201,7 @@ static void rates_and_flags(void)
         advance(&f, 16449); assert(peek(&f, 12) == 0x70);
         wr(&f, 11, 6 | (enables << 4));
         assert(f.irq == !!enables && peek(&f, 12) == (enables ? 0xf0 : 0x70));
-        assert(rd(&f, 12) == (enables ? 0xf0 : 0x70) && !f.irq);
+        assert(rd(&f, 12) == (uint8_t)(enables ? 0xf0 : 0x70) && !f.irq);
         assert(!rd(&f, 12)); done(&f);
     }
 }

@@ -357,6 +357,6 @@ static void repair_stack(void)
 }
 int main(void)
 {
-    setbuf(stdout,NULL);popf_matrix();privilege_matrix();stack_and_flags();events();repair_stack();failures();
+    setvbuf(stdout,NULL,_IONBF,0);popf_matrix();privilege_matrix();stack_and_flags();events();repair_stack();failures();
     puts("private IOPL, FLAGS, scalar I/O, HLT and event checks passed");return 0;
 }

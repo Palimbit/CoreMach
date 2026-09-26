@@ -226,8 +226,8 @@ static void branches(void)
         fixture_t f;bm_cpu_t cpu=create(&f,0,0);bm_286_arch_state_t a=get(&cpu),b,e;
         uint8_t bytes[]={(uint8_t)op,0xfe};code(&f,bytes,2);a.cx=(uint16_t)cx;a.flags=(uint16_t)(2|(z<<6));
         assert(bm_286_set_arch_state(&cpu,&a)==BM_STATUS_OK);step(&cpu);b=get(&cpu);e=a;
-        if(op!=0xe3)e.cx--;
-        e.ip=(op==0xe3?cx==0:e.cx!=0&&(op==0xe2||(op==0xe1)==z))?0x100:0x102;
+        if(op!=0xe3U)e.cx--;
+        e.ip=(op==0xe3U?cx==0:e.cx!=0&&(op==0xe2U||(op==0xe1U)==z))?0x100:0x102;
         same(&e,&b);cpu.ops.destroy(cpu.context);++total;
     }
     printf("%u Jcc/LOOP/JCXZ cases\n",total);
@@ -259,7 +259,7 @@ static void fault_setup(fixture_t *f,bm_cpu_t *cpu,unsigned route,unsigned odd)
     case 5:bytes[1]=0xc3;word(f,a.ss.base+a.sp,0x500);a.cs.limit=0x400;break;
     case 6:bytes[1]=0xe8;bytes[2]=0xfc;bytes[3]=3;length=4;a.cs.limit=0x400;break;
     case 7:bytes[1]=0xe2;bytes[2]=0x7f;length=3;a.cx=2;a.cs.limit=0x110;break;
-    case 8:bytes[1]=0x8f;bytes[2]=7;length=3;a.ds.access&=(uint8_t)~2u;break;
+    case 8:bytes[1]=0x8f;bytes[2]=7;length=3;a.ds.access&=0xfdu;break;
     case 9:bytes[1]=0x1f;word(f,a.ss.base+a.sp,0x20);break;
     case 10:bytes[1]=0x1f;word(f,a.ss.base+a.sp,24);f->ram[a.gdtr.base+29]&=0x7f;break;
     case 11:bytes[1]=0x17;word(f,a.ss.base+a.sp,24);f->ram[a.gdtr.base+29]&=0x7f;break;
@@ -435,6 +435,6 @@ static void repair_and_shadow(void)
 }
 int main(void)
 {
-    setbuf(stdout,NULL);registers();aggregate();segment_pop();branches();near_calls();faults();failures();gates();stack_aliases();memory_and_edges();repair_and_shadow();
+    setvbuf(stdout,NULL,_IONBF,0);registers();aggregate();segment_pop();branches();near_calls();faults();failures();gates();stack_aliases();memory_and_edges();repair_and_shadow();
     puts("private protected stack and near-control tests passed");return 0;
 }

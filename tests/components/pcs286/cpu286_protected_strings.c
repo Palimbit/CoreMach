@@ -343,6 +343,6 @@ static void failures(void)
 }
 int main(void)
 {
-    setbuf(stdout,NULL);matrix();all_counts();guest_faults();locks();events();
+    setvbuf(stdout,NULL,_IONBF,0);matrix();all_counts();guest_faults();locks();events();
     lifecycle_and_latched_events();failures();puts("protected strings, REP and LOCK checks passed");return 0;
 }

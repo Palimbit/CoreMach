@@ -63,7 +63,8 @@ static void words_and_flipflops(void)
     for(unsigned v=0;v<65536;++v) {
         unsigned u=ch/4,r=2*(ch%4)+count;word(d,u,r,v);
         bm_at_dma_channel_state_t s=channel(d,ch);
-        assert((count?s.current_count:s.current_address)==v && (count?s.base_count:s.base_address)==v);
+        assert((count?s.current_count:s.current_address) == (uint16_t)v &&
+            (count?s.base_count:s.base_address) == (uint16_t)v);
         assert(rd(d,port(u,r),1)==(v&255) && rd(d,port(u,r),1)==(v&255));
         assert(rd(d,port(u,r),0)==(v&255));
         assert(rd(d,port(u,r),1)==(v>>8));
@@ -138,7 +139,7 @@ static void request_matrix(void)
         assert(rd(d,port(u,8),0)==((soft|lines)<<4));
         unsigned expected=!disabled && (soft || (lines & (15U-mask)));
         assert((unsigned)f.hrq==expected && (unsigned)state(d).bus_request==expected);
-        if(!u)assert(rd(d,0xd0,0)==(expected?0x10:0));
+        if(!u)assert(rd(d,0xd0,0) == (uint8_t)(expected ? 0x10 : 0));
         uint64_t cycles=99;assert(bm_at_dma_service(d,&cycles)==BM_STATUS_IDLE && !cycles);
         unsigned edges=f.edges;assert(bm_at_dma_set_bus_grant(d,0)==BM_STATUS_OK && f.edges==edges);
         ++cases;
