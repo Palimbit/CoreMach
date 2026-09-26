@@ -2,6 +2,17 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
+Current task integration: [F contract](pcs286-protected-tasks.md) supersedes
+this tranche's task/NT unsupported statements. Earlier validation counts below
+are historical. Public PE remains blocked. D9 string corrections now stage
+in the outgoing task image before a task-gate save.
+
+
+This is the historical block A record. [E1 ordinary returns](pcs286-protected-returns.md)
+extends the private helper to outer IRET and same/outer RETF with executed
+guest tests; public PE remains gated. The historical unsupported outer cases
+below are superseded, while current-NT task return remains unsupported.
+
 ## Scope and source
 
 `bm_286_pm_iret` completes handoff block A at the **private helper** boundary.

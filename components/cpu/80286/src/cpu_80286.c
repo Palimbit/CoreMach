@@ -32,7 +32,8 @@
  * These inherited works are GPL-2.0-or-later. No global core is embedded.
  */
 #include <blumach/components/cpu_80286.h>
-#include "descriptor_286.h"
+#include "access_286.h"
+#include "execution_286.h"
 
 #include <string.h>
 
@@ -90,12 +91,16 @@ static void reset_architecture(bm_286_private_t *state)
     state->arch.cs.base = 0xff0000U;
     state->arch.cs.limit = 0xffffU;
     state->arch.cs.valid = 1U;
+    state->arch.cs.access = 0x82U;
     state->arch.ds.limit = 0xffffU;
     state->arch.ds.valid = 1U;
+    state->arch.ds.access = 0x82U;
     state->arch.es.limit = 0xffffU;
     state->arch.es.valid = 1U;
+    state->arch.es.access = 0x82U;
     state->arch.ss.limit = 0xffffU;
     state->arch.ss.valid = 1U;
+    state->arch.ss.access = 0x82U;
     state->arch.idtr.limit = 0x03ffU;
     state->intr_line = 0U;
     state->nmi_line = 0U;
@@ -282,7 +287,7 @@ static bm_status_t fetch_byte(bm_286_private_t *state, uint16_t ip,
 }
 
 /* The Intel 286 instruction dictionary, not the later 386 prefix map, bounds
- * this private real-mode decoder. Failed decode never commits IP or a register. */
+ * this shared decoder. Failed decode never commits IP or a register. */
 typedef struct decoded_286 {
     bm_286_private_t *state;
     uint32_t cursor;
@@ -294,29 +299,52 @@ typedef struct decoded_286 {
     uint8_t software_vector;
     uint8_t synchronous_fault; /* Completed fault entry, not software INT. */
     uint8_t lock_prefix; /* Bounded memory forms, not the full 286 LOCK space. */
-    uint8_t operand_limit_fault; /* Operand, fetch, length or target: unwind to #13. */
+    uint8_t operand_limit_fault; /* Real-mode unwind to #13. */
+    uint8_t protected_subset, pm_fault_vector, task_context;
+    uint16_t pm_fault_error; /* Explicit guest metadata, never host status. */
+    uint8_t repeat_prefix, string_fault_adjust; /* SI=1, DI=2, CX decrement<<2. */
+    uint16_t string_delta;
 } decoded_286_t;
 
 static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector);
+
+/* A segment-load helper borrows an instruction-owned exclusion window.
+ * Its descriptor transactions remain locked; its nested pin edges must not
+ * release the outer owner's lock. No generic bus/CPU ABI extension. */
+static bm_status_t locked_segment_access(void *context, bm_bus_transaction_t *transfer)
+{
+    bm_286_private_t *state = context;
+    transfer->attributes |= BM_BUS_TRANSACTION_LOCKED;
+    return state->config.access(state->config.access_context, transfer);
+}
+static void borrowed_segment_lock(void *context, int asserted)
+{
+    (void)context;
+    (void)asserted;
+}
 
 static bm_status_t load_data_segment(decoded_286_t *decode, unsigned reg,
                                       uint16_t selector)
 {
     bm_286_segment_load_result_t result;
     bm_status_t status;
-    /* Public PE execution remains gated until protected fault entry exists.
-     * Never nest automatic descriptor exclusion inside instruction LOCK. */
-    if ((decode->state->arch.msw & MSW_PE) &&
-        (decode->state->lock_active || decode->lock_prefix))
-        return BM_STATUS_UNSUPPORTED;
+    bm_286_config_t config = decode->state->config;
+    if ((decode->state->arch.msw & MSW_PE) && decode->state->lock_active) {
+        config.access = locked_segment_access;
+        config.access_context = decode->state;
+        config.bus_lock = borrowed_segment_lock;
+    }
     status = bm_286_load_segment_state(&decode->state->arch,
-        &decode->state->config, reg, selector, &result);
+        &config, reg, selector, &result);
     decode->waits += result.waits;
     if (status != BM_STATUS_OK)
         return status;
     if (result.fault_vector != 0) {
-        if (decode->state->arch.msw & MSW_PE)
-            return BM_STATUS_UNSUPPORTED; /* Do not use a real-mode frame. */
+        if (decode->state->arch.msw & MSW_PE) {
+            decode->pm_fault_vector = result.fault_vector;
+            decode->pm_fault_error = result.fault_error;
+            return BM_STATUS_UNSUPPORTED; /* Unwind before protected delivery. */
+        }
         return deliver_fault(decode, result.fault_vector);
     }
     return result.loaded ? BM_STATUS_OK : BM_STATUS_INVALID_STATE;
@@ -375,6 +403,25 @@ static bm_status_t next_byte(decoded_286_t *decode, uint8_t *value)
 {
     uint32_t waits;
     bm_status_t status;
+    if (decode->protected_subset) {
+        bm_286_pm_access_state_t access_state = {0};
+        bm_286_pm_access_result_t result;
+        if (decode->length >= 10U) {
+            decode->pm_fault_vector = 13;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        status = bm_286_pm_access(&decode->state->arch, 1, BM_286_PM_FETCH,
+            decode->cursor, 1, false, NULL, decode->state->config.access,
+            decode->state->config.access_context, &access_state, &result);
+        decode->waits += result.waits;
+        if (status != BM_STATUS_OK) return status;
+        if (result.fault_vector) {
+            decode->pm_fault_vector = result.fault_vector;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        *value = result.bytes[0]; ++decode->cursor; ++decode->length;
+        return BM_STATUS_OK;
+    }
     if (!decode->state->arch.cs.valid)
         return BM_STATUS_UNSUPPORTED; /* Invalid imported cache is not modeled. */
     if (decode->length >= 10U || decode->cursor > decode->state->arch.cs.limit) {
@@ -541,6 +588,26 @@ static bm_status_t data_access(decoded_286_t *decode,
     return BM_STATUS_OK;
 }
 
+/* Private complete operand check; callers distinguish guest metadata from
+ * endpoint errors. No table reload and no bus effects. */
+static bm_status_t protected_operand_check(decoded_286_t *decode,
+    const bm_286_segment_state_t *segment, uint16_t offset, unsigned length, int write)
+{
+    bm_286_pm_access_check_t check;
+    unsigned reg;
+    bm_status_t status;
+    for (reg = 0; reg < 4; ++reg)
+        if (segment == segment_register(&decode->state->arch, reg)) break;
+    status = bm_286_pm_check_access(&decode->state->arch, reg,
+        write ? BM_286_PM_WRITE : BM_286_PM_READ, offset, length, &check);
+    if (status != BM_STATUS_OK) return status;
+    if (!check.allowed) {
+        decode->pm_fault_vector = check.fault_vector;
+        return BM_STATUS_UNSUPPORTED;
+    }
+    return BM_STATUS_OK;
+}
+
 /* Keep operand faults separate from stack/IVT transport and host failures.
  * Returning a non-OK status unwinds the caller before it commits registers;
  * the private marker, never a host status alone, requests guest delivery. */
@@ -549,6 +616,37 @@ static bm_status_t operand_access(decoded_286_t *decode,
                                   uint16_t offset, unsigned size, int write,
                                   uint16_t *value)
 {
+    if (decode->protected_subset) {
+        bm_286_pm_access_state_t access_state = {0};
+        bm_286_pm_access_result_t result;
+        uint8_t bytes[2];
+        unsigned reg;
+        bm_status_t status;
+        for (reg = 0; reg < 4; ++reg)
+            if (segment == segment_register(&decode->state->arch, reg)) break;
+        if (reg == 4 || (size != 1 && size != 2)) return BM_STATUS_INVALID_STATE;
+        bytes[0] = write ? (uint8_t)*value : 0;
+        bytes[1] = write ? (uint8_t)(*value >> 8) : 0;
+        status = protected_operand_check(decode, segment, offset, size, write);
+        if (status != BM_STATUS_OK) return status;
+        if (decode->lock_prefix && !decode->state->lock_active) {
+            status = begin_bus_lock(decode->state);
+            if (status != BM_STATUS_OK) return status;
+        }
+        status = bm_286_pm_access(&decode->state->arch, reg,
+            write ? BM_286_PM_WRITE : BM_286_PM_READ, offset, size,
+            decode->state->lock_active != 0,
+            write ? bytes : NULL, decode->state->config.access,
+            decode->state->config.access_context, &access_state, &result);
+        decode->waits += result.waits;
+        if (status != BM_STATUS_OK) return status;
+        if (result.fault_vector) {
+            decode->pm_fault_vector = result.fault_vector;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        if (!write) *value = (uint16_t)(result.bytes[0] | ((uint16_t)result.bytes[1] << 8));
+        return BM_STATUS_OK;
+    }
     if (segment != NULL && segment->valid &&
         (uint32_t) offset + size - 1U > segment->limit) {
         decode->operand_limit_fault = 1U;
@@ -564,6 +662,8 @@ static bm_status_t operand_access(decoded_286_t *decode,
 static bm_status_t pointer_preflight(decoded_286_t *decode,
                                     const operand_286_t *operand)
 {
+    if (decode->protected_subset)
+        return protected_operand_check(decode, operand->segment, operand->offset, 4U, 0);
     if (!operand->memory || !operand->segment->valid)
         return BM_STATUS_UNSUPPORTED;
     if ((uint32_t) operand->offset + 1U > operand->segment->limit ||
@@ -589,6 +689,20 @@ static bm_status_t read_operand(decoded_286_t *decode,
     return BM_STATUS_OK;
 }
 
+/* Complete destination permission check before a scalar RMW read. */
+static bm_status_t read_rmw_operand(decoded_286_t *decode, const operand_286_t *operand,
+    unsigned size, uint16_t *value)
+{
+    if (decode->protected_subset && operand->memory) {
+        bm_status_t status = protected_operand_check(decode, operand->segment, operand->offset, size, 1);
+        /* PRM specifies #GP even where restart is not guaranteed. Keeping
+         * pre-operation registers is our deterministic policy for unspecified
+         * fault microstate, not certification that silicon can safely retry. */
+        if (status != BM_STATUS_OK) return status;
+    }
+    return read_operand(decode, operand, size, value);
+}
+
 static bm_status_t write_operand(decoded_286_t *decode,
                                  const operand_286_t *operand,
                                  unsigned size, uint16_t value)
@@ -606,9 +720,8 @@ static bm_status_t write_operand(decoded_286_t *decode,
     return BM_STATUS_OK;
 }
 
-/* Real-mode stack operations never use a segment override for the stack
- * itself. Valid-cache overruns unwind to real-mode #13; an unusable exception
- * stack shuts down the guest. Completed endpoint writes are never undone. */
+/* Stack access always uses SS. operand_access supplies real #13 or private
+ * protected #SS checks; completed endpoint writes are never undone. */
 static bm_status_t push_word(decoded_286_t *decode, uint16_t value)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -632,6 +745,22 @@ static bm_status_t stack_limit_failure(decoded_286_t *decode)
     return BM_STATUS_UNSUPPORTED;
 }
 
+static bm_status_t protected_stack_range(decoded_286_t *decode,
+    uint16_t start, uint32_t length, int write)
+{
+    bm_286_pm_access_check_t check;
+    bm_status_t status = bm_286_pm_check_access(&decode->state->arch, 2U,
+        write ? BM_286_PM_WRITE : BM_286_PM_READ, start, length, &check);
+    if (status != BM_STATUS_OK)
+        return status;
+    if (!check.allowed) {
+        decode->pm_fault_vector = check.fault_vector;
+        decode->pm_fault_error = 0U;
+        return BM_STATUS_UNSUPPORTED;
+    }
+    return BM_STATUS_OK;
+}
+
 /* Multiword operations stage register changes, not external bus writes.
  * Whole-operation preflight is a functional policy, not silicon fault
  * precedence or physical bus-cycle ordering. */
@@ -641,17 +770,23 @@ static bm_status_t aggregate_stack(decoded_286_t *decode, int pop)
     uint16_t values[8], offsets[8];
     unsigned i;
     bm_status_t status;
+    if (decode->protected_subset) {
+        uint16_t start = pop ? arch->sp : (uint16_t) (arch->sp - 16U);
+        status = protected_stack_range(decode, start, 16U, !pop);
+        if (status != BM_STATUS_OK)
+            return status;
+    }
     for (i = 0U; i < 8U; ++i) {
         offsets[i] = (uint16_t) (pop ? arch->sp + 2U * i :
                                       arch->sp - 2U * (i + 1U));
-        if (!stack_word_valid(arch, offsets[i]))
+        if (!decode->protected_subset && !stack_word_valid(arch, offsets[i]))
             return stack_limit_failure(decode);
         values[i] = *word_register(arch, i);
     }
     for (i = 0U; i < 8U; ++i) {
         if (pop && i == 3U)
             continue; /* Discard the saved SP slot; never load it into SP. */
-        status = data_access(decode, &arch->ss, offsets[i], 2U, !pop, &values[i]);
+        status = operand_access(decode, &arch->ss, offsets[i], 2U, !pop, &values[i]);
         if (status != BM_STATUS_OK)
             return status;
     }
@@ -679,14 +814,29 @@ static bm_status_t enter_frame(decoded_286_t *decode)
     nesting &= 31U; /* Intel 286 Appendix B: LEVEL modulo 32. */
     words = nesting == 0U ? 1U : (unsigned) nesting + 1U;
     final_sp = (uint16_t) (sp - 2U * words - allocation);
-    if (!arch->ss.valid || final_sp > arch->ss.limit)
-        return stack_limit_failure(decode);
-    for (i = 0U; i < words; ++i)
-        if (!stack_word_valid(arch, (uint16_t) (sp - 2U * (i + 1U))))
+    if (decode->protected_subset) {
+        /* Include reserved locals in the range without accessing them.
+         * Display words are checked individually, but read interleaved with
+         * pushes so overlapping frames observe earlier completed writes. */
+        status = protected_stack_range(decode, final_sp,
+            2U * words + (uint32_t) allocation, 1);
+        if (status != BM_STATUS_OK)
+            return status;
+        for (i = 1U; i < nesting; ++i) {
+            status = protected_stack_range(decode, (uint16_t) (bp - 2U * i), 2U, 0);
+            if (status != BM_STATUS_OK)
+                return status;
+        }
+    } else {
+        if (!arch->ss.valid || final_sp > arch->ss.limit)
             return stack_limit_failure(decode);
-    for (i = 1U; i < nesting; ++i)
-        if (!stack_word_valid(arch, (uint16_t) (bp - 2U * i)))
-            return stack_limit_failure(decode);
+        for (i = 0U; i < words; ++i)
+            if (!stack_word_valid(arch, (uint16_t) (sp - 2U * (i + 1U))))
+                return stack_limit_failure(decode);
+        for (i = 1U; i < nesting; ++i)
+            if (!stack_word_valid(arch, (uint16_t) (bp - 2U * i)))
+                return stack_limit_failure(decode);
+    }
     for (i = 0U; i < words; ++i) {
         if (i == 0U)
             value = arch->bp;
@@ -694,12 +844,12 @@ static bm_status_t enter_frame(decoded_286_t *decode)
             value = frame;
         else {
             bp = (uint16_t) (bp - 2U);
-            status = data_access(decode, &arch->ss, bp, 2U, 0, &value);
+            status = operand_access(decode, &arch->ss, bp, 2U, 0, &value);
             if (status != BM_STATUS_OK)
                 return status;
         }
         sp = (uint16_t) (sp - 2U);
-        status = data_access(decode, &arch->ss, sp, 2U, 1, &value);
+        status = operand_access(decode, &arch->ss, sp, 2U, 1, &value);
         if (status != BM_STATUS_OK)
             return status;
     }
@@ -711,6 +861,16 @@ static bm_status_t enter_frame(decoded_286_t *decode)
 static bm_status_t check_near_target(decoded_286_t *decode, uint16_t ip)
 {
     const bm_286_arch_state_t *arch = &decode->state->arch;
+    if (decode->protected_subset) {
+        bm_286_pm_access_check_t check;
+        bm_status_t status = bm_286_pm_check_access(arch, 1, BM_286_PM_FETCH, ip, 1, &check);
+        if (status != BM_STATUS_OK) return status;
+        if (check.fault_vector) {
+            decode->pm_fault_vector = check.fault_vector;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        return BM_STATUS_OK;
+    }
     if (!arch->cs.valid)
         return BM_STATUS_UNSUPPORTED;
     if (ip > arch->cs.limit) {
@@ -734,16 +894,31 @@ static bm_status_t near_branch(decoded_286_t *decode, uint16_t target, int call)
     return BM_STATUS_OK;
 }
 
-/* Real-mode CS reload drops the special reset base. A20 remains board-owned.
- * Only called after both pointer words were obtained successfully; protected
- * mode and guest fault delivery are rejected by the surrounding decoder. */
+/* Both pointer words are already fetched. Real CS reload drops the reset
+ * base; the private PE path validates direct code, call gates or tasks.
+ * A20 remains board-owned. */
 static bm_status_t far_jump(decoded_286_t *decode, uint16_t ip, uint16_t cs)
 {
     bm_286_segment_state_t *segment = &decode->state->arch.cs;
+    if (decode->protected_subset) {
+        bm_286_segment_load_result_t result;
+        bm_status_t status = bm_286_pm_jump(&decode->state->arch,
+            &decode->state->config, cs, ip, (uint16_t)decode->cursor, &result);
+        decode->waits += result.waits;
+        if (status != BM_STATUS_OK) return status;
+        decode->task_context=result.task_context;
+        if (result.fault_vector) {
+            decode->pm_fault_vector = result.fault_vector;
+            decode->pm_fault_error = result.fault_error;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        decode->cursor = decode->state->arch.ip; /* A call gate redirects the offset. */
+        return result.loaded ? BM_STATUS_OK : BM_STATUS_INVALID_STATE;
+    }
     segment->selector = cs;
     segment->base = (uint32_t) cs << 4;
     segment->limit = 0xffffU;
-    segment->access = 0U;
+    segment->access = 0x82U;
     segment->valid = 1U;
     decode->cursor = ip;
     return BM_STATUS_OK;
@@ -753,6 +928,21 @@ static bm_status_t far_jump(decoded_286_t *decode, uint16_t ip, uint16_t cs)
  * Stage registers, never roll back completed endpoint writes. */
 static bm_status_t far_call(decoded_286_t *decode, uint16_t ip, uint16_t cs)
 {
+    if (decode->protected_subset) {
+        bm_286_segment_load_result_t result;
+        bm_status_t status = bm_286_pm_call(&decode->state->arch,
+            &decode->state->config, cs, ip, (uint16_t)decode->cursor, &result);
+        decode->waits += result.waits;
+        if (status != BM_STATUS_OK) return status;
+        decode->task_context=result.task_context;
+        if (result.fault_vector) {
+            decode->pm_fault_vector = result.fault_vector;
+            decode->pm_fault_error = result.fault_error;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        decode->cursor = decode->state->arch.ip;
+        return result.loaded ? BM_STATUS_OK : BM_STATUS_INVALID_STATE;
+    }
     bm_286_arch_state_t *arch = &decode->state->arch;
     uint16_t words[2] = {arch->cs.selector, (uint16_t) decode->cursor};
     bm_status_t status;
@@ -771,6 +961,21 @@ static bm_status_t far_call(decoded_286_t *decode, uint16_t ip, uint16_t cs)
 
 static bm_status_t far_return(decoded_286_t *decode, uint16_t discard)
 {
+    if (decode->protected_subset) {
+        bm_286_segment_load_result_t result;
+        bm_status_t status = bm_286_pm_retf(&decode->state->arch,
+            &decode->state->config, discard, &result);
+        decode->waits += result.waits;
+        if (status != BM_STATUS_OK) return status;
+        if (result.fault_vector) {
+            decode->pm_fault_vector = result.fault_vector;
+            decode->pm_fault_error = result.fault_error;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        if (!result.loaded) return BM_STATUS_INVALID_STATE;
+        decode->cursor = decode->state->arch.ip;
+        return BM_STATUS_OK;
+    }
     bm_286_arch_state_t *arch = &decode->state->arch;
     uint16_t words[2];
     bm_status_t status;
@@ -943,6 +1148,11 @@ static bm_status_t software_interrupt(decoded_286_t *decode, uint8_t opcode)
         if (status != BM_STATUS_OK)
             return status;
     }
+    if (decode->protected_subset) {
+        decode->software_interrupt = 1U;
+        decode->software_vector = vector;
+        return BM_STATUS_OK; /* Private caller supplies SOFTWARE source and next IP. */
+    }
     status = interrupt_frame(decode, vector, (uint16_t) decode->cursor);
     if (status == BM_STATUS_OK) {
         decode->software_interrupt = 1U;
@@ -962,7 +1172,15 @@ static bm_status_t execute_flags(decoded_286_t *decode, uint8_t opcode)
         status = operand_access(decode, &arch->ss, arch->sp, 2U, 0, &value);
         if (status != BM_STATUS_OK)
             return status;
-        arch->flags = (uint16_t) ((arch->flags & 0x7000U) | (value & 0x0fd5U) | FLAG_FIXED_ONE);
+        if (decode->protected_subset) {
+            uint16_t mask = 0x4fd5U; /* NT writable at all CPLs, IOPL only CPL0. */
+            if (!arch->cpl) mask |= 0x3000U;
+            if (arch->cpl > ((arch->flags >> 12) & 3U)) mask &= 0xfdffU;
+            /* IF permission uses incoming IOPL, not the candidate stack word. */
+            arch->flags = (uint16_t)((((arch->flags & (uint16_t)~mask) |
+                (value & mask)) & 0x7fd5U) | FLAG_FIXED_ONE);
+        } else
+            arch->flags = (uint16_t) ((arch->flags & 0x7000U) | (value & 0x0fd5U) | FLAG_FIXED_ONE);
         arch->sp = (uint16_t) (arch->sp + 2U);
         return BM_STATUS_OK; /* Unlike STI, POPF creates no INTR shadow. */
     case 0x9eU:
@@ -994,12 +1212,13 @@ static bm_status_t execute_ff_control(decoded_286_t *decode,
         status = pointer_preflight(decode, operand);
         if (status != BM_STATUS_OK)
             return status;
-        /* The two word offsets wrap independently. SST Harris captures
+        /* Protected preflight above forbids doubleword wrap. In real mode
+         * the two word offsets wrap independently. SST Harris captures
          * FF.5 cases 2914/3652/4550 read the selector at 0000 after FFFE. */
         status = read_operand(decode, operand, 2U, &value);
         if (status != BM_STATUS_OK)
             return status;
-        status = data_access(decode, operand->segment,
+        status = operand_access(decode, operand->segment,
                              (uint16_t) (operand->offset + 2U), 2U, 0, &selector);
         if (status != BM_STATUS_OK)
             return status;
@@ -1212,7 +1431,8 @@ static bm_status_t execute_shift(decoded_286_t *decode, uint8_t opcode)
             return status;
     }
     count &= 31U;
-    status = read_operand(decode, &operand, size, &original);
+    status = count ? read_rmw_operand(decode, &operand, size, &original) :
+        read_operand(decode, &operand, size, &original);
     if (status != BM_STATUS_OK || count == 0U)
         return status;
     /* Zero-count memory reads, but no write, match the inherited functional
@@ -1382,6 +1602,10 @@ static bm_status_t execute_multiply(decoded_286_t *decode, uint8_t opcode,
 
 static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector)
 {
+    if (decode->protected_subset) {
+        decode->pm_fault_vector = vector;
+        return BM_STATUS_UNSUPPORTED; /* Caller unwinds, then uses protected IDT. */
+    }
     /* Implemented real-mode faults save initial IP, including prefixes,
      * without error code or INTA. Mark complete only after frame/IVT success. */
     bm_status_t status = interrupt_frame(decode, vector, decode->state->arch.ip);
@@ -1391,68 +1615,108 @@ static bm_status_t deliver_fault(decoded_286_t *decode, uint8_t vector)
     return status;
 }
 
-static bm_status_t execute_system_real(decoded_286_t *decode)
+static bm_status_t execute_system(decoded_286_t *decode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
     operand_286_t operand;
     uint8_t opcode;
     uint16_t value;
     bm_status_t status = next_byte(decode, &opcode);
-    if (status != BM_STATUS_OK)
-        return status;
-    if (opcode == 0x06U) { /* CLTS, real mode: no privilege check. */
+    if (status != BM_STATUS_OK) return status;
+    if (opcode == 0x06U) { /* CLTS */
+        if ((arch->msw & MSW_PE) && arch->cpl) return deliver_fault(decode, 13);
         arch->msw &= 0xfff7U;
         return BM_STATUS_OK;
     }
-    if (opcode != 0x01U)
-        return BM_STATUS_UNSUPPORTED;
+    if (opcode > 0x03U) return BM_STATUS_UNSUPPORTED;
     status = decode_operand(decode, &operand);
-    if (status != BM_STATUS_OK)
-        return status;
+    if (status != BM_STATUS_OK) return status;
+    if (opcode == 2U || opcode == 3U ||
+        (opcode == 0U && (operand.reg_field == 4U || operand.reg_field == 5U))) {
+        bm_286_pm_query_result_t result;
+        bm_286_pm_query_kind_t kind = opcode == 2U ? BM_286_PM_LAR :
+            opcode == 3U ? BM_286_PM_LSL : operand.reg_field == 4U ? BM_286_PM_VERR : BM_286_PM_VERW;
+        if (!(arch->msw & MSW_PE)) return deliver_fault(decode, 6);
+        status = read_operand(decode, &operand, 2, &value);
+        if (status != BM_STATUS_OK) return status;
+        status = bm_286_pm_query(arch, &decode->state->config, kind, value, &result);
+        decode->waits += result.waits;
+        if (status != BM_STATUS_OK) return status;
+        if (result.accepted && opcode != 0U)
+            *word_register(arch, operand.reg_field) = result.value;
+        arch->flags = (uint16_t)((arch->flags & ~FLAG_ZF) | (result.accepted ? FLAG_ZF : 0));
+        return BM_STATUS_OK;
+    }
+    if (opcode == 0x00U) {
+        if (operand.reg_field < 2U) {
+            if (!(arch->msw & MSW_PE)) return deliver_fault(decode, 6U);
+            return write_operand(decode, &operand, 2U,
+                operand.reg_field ? arch->tr.selector : arch->ldtr.selector);
+        }
+        if (operand.reg_field != 2U && operand.reg_field != 3U) return BM_STATUS_UNSUPPORTED;
+        if (!(arch->msw & MSW_PE)) return deliver_fault(decode, 6); /* LLDT/LTR are PE-only. */
+        if (arch->cpl) return deliver_fault(decode, 13);
+        status = read_operand(decode, &operand, 2, &value);
+        if (status == BM_STATUS_OK && operand.reg_field == 3U) {
+            bm_286_segment_load_result_t result;
+            status = bm_286_pm_ltr(arch, &decode->state->config, value, &result);
+            decode->waits += result.waits;
+            if (status != BM_STATUS_OK) return status;
+            if (result.fault_vector) {
+                decode->pm_fault_vector = result.fault_vector;
+                decode->pm_fault_error = result.fault_error;
+                return BM_STATUS_UNSUPPORTED;
+            }
+            return result.loaded ? BM_STATUS_OK : BM_STATUS_INVALID_STATE;
+        }
+        return status == BM_STATUS_OK ? load_data_segment(decode, 4, value) : status;
+    }
     if (operand.reg_field < 4U) {
         bm_286_table_state_t *table = (operand.reg_field & 1U) ? &arch->idtr : &arch->gdtr;
         uint16_t words[3];
         int load = operand.reg_field >= 2U;
-        if (!operand.memory)
-            return deliver_fault(decode, 6U);
-        if (!operand.segment->valid)
-            return BM_STATUS_UNSUPPORTED;
-        /* Functional whole-operand preflight; not a physical access-order claim. */
-        if ((uint32_t) operand.offset + 5U > operand.segment->limit)
-            return deliver_fault(decode, 13U);
-        words[0] = table->limit;
-        words[1] = (uint16_t) table->base;
-        /* The 286 PRM leaves byte 5 undefined on stores. Retain inherited FF
-         * readback, also described by Intel's 386 compatibility notes. */
-        words[2] = (uint16_t) (0xff00U | (table->base >> 16U));
-        for (unsigned i = 0; i < 3U; ++i) {
-            status = data_access(decode, operand.segment,
-                (uint16_t) (operand.offset + 2U * i), 2U, !load, &words[i]);
-            if (status != BM_STATUS_OK)
-                return status;
+        if (!operand.memory) return deliver_fault(decode, 6);
+        if (load && (arch->msw & MSW_PE) && arch->cpl) return deliver_fault(decode, 13);
+        if (decode->protected_subset) {
+            bm_286_pm_access_check_t check;
+            unsigned reg;
+            for (reg = 0; reg < 4; ++reg)
+                if (operand.segment == segment_register(arch, reg)) break;
+            status = bm_286_pm_check_access(arch, reg, load ? BM_286_PM_READ : BM_286_PM_WRITE,
+                operand.offset, 6, &check);
+            if (status != BM_STATUS_OK) return status;
+            if (check.fault_vector) {
+                decode->pm_fault_vector = check.fault_vector;
+                return BM_STATUS_UNSUPPORTED;
+            }
+        } else {
+            if (!operand.segment->valid) return BM_STATUS_UNSUPPORTED;
+            if ((uint32_t)operand.offset + 5U > operand.segment->limit)
+                return deliver_fault(decode, 13);
+        }
+        /* Whole-operand preflight before effects. 286 store byte 5 is undefined;
+         * preserve the inherited FF policy, not a new physical measurement. */
+        words[0] = table->limit; words[1] = (uint16_t)table->base;
+        words[2] = (uint16_t)(0xff00U | (table->base >> 16U));
+        for (unsigned i = 0; i < 3; ++i) {
+            status = operand_access(decode, operand.segment,
+                (uint16_t)(operand.offset + 2U * i), 2, !load, &words[i]);
+            if (status != BM_STATUS_OK) return status;
         }
         if (load) {
             table->limit = words[0];
-            table->base = (uint32_t) words[1] | ((uint32_t) (words[2] & 0xffU) << 16U);
+            table->base = (uint32_t)words[1] | ((uint32_t)(words[2] & 0xffU) << 16U);
         }
         return BM_STATUS_OK;
     }
-    if (operand.reg_field != 4U && operand.reg_field != 6U)
-        return BM_STATUS_UNSUPPORTED; /* Other system forms remain pending. */
-    if (operand.memory) {
-        if (!operand.segment->valid)
-            return BM_STATUS_UNSUPPORTED;
-        if ((uint32_t) operand.offset + 1U > operand.segment->limit)
-            return deliver_fault(decode, 13U);
-    }
-    if (operand.reg_field == 4U) /* SMSW, always a 16-bit destination. */
-        return write_operand(decode, &operand, 2U, arch->msw);
-    status = read_operand(decode, &operand, 2U, &value);
+    if (operand.reg_field != 4U && operand.reg_field != 6U) return BM_STATUS_UNSUPPORTED;
+    if (operand.reg_field == 4U) return write_operand(decode, &operand, 2, arch->msw);
+    if ((arch->msw & MSW_PE) && arch->cpl) return deliver_fault(decode, 13);
+    status = read_operand(decode, &operand, 2, &value);
     if (status == BM_STATUS_OK) {
-        /* 286 lower four bits only; PE cannot be cleared by LMSW. Preserve
-         * reserved-one readback and do not import 386 CR0 behavior. Setting
-         * PE is observable, but the next protected boundary still refuses. */
-        arch->msw = (uint16_t) ((arch->msw & 0xfff1U) | (value & 0x000fU));
+        /* Sticky PE, lower four bits only. LMSW never reloads a segment cache.
+         * Public step still stops at the next protected boundary. */
+        arch->msw = (uint16_t)((arch->msw & 0xfff1U) | (value & 0x000fU));
     }
     return status;
 }
@@ -1591,7 +1855,8 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
             if (status != BM_STATUS_OK)
                 return status;
             if (form < 2U) {
-                status = read_operand(decode, &operand, size, &destination);
+                status = operation == 7U ? read_operand(decode, &operand, size, &destination) :
+                    read_rmw_operand(decode, &operand, size, &destination);
                 source = size == 1U ? byte_register(arch, operand.reg_field) :
                     *word_register(arch, operand.reg_field);
             } else {
@@ -1656,6 +1921,9 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
         status = decode_operand(decode, &operand);
         if (status != BM_STATUS_OK)
             return status;
+        if (decode->protected_subset && opcode == 0xffU &&
+            operand.reg_field == 7U)
+            return BM_STATUS_UNSUPPORTED; /* Reserved form remains separate. */
         if (decode->lock_prefix && (!operand.memory ||
             ((opcode == 0x80U || opcode == 0x81U || opcode == 0x83U) && operand.reg_field == 7U) ||
             ((opcode == 0xf6U || opcode == 0xf7U) && operand.reg_field != 2U && operand.reg_field != 3U) ||
@@ -1705,7 +1973,11 @@ static bm_status_t execute_arithmetic(decoded_286_t *decode, uint8_t opcode)
                 return BM_STATUS_UNSUPPORTED; /* FE /2+ invalid; #6 pending. */
             operation = operand.reg_field == 0U ? 0U : 5U;
         }
-        status = read_operand(decode, &operand, size, &destination);
+        if (opcode == 0x84U || opcode == 0x85U ||
+            ((opcode == 0xf6U || opcode == 0xf7U) && operand.reg_field == 0U) ||
+            ((opcode == 0x80U || opcode == 0x81U || opcode == 0x83U) && operation == 7U))
+            status = read_operand(decode, &operand, size, &destination);
+        else status = read_rmw_operand(decode, &operand, size, &destination);
         if (status != BM_STATUS_OK)
             return status;
         if (operation == 8U) { /* NOT, including no FLAGS change. */
@@ -1805,6 +2077,8 @@ static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
             return status;
         port = immediate;
     }
+    if (decode->protected_subset && arch->cpl > ((arch->flags >> 12) & 3U))
+        return deliver_fault(decode, 13U);
     status = io_access(decode, port, size, output, &value);
     if (status != BM_STATUS_OK)
         return status;
@@ -1817,6 +2091,21 @@ static bm_status_t execute_io(decoded_286_t *decode, uint8_t opcode)
     return BM_STATUS_OK;
 }
 
+/* Stage the register adjustments described by Intel's string restart memo.
+ * The corrected-REP contract is a functional model, not B2/B3/C2 emulation.
+ * SCAS uses its architectural DI (PRM B-100), not the memo's anomalous SI;
+ * LODS uses pre-operation state where the memo supplies no adjustment.
+ * Publish only after successful guest delivery, never on a host failure. */
+static bm_status_t string_fault(decoded_286_t *decode, bm_status_t status,
+    unsigned indices, unsigned count, uint16_t delta)
+{
+    if (status != BM_STATUS_OK && decode->pm_fault_vector != UINT8_MAX) {
+        decode->string_fault_adjust = (uint8_t)(indices | (decode->repeat_prefix ? count << 2 : 0));
+        decode->string_delta = delta;
+    }
+    return status;
+}
+
 static bm_status_t execute_string_io(decoded_286_t *decode, uint8_t opcode)
 {
     bm_286_arch_state_t *arch = &decode->state->arch;
@@ -1827,10 +2116,16 @@ static bm_status_t execute_string_io(decoded_286_t *decode, uint8_t opcode)
     uint16_t offset = output ? arch->si : arch->di, value = 0;
     uint16_t delta = (uint16_t) ((arch->flags & FLAG_DF) ? 0U - size : size);
     bm_status_t status;
-    /* Refuse missing guest segment-fault paths before consuming an input.
-     * This preflight is functional policy, not certified fault precedence.
+    /* Preflight guest segment faults before consuming an input.
+     * This is functional policy, not certified fault precedence.
      * Host callback failures may still consume input or commit partial output. */
-    if (!segment->valid || (uint32_t) offset + size - 1U > segment->limit)
+    if (decode->protected_subset) {
+        if (arch->cpl > ((arch->flags >> 12) & 3U))
+            return string_fault(decode, deliver_fault(decode, 13), output ? 1 : 2,
+                output ? 2 : 1, delta);
+        status = protected_operand_check(decode, segment, offset, size, !output);
+        if (status != BM_STATUS_OK) return string_fault(decode, status, output ? 1 : 2, 2, delta);
+    } else if (!segment->valid || (uint32_t) offset + size - 1U > segment->limit)
         return BM_STATUS_UNSUPPORTED;
     if (decode->lock_prefix) {
         status = begin_bus_lock(decode->state);
@@ -1838,13 +2133,13 @@ static bm_status_t execute_string_io(decoded_286_t *decode, uint8_t opcode)
             return status;
     }
     if (output) {
-        status = data_access(decode, segment, offset, size, 0, &value);
+        status = (decode->protected_subset ? operand_access : data_access)(decode, segment, offset, size, 0, &value);
         if (status == BM_STATUS_OK)
             status = io_access(decode, arch->dx, size, 1, &value);
     } else {
         status = io_access(decode, arch->dx, size, 0, &value);
         if (status == BM_STATUS_OK)
-            status = data_access(decode, segment, offset, size, 1, &value);
+            status = (decode->protected_subset ? operand_access : data_access)(decode, segment, offset, size, 1, &value);
     }
     if (status != BM_STATUS_OK)
         return status;
@@ -1855,7 +2150,7 @@ static bm_status_t execute_string_io(decoded_286_t *decode, uint8_t opcode)
     return BM_STATUS_OK;
 }
 
-/* One real-mode string element. REP restart/interrupt semantics are separate.
+/* One string element shared by real and private protected execution.
  * CMPS retains the inherited destination-before-source read order, but this
  * functional bus sequence is not a claim of physical 286 fault precedence. */
 static bm_status_t execute_string(decoded_286_t *decode, uint8_t opcode)
@@ -1872,18 +2167,39 @@ static bm_status_t execute_string(decoded_286_t *decode, uint8_t opcode)
     int uses_source = kind == 0xa4U || kind == 0xa6U || kind == 0xacU;
     int uses_destination = kind != 0xacU;
     bm_status_t status;
+    if (decode->protected_subset) {
+        /* CMPS validates destination first, matching its documented restart
+         * stages. Complete element preflight before endpoint effects remains
+         * our functional bus policy (not measured silicon bus sequencing). */
+        if (kind == 0xa6U) {
+            status = protected_operand_check(decode, &arch->es, arch->di, size, 0);
+            if (status != BM_STATUS_OK) return string_fault(decode, status, 2, 1, delta);
+        }
+        if (uses_source) {
+            status = protected_operand_check(decode, source_segment, arch->si, size, 0);
+            if (status != BM_STATUS_OK) return string_fault(decode, status,
+                kind == 0xa6U ? 3 : kind == 0xa4U ? 1 : 0,
+                kind == 0xa6U ? 2 : kind == 0xa4U ? 1 : 0, delta);
+        }
+        if (uses_destination && kind != 0xa6U) {
+            status = protected_operand_check(decode, &arch->es, arch->di, size,
+                kind == 0xa4U || kind == 0xaaU);
+            if (status != BM_STATUS_OK) return string_fault(decode, status,
+                kind == 0xa4U ? 3 : 2, 2, delta);
+        }
+    }
     if (kind == 0xa6U || kind == 0xaeU) {
-        status = data_access(decode, &arch->es, arch->di, size, 0, &destination);
+        status = (decode->protected_subset ? operand_access : data_access)(decode, &arch->es, arch->di, size, 0, &destination);
         if (status != BM_STATUS_OK)
             return status;
     }
     if (uses_source) {
-        status = data_access(decode, source_segment, arch->si, size, 0, &source);
+        status = (decode->protected_subset ? operand_access : data_access)(decode, source_segment, arch->si, size, 0, &source);
         if (status != BM_STATUS_OK)
             return status;
     }
     if (kind == 0xa4U || kind == 0xaaU) {
-        status = data_access(decode, &arch->es, arch->di, size, 1, &source);
+        status = (decode->protected_subset ? operand_access : data_access)(decode, &arch->es, arch->di, size, 1, &source);
         if (status != BM_STATUS_OK)
             return status;
     } else if (kind == 0xa6U || kind == 0xaeU)
@@ -1914,12 +2230,44 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
     uint8_t immediate;
     unsigned size;
     bm_status_t status;
+    if (arch->msw & MSW_PE) {
+        if (!decode->protected_subset)
+            return BM_STATUS_UNSUPPORTED; /* Public/internal default PE gate. */
+        /* Positive list: unreviewed real-mode handlers cannot leak into PE. */
+        if (!((opcode <= 0x3dU && (opcode & 7U) <= 5U) ||
+              opcode == 0x27U || opcode == 0x2fU || opcode == 0x37U || opcode == 0x3fU ||
+              (opcode >= 0x40U && opcode <= 0x63U) ||
+              opcode == 0x69U || opcode == 0x6bU ||
+              opcode == 0x80U || opcode == 0x81U || opcode == 0x83U ||
+              (opcode >= 0x84U && opcode <= 0x87U) ||
+              opcode == 0x98U || opcode == 0x99U || opcode == 0x9bU ||
+              opcode == 0xa8U || opcode == 0xa9U ||
+              (opcode >= 0xc0U && opcode <= 0xc5U) ||
+              (opcode >= 0xccU && opcode <= 0xceU) ||
+              (opcode >= 0xd0U && opcode <= 0xd5U) || (opcode >= 0xd8U && opcode <= 0xdfU) ||
+              opcode == 0xf6U || opcode == 0xf7U || opcode == 0xfeU ||
+              (opcode >= 0x6cU && opcode <= 0x7fU) ||
+              (opcode >= 0x88U && opcode <= 0x8fU) ||
+              (opcode >= 0x90U && opcode <= 0x97U) ||
+              (opcode >= 0x9cU && opcode <= 0x9fU) ||
+              (opcode >= 0xa0U && opcode <= 0xafU) ||
+              (opcode >= 0xb0U && opcode <= 0xbfU) ||
+              (opcode >= 0xe0U && opcode <= 0xe8U) ||
+              (opcode >= 0xecU && opcode <= 0xefU) ||
+              (opcode >= 0xf8U && opcode <= 0xfdU) || opcode == 0xf4U || opcode == 0xf5U ||
+              opcode == 0xc6U || opcode == 0xc7U || opcode == 0xd7U ||
+              opcode == 0x06U || opcode == 0x0eU || opcode == 0x16U || opcode == 0x1eU ||
+              opcode == 0x07U || opcode == 0x17U || opcode == 0x1fU ||
+              opcode == 0x68U || opcode == 0x6aU || opcode == 0xffU ||
+              opcode == 0xc2U || opcode == 0xc3U || opcode == 0xc8U || opcode == 0xc9U ||
+              opcode == 0xcaU || opcode == 0xcbU || opcode == 0x9aU ||
+              opcode == 0x0fU || opcode == 0xe9U || opcode == 0xebU || opcode == 0xeaU))
+            return BM_STATUS_UNSUPPORTED;
+    }
     if (opcode == 0x90U)
         return BM_STATUS_OK;
-    if (arch->msw & MSW_PE)
-        return BM_STATUS_UNSUPPORTED; /* No real-mode semantics in PE mode. */
     if (opcode == 0x0fU)
-        return execute_system_real(decode);
+        return execute_system(decode);
     if (opcode == 0x9bU) {
         if ((arch->msw & (MSW_MP | MSW_TS)) == (MSW_MP | MSW_TS))
             return deliver_fault(decode, 7U);
@@ -1930,9 +2278,31 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
     if (opcode >= 0xd8U && opcode <= 0xdfU) {
         if (arch->msw & (MSW_EM | MSW_TS))
             return deliver_fault(decode, 7U);
-        /* No populated 80287 or untrapped ESC handshake model yet. Never
-         * manufacture floating-point results or pretend a store succeeded. */
-        return BM_STATUS_UNSUPPORTED;
+        /* The selected machine profile has no populated 80287. The 80286
+         * still consumes ModR/M and displacement and calculates the effective
+         * address, but no PEREQ operand transfer follows. Consequently a
+         * memory destination is untouched and a memory source is not read.
+         * This is the architectural absence path, not an x87 no-op model: a
+         * populated extension remains outside this contract. */
+        return decode_operand(decode, &operand);
+    }
+    if (opcode == 0x63U) { /* ARPL: Intel B-21; flags other than ZF preserved. */
+        if (!(arch->msw & MSW_PE)) return deliver_fault(decode, 6U);
+        status = decode_operand(decode, &operand);
+        if (status != BM_STATUS_OK) return status;
+        if (operand.memory) {
+            status = protected_operand_check(decode, operand.segment, operand.offset, 2U, 1);
+            if (status != BM_STATUS_OK) return status;
+        }
+        status = read_operand(decode, &operand, 2U, &value);
+        if (status != BM_STATUS_OK) return status;
+        other = *word_register(arch, operand.reg_field) & 3U;
+        if ((value & 3U) < other) {
+            status = write_operand(decode, &operand, 2U, (uint16_t)((value & 0xfffcU) | other));
+            if (status != BM_STATUS_OK) return status;
+            arch->flags |= FLAG_ZF;
+        } else arch->flags &= (uint16_t) ~FLAG_ZF;
+        return BM_STATUS_OK;
     }
     if (opcode == 0x62U) { /* BOUND r16, m16:16 (Intel PRM B-22). */
         status = decode_operand(decode, &operand);
@@ -1942,14 +2312,18 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
             return deliver_fault(decode, 6U);
         /* Preflight ordering is not physical bus evidence. Invalid imported
          * caches remain a gap, not a fabricated guest protection fault. */
-        if (!operand.segment->valid)
-            return BM_STATUS_UNSUPPORTED;
-        if ((uint32_t) operand.offset + 3U > operand.segment->limit)
-            return deliver_fault(decode, 13U);
+        if (decode->protected_subset) {
+            status = protected_operand_check(decode, operand.segment, operand.offset, 4U, 0);
+            if (status != BM_STATUS_OK) return status;
+        } else {
+            if (!operand.segment->valid) return BM_STATUS_UNSUPPORTED;
+            if ((uint32_t) operand.offset + 3U > operand.segment->limit)
+                return deliver_fault(decode, 13U);
+        }
         status = read_operand(decode, &operand, 2U, &value);
         if (status != BM_STATUS_OK)
             return status;
-        status = data_access(decode, operand.segment,
+        status = operand_access(decode, operand.segment,
             (uint16_t) (operand.offset + 2U), 2U, 0, &other);
         if (status != BM_STATUS_OK)
             return status;
@@ -1981,7 +2355,7 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         status = read_operand(decode, &operand, 2U, &value);
         if (status != BM_STATUS_OK)
             return status;
-        status = data_access(decode, operand.segment,
+        status = operand_access(decode, operand.segment,
             (uint16_t) (operand.offset + 2U), 2U, 0, &other);
         if (status != BM_STATUS_OK)
             return status;
@@ -2010,6 +2384,8 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
     if (opcode == 0xcfU)
         return interrupt_return(decode);
     if (opcode == 0xfaU || opcode == 0xfbU) {
+        if (decode->protected_subset && arch->cpl > ((arch->flags >> 12) & 3U))
+            return deliver_fault(decode, 13U);
         if (opcode == 0xfaU)
             arch->flags &= (uint16_t) ~FLAG_IF;
         else {
@@ -2019,6 +2395,8 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         return BM_STATUS_OK;
     }
     if (opcode == 0xf4U) {
+        if (decode->protected_subset && arch->cpl)
+            return deliver_fault(decode, 13U);
         arch->halted = 1U;
         return BM_STATUS_OK;
     }
@@ -2069,12 +2447,16 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         status = decode_operand(decode, &operand);
         if (status != BM_STATUS_OK)
             return status;
+        /* Documented MOV/XCHG register forms have no external data window.
+         * MOV-to-segment still needs descriptor exclusion after its source. */
+        if (decode->protected_subset && !operand.memory && opcode != 0x8eU)
+            decode->lock_prefix = 0;
         size = ((opcode & 1U) || opcode == 0x8cU || opcode == 0x8eU)
             ? 2U : 1U;
         if (opcode == 0x86U || opcode == 0x87U) {
             if (operand.memory)
                 decode->lock_prefix = 1U; /* XCHG asserts LOCK without F0. */
-            status = read_operand(decode, &operand, size, &value);
+            status = read_rmw_operand(decode, &operand, size, &value);
             if (status != BM_STATUS_OK)
                 return status;
             other = size == 1U ? byte_register(arch, operand.reg_field) :
@@ -2097,13 +2479,20 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
         if (opcode == 0x8eU) {
             segment = segment_register(arch, operand.reg_field);
             if (operand.reg_field == 1U)
-                return decode->lock_prefix ? BM_STATUS_UNSUPPORTED :
-                    deliver_fault(decode, 6U); /* MOV CS; LOCK precedence pending. */
+                return decode->lock_prefix && !decode->protected_subset ? BM_STATUS_UNSUPPORTED :
+                    deliver_fault(decode, 6U); /* Real LOCK precedence remains outside its subset. */
             if (segment == NULL)
                 return BM_STATUS_UNSUPPORTED; /* Reserved-field aliases unverified. */
-            status = read_operand(decode, &operand, 2U, &value);
+            if (decode->protected_subset && !operand.memory) {
+                value = *word_register(arch, operand.reg_number);
+                status = BM_STATUS_OK;
+            } else status = read_operand(decode, &operand, 2U, &value);
             if (status != BM_STATUS_OK)
                 return status;
+            if (decode->protected_subset && decode->lock_prefix) {
+                status = begin_bus_lock(decode->state);
+                if (status != BM_STATUS_OK) return status;
+            }
             status = load_data_segment(decode, operand.reg_field, value);
             if (status != BM_STATUS_OK)
                 return status;
@@ -2143,6 +2532,182 @@ static bm_status_t execute_data(decoded_286_t *decode, uint8_t opcode)
     return execute_arithmetic(decode, opcode);
 }
 
+static bm_status_t step_protected(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
+{
+    bm_286_private_t *state;
+    bm_286_boundary_t boundary = {0};
+    decoded_286_t decode = {0};
+    bm_286_pm_delivery_state_t delivery_state = {0};
+    bm_286_pm_delivery_result_t delivered;
+    bm_286_pm_request_t request = {0};
+    bm_status_t status;
+    uint8_t opcode = 0, sampled_tf, repeat = 0, repeat_more = 0;
+    bool returned = false, boundary_trap;
+    if (!is_286_cpu(cpu) || !out_boundary) return BM_STATUS_INVALID_ARGUMENT;
+    memset(out_boundary, 0, sizeof(*out_boundary));
+    state = cpu->context;
+    if (state->stopped || (state->lock_active && !(state->rep_active && state->rep_lock)))
+        return BM_STATUS_INVALID_STATE;
+    boundary.instruction_ip = state->arch.ip;
+    boundary.instruction_address = (state->arch.cs.base + state->arch.ip) & ADDRESS_MASK;
+    boundary.timing = BM_286_TIMING_UNKNOWN;
+    if (state->hold_line && !state->lock_active) {
+        if (!state->hold_acknowledged) {
+            state->hold_acknowledged = 1;
+            if (state->config.hold_ack) state->config.hold_ack(state->config.pin_context, 1);
+        }
+        boundary.kind = BM_286_BOUNDARY_HOLD;
+        *out_boundary = boundary;
+        return BM_STATUS_IDLE;
+    }
+    request.source = BM_286_PM_BOUNDARY;
+    request.restart_ip = request.next_ip = state->arch.ip;
+    request.intr_line = state->intr_line != 0;
+    boundary_trap = !state->arch.shutdown && state->arch.trap_pending &&
+        state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD;
+    /* A pending accepted event ends the diagnostic REP exclusion window. */
+    if (state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD &&
+        (state->arch.trap_pending ||
+         (state->arch.nmi_pending && !state->arch.nmi_blocked) ||
+         (state->intr_line && (state->arch.flags & FLAG_IF) && !state->arch.interrupt_shadow)))
+        end_bus_lock(state);
+    status = bm_286_pm_deliver(&state->arch, &state->config, &delivery_state,
+        &request, &delivered);
+    if (status != BM_STATUS_OK &&
+        (status != BM_STATUS_IDLE || delivered.accepted)) goto stop;
+    if (status == BM_STATUS_OK) {
+        state->rep_active = 0;
+        /* Classify by accepted origin, never by the controller's vector.
+         * INTR vector 1 is not a sampled trap. A delivery rejection that
+         * escalates to a protection fault/#DF is an exception boundary. */
+        boundary.kind = delivered.shutdown ? BM_286_BOUNDARY_SHUTDOWN :
+            (boundary_trap || delivered.attempts > 1 ?
+                BM_286_BOUNDARY_EXCEPTION : BM_286_BOUNDARY_INTERRUPT);
+        boundary.has_vector = (uint8_t)delivered.entered;
+        boundary.vector = delivered.entered ? delivered.vector : 0;
+        boundary.bus_wait_cycles = delivered.waits;
+        goto complete;
+    }
+    if (state->arch.shutdown || state->arch.halted) {
+        boundary.kind = state->arch.shutdown ? BM_286_BOUNDARY_SHUTDOWN : BM_286_BOUNDARY_HALT;
+        *out_boundary = boundary;
+        return BM_STATUS_IDLE;
+    }
+    decode.state = state; decode.cursor = state->arch.ip;
+    decode.override_segment = -1; decode.protected_subset = 1;
+    decode.pm_fault_vector = UINT8_MAX; /* #DE is vector zero, not absence. */
+    sampled_tf = (uint8_t)((state->arch.flags & FLAG_TF) != 0);
+    if (state->rep_active) {
+        opcode = state->rep_opcode; repeat = state->rep_prefix;
+        decode.override_segment = state->rep_segment; decode.lock_prefix = state->rep_lock;
+        decode.cursor = state->rep_end_ip; status = BM_STATUS_OK;
+    } else for (;;) {
+        status = next_byte(&decode, &opcode);
+        if (status != BM_STATUS_OK) break;
+        if (opcode == 0x26 || opcode == 0x2e || opcode == 0x36 || opcode == 0x3e) {
+            decode.override_segment = (opcode >> 3) & 3;
+            continue;
+        }
+        if (opcode == 0xf2 || opcode == 0xf3) { repeat = opcode; continue; }
+        if (opcode == 0xf0) { decode.lock_prefix = 1; continue; }
+        break;
+    }
+    decode.repeat_prefix = repeat;
+    if (status == BM_STATUS_OK && decode.lock_prefix &&
+        state->arch.cpl > ((state->arch.flags >> 12) & 3U))
+        status = deliver_fault(&decode, 13U);
+    if (status == BM_STATUS_OK) {
+        int locked_string = (opcode >= 0x6cU && opcode <= 0x6fU) ||
+            opcode == 0xa4U || opcode == 0xa5U;
+        if (decode.lock_prefix && ((repeat && !locked_string) ||
+            !(locked_string || (opcode <= 0x31U && (opcode & 7U) <= 1U) ||
+              opcode == 0x80U || opcode == 0x81U || opcode == 0x83U ||
+              (opcode >= 0x88U && opcode <= 0x8cU) || opcode == 0x8eU ||
+              (opcode >= 0x90U && opcode <= 0x97U) || (opcode >= 0xb0U && opcode <= 0xbfU) ||
+              (opcode >= 0xa0U && opcode <= 0xa3U) ||
+              opcode == 0xc6U || opcode == 0xc7U ||
+              opcode == 0xc0U || opcode == 0xc1U ||
+              (opcode >= 0xd0U && opcode <= 0xd3U) ||
+              opcode == 0x86U || opcode == 0x87U || opcode == 0xf6U ||
+              opcode == 0xf7U || opcode == 0xfeU || opcode == 0xffU)))
+            status = BM_STATUS_UNSUPPORTED; /* Outside the documented prefix contract. */
+
+        else if (repeat) {
+            if (!((opcode >= 0x6c && opcode <= 0x6f) ||
+                (opcode >= 0xa4 && opcode <= 0xa7) || (opcode >= 0xaa && opcode <= 0xaf)))
+                status = BM_STATUS_UNSUPPORTED;
+            else if (state->arch.cx) {
+                status = execute_string(&decode, opcode);
+                if (status == BM_STATUS_OK) {
+                    --state->arch.cx;
+                    repeat_more = state->arch.cx != 0;
+                    if ((opcode & 0xfeU) == 0xa6 || (opcode & 0xfeU) == 0xae)
+                        repeat_more &= ((state->arch.flags & FLAG_ZF) != 0) == (repeat == 0xf3);
+                }
+            }
+        } else if (opcode == 0xcf) {
+            bm_286_segment_load_result_t result;
+            status = bm_286_pm_iret(&state->arch, &state->config, (uint16_t)decode.cursor, &result);
+            decode.waits += result.waits;
+            decode.task_context=result.task_context;
+            if (status == BM_STATUS_OK && result.fault_vector) {
+                decode.pm_fault_vector = result.fault_vector;
+                decode.pm_fault_error = result.fault_error;
+                status = BM_STATUS_UNSUPPORTED;
+            } else if (status == BM_STATUS_OK) {
+                if (!result.loaded) status = BM_STATUS_INVALID_STATE;
+                else returned = true;
+            }
+        } else status = execute_data(&decode, opcode);
+    }
+    if (decode.pm_fault_vector != UINT8_MAX || decode.software_interrupt) {
+        end_bus_lock(state);
+        state->rep_active = 0;
+        request.source = decode.software_interrupt ? BM_286_PM_SOFTWARE : BM_286_PM_EXCEPTION;
+        request.vector = decode.software_interrupt ? decode.software_vector : decode.pm_fault_vector;
+        request.next_ip = (uint16_t) decode.cursor;
+        request.error_code = decode.pm_fault_error;
+        if(decode.task_context) request.restart_ip=state->arch.ip;
+        request.task_fault=decode.task_context!=0;
+        request.string_fault_adjust=decode.string_fault_adjust;
+        request.string_delta=decode.string_delta;
+        /* Ordinary faults restart at the first prefix; a selected task owns
+         * its incoming IP. Delivery stages string corrections in the outgoing
+         * image, before a possible task save, never in the handler's task. */
+        status = bm_286_pm_deliver(&state->arch, &state->config, &delivery_state,
+            &request, &delivered);
+        decode.waits += delivered.waits;
+        if (status != BM_STATUS_OK) goto stop;
+        boundary.kind = delivered.shutdown ? BM_286_BOUNDARY_SHUTDOWN :
+            decode.software_interrupt && delivered.attempts == 1 ? BM_286_BOUNDARY_INSTRUCTION : BM_286_BOUNDARY_EXCEPTION;
+        boundary.has_vector = (uint8_t)delivered.entered;
+        boundary.vector = delivered.entered ? delivered.vector : 0;
+    } else {
+        if (status != BM_STATUS_OK) goto stop;
+        state->rep_active = repeat_more;
+        if (repeat_more) {
+            state->rep_opcode = opcode; state->rep_prefix = repeat;
+            state->rep_lock = decode.lock_prefix; state->rep_segment = decode.override_segment;
+            state->rep_end_ip = (uint16_t)decode.cursor;
+        } else if (!returned) state->arch.ip = (uint16_t)decode.cursor;
+        state->arch.interrupt_shadow = decode.next_shadow;
+        state->arch.trap_pending = (uint8_t)(state->arch.trap_pending ||
+            (sampled_tf && !decode.task_context && decode.next_shadow != BM_286_SHADOW_SS_LOAD));
+        boundary.kind = repeat_more ? BM_286_BOUNDARY_REP_ITERATION : BM_286_BOUNDARY_INSTRUCTION;
+    }
+    if (!repeat_more) end_bus_lock(state);
+    boundary.bus_wait_cycles = decode.waits;
+complete:
+    boundary.cpu_cycles = boundary.bus_wait_cycles; /* Known wait lower bound only. */
+    *out_boundary = boundary;
+    if (state->config.trace) state->config.trace(state->config.trace_context, &boundary);
+    return BM_STATUS_OK;
+stop:
+    state->stopped = 1; /* Includes unsupported gaps; never automatic replay. */
+    end_bus_lock(state);
+    return status;
+}
+
 bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
 {
     bm_286_private_t *state;
@@ -2159,6 +2724,10 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
     state = cpu->context;
     if (state->stopped)
         return BM_STATUS_INVALID_STATE;
+    /* Select the mode before real-mode event arbitration, HOLD or idle paths.
+     * The reviewed C/D/E/F functional profile owns every protected boundary. */
+    if (state->arch.msw & MSW_PE)
+        return step_protected(cpu, out_boundary);
     boundary.instruction_ip = state->arch.ip;
     boundary.instruction_address =
         (state->arch.cs.base + state->arch.ip) & ADDRESS_MASK;
@@ -2173,8 +2742,10 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
         *out_boundary = boundary;
         return BM_STATUS_IDLE;
     }
-    decode = (decoded_286_t) {state, state->arch.ip, 0U, 0U, -1,
-                             BM_286_SHADOW_NONE, 0U, 0U, 0U, 0U, 0U};
+    decode = (decoded_286_t) {0};
+    decode.state = state;
+    decode.cursor = state->arch.ip;
+    decode.override_segment = -1;
     if (!state->arch.shutdown && state->arch.trap_pending &&
         state->arch.interrupt_shadow != BM_286_SHADOW_SS_LOAD)
         event = 1U;
@@ -2207,10 +2778,6 @@ bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary)
             BM_286_BOUNDARY_HALT;
         *out_boundary = boundary;
         return BM_STATUS_IDLE;
-    }
-    if (state->arch.msw & MSW_PE) {
-        state->stopped = 1U;
-        return BM_STATUS_UNSUPPORTED; /* No protected fetch/privilege model. */
     }
     trap_was_enabled = (uint8_t) ((state->arch.flags & FLAG_TF) != 0U);
     if (state->rep_active) {

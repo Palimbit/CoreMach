@@ -89,7 +89,7 @@ static bm_286_boundary_t step(fixture_t *f)
 static void target(bm_286_arch_state_t *s, uint16_t ip, uint16_t cs, uint16_t sp)
 {
     s->ip = ip; s->sp = sp; s->cs.selector = cs; s->cs.base = (uint32_t)cs << 4;
-    s->cs.limit = 0xffff; s->cs.access = 0; s->cs.valid = 1;
+    s->cs.limit = 0xffff; s->cs.access = 0x82; s->cs.valid = 1;
 }
 static void calls(fixture_t *f)
 {
@@ -207,6 +207,8 @@ static void failures(fixture_t *f)
             if (bad == 0) s.ss.valid = 0;
             if (bad == 1) s.ss.limit = 0x100;
             if (bad == 2) s.sp = (uint16_t)(form < 2 ? 3 : 0xfffd);
+            /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+            uint64_t gate_cycles = 99;
             if (bad == 3) s.msw |= 1;
             if (bad == 4) f->ram[0x30100] = 0xf0;
             if (bad == 5) f->ram[0x30100] = 0xf3;
@@ -224,7 +226,8 @@ static void failures(fixture_t *f)
                 }
                 continue;
             }
-            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+            set(f, &s); assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+            if (s.msw & 1U) assert(gate_cycles == 0);
             a = state(f); same(&s, &a);
             for (unsigned j = 0; j < f->count; ++j) assert(f->trace[j].operation != BM_BUS_WRITE);
         }

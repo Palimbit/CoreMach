@@ -287,7 +287,9 @@ static void test_halt_shutdown_and_pending_signals(void)
     assert(bm_286_step(&cpu, &boundary) == BM_STATUS_IDLE);
     assert(boundary.kind == BM_286_BOUNDARY_SHUTDOWN);
     assert(cpu.ops.signal(cpu.context, BM_286_SIGNAL_NMI, 1) == BM_STATUS_OK);
-    assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNSUPPORTED);
+    /* Strict clocks still reject before any protected recovery. */
+    uint64_t gate_cycles = 99;
+    assert(bm_286_step_clocked(cpu.context, 0, &gate_cycles) == BM_STATUS_UNSUPPORTED && !gate_cycles);
     state = state_of(&cpu);
     assert(state.shutdown == 1U && (state.msw & 1U) == 1U);
     assert(rom.fetches == fetches_before_shutdown);

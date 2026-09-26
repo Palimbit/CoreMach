@@ -491,7 +491,7 @@ static void state_loads(void)
                    (uint16_t)selector, &result) == BM_STATUS_OK);
             assert(result.loaded && !result.waits && !result.fault_vector);
             assert(s->selector == selector && s->base == selector * 16u);
-            assert(s->limit == 0xffff && !s->access && s->valid);
+            assert(s->limit == 0xffff && s->access == 0x82 && s->valid);
         }
     }
     memcpy(&before, &arch, sizeof(arch));

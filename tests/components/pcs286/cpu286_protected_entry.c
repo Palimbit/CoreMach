@@ -124,7 +124,7 @@ static void rejections(void)
         case 0: a.idtr.limit = 110; break;
         case 1: f.ram[0x106d] = 0x82; break;
         case 2: f.ram[0x106d] = 6; vector = 11; break;
-        case 3: f.ram[0x106d] = 0x85; expected = BM_STATUS_UNSUPPORTED; break;
+        case 3: f.ram[0x106d] = 0x85; error = 9; break; /* Task target is code, not TSS. */
         case 4: f.ram[0x106a] = 0; error = 1; break;
         case 5: f.ram[0x200d] = 0x92; error = 9; break;
         case 6: f.ram[0x200d] = 0x1a; vector = 11; error = 9; break;
@@ -132,7 +132,7 @@ static void rejections(void)
         case 8: f.ram[0x2008] = f.ram[0x2009] = 0; error = 0; break;
         case 9: c.bus_lock = NULL; expected = BM_STATUS_UNSUPPORTED; break;
         case 10: a.cpl = 3; e.software = true; break;
-        case 11: a.cpl = 3; expected = BM_STATUS_UNSUPPORTED; break;
+        case 11: a.cpl = 3; vector = 10; error = 1; break; /* E2b: no loaded TR. */
         }
         memcpy(&before, &a, sizeof(a));
         assert(bm_286_pm_enter_event(&a, &c, &e, &r) == expected);

@@ -135,7 +135,7 @@ static void success_and_failures(void)
         expected.cs.limit = 0x789a; expected.cs.access = (uint8_t)(0x9b | (cpl << 5));
         expected.ip = 0x5678; expected.sp += 6; expected.flags = 0x4703;
         expected.nmi_blocked = 0;
-        assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
         same(&a, &expected);
         calls = (os ? 6u : 3u) + (ot ? 8u : 4u) + 2u;
         assert(f.calls == calls && f.writes == 1 && r.waits == calls * 3u);
@@ -150,7 +150,7 @@ static void success_and_failures(void)
         for (fail = 1; fail <= calls; ++fail) for (after = 0; after < 2; ++after) {
             setup(&f, &a, &c, cpl, os, ot); observe(&f, &a);
             f.fail = fail; f.after = after != 0; f.failure = errors[kind];
-            assert(bm_286_pm_iret(&a, &c, &r) == errors[kind]);
+            assert(bm_286_pm_iret(&a, &c, 0x105, &r) == errors[kind]);
             same(&a, &f.before);
             assert(!r.loaded && !r.fault_vector && !r.fault_error);
             assert(r.waits == (fail - 1) * 3u && f.calls == fail);
@@ -194,7 +194,7 @@ static void flags_matrix(void)
         for (saved = 0; saved < 65536; ++saved) {
             a = initial; f.calls = f.effects = f.writes = f.locks = f.unlocks = 0;
             word(&f, a.ss.base + a.sp + 4, (uint16_t)saved);
-            assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+            assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
             assert(a.flags == restored_flags(initial.flags, (uint16_t)saved, cpl));
             assert(a.cpl == cpl && a.nmi_pending && !a.nmi_blocked && a.trap_pending);
             assert(a.interrupt_shadow == BM_286_SHADOW_SS_LOAD);
@@ -214,7 +214,8 @@ static void selectors_and_types(void)
         unsigned selector = (local ? 4u : 8u) + rpl;
         unsigned dpl = (access >> 5) & 3u;
         bool code = (access & 0x18u) == 0x18u;
-        bool privilege = (access & 4u) ? dpl <= cpl : dpl == cpl;
+        bool privilege = (access & 4u) ? dpl <= rpl : dpl == rpl;
+        bool null_outer_ss = false;
         uint8_t vector = 0;
         bm_status_t status = BM_STATUS_OK;
         setup(&f, &a, &c, cpl, rpl & 1, access & 1);
@@ -222,23 +223,23 @@ static void selectors_and_types(void)
         descriptor(&f, local ? a.ldtr.base : a.gdtr.base + 8, (uint8_t)access);
         frame(&f, &a, (uint16_t)selector, 2); before = a;
         if (rpl < cpl) vector = 13;
-        else if (rpl > cpl) status = BM_STATUS_UNSUPPORTED;
         else if (!code || !privilege) vector = 13;
         else if (!(access & 0x80u)) vector = 11;
-        assert(bm_286_pm_iret(&a, &c, &r) == status);
+        else if (rpl > cpl) { vector = 13; null_outer_ss = true; } /* Fixture SS word is null. */
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == status);
         assert(r.fault_vector == vector && r.loaded == (status == BM_STATUS_OK && !vector));
         if (r.loaded) {
             assert(a.cs.selector == selector && a.cs.access == (access | 1u));
             assert(a.cs.base == 0x123456 && a.cpl == cpl && f.writes == 1);
         } else {
             same(&a, &before); assert(!f.writes && !f.locks);
-            assert(r.fault_error == (vector ? (selector & 0xfffcu) : 0u));
+            assert(r.fault_error == (vector && !null_outer_ss ? (selector & 0xfffcu) : 0u));
         }
     }
     for (cpl = 0; cpl < 4; ++cpl) for (null_value = 0; null_value < 4; ++null_value) {
         setup(&f, &a, &c, cpl, 0, 0); frame(&f, &a, (uint16_t)null_value, 2); before = a;
-        assert(bm_286_pm_iret(&a, &c, &r) == (null_value > cpl ? BM_STATUS_UNSUPPORTED : BM_STATUS_OK));
-        assert(!r.loaded && r.fault_vector == (null_value > cpl ? 0 : 13));
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK);
+        assert(!r.loaded && r.fault_vector == 13);
         assert(!r.fault_error && !f.writes && f.calls == 1); same(&a, &before);
     }
 }
@@ -268,7 +269,7 @@ static void rejections_and_precedence(void)
         case 9: f.ram[a.gdtr.base + 13] = 0x1a; break; /* DPL before presence */
         case 10: f.ram[a.gdtr.base + 13] = 0x3a;
                  word(&f, a.sp, 0xffff); vector = 11; break; /* Presence before IP */
-        case 11: a.flags |= 0x4000; a.ss.valid = 0; status = BM_STATUS_UNSUPPORTED; break;
+        case 11: a.flags |= 0x4000; a.ss.valid = 0; vector = 10; error = 0; break;
         case 12: c.bus_lock = NULL; status = BM_STATUS_UNSUPPORTED; break;
         case 13: a.ss.valid = 0; status = BM_STATUS_INVALID_STATE; break;
         case 14: a.ss.base = 0x1000000; status = BM_STATUS_INVALID_STATE; break;
@@ -284,17 +285,17 @@ static void rejections_and_precedence(void)
         case 24: a.ss.access = 0xbb; status = BM_STATUS_INVALID_STATE; break;
         }
         observe(&f, &a);
-        assert(bm_286_pm_iret(&a, &c, &r) == status); same(&a, &f.before);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == status); same(&a, &f.before);
         assert(!r.loaded && !f.writes && !f.locked);
         assert(r.fault_vector == (status == BM_STATUS_OK ? vector : 0));
         assert(r.fault_error == (status == BM_STATUS_OK ? error : 0));
     }
     setup(&f, &a, &c, 0, 0, 0); observe(&f, &a);
-    assert(bm_286_pm_iret(NULL, &c, &r) == BM_STATUS_INVALID_ARGUMENT);
-    assert(bm_286_pm_iret(&a, NULL, &r) == BM_STATUS_INVALID_ARGUMENT);
-    assert(bm_286_pm_iret(&a, &c, NULL) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_286_pm_iret(NULL, &c, 0x105, &r) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_286_pm_iret(&a, NULL, 0x105, &r) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_286_pm_iret(&a, &c, 0x105, NULL) == BM_STATUS_INVALID_ARGUMENT);
     c.access = NULL;
-    assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_INVALID_ARGUMENT);
     assert(!f.calls && !r.loaded && !r.fault_vector); same(&a, &f.before);
 }
 
@@ -320,7 +321,7 @@ static void stack_and_ip_boundaries(void)
             descriptor(&f, a.gdtr.base + 8, 0x9a);
             for (j = 0; j < 6; ++j)
                 if (sp + j > 65535 || (down ? sp + j <= limits[l] : sp + j > limits[l])) fits = false;
-            assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK);
+            assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK);
             assert(r.loaded == fits);
             if (fits) assert(a.sp == (uint16_t)(sp + 6));
             else assert(r.fault_vector == 12 && !r.fault_error && !f.writes);
@@ -331,7 +332,7 @@ static void stack_and_ip_boundaries(void)
     for (sp = 0; sp < 65536; ++sp) {
         a = initial; f.calls = f.effects = f.writes = f.locks = f.unlocks = 0;
         word(&f, a.ss.base + a.sp, (uint16_t)sp);
-        assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK);
         assert(r.loaded == (sp <= 0x789a));
         if (!r.loaded) assert(r.fault_vector == 13 && !r.fault_error && !f.writes);
     }
@@ -365,11 +366,11 @@ static void roundtrip(void)
             /* A private synthetic handler must explicitly discard its error word.
              * Without that action saved IP becomes CS and must fail validation. */
             bm_286_arch_state_t before = a;
-            assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && !r.loaded);
+            assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && !r.loaded);
             assert(r.fault_vector == 13); same(&a, &before);
             a.sp += 2; f.calls = f.effects = f.writes = f.locks = f.unlocks = 0;
         }
-        assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
         original.nmi_blocked = 0; same(&a, &original);
     }
 }
@@ -387,35 +388,35 @@ static void wrapping_and_accessed(void)
         a.sp = 0x8002; /* IP physical FFFFFD/FFFFFE; FLAGS at 1/2. */
         a.gdtr.base = 0x12000 + odd;
         descriptor(&f, a.gdtr.base + 8, 0x9a); frame(&f, &a, 8, 2);
-        assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
         assert(f.trace[0].address == ((0xff7ffbu + odd + 0x8004) & 0xffffffu));
         setup(&f, &a, &c, 0, odd, odd);
         a.gdtr.base = 0xfffff4u + odd;
         descriptor(&f, a.gdtr.base + 8, 0x9a);
-        assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
         assert(f.trace[f.calls - 1].address == 1u + odd);
     }
     for (already = 0; already < 2; ++already) for (byte = 0; byte < 256; ++byte) {
         setup(&f, &a, &c, 0, 0, 0);
         f.ram[f.access_address] |= (uint8_t)already;
         f.change_access = true; f.replacement = (uint8_t)byte;
-        assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
         assert(f.ram[f.access_address] == (byte | 1u) && a.cs.access == 0x9b);
     }
     /* FLAGS aliases the descriptor access byte: all frame reads precede A. */
     setup(&f, &a, &c, 0, 0, 0);
     a.sp = 0x2009; word(&f, 0x2009, 0); word(&f, 0x200b, 8);
     word(&f, 0x200d, 0x029a); /* P=1, executable; returned FLAGS must see A=0. */
-    assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+    assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
     assert(a.flags == 0x0292 && f.ram[0x200d] == 0x9b);
-    /* Restoring NT is legal; a subsequent return selects the unsupported task
+    /* Restoring NT is legal; a subsequent return selects the task
      * path BEFORE ordinary stack reads, even when that stack is now invalid. */
     setup(&f, &a, &c, 3, 1, 0); frame(&f, &a, 11, 0x4002);
-    assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+    assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
     assert(a.flags & 0x4000); f.calls = 0; a.ss.valid = 0;
     observe(&f, &a);
-    assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_UNSUPPORTED);
-    assert(!f.calls && !r.loaded && !r.fault_vector); same(&a, &f.before);
+    assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK);
+    assert(!f.calls && !r.loaded && r.fault_vector==10 && !r.fault_error); same(&a, &f.before);
 }
 
 static void public_gate_and_isolation(void)
@@ -425,17 +426,17 @@ static void public_gate_and_isolation(void)
     bm_286_config_t c, d;
     bm_286_segment_load_result_t r;
     bm_host_services_t host; bm_cpu_t cpu;
-    bm_286_boundary_t boundary;
+    bm_286_boundary_t boundary; uint64_t cycles = 99;
     setup(&f, &a, &c, 0, 0, 0); setup(&other, &b, &d, 3, 1, 1);
-    assert(bm_286_pm_iret(&a, &c, &r) == BM_STATUS_OK && r.loaded);
+    assert(bm_286_pm_iret(&a, &c, 0x105, &r) == BM_STATUS_OK && r.loaded);
     assert(!other.calls && b.ip == 0x100 && b.sp == 0x8000 && b.nmi_blocked);
-    assert(bm_286_pm_iret(&b, &d, &r) == BM_STATUS_OK && r.loaded && b.cpl == 3);
+    assert(bm_286_pm_iret(&b, &d, 0x105, &r) == BM_STATUS_OK && r.loaded && b.cpl == 3);
     host = bm_null_host_services();
     assert(bm_286_create(&host, &c, &cpu) == BM_STATUS_OK);
     a.nmi_pending = a.trap_pending = 0; a.interrupt_shadow = BM_286_SHADOW_NONE;
     assert(bm_286_set_arch_state(&cpu, &a) == BM_STATUS_OK);
     f.calls = 0;
-    assert(bm_286_step(&cpu, &boundary) == BM_STATUS_UNSUPPORTED && !f.calls);
+    assert(bm_286_step_clocked(cpu.context, 0, &cycles) == BM_STATUS_UNSUPPORTED && !cycles && !f.calls);
     assert(bm_286_get_arch_state(&cpu, &inspected) == BM_STATUS_OK); same(&a, &inspected);
     assert(bm_286_step(&cpu, &boundary) == BM_STATUS_INVALID_STATE && !f.calls);
     cpu.ops.destroy(cpu.context);

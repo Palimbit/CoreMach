@@ -83,7 +83,7 @@ static void check_fault(fixture_t *f, const bm_286_arch_state_t *s, const bm_286
     bm_286_arch_state_t a = state(f), e = *s;
     e.sp = (uint16_t)(s->sp - 6); e.flags &= 0xfcffU; e.ip = 0x200;
     e.cs.selector = 0x4000; e.cs.base = 0x40000;
-    e.cs.limit = 0xffff; e.cs.access = 0; e.cs.valid = 1;
+    e.cs.limit = 0xffff; e.cs.access = 0x82; e.cs.valid = 1;
     e.trap_pending = 0; e.interrupt_shadow = BM_286_SHADOW_NONE;
     same(&a, &e);
     assert(b->kind == BM_286_BOUNDARY_EXCEPTION && b->has_vector && b->vector == 7);
@@ -112,14 +112,69 @@ static void matrix(fixture_t *f)
                 assert(!b.has_vector && b.kind == BM_286_BOUNDARY_INSTRUCTION);
                 assert(f->count == prefix+1);
             } else {
-                assert(status == BM_STATUS_UNSUPPORTED);
-                a = state(f); same(&a, &s); assert(f->count == prefix+1);
+                assert(status == BM_STATUS_OK); a = state(f); e = s;
+                e.ip += (uint16_t)(prefix+4); same(&a, &e);
+                assert(!b.has_vector && b.kind == BM_286_BOUNDARY_INSTRUCTION);
+                /* Fetch the complete direct-address form; absent PEREQ means
+                 * no access to ES:FFFF and no fabricated x87 store. */
+                assert(f->count == prefix+4);
             }
             if (status == BM_STATUS_OK) {
                 assert(b.timing == BM_286_TIMING_UNKNOWN);
                 assert(b.cpu_cycles == f->count*2 && b.bus_wait_cycles == b.cpu_cycles);
             }
+    }
+}
+static void absent_extension(fixture_t *f)
+{
+    static const struct {
+        uint8_t bytes[4];
+        unsigned length;
+    } forms[] = {
+        {{0xd8,0xc0,0,0},2},       /* Register form. */
+        {{0xd9,0x00,0,0},2},       /* [BX+SI]. */
+        {{0xda,0x46,0x80,0},3},    /* [BP-80h]. */
+        {{0xdc,0x86,0x34,0x12},4}, /* [BP+1234h]. */
+        {{0xdf,0x06,0xff,0xff},4}  /* Direct FFFFh. */
+    };
+    for (unsigned mode = 0; mode < 2; ++mode)
+        for (unsigned i = 0; i < sizeof(forms)/sizeof(forms[0]); ++i) {
+            bm_286_arch_state_t s = setup(f, forms[i].bytes[0], 0, 0), e, a;
+            bm_286_boundary_t b;
+            memcpy(f->ram+0x30100, forms[i].bytes, forms[i].length);
+            s.msw |= (uint16_t)mode; /* Same absence semantics in RM and PE. */
+            s.ds.valid = s.ss.valid = 0; /* Address calculation is not access. */
+            e = s; e.ip += (uint16_t)forms[i].length; set(f, &s);
+            assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+            a = state(f); same(&a, &e);
+            assert(f->count == forms[i].length);
+            assert(!b.has_vector && b.kind == BM_286_BOUNDARY_INSTRUCTION);
         }
+
+    /* The BIOS detection form must leave its destination unchanged when no
+     * 80287 can request an operand transfer. */
+    {
+        static const uint8_t detect[] = {0xdb,0xe3,0xd9,0x3e,0x06,0x00};
+        bm_286_arch_state_t s = setup(f, detect[0], 0, 0), a;
+        bm_286_boundary_t b;
+        memcpy(f->ram+0x30100, detect, sizeof(detect));
+        word(f, 6, 0xa500); set(f, &s);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_OK);
+        a = state(f); assert(a.ip == 0x106 && get_word(f, 6) == 0xa500);
+        assert(f->count == sizeof(detect));
+    }
+
+    /* Host fetch failures stay host failures and never become guest #7/#13. */
+    for (unsigned fail = 1; fail <= 4; ++fail) for (unsigned after = 0; after < 2; ++after) {
+        bm_286_arch_state_t s = setup(f, 0xd9, 0, 0), a;
+        bm_286_boundary_t b;
+        f->ram[0x30101]=0x06; f->ram[0x30102]=0x34; f->ram[0x30103]=0x12;
+        f->fail_at=fail; f->fail_after=after; set(f, &s);
+        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_DEVICE_ERROR);
+        a=state(f); same(&a,&s); assert(f->count==fail);
+        assert(bm_286_step(&f->cpu,&b)==BM_STATUS_INVALID_STATE && f->count==fail);
+    }
 }
 static void retry_and_failure(fixture_t *f)
 {
@@ -166,6 +221,8 @@ static void boundaries(fixture_t *f)
         s = setup(f, 0xd8, 2, 1);
         if (bad == 0) s.idtr.limit = 30;
         if (bad == 1) s.sp = 5;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (bad == 2) s.msw |= 1;
         if (bad == 3) f->ram[0x30100] = 0xf0;
         if (bad == 4) f->ram[0x30100] = 0xf3;
@@ -176,7 +233,8 @@ static void boundaries(fixture_t *f)
             assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector && f->count == 2);
             continue;
         }
-        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         a = state(f); same(&a, &s);
         for (unsigned t = 0; t < f->count; ++t) assert(f->trace[t].operation == BM_BUS_FETCH);
     }
@@ -202,7 +260,8 @@ static void system_registers(fixture_t *f)
             a = state(f); same(&a, &e);
             assert(f->count == 3 && !b.has_vector && b.timing == BM_286_TIMING_UNKNOWN);
             if (load && (v & 1U)) {
-                assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+                uint64_t cycles = 99;
+                assert(bm_286_step_clocked(f->cpu.context, 0, &cycles) == BM_STATUS_UNSUPPORTED && !cycles);
                 a = state(f); same(&a, &e); assert(f->count == 3);
             }
         }
@@ -299,11 +358,14 @@ static void system_limits(fixture_t *f)
         bm_286_arch_state_t s = setup(f, 0x0f, 0, 1), a;
         bm_286_boundary_t b;
         f->ram[0x30102] = 1; f->ram[0x30103] = 0xf0;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (bad == 0) s.msw |= 1;
         if (bad == 1) f->ram[0x30100] = 0xf0;
         if (bad == 2) f->ram[0x30100] = 0xf3;
         if (bad == 3) f->ram[0x30103] = 0xe8; /* 0F 01 /5 remains unsupported. */
-        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        set(f, &s); assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         a = state(f); same(&a, &s);
     }
 }
@@ -384,7 +446,7 @@ static void table_faults(fixture_t *f)
         } else {
             e.sp -= 6; e.flags &= 0xfcffU; e.ip = 0x200;
             e.cs.selector = 0x4000; e.cs.base = 0x40000;
-            e.cs.limit = 0xffff; e.cs.access = 0; e.cs.valid = 1;
+            e.cs.limit = 0xffff; e.cs.access = 0x82; e.cs.valid = 1;
             assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == vector);
             assert(get_word(f, s.ss.base+s.sp-6) == s.ip);
             assert(f->count == (memory ? 11U : 9U));
@@ -423,7 +485,7 @@ int main(void)
     c.access = access_bus; c.access_context = &f;
     /* No INTA or lock adapter: synchronous #7 must not need either. */
     assert(bm_286_create(&host, &c, &f.cpu) == BM_STATUS_OK);
-    matrix(&f); retry_and_failure(&f); boundaries(&f);
+    matrix(&f); absent_extension(&f); retry_and_failure(&f); boundaries(&f);
     system_registers(&f); system_memory(&f); system_guest_program(&f); system_limits(&f);
     table_memory(&f); table_faults(&f); table_interrupt_program(&f);
     f.cpu.ops.destroy(f.cpu.context); free(f.ram); return 0;

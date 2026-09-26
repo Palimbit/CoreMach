@@ -70,7 +70,7 @@ static bm_286_arch_state_t jump(bm_cpu_t *cpu, fixture_t *f, bm_286_arch_state_t
     assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
     assert(bm_286_get_arch_state(cpu, &a) == BM_STATUS_OK);
     expected.cs.selector = cs; expected.cs.base = (uint32_t) cs << 4;
-    expected.cs.limit = 0xffffU; expected.cs.access = 0U; expected.cs.valid = 1U;
+    expected.cs.limit = 0xffffU; expected.cs.access = 0x82U; expected.cs.valid = 1U;
     expected.ip = ip;
     assert(memcmp(&a, &expected, sizeof(a)) == 0);
     assert(b.kind == BM_286_BOUNDARY_INSTRUCTION && b.timing == BM_286_TIMING_UNKNOWN);
@@ -155,6 +155,8 @@ static void failures_and_limits(bm_cpu_t *cpu, fixture_t *f)
         if (which < 2U) s.bx = which == 0U ? 0xfffdU : 0xffffU;
         if (which == 2U) s.ds.valid = 0U;
         if (which == 4U) s.cs.limit = 3U;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (which == 5U) s.msw |= 1U;
         if (which == 6U) s.cs.valid = 0U;
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
@@ -167,7 +169,8 @@ static void failures_and_limits(bm_cpu_t *cpu, fixture_t *f)
             assert(f->ram[s.ss.base+a.sp] == (uint8_t)s.ip);
             continue;
         }
-        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
+        assert((s.msw & 1U ? bm_286_step_clocked(cpu->context, 0, &gate_cycles) : bm_286_step(cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         assert(bm_286_get_arch_state(cpu, &a) == BM_STATUS_OK);
         assert(memcmp(&s, &a, sizeof(s)) == 0);
         for (unsigned i = 0U; i < f->count; ++i)

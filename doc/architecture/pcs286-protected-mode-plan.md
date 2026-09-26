@@ -14,11 +14,11 @@ accuracy claim, implicit 386 semantics or BIOS-specific success shortcuts.
 | --- | --- | --- | --- |
 | 1. Interpretation | Selectors, descriptor types and segment ranges | Exhaustive selectors/access bytes and boundary tests | Implemented, standalone helpers |
 | 2. Tables | GDT/LDT lookup, table bounds, selector error metadata | Synthetic tables, unusable LDTR, boundary entries, every-transfer host failures | Implemented as private lookup; instruction integration in block 3 |
-| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Common MOV/POP/LDS/LES state path implemented; PE dispatch and LLDT opcode pending |
-| 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Pending; enable only with block 5 |
-| 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | Private same-CPL entry/IRET and bounded escalation, arbitration and shutdown implemented; instruction dispatch pending; gates block 4 activation |
-| 6. Privilege transfers | Call gates, conforming code, stack switching, parameter copying, RETF | Same/outer/inner privilege matrices and interrupted transfers | Pending |
-| 7. Tasks | TSS, LTR, busy/backlink, task gates, task switches, NT return | Synthetic tasks, invalid TSS and nested-task tests | Pending |
+| 3. Segment loads | DS/ES/SS validation, cached descriptors, CPL/RPL/DPL, accessed bit; LLDT | Null selectors, presence, type and privilege matrices; no premature state commit | Common state path plus private MOV/POP/LDS/LES/LLDT opcode integration; functional public step/run now active |
+| 4. Protected execution | Fetch/data/stack permissions, entry via LMSW and far transfer, instruction checks | Synthetic protected programs, bounds and privilege violations | Private C/D1-D10 instruction tranche and joint audit complete under the documented functional contract; public step/run active after joint C/D/E/F review; strict timing separate |
+| 5. Faults and interrupts | Protected IDT gates, exception frames/error codes, IRQ/NMI, IRET, nested failure/shutdown | Guest repair/retry, stack failures, double-fault paths, real-mode regression | D10 same-CPL and E2b ordinary inner entry complete privately, including joint escalation, signals and reset programs; F task gates integrated privately; public functional step/run active |
+| 6. Privilege transfers | Call gates, conforming code, stack switching, parameter copying, RETF | Same/outer/inner privilege matrices and interrupted transfers | E1/E2a/E2b ordinary returns, calls/gates, TSS stack slots and inner IDT entry complete under the explicit private functional contracts |
+| 7. Tasks | TSS, LTR, busy/backlink, task gates, task switches, NT return | Synthetic tasks, invalid TSS and nested-task tests | E2b LTR and F task switching/backlink/save-load/task gates/NT return implemented and tested privately; joint C/D/E/F private review passed; public functional step/run active |
 
 The ordering is incremental development, not permission to expose broken
 intermediate execution: blocks 4 and 5 share a public activation gate. Full
@@ -27,6 +27,256 @@ such as LAR/LSL/VERR/VERW must join the relevant table/privilege blocks rather
 than remain disconnected success stubs. IOPL-sensitive instructions and system
 instruction privilege checks belong to block 4. Task-switch fault ordering
 belongs to block 7. Keep a per-instruction coverage ledger as each block lands.
+
+## Current: public functional activation
+
+[Public API contract and validation](pcs286-protected-public.md) connect
+step/run to the reviewed C/D/E/F profile before real event/idle arbitration.
+The earlier private spelling now delegates to public step; there is no bypass.
+Composed programs, every-transfer host failures and lifecycle/budget tests
+run through public APIs. Functional activation is complete for the documented
+profile; unsupported encodings and the strict clock gate remain explicit.
+
+Next machine work: Headland/IOC02, AT DMA and board assembly under their
+own contracts. Exact timing, populated 80287 and remaining physical fidelity
+qualifications are separate; no full CPU/OS/PCS286 boot certification.
+
+## Previous: joint private C/D/E/F review
+
+[Composed programs, source decisions and activation conditions](pcs286-protected-full-joint.md)
+complete the joint review under the private functional contracts. Eight
+reset-to-HLT programs combine ordinary privilege transitions, task switching,
+partial-context repair, REP/events and returns. Every-transfer host failures
+and public-gate checks preserve signal/effect/stop ownership; task NMI safely
+recovers separate reset/shutdown programs. No CPU behavior change was required.
+
+Next: route public functional step/run through the reviewed profile, with
+public API execution/failure/lifecycle tests. Keep unsupported-profile guards
+and the strict clock gate. This is not full CPU/80287/timing/OS/PCS286 boot
+certification. No publication or machine-device implementation is included.
+
+## Previous F: private task switching and return
+
+[F source precedence, state policy and tests](pcs286-protected-tasks.md)
+complete the task tranche under the stated private functional contract.
+Direct/task-gate CALL/JMP, IDT tasks and NT IRET share TSS save/load and
+busy/backlink handling. Faults after selection use the new context; host
+failures never become guest faults. D9 string corrections stage in the
+outgoing task image. Null LDTR follows the explicit Intel 286 OS guide.
+
+Debug/Release each pass 124 ordinary tests plus the two existing Headland/AT
+DMA skips (126 registered). Reset programs, guest repair, every-transfer host
+failures, TF/NMI/shadows/HOLD and task #DF/recovery supplement matrices.
+Public PE/strict clocks stay closed. Next: joint C/D/E/F review before public
+activation; physical microstate/timing and machine devices remain qualified.
+
+## Previous E2b: LTR and ordinary inner IDT entry
+
+[E2b source decisions, contract and tests](pcs286-protected-inner.md) close
+LTR and ordinary inner interrupt/trap entry, sharing checked cached TSS slots
+with CALL. LTR validates descriptor availability/presence and performs a locked
+busy update; it does not validate TSS contents or switch tasks. The former
+E2a minimum-limit precondition is superseded by the documented complete-slot
+use policy. Missing/short TSS produces #TS; impossible imported caches remain
+host errors. Delivery publishes SS/CPL after all writes, retaining signals.
+
+Two authored 68-boundary programs establish TR from reset, repair LTR and TSS
+faults in guest handlers, and exercise outer IRET, inner INT/IRQ/NMI, CALL/RETF,
+GP/TF and observable completion. Matrices and every-transfer failure tests
+cover FLAGS, privilege, TSS/frame limits, exclusion and shutdown recovery.
+Debug/Release:123 ordinary passes +2 existing skips (125 total); Python50/50;
+provenance40 components/225 files. All C/D/E remains local and unpublished.
+Public PE/strict clock gates stay closed. Next F task switches/task gates/NT
+return, then the joint full-CPU integration review; Headland/DMA is separate.
+
+## Previous E2a: ordinary calls, gates and inner call stacks
+
+[E2a source, contract and tests](pcs286-protected-calls.md) connect direct and
+conforming far CALL/JMP and call gates, including TSS-backed inner CALL and
+parameter copies, to E1 RETF. The caller supplies a valid loaded busy TR cache;
+LTR and noncanonical TR/TSS fault semantics remain E2b, together with inner IDT
+entry and its joint IRQ/NMI/TF/escalation audit. Task/NT switching remains F.
+This is not all E2, public activation or a full protected CPU.
+
+New executed tests caught and corrected the second indirect-pointer word using
+real access checks and gate JMP retaining the ignored operand offset. Complete
+preflight precedes A updates and interleaved stack writes; host failures retain
+memory effects and NMI without replay. Prior gap tests remain as guest results.
+Debug/Release:122 ordinary passes +2 skips; Python50/50; provenance40 components/
+224 files. C/D1-D10/E1/E2a remains local, uncommitted and unpublished.
+
+## Previous E1: ordinary same/outer privilege returns
+
+[E1 source decisions, contract and tests](pcs286-protected-returns.md) add outer
+IRET and same/outer RETF. SS:SP/CPL and DS/ES cleanup commit only after complete
+validation and both accessed-bit updates. FLAGS privileges use the executing
+CPL; RETF preserves FLAGS/NT/NMI and discards parameters on both stacks.
+Public PE remains gated. This completes the return tranche, not all block E.
+
+Observed Debug/Release:121 ordinary passes +2 skips; Python50/50; provenance40
+components/223 files. All C/D1-D10/E1 work is local and uncommitted/unpublished.
+Next E2: direct conforming/far CALL/gate transfers, inner stacks from the TSS,
+parameter copying and their joint round trips; task/NT switching remains F.
+
+## Previous D10: joint private access/delivery/return audit
+
+[D10 audit and executable evidence](pcs286-protected-joint-audit.md) close
+conversation point 2 for the current same-CPL functional contract. The audit
+fixes INTR vector 1 being reported as sampled #1, verifies nested faulting-IRET
+repair, escalation/shutdown/NMI recovery and runs two reset-to-PE programs with
+fault repair, REP/NMI/IRQ, INT3, TF and HLT. Every program-boundary transfer is
+fault-injected; public PE gates remain closed and are tested across pending
+signals, shadows and idle states. Public activation is a separate integration
+change, not implied by private conformance. No full protected-CPU claim.
+
+Debug/Release: 120 ordinary passes +2 existing skips; Python50/50, provenance
+40 components/222 files. C/D1-D10 remains local and uncommitted/unpublished.
+Next E/F privilege transfers/tasks; extend this audit as their paths are added.
+D9 interpretations and physical NMI/SS/ED/timing qualifications remain explicit.
+
+## Previous D9: remaining instructions closed under the PRM-1987 contract
+
+[D9 contract, interpretations and validation](pcs286-protected-instruction-policy.md)
+supersede the D3/D8 blanket stops. String protection/IOPL failures and scalar
+write-protection failures now deliver guest exceptions. The selected corrected
+REP model applies staged SI/DI/CX adjustments; SCAS/LODS and nonrestartable
+scalar state policies are explicit, not claims of independently measured silicon.
+LAR/LSL use the stated instruction-specific source precedence. Valid private
+LOCK MOV/XCHG forms include segment loads with borrowed descriptor exclusion.
+
+The requested remaining-instruction tranche (conversation point 1) is closed
+for this functional contract; it is not completion of this plan's blocks 4/5
+or all protected-mode support. Hardware capture is a further fidelity check,
+not a prerequisite for every documented instruction. Encodings outside the
+contract stay unsupported. Public PE remains closed pending the joint access,
+delivery and return audit; privilege transfers/tasks remain blocks 6/7.
+ED=1/FFFF, faulting-IRET NMI details, consecutive inhibition, physical stepping
+and timing fidelity remain separate. D9 stays uncommitted/unpublished.
+
+## D7/D8 checkpoint: instruction integration (superseded by D9)
+
+[D7/D8 contract and validation](pcs286-protected-instructions.md) supersede the
+D7 implementation plan below. LDS/LES and BOUND use complete protected four-byte
+preflight, preserving real-mode independently wrapped words. Shared scalar ALU,
+RMW, shift/multiply/divide/decimal, ARPL, SLDT/STR and software events are connected.
+Valid memory/I/O strings and REP use protected operands, with completed-element
+state, prefix restart after accepted events and reviewed memory LOCK forms.
+
+At this checkpoint this did **not** close block 4 or the remaining-instruction tranche.
+Intel's LOADALL memo and REP erratum do not establish complete fault snapshots
+for our model: string protection/IOPL faults and write-protected XCHG/ADC/SBB/
+RCL/RCR stopped as emulator gaps. That blanket requirement was replaced by the
+explicit D9 functional contract above; the original concern still qualifies
+physical fidelity. Joint access/delivery/return certification and E/F
+privilege/task transfers remain separate.
+Public PE and strict timing gates stay closed; no 80287 or PCS286 boot claim.
+
+## Previous D7 plan: doubleword operand consumers
+
+A post-D6 read-only review identifies LDS/LES and BOUND as a bounded next step.
+Intel PRM B-61/B-62 (PDF269/270) describes the complete LDS/LES four-byte pointer,
+segment-cache validation and atomic register result; B-22 (PDF230) describes
+BOUND's signed inclusive two-word bounds and #5/#UD/operand faults. Both families
+were outside the private positive list at the D6 checkpoint.
+
+Before enabling them, replace their real-specific range/second-word paths with
+protected whole-four-byte source preflight and staged protected reads. Preserve
+the real-mode pointer wrapping behavior separately: its independently wrapped
+word offsets must not silently become a protected doubleword access policy.
+Test FFFC as the last complete four-byte source in a full segment, FFFD/FFFE/FFFF
+rejection, normal/expand-down and SS versus DS/ES/CS permissions, unaligned
+transfers and host failure at each read/table/accessed-bit write. LDS/LES must
+retain both old destinations until source and selector validation complete,
+including a source addressed through the segment or register being replaced.
+BOUND must preserve registers/FLAGS, deliver prefix-inclusive #5 on signed
+out-of-bounds, #UD for a register source and operand faults before comparison.
+Add executed repair/IRET/retry; retain existing real-mode tests and public gates.
+This is a source-reviewed implementation plan, not additional opcode coverage.
+
+## Block D6 continuation: private ENTER
+
+ENTER now preflights the complete stack reservation and every display source,
+then preserves interleaved reads/writes for overlaps. BP/SP publish only after
+success; locals are reserved without bus writes. [D6 contract and evidence](pcs286-protected-enter.md)
+record 18,432 ENTER/LEAVE cases and 6,210 every-transfer failures, allocation/
+display faults, executed repair/IRET/retry and callback NMI retention. Public PE
+remains closed. Next: remaining ALU/RMW and operand consumers (including LDS/LES),
+strings/REP/INS/OUTS, LOCK and software events, then the joint consumer audit.
+D3 source gaps and E/F are unchanged. Work remains local and unpublished.
+
+## Block D5 continuation: private stack and near control flow (prior tranche)
+
+Ordinary PUSH/POP, including segment loads, PUSHA/POPA, LEAVE, near CALL/RET,
+indirect near JMP, Jcc and LOOP/JCXZ now use the shared protected decoder path.
+Whole aggregate SS preflight precedes transfers; register commits follow success.
+[D5 contract and validation](pcs286-protected-stack.md) records 131,104 branch
+cases, stack/selector/alias checks, executed POPA repair/IRET/retry and POP SS/
+POP SP with pending NMI, plus 7,850 before/after transfer failures. Public PE
+remains closed. Next: ENTER, remaining ALU/RMW and operand consumers, strings/
+REP/INS/OUTS, LOCK and software events; D3 evidence gaps and E/F remain open.
+
+## Block D4 continuation: private FLAGS and scalar IOPL (prior tranche)
+
+CLI/STI, PUSHF/POPF and simple FLAGS, CPL0 HLT and scalar IN/OUT now join
+private execution. POPF preserves privileged bits instead of faulting; denied
+I/O performs no device access. [D4 contract and validation](pcs286-protected-iopl.md)
+record exhaustive saved FLAGS, privilege matrices, event/HLT checks, stack
+repair/IRET/retry and 2,940 transfer failures. Public PE stays closed. Next:
+ordinary/aggregate stack and control flow, strings/REP/INS/OUTS, LOCK and software
+events; query evidence gaps and E/F remain. Work is still local and unpublished.
+
+## Block D3 continuation: private descriptor queries (prior tranche)
+
+LAR/LSL/VERR/VERW now join table lookup, protected operands, ZF/destination
+commit and fault unwind. Query rejection is separate from operand exceptions
+and host failures. [D3 scope and evidence](pcs286-protected-queries.md) records
+62,464 defined matrix cases, 3,072 explicit gaps, eight executed repair/IRET/
+retry streams and 3,160 transfer failures. LSL conforming code and LAR
+interrupt/trap gate types still stop pending 286 evidence. Public gates stay
+closed; IOPL and the remaining operand/instruction/event audit are next.
+
+## Block D2 continuation: private reset-to-PE transition (prior tranche)
+
+LMSW retains real caches; near/direct nonconforming far JMP, table/MSW/CLTS
+and LLDT connect to private protection and delivery. Two authored programs
+start at reset and execute fault/repair/IRET/retry without imported state.
+See [D2 evidence and exact scope](pcs286-protected-transition.md), including
+16,384 jump cases and 1,460 before/after host failures. Raw real-cache 82h is
+based on a separately identified 286 hardware report; table decoding is unchanged.
+The public gate stays closed. Queries, IOPL, aggregate stack/string/REP/I-O,
+software events and remaining instruction consumers still need integration.
+Conforming/gate/task transfers remain E/F. C/D1/D2 are local and unpublished.
+
+## Block D1 continuation: private shared decoder integration (prior tranche)
+
+The private `bm_286_pm_step_subset` joins existing MOV/LEA/XLAT/register-XCHG/
+NOP decoding, protected scalar access/load faults, bounded event delivery and
+same-CPL IRET. An explicit opcode list isolates pending handlers. Eight authored
+instruction streams now fault, execute a repairing handler and return/retry
+without fixture state edits after setup. Public PE activation is still blocked:
+LMSW/far transfer, system/IOPL and the complete operand/event audit remain open.
+
+[Scope, source review and integration evidence](pcs286-protected-execution.md)
+record the exact allowed forms, 128 MOV cases, 88 fault cases and 2,080 injected
+host failures. TF/NMI/INTR, MOV SS shadows and HOLD join the same CPU instance.
+This is private subset execution from imported caches, not entry into PE or
+full protected program/OS support. C/D1 remain local and unpublished.
+
+## Block C continuation: private cached access foundation
+
+`bm_286_pm_check_access` validates complete fetch/data/stack ranges and cached
+permissions without reloading descriptors or repeating load-time privileges.
+`bm_286_pm_access` performs bounded transfers with staged reads, exact retained
+write effects and a per-instance host-stop latch. Entry/IRET now share the SS
+checker while preserving their existing check order. Tests join access faults
+to private delivery/repair/IRET/retry; no protected opcodes execute yet.
+
+[Source, contracts, coverage and open evidence](pcs286-protected-access.md)
+record 12,288 permission cases, 19,267,584 range cases and 4,500 injected host
+failures. The ED=1/FFFF source contradiction remains explicitly open. Block D
+must connect operand checks, aggregate stack/string restart, privilege checks
+and event unwind before either PE gate can open. This tranche is local and
+unpublished on top of 4769e40524bc194747b142f3e7ec908ae4df0897.
 
 ## Block B continuation: private bounded delivery (not public activation)
 

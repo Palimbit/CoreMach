@@ -247,6 +247,8 @@ static void failures(fixture_t *f)
         if (bad == 0) s.idtr.limit = 0x202;
         if (bad == 1) s.sp = 1;
         if (bad == 2) s.ss.valid = 0;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (bad == 3) s.msw |= 1;
         if (bad == 4) f->ram[0x30100] = 0xf0; /* no LOCK */
         if (bad == 5) f->ram[0x30100] = 0xf3; /* no REP */
@@ -266,7 +268,8 @@ static void failures(fixture_t *f)
             assert(read_word(f, s.ss.base+s.sp-6) == s.ip && !f->acknowledgements);
             continue;
         }
-        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        set(f, &s); assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         after = state(f); same(&s, &after);
         for (unsigned j = 0; j < f->count; ++j) assert(f->trace[j].operation == BM_BUS_FETCH);
         assert(!f->acknowledgements);

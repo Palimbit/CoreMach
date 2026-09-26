@@ -2,6 +2,11 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
+Current activation: [public functional step/run](pcs286-protected-public.md)
+now use the reviewed profile. Public PE gate statements below describe the
+earlier checkpoint; the strict clock gate and stated semantic limits remain.
+
+
 Local integration branch: `feature/pcs286-integration-p1`, based on portable
 merge `8e5cd917d95536fbdfe65ce2d5d658eda0633d20` (PR #208).
 This is a component milestone, not a bootable PCS 286 or completed P1/P3.

@@ -22,6 +22,11 @@ typedef enum bm_pit_exact_state {
 } bm_pit_exact_state_t;
 
 typedef struct bm_pit_exact_channel {
+    bool is_8254;
+    bool status_latched;
+    uint8_t status_latch;
+    uint8_t pending_lsb;
+    uint16_t active_count; /* Last complete divisor loaded into CE (8254). */
     uint8_t control;
     uint8_t mode_raw;
     uint8_t mode;
@@ -51,6 +56,7 @@ typedef struct bm_pit_exact_device {
 } bm_pit_exact_device_t;
 
 void bm_pit_exact_reset(bm_pit_exact_device_t *pit);
+void bm_pit_exact_reset_8254(bm_pit_exact_device_t *pit);
 void bm_pit_exact_control_write(bm_pit_exact_device_t *pit, uint8_t value);
 void bm_pit_exact_data_write(bm_pit_exact_device_t *pit, unsigned int channel, uint8_t value);
 uint8_t bm_pit_exact_data_read(bm_pit_exact_device_t *pit, unsigned int channel);
@@ -60,6 +66,8 @@ uint32_t bm_pit_exact_cycles_until_output_change(
     const bm_pit_exact_device_t *pit);
 uint32_t bm_pit_exact_advance_until_output_change(
     bm_pit_exact_device_t *pit, uint32_t maximum_ticks);
+uint64_t bm_pit_exact_advance_until_output_change64(
+    bm_pit_exact_device_t *pit, uint64_t maximum_ticks);
 uint16_t bm_pit_exact_get_count(const bm_pit_exact_device_t *pit, unsigned int channel);
 bool bm_pit_exact_get_output(const bm_pit_exact_device_t *pit, unsigned int channel);
 

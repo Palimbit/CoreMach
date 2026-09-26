@@ -54,6 +54,17 @@ bm_286_pm_descriptor_t bm_286_pm_descriptor_decode(const uint8_t bytes[8])
     return result;
 }
 
+bm_286_pm_descriptor_t bm_286_cached_descriptor(const bm_286_segment_state_t *segment)
+{
+    uint8_t bytes[8] = {0};
+    bm_286_pm_descriptor_t result;
+    bytes[5] = segment->access == 0x82 ? 0x92 : segment->access;
+    result = bm_286_pm_descriptor_decode(bytes);
+    result.access = segment->access;
+    result.base = segment->base; result.limit = segment->limit;
+    return result;
+}
+
 bool bm_286_pm_segment_contains(const bm_286_pm_descriptor_t *descriptor,
                                 uint32_t offset, uint32_t length)
 {
@@ -280,7 +291,7 @@ bm_status_t bm_286_load_segment_state(bm_286_arch_state_t *arch,
         destination->selector = selector;
         destination->base = (uint32_t)selector << 4;
         destination->limit = 0xffff;
-        destination->access = 0;
+        destination->access = 0x82; /* Real-compatible cache, not a table LDT. */
         destination->valid = 1;
         result->loaded = true;
         return BM_STATUS_OK;
@@ -297,5 +308,109 @@ bm_status_t bm_286_load_segment_state(bm_286_arch_state_t *arch,
         config->bus_lock, config->pin_context, destination);
     result->waits = plan.waits;
     result->loaded = status == BM_STATUS_OK;
+    return status;
+}
+
+/* Intel 286 PRM 11.3/11.3.1, B-60/B-71/B-111. */
+bm_status_t bm_286_pm_query(const bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, bm_286_pm_query_kind_t kind,
+    uint16_t selector, bm_286_pm_query_result_t *result)
+{
+    bm_286_pm_lookup_t lookup;
+    const bm_286_pm_descriptor_t *d = &lookup.descriptor;
+    bm_status_t status;
+    bool eligible;
+    if (!result) return BM_STATUS_INVALID_ARGUMENT;
+    memset(result, 0, sizeof(*result));
+    if (!arch || !config || !config->access || kind < BM_286_PM_LAR || kind > BM_286_PM_VERW)
+        return BM_STATUS_INVALID_ARGUMENT;
+    if (!(arch->msw & 1u) || arch->cpl > 3 || arch->halted || arch->shutdown)
+        return BM_STATUS_INVALID_STATE;
+    status = bm_286_pm_lookup_descriptor(&arch->gdtr, &arch->ldtr, selector,
+        config->access, config->access_context, &lookup);
+    result->waits = lookup.waits;
+    if (status != BM_STATUS_OK || lookup.reason != BM_286_PM_FOUND) return status;
+    /* PRM B-71 explicitly limits LSL to nonconforming segments; apply the
+     * instruction entry's condition rather than import later-x86 semantics.
+     * B-60/11.3 define LAR for a visible descriptor, including control types. */
+    if (kind == BM_286_PM_LSL && d->conforming) return BM_STATUS_OK;
+    if (!d->conforming && (d->dpl < arch->cpl || d->dpl < (selector & 3u)))
+        return BM_STATUS_OK;
+    switch (kind) {
+    case BM_286_PM_LAR:
+        eligible = d->kind != BM_286_PM_INVALID;
+        break;
+    case BM_286_PM_LSL:
+        eligible = d->kind == BM_286_PM_DATA || d->kind == BM_286_PM_CODE ||
+            d->kind == BM_286_PM_LDT || d->kind == BM_286_PM_TSS_AVAILABLE ||
+            d->kind == BM_286_PM_TSS_BUSY;
+        break;
+    case BM_286_PM_VERR: eligible = d->readable; break;
+    default: eligible = d->writable; break;
+    }
+    if (eligible) {
+        result->accepted = true;
+        if (kind == BM_286_PM_LAR) result->value = (uint16_t)((uint16_t)d->access << 8);
+        if (kind == BM_286_PM_LSL) result->value = d->limit;
+    }
+    return BM_STATUS_OK;
+}
+
+bm_status_t bm_286_pm_ltr(bm_286_arch_state_t *arch,
+    const bm_286_config_t *config, uint16_t selector,
+    bm_286_segment_load_result_t *result)
+{
+    bm_286_pm_lookup_t lookup;
+    bm_286_segment_state_t tr = {0};
+    bm_286_pm_selector_t s = bm_286_pm_selector_decode(selector);
+    bm_bus_transaction_t t = {0};
+    bm_status_t status;
+    uint8_t access_byte;
+    if (!result) return BM_STATUS_INVALID_ARGUMENT;
+    memset(result, 0, sizeof(*result));
+    if (!arch || !config || !config->access) return BM_STATUS_INVALID_ARGUMENT;
+    if (arch->cpl > 3 || arch->halted || arch->shutdown) return BM_STATUS_INVALID_STATE;
+    if (!(arch->msw & 1u)) { result->fault_vector = 6; return BM_STATUS_OK; }
+    if (arch->cpl) { result->fault_vector = 13; return BM_STATUS_OK; }
+    if (s.null_selector || s.local) {
+        result->fault_vector = 13; result->fault_error = (uint16_t)(selector & 0xfffcu);
+        return BM_STATUS_OK;
+    }
+    status = bm_286_pm_lookup_descriptor(&arch->gdtr, &arch->ldtr, selector,
+        config->access, config->access_context, &lookup);
+    result->waits = lookup.waits;
+    if (status != BM_STATUS_OK) return status;
+    if (lookup.reason != BM_286_PM_FOUND || lookup.descriptor.kind != BM_286_PM_TSS_AVAILABLE)
+        result->fault_vector = 13;
+    else if (!lookup.descriptor.present) result->fault_vector = 11;
+    if (result->fault_vector) { result->fault_error = lookup.selector_error; return BM_STATUS_OK; }
+    if (!config->bus_lock) return BM_STATUS_UNSUPPORTED;
+    /* Availability is tested again under exclusion (8.4), not merely ORed
+     * into a stale snapshot. Whole-descriptor replacement still requires
+     * external serialization. No TSS memory or old descriptor is touched. */
+    t.address = (arch->gdtr.base + s.table_offset + 5u) & 0xffffffu;
+    t.space = BM_ADDRESS_DATA; t.operation = BM_BUS_READ;
+    t.size = t.alignment = 1; t.endianness = BM_ENDIAN_LITTLE;
+    t.attributes = BM_BUS_TRANSACTION_LOCKED;
+    config->bus_lock(config->pin_context, 1);
+    status = config->access(config->access_context, &t);
+    if (status == BM_STATUS_OK) {
+        result->waits += t.wait_states;
+        access_byte = (uint8_t)t.value;
+        if ((access_byte & 0x1fu) != 1u) result->fault_vector = 13;
+        else if (!(access_byte & 0x80u)) result->fault_vector = 11;
+        if (result->fault_vector) result->fault_error = lookup.selector_error;
+        else {
+            t.operation = BM_BUS_WRITE; t.value = access_byte | 2u; t.wait_states = 0;
+            status = config->access(config->access_context, &t);
+            if (status == BM_STATUS_OK) {
+                result->waits += t.wait_states;
+                tr.selector = selector; tr.base = lookup.descriptor.base;
+                tr.limit = lookup.descriptor.limit; tr.access = (uint8_t)(access_byte | 2u); tr.valid = 1;
+            }
+        }
+    }
+    config->bus_lock(config->pin_context, 0);
+    if (status == BM_STATUS_OK && !result->fault_vector) { arch->tr = tr; result->loaded = true; }
     return status;
 }

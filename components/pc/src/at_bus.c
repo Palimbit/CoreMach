@@ -26,7 +26,7 @@ valid_clock(bm_clock_rate_t clock)
 static int
 valid_master(bm_at_master_t master)
 {
-    return master >= BM_AT_MASTER_CPU && master <= BM_AT_MASTER_ISA;
+    return master >= BM_AT_MASTER_CPU && master <= BM_AT_MASTER_REFRESH;
 }
 
 static int
@@ -34,6 +34,7 @@ valid_transfer(const bm_at_transfer_t *transfer)
 {
     const bm_bus_transaction_t *t;
     if (transfer == NULL || !valid_master(transfer->master) ||
+        transfer->master == BM_AT_MASTER_REFRESH ||
         !valid_clock(transfer->requester_clock))
         return 0;
     t = &transfer->bus;
@@ -206,5 +207,18 @@ bm_at_bus_hold_ack(bm_at_bus_t *bus, int asserted)
     if (asserted && (!bus->hold || !bus->requested || bus->locked))
         return BM_STATUS_INVALID_STATE;
     bus->hlda = asserted;
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_at_bus_arbitration(const bm_at_bus_t *bus, bm_at_bus_arbitration_t *state)
+{
+    if (bus == NULL || state == NULL)
+        return BM_STATUS_INVALID_ARGUMENT;
+    state->requester = bus->requested ? bus->requester : BM_AT_MASTER_CPU;
+    state->requested = bus->requested;
+    state->locked = bus->locked;
+    state->hold = bus->hold;
+    state->hlda = bus->hlda;
     return BM_STATUS_OK;
 }

@@ -254,6 +254,8 @@ static void rejected(fixture_t *f)
         if (bad == 8) {code[0] = 0x0f; code[1] = 0xaf;} /* 386 IMUL not a 286 form */
         if (bad == 9) {code[0] = 0xf7; code[1] = 0xc8;} /* Undefined /1 word */
         s = setup(f, code, sizeof(code));
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (bad == 3) s.msw |= 1;
         if (bad == 4) s.ds.valid = 0;
         if (bad == 5) s.bx = 0xffff;
@@ -266,7 +268,8 @@ static void rejected(fixture_t *f)
             assert(a.ax == s.ax && a.dx == s.dx && a.sp == (uint16_t)(s.sp-6));
             continue;
         }
-        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        set(f, &s); assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         a = state(f); same(&s, &a);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);
     }

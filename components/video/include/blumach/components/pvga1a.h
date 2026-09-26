@@ -32,6 +32,12 @@ bm_status_t bm_pvga1a_create(const bm_host_services_t *host,
                              bm_pvga1a_t **out_video);
 void bm_pvga1a_destroy(bm_pvga1a_t *video);
 void bm_pvga1a_reset(bm_pvga1a_t *video);
+/* Opt in to time-driven input status (including with zero ns), then advance
+ * its raster. Reset returns to the legacy read-driven status used by existing
+ * owners. Internal VGA clocks only; external clock selections are UNSUPPORTED
+ * without changing phase. Functional CRTC model, not qualified board timing.
+ * DEBUG reads preserve latches/indexes; DEBUG writes are rejected. */
+bm_status_t bm_pvga1a_advance_ns(bm_pvga1a_t *video, uint64_t nanoseconds);
 bm_status_t bm_pvga1a_inspect_register(const bm_pvga1a_t *video,
                                        bm_pvga1a_register_set_t set,
                                        uint8_t index,

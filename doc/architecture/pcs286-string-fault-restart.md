@@ -2,7 +2,27 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-Status: researched, not implemented. Baseline: `25ec581fb37b73998f16557779b8eefb2f088097`.
+Current task integration: [F contract](pcs286-protected-tasks.md) supersedes
+this tranche's task/NT unsupported statements. Earlier validation counts below
+are historical. Public PE remains blocked. D9 string corrections now stage
+in the outgoing task image before a task-gate save.
+
+
+Current D9 update, 2026-09-24: [the PRM-1987 functional contract](pcs286-protected-instruction-policy.md)
+implements private protected string fault delivery and the selected corrected
+REP snapshot. Official documentation suffices for documented behavior; hardware
+capture is not a blanket prerequisite. SCAS/LODS and bus-order interpretations
+are explicit. The matrix below remains a physical-fidelity acquisition plan;
+it no longer blocks the entire functional instruction path.
+
+Prior D8 checkpoint: valid private protected string/REP/I/O paths
+join shared protected access. Segment/IOPL rejection still stops as an explicit
+evidence gap before current-element effects. This is not guest fault delivery;
+prior completed elements remain committed. See [D7/D8 scope and tests](pcs286-protected-instructions.md).
+The evidence matrix still applies to hardware claims. D9 records the policies
+that replace this checkpoint's blanket execution stops.
+
+Original research baseline: `25ec581fb37b73998f16557779b8eefb2f088097`.
 This decision does not disable working string instructions or external-interrupt
 restart. It concerns their still-unsupported segment-fault paths.
 

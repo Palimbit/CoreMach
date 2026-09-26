@@ -467,7 +467,7 @@ static void interrupt_lock_and_edges(void)
         assert(a.nmi_pending && a.nmi_blocked && !f.acks);
         calls = f.calls; observe(&f, &a);
         assert(bm_286_pm_deliver(&a, &c, &s, &q, &r) == BM_STATUS_IDLE && f.calls == calls);
-        assert(bm_286_pm_iret(&a, &c, &returned) == BM_STATUS_OK && returned.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &returned) == BM_STATUS_OK && returned.loaded);
         assert(!a.nmi_blocked && a.nmi_pending);
         observe(&f, &a);
         assert(bm_286_pm_deliver(&a, &c, &s, &q, &r) == BM_STATUS_OK && r.vector == 2);
@@ -505,8 +505,8 @@ static void pending_failure_origins(void)
     assert(f.acks == 2 && f.locks == 1 && f.unlocks == 1 && f.shutdown_asserts == 1);
     scenario(&f, &a, &c, &q, &s, 1, 0, 0);
     f.ram[a.idtr.base + 8 * 8 + 5] = 0x85;
-    assert(bm_286_pm_deliver(&a, &c, &s, &q, &r) == BM_STATUS_UNSUPPORTED);
-    assert(s.stopped && !a.shutdown && !r.shutdown && !f.shutdown_asserts && !f.writes);
+    assert(bm_286_pm_deliver(&a, &c, &s, &q, &r) == BM_STATUS_OK);
+    assert(!s.stopped && a.shutdown && r.shutdown && f.shutdown_asserts==1 && !f.writes);
 }
 
 static void repair_and_retry(void)
@@ -529,12 +529,12 @@ static void repair_and_retry(void)
          * This is a private helper sequence, not executed protected opcodes. */
         f.ram[a.idtr.base + q.vector * 8 + 5] |= 0x80;
         a.sp += 2; observe(&f, &a);
-        assert(bm_286_pm_iret(&a, &c, &returned) == BM_STATUS_OK && returned.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &returned) == BM_STATUS_OK && returned.loaded);
         assert(a.ip == q.restart_ip && a.sp == 0x8000);
         observe(&f, &a);
         assert(bm_286_pm_deliver(&a, &c, &s, &q, &r) == BM_STATUS_OK && r.vector == 0x40);
         assert(!r.has_error[0]); observe(&f, &a);
-        assert(bm_286_pm_iret(&a, &c, &returned) == BM_STATUS_OK && returned.loaded);
+        assert(bm_286_pm_iret(&a, &c, 0x105, &returned) == BM_STATUS_OK && returned.loaded);
         assert(a.ip == q.next_ip && a.sp == 0x8000 && a.cs.selector == 24 + cpl);
         /* A later instruction fault in a handler is a new delivery, not #DF. */
         q.source = BM_286_PM_EXCEPTION; q.vector = 13; q.restart_ip = a.ip;
@@ -567,6 +567,21 @@ static void invalid_inputs_and_gaps(void)
         if (n == 8) { c.access = NULL; expected = BM_STATUS_INVALID_ARGUMENT; }
         if (n == 9) { a.idtr.base = 0x1000000; expected = BM_STATUS_INVALID_STATE; }
         observe(&f, &a);
+        if (n == 2) {
+            /* Task gate points to code: #UD -> #GP in the unchanged task. */
+            assert(bm_286_pm_deliver(&a, &c, &s, &q, &r)==BM_STATUS_OK);
+            assert(r.entered && r.vector==13 && r.attempts==2 && r.errors[1]==8);
+            assert(!s.stopped && !r.shutdown && a.sp==f.before.sp-8 && !f.locked);
+            continue;
+        }
+        if (n == 3) {
+            /* E2b retains this case as real no-TR escalation: #UD -> #TS -> #DF. */
+            assert(bm_286_pm_deliver(&a, &c, &s, &q, &r) == BM_STATUS_OK);
+            assert(r.shutdown && a.shutdown && !r.entered && !s.stopped);
+            assert(r.attempts == 3 && r.vectors[0] == 6 && r.vectors[1] == 10 && r.vectors[2] == 8);
+            assert(!f.writes && !f.acks && !f.locked && f.shutdown_asserts == 1);
+            assert(a.sp == f.before.sp && a.ip == f.before.ip); continue;
+        }
         assert(bm_286_pm_deliver(&a, &c, &s, &q, &r) == expected);
         assert(!r.entered && !r.shutdown && !f.writes && !f.acks && !f.locked);
         assert(s.stopped == (n >= 2 && n <= 4)); same_frame(&a, &f.before);

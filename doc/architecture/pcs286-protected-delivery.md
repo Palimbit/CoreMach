@@ -2,10 +2,18 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
+Current task integration: [F contract](pcs286-protected-tasks.md) supersedes
+this tranche's task/NT unsupported statements. Earlier validation counts below
+are historical. Public PE remains blocked. D9 string corrections now stage
+in the outgoing task image before a task-gate save.
+
+
 ## Scope and evidence
 
 Handoff block B now has a private, bounded delivery coordinator connected to
-the existing same-CPL IDT entry and IRET helpers. It classifies event origin,
+the IDT entry and IRET helpers. E2b extends entry to ordinary inner privileges;
+see [LTR, stack selection and source decisions](pcs286-protected-inner.md).
+The coordinator classifies event origin,
 selects return IP/error-word policy, escalates guest entry rejection, exposes
 shutdown and permits an eligible NMI recovery attempt. Public `step` and the
 instruction execution helper still reject PE. No protected guest program,
@@ -65,13 +73,13 @@ only on successful entry. A later fault *executing handler instructions* starts
 a new delivery; it is not an automatic double fault. There is no recursive call
 or persistent "inside a handler" double-fault flag.
 
-Same-CPL entry currently rejects with #NP, #SS or #GP before writes. Consequently
+Ordinary entry rejects with #TS, #NP, #SS or #GP before writes. Consequently
 only one attempt writes an accessed byte/frame. A transport error exits
-immediately and never becomes another exception. Task gates and inner privilege
-transfers remain unsupported, including an otherwise valid task gate for #DF.
+immediately and never becomes another exception. Task gates remain unsupported,
+including an otherwise valid task gate for #DF.
 That implementation gap is not shutdown. Intel recommends a task gate to obtain
-a reliable #DF context; synthetic same-CPL #DF tests do not substitute for TSS
-implementation or make a damaged stack recoverable.
+a reliable #DF context; synthetic same/inner-CPL #DF tests do not substitute
+for task switching or make an unusable selected stack recoverable.
 
 ## Event and signal ownership
 

@@ -307,6 +307,8 @@ static void limits(fixture_t *f)
             bm_286_boundary_t b; unsigned output=(op&2)!=0, size=(op&1)+1;
             if(mode==0) {if(output) s.ds.valid=0; else s.es.valid=0;}
             if(mode==1) {if(output) s.ds.limit=0x100; else s.es.limit=0x100;}
+            /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+            uint64_t gate_cycles = 99;
             if(mode==2) s.msw|=1;
             if(mode==3) {code[0]=0xf0; code[1]=0x9b;} /* LOCK WAIT pending. */
             if(mode==4) {
@@ -318,7 +320,8 @@ static void limits(fixture_t *f)
                 }
             }
             memcpy(f->ram+0x30100,code,sizeof(code)); set(f,&s);
-            assert(bm_286_step(&f->cpu,&b)==BM_STATUS_UNSUPPORTED);
+            assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu,&b))==BM_STATUS_UNSUPPORTED);
+            if (s.msw & 1U) assert(gate_cycles == 0);
             a=state(f); same(&a,&s);
             assert(!f->in_bytes && !f->out_bytes && !f->traced);
             for(unsigned i=0;i<f->count;++i) assert(f->trace[i].operation==BM_BUS_FETCH);

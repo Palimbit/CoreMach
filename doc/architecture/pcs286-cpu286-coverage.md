@@ -2,7 +2,308 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-## Latest tranche: private protected exception delivery and shutdown
+## Latest local validation: absent 80287, 2026-09-26
+
+[The absent-extension contract](pcs286-80287-absence.md) closes the first real
+POST boundary after CMOS. ESC keeps the existing Intel MP/EM/TS exception
+matrix, consumes complete 16-bit addressing, and performs no operand transfer
+when BUSY/ERROR/PEREQ are inactive. Tests include all ESC opcodes, representative
+addressing, RM/PE, untouched operands and each fetch failure. The BIOS crosses
+`FNINIT`/`FNSTCW`, completes its absent-ATA timeout and displays
+`Fixed Disks: Pass`. The subsequent 8042 command-byte boundary is outside the
+CPU extension contract. Populated 80287 state, PEREQ transfers, extension
+exceptions and timing remain pending.
+
+## Latest local validation: public functional PE, 2026-09-25
+
+[Public step/run contract and evidence](pcs286-protected-public.md) activate
+the reviewed C/D/E/F profile. Mode dispatch precedes real-mode events/idle;
+the old private test spelling delegates to public step. Strict clocks remain
+blocked, UNKNOWN timing and all unsupported-profile guards stay explicit.
+
+The twelve composed programs execute through both step and run(1), with
+300,720 bus-failure cases and 1,536 reached-context strict-clock checks.
+Twenty-four run(1/7/256) programs match step state/RAM/traces/waits/pins;
+ten partial-budget host failures test isolation/reset, and twenty INTA
+failures test no conversion or replay. Existing instruction suites also
+reach the public path. No full CPU/80287, OS, timing or firmware boot claim.
+
+GCC16.2 UCRT64 Debug/Release each pass **125 ordinary tests plus two existing
+Headland/AT DMA skips (127 registered)**, with assertions and Werror enabled.
+Python50/50; provenance41 components/229 files without errors; catalogue32
+machines/five locales. No local MSVC or new remote CI. Work stays unpublished.
+Next: separate Headland/IOC02 and AT DMA work, then board integration;
+strict native-clock use requires timing implementation and validation.
+
+## Previous local validation: joint private C/D/E/F review, 2026-09-25
+
+[Combined review and activation gate](pcs286-protected-full-joint.md) close the
+joint review of the documented private functional profile. CPU behavior did
+not need changing. Public PE and strict clocks remain blocked; activating
+public step/run is the next explicit implementation change, with API tests.
+
+Eight reset programs (four102/four108 boundaries) combine outer IRET, inner
+CALL/RETF, task entry, ordinary repair of partial task state, task-based SS0
+repair, REP interrupted by HOLD/NMI/IRQ, nested ordinary/task returns and
+IOPL repair. There are146,480 per-transfer host failures with callback NMI
+and2,304 public-gate checks. Four additional reset/shutdown/task-NMI/safe-HLT
+programs add3,880 recovery-entry failures. No firmware or external vectors.
+
+Existing instruction, privilege and task matrices remain active. Model
+qualifications in C/D/E/F are retained; no completeCPU/80287, physical timing,
+OS or PCS286 boot claim follows from synthetic private execution.
+
+GCC16.2 UCRT64 Debug/Release each pass **125 ordinary tests plus two existing
+Headland/AT DMA skips (127 registered)**, with assertions and Werror enabled.
+Python50/50; provenance41 components/229 files without errors; catalogue32
+machines/five locales. No local MSVC or new remote CI. Work stays unpublished.
+
+## Previous local tranche: private task switching (F), 2026-09-25
+
+[F contract, sources and qualifications](pcs286-protected-tasks.md) adds task
+CALL/JMP, IDT task gates and current-NT IRET to E2b LTR. Busy/backlink, dynamic
+TSS save/load, FLAGS/MSW.TS, descriptor faults and new-context delivery share
+one private mechanism. Public PE and strict clocked execution stay blocked.
+
+New tests cover 24,576 target and 34,816 incoming-segment cases; 131,072 limits;
+196,608 FLAGS; 768 fresh busy-byte races; null/global/local selectors; error
+stacks, physical wrap and alias ordering; guest repair/nested returns; all
+256 software and INTA vectors, TF/shadows/HOLD, task #DF/NMI recovery and the
+32-context host diagnostic bound. Two reset-to-HLT programs establish their
+own PE/LDTR/TR and complete task CALL/JMP/INT/NMI/IRQ/NT-return sequences.
+Every-transfer failures test exact effects, callback NMI, lock release and stop.
+
+Integration review found and fixed D9 string-fault corrections being applied
+to a new task's registers: SI/DI/CX now belong to the outgoing TSS image.
+Guest TSS repair/IRET/retry and host-failure regressions cover this correction.
+LDTR null is explicitly allowed by Intel OS Writer's Guide 121960-001, 7-5.
+Short-TSS partial register images and bus order remain declared functional
+policies, not silicon microstate observations.
+
+GCC16.2 UCRT64 Debug and Release: **124 ordinary tests pass +2 existing
+Headland/AT DMA skips (126 registered)**, assertions/Werror enabled.
+Python50/50; provenance41 components/228 files with zero errors; catalogue
+32 machines/five locales. The two reset programs take38 boundaries each;
+56,900 bus-failure cases plus10 INTA-failure cases cover the new task suite.
+C/D/E/F remains local, uncommitted and unpublished. Full private CPU joint
+review and public activation remain separate; no OS/80287/PCS286 boot claim.
+
+## Previous local tranche: LTR and ordinary inner protected events (E2b)
+
+[E2b contract and source interpretation](pcs286-protected-inner.md) complete
+the private LTR/inner-IDT tranche. Public PE and strict clocked execution remain
+blocked. This is ordinary privilege transfer, not task switching or OS boot.
+
+| Current E2b area | Implemented and tested | Remaining boundary |
+| --- | --- | --- |
+| LTR 0F 00 /3 | Register/memory, PE/CPL0, selector/type/presence, locked fresh busy test/set, staged TR | No task register save/load or old-busy clearing |
+| Cached TSS stack selection | Shared CALL/IDT SS:SP validation, missing TR/short slot #TS, descriptor faults | Complete-slot limit policy is an explicit interpretation, not silicon measurement |
+| Inner IDT entry | 10/12-byte frames, CS/SS/CPL/FLAGS, INTA exclusion, outer IRET | Task gates and current-NT IRET remain F |
+| Joint delivery | IRQ/NMI/TF, SS/STI/HOLD, #TS/#GP/#DF, shutdown/NMI/reset | Full task-based recovery and final public integration audit pending |
+| Guest establishment | Reset/LTR, guest repair/retry, STR, outer/inner crossings, CALL/RETF, completion | No fixture imports after execution; no firmware/media boot validation |
+
+Evidence:16,384 LTR selector/type cases;65,536 LTR limits;512 locked-byte races;
+24,576 SS and8,192 code cases;393,216 TSS slot limits;1,572,864 frame ranges;
+262,144 FLAGS;1,024 vector/IRET roundtrips;6,580 route host failures with NMI;
+657 successful callback edges;two68-boundary reset programs and15,140 whole-
+program transfer failures. Fault precedence, wrap, shadow/HOLD and recovery
+cases supplement these matrices. Former entry/delivery/CALL gap cases retained.
+
+GCC16.2 UCRT64 Debug/Release:123 ordinary passes +2 existing skips (125 total),
+Python50/50,provenance40 components/225 files,catalogue32 machines/five locales.
+No MSVC/new CI. C/D1-D10/E1/E2a/E2b remains local, uncommitted and unpublished.
+
+## Previous local tranche: ordinary protected calls/gates (E2a)
+
+[E2a contract and source decisions](pcs286-protected-calls.md) add 9A/EA and
+FF /3,/5 for direct/conforming code and call gates. Inner CALL obtains SS:SP
+from a previously loaded consistent TR cache and copies 0..31 words. LTR,
+noncanonical TR/TSS fault semantics and inner IDT entry remain E2b; tasks are F.
+No public PE or clocked gate was opened. Initial test TR is explicitly imported.
+
+Evidence:8192 direct,4096 gate,8192 target,12288 inner SS,2359296 stack ranges,
+3072 executed CALL/RETF roundtrips,5900 host failures with NMI,48 guest repairs,
+5184 overlapping stack simulations,30 competing faults,32 indirect bounds,
+80 conforming/LDT-gate programs and physical wrap. Former unsupported cases
+in D1/D2/D5 remain as concrete result/fault tests. Corrected second-word
+expand-down access and gate-JMP destination publication found by new tests.
+
+GCC16.2 UCRT64 Debug/Release:122 ordinary passes +2 existing skips (124 total),
+Python50/50,provenance40 components/224 files,catalogue32 machines/five locales.
+No MSVC/new CI. All C/D1-D10/E1/E2a work remains local and unpublished.
+
+## Previous local tranche: ordinary protected returns (E1)
+
+[E1 contract and source precedence](pcs286-protected-returns.md) implement
+same/outer RETF and outer IRET with staged SS:SP/CPL and DS/ES cleanup. New
+evidence:16,384 CS/24,576 SS cases,1,572,864 FLAGS,4,194,304 frame ranges,
+262,144 discard/SP,6,336 cache cases,1,620 host failures,28 fault-priority
+cases,40 executed returns and24 guest-only nested repair programs. Existing
+formerly unsupported cases remain as concrete guest-rejection regressions.
+
+GCC UCRT64 Debug/Release:121 ordinary passes +2 existing skips,123 registered.
+Python50/50, provenance40 components/223 files, catalogue32 machines/five
+locales. No local MSVC/new remote CI. C/D1-D10/E1 stays local and unpublished.
+Public PE remains gated; E2 calls/gates/inner TSS stacks and F tasks are pending.
+
+## Previous local tranche: joint private protection/delivery/IRET audit (D10)
+
+[D10 scope and evidence](pcs286-protected-joint-audit.md) close the joint audit
+for the current same-CPL contract, while public PE and clocked gates stay closed.
+Fixed INTR vector 1 misclassification as sampled #1; no frame semantics changed.
+New suite: 4,096 vector/frame/IRET cases, 48 nested IRET guest repairs,
+96 escalation cases, four shutdown/NMI/reset scenarios, two 46-boundary
+reset-to-PE programs and 12,690 host failures across individual routes and all
+program boundaries. It also checks 1,164 callback NMI edges and 864 public gates.
+
+Observed GCC UCRT64 Debug/Release: 120 ordinary passes +2 existing skips
+(122 registered), Python50/50, provenance40 components/222 files without errors,
+catalogue32 machines/five locales. No local MSVC/new remote CI or firmware run.
+C through D10 is uncommitted/unpublished. Next E/F privilege/task transfers;
+public activation remains a separate integration change. Physical-fidelity
+qualifications from D9 remain, with no certified stepping or timing claim.
+
+## Previous local tranche: instruction closure under PRM-1987 (D9)
+
+The remaining private instruction tranche is complete under the
+[explicit functional contract](pcs286-protected-instruction-policy.md).
+String protection/IOPL and nonrestartable scalar-write cases now deliver their
+guest exceptions; corrected-REP register adjustments are staged until delivery
+succeeds. SCAS/LODS and nonrestartable scalar-state interpretations remain
+explicit fidelity qualifications. LAR/LSL no longer use the former blanket
+evidence stops; MOV segment under LOCK retains exclusion through descriptor
+work. Public PE remains closed for the joint protection/delivery/return audit.
+
+Observed: all 65,536 descriptor-query cases, 7,648 new string-fault snapshots,
+180 guest-only repair/IRET/retry programs, 88 extra LOCK cases and 8,750 extra
+before/after host-transfer failures. Debug/Release each pass 119 ordinary CTests
+plus two existing Headland/AT DMA skips (121 registered). Python 50/50;
+provenance 40 components/221 files without errors; catalogue 32 machines/five
+locales. C through D9 remains local and uncommitted/unpublished.
+
+Next: the joint audit, then E/F privilege/task transfers and machine/timing work.
+This is neither a complete protected CPU nor physical-stepping certification.
+
+## Previous local tranche: private scalar/string instruction integration (D7/D8)
+
+LDS/LES, BOUND, scalar ALU/RMW, shifts/multiply/divide/decimal, ARPL, SLDT/STR,
+software INT/INT3/INTO, valid strings/REP/INS/OUTS and reviewed memory LOCK forms
+now join the private shared decoder. #DE vector zero is distinct from no fault.
+REP retains completed elements and restarts at the prefix after accepted events.
+See [exact scope, primary sources and evidence gates](pcs286-protected-instructions.md).
+
+Observed: 4,576 scalar integration comparisons, 8,192 software vector/privilege
+cases, 672 string mode/direction/alignment cases, all 65,536 initial CX values,
+9,850 before/after host-transfer failures and eight decoded repair/IRET/retry
+streams. Debug/Release each pass 118 ordinary CTests plus two existing Headland/
+AT DMA skips (120 registered); Python 50/50. Public PE remains closed.
+
+**At D8 instruction integration was not complete:** string protection/IOPL fault-state
+and write-protected XCHG/ADC/SBB/RCL/RCR restart evidence remain unresolved;
+unreviewed LOCK forms, existing D3 type gaps, joint fault audit and E/F transfers
+were pending. D9 above supersedes the instruction-specific blanket stops with
+an explicit documented/model-policy contract; joint audit and E/F remain open.
+
+## Previous local tranche: private ENTER (D6)
+
+ENTER joins protected stack access with a complete frame/local-reservation
+preflight and individual display-word checks. Interleaved reads/writes preserve
+overlap semantics; BP/SP commit after success. Tests add 18,432 ENTER/LEAVE
+cases and 6,210 every-transfer host failures, stack/display/allocation limits,
+two executed repair/IRET/retry streams and callback-latched NMI checks.
+Debug/Release each pass 116 ordinary CTests plus two existing Headland/AT DMA
+skips (118 registered). See [D6 source and exact scope](pcs286-protected-enter.md).
+Remaining ALU/RMW/operand consumers, strings/REP/INS/OUTS, LOCK, software events
+and joint audit still gate public PE. C through D6 is uncommitted/unpublished.
+
+## Previous local tranche: private stack and near control flow (D5)
+
+Ordinary PUSH/POP, segment POP, PUSHA/POPA, LEAVE, near CALL/RET/JMP and
+Jcc/LOOP/JCXZ join private execution. Protected aggregate stack accesses use
+complete range preflight and staged registers; host errors retain endpoint
+effects and stop without replay. Added 640 register/immediate cases, 56 aggregate
+round trips, 131,104 branches, selector/alias/range/event checks, two POPA repair/
+IRET/retry streams and 7,850 every-transfer failures. Debug/Release each pass
+115 ordinary CTests plus the two existing Headland/AT DMA skips (117 registered).
+See [D5 source, exact scope and pending work](pcs286-protected-stack.md).
+Public PE remains closed; ENTER, broad ALU/RMW/operand, string/LOCK/software-event
+audit and previous D3/E/F gaps remain. C through D5 is uncommitted/unpublished.
+
+## Previous local tranche: private IOPL, FLAGS and scalar I/O (D4)
+
+The private subset adds CLI/STI, PUSHF/POPF/simple FLAGS, CPL0 HLT and scalar
+IN/OUT. POPF masks protected bits using incoming CPL/IOPL; disallowed trusted
+instructions deliver #GP(0) before device effects. SS word access and bus error
+ownership remain shared. Tests add 2,097,152 POPF cases, 704 privilege cases,
+2,940 per-transfer host failures, event/wakeup checks and two stack repair/IRET
+programs. Debug/Release pass 114 ordinary CTests plus two existing skips each.
+See [D4 source, exact scope and remaining gates](pcs286-protected-iopl.md).
+LOCK/INS/OUTS/REP, broad stack/control-flow and software-event audit remain;
+public PE is still blocked. Accumulated C/D1/D2/D3/D4 stays local/unpublished.
+
+## Previous local tranche: private descriptor queries (D3)
+
+LAR/LSL/VERR/VERW now use read-only table lookup and shared protected source
+access. Negative queries update ZF only and preserve the LAR/LSL destination;
+operand faults deliver #GP/#SS, host failures stop without replay. Tests execute
+62,464 defined matrix cases, 3,072 explicit evidence gaps, eight repair/IRET/
+retry sequences and 3,160 before/after host failures. Debug/Release each pass
+113 ordinary CTests plus two existing skips; public PE remains blocked.
+LSL conforming code and LAR interrupt/trap gate types remain explicitly pending
+286 evidence. See [D3 contract, source and scope](pcs286-protected-queries.md).
+IOPL and broad instruction/event audit follow. C/D1/D2/D3 remain unpublished.
+
+## Previous local tranche: private reset-to-PE transition (D2)
+
+The private subset executes reset -> LGDT/LIDT -> LMSW -> near/direct far JMP
+-> LLDT/segment loads -> fault -> repair -> IRET -> retry without imported
+execution state. Protected table/MSW/CLTS and LLDT join shared access and
+delivery. Raw real-cache 82h survives LMSW; table 82h remains an LDT.
+The external experimental cache evidence and conflicting account are recorded.
+
+Adds 16,384 direct-JMP cases, system privilege/range/MSW/LLDT edges and 1,460
+before/after transfer failures. Debug/Release: 112 ordinary passes plus two
+existing skips each. Public PE stays blocked and timing UNKNOWN; conforming,
+indirect/gate/task transfers, queries and broader instruction audit remain.
+See [D2 sources, contract, tests and pending gate](pcs286-protected-transition.md).
+Accumulated C/D1/D2 remains uncommitted and unpublished on 4769e40524bc.
+
+## Previous local tranche: private shared MOV/IRET execution (D1)
+
+The existing decoder/handlers now join protected fetch/scalar access, MOV
+segment loads, fault unwind, event delivery and same-CPL IRET through an
+uninstalled private subset entry. Allowed forms: MOV 88–8E/A0–A3/B0–BF/C6–C7,
+LEA, XLAT, register XCHG, NOP and IRET, with segment overrides. Positive opcode
+filtering keeps LOCK/REP, arithmetic/RMW, stack/strings/I/O, far transfers and
+system/privilege instructions unsupported. Reserved-field aliases remain gaps.
+
+Eight executed synthetic byte streams fault on null DS, run a MOV-based repair
+handler, discard the error word with an instruction, execute IRET and retry.
+Tests add 128 MOV cases, 88 integrated fault cases and 2,080 before/after host
+failures; TF/NMI/IRQ, HOLD, SS shadow and callback edges are checked. See
+[scope and evidence](pcs286-protected-execution.md). Both public and default
+internal PE barriers stay closed; no real-to-PE entry or OS/machine claim.
+Local uncommitted changes on base 4769e40524bc; no publication or new remote CI.
+
+## Previous local tranche: private protected cached accesses
+
+Complete cached fetch/data/SS range checks now distinguish #GP(0)/#SS(0)
+from host state/endpoint failures. Bounded 1..10-byte transfers preserve 24-bit
+addresses and board-owned A20, stage reads and latch stop on host errors.
+Entry and IRET share the SS checker with their established fault order.
+Load-time privilege/presence remains with the loader; ordinary accesses do
+not re-read descriptors or write accessed bits.
+
+Tests cover 12,288 permission combinations, 19,267,584 independent byte-oracle
+range cases, 4,500 before/after transfer failures, cache mutation/reload and
+three private access-fault/handler/IRET/retry sequences. See [block C evidence
+and remaining instruction gates](pcs286-protected-access.md). The ED=1/FFFF
+manual inconsistency is recorded rather than silently resolved. No protected
+program execution, timing or machine acceptance is claimed. Both PE gates
+remain closed; instruction, stack/string restart and event integration follow.
+Local uncommitted work on published base 4769e40524bc; no new CI evidence.
+
+## Previous tranche: private protected exception delivery and shutdown
 
 The bounded private coordinator classifies source/return/error policy, handles
 entry rejection and #DF/shutdown, and arbitrates sampled #1/NMI/#9/INTR with
@@ -1119,7 +1420,11 @@ is a separate per-instance derived rewrite of 808x/V30 behaviour; its ALU
 techniques may inform a derived rewrite, but its segment/model architecture
 cannot become a 286 by selecting a flag.
 
-## Instruction and mode coverage matrix
+## Earlier instruction and mode inventory
+
+This retained inventory predates C/D/E private integration. Its portable column
+records that earlier baseline; the tranche records and current E2b table above
+supersede its protected-mode gaps. Public activation and timing remain blocked.
 
 `Required` means required for a reusable documented 80286 core, including
 guest #6 for undefined encodings. `Later` names a separately scoped silicon
@@ -1145,7 +1450,7 @@ generic catch-all or NOP is not coverage.
 | 286 application extensions | BOUND 62 (#5), ARPL 63, 186-family PUSHA/POPA, immediate PUSH, IMUL, ENTER/LEAVE, INS/OUTS and count-immediate shifts | `386_ops.h`, `x86_ops_misc.h`, `x86_ops_pmode.h` | Real-mode forms implemented including BOUND #5/register #6/limit #13; ARPL pending; timing unknown |
 | Protected system instructions | 0F 00 group SLDT/STR/LLDT/LTR/VERR/VERW; 0F 01 SGDT/SIDT/LGDT/LIDT/SMSW/LMSW; 0F 02/03 LAR/LSL; 0F 06 CLTS; privilege, type, present and selector tests | `x86_ops_pmode.h`, `386_ops.h` | Real-mode SGDT/SIDT/LGDT/LIDT/SMSW/LMSW/CLTS implemented; remaining system forms and all protected checks missing; timing unknown |
 | Undefined / undocumented | Reserved primary, 0F and ModR/M forms must deliver #6 per Intel's documented map. Classic 0F 05 LOADALL, F1 alias and D6 SETALC are separate undocumented silicon candidates, not documented-required success | `386_ops.h`, `x86_ops_misc.h` | Missing; undocumented deferred pending silicon evidence |
-| Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | WAIT completion with inactive BUSY/ERROR and documented #7 gates implemented; untrapped ESC and populated interface pending; timing unknown |
+| Unpopulated 80287 interface | ESC D8-DF and WAIT 9B with MSW EM/MP/TS: required #7/no-coprocessor behaviour; no fabricated 80287 arithmetic. Populated BUSY/ERROR/PEREQ/PEACK and #9/#16 are later | `x86_ops_fpu_2386.h` | WAIT completion, documented #7 gates and untrapped ESC decode with inactive PEREQ implemented; populated interface and timing pending |
 
 ## Protection, interrupt and fault matrix
 

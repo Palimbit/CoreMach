@@ -458,7 +458,9 @@ static void test_rejections_and_instances(void)
         state.ax = 0x42U;
         a->bytes[0x100U] = 0x99U;
         assert(bm_286_set_arch_state(&ca, &state) == BM_STATUS_OK);
-        assert(bm_286_step(&ca, &boundary) == BM_STATUS_UNSUPPORTED);
+        /* Preserve the no-effect assertion for the strict timing API. */
+        uint64_t cycles = 99;
+        assert(bm_286_step_clocked(ca.context, 0, &cycles) == BM_STATUS_UNSUPPORTED && !cycles);
         assert(a->bytes[0x100U] == 0x99U && a->count == 0U);
     }
     {

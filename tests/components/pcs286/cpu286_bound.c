@@ -118,7 +118,7 @@ static void fault(fixture_t *f, const bm_286_arch_state_t *s,
     bm_286_arch_state_t e = *s, a = state(f);
     e.sp = (uint16_t)(e.sp - 6); e.flags &= 0xfcffU;
     e.cs.selector = 0x4000; e.cs.base = 0x40000; e.cs.limit = 0xffff;
-    e.cs.access = 0; e.cs.valid = 1; e.ip = 0x200;
+    e.cs.access = 0x82; e.cs.valid = 1; e.ip = 0x200;
     e.interrupt_shadow = BM_286_SHADOW_NONE; e.trap_pending = 0;
     same(&a, &e);
     assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == vector);
@@ -273,6 +273,8 @@ static void gaps(fixture_t *f)
         if (bad < 3) { f->ram[0x30102] = (uint8_t)(0xfd + bad); f->ram[0x30103] = 0xff; }
         if (bad == 3) s.ds.valid = 0;
         if (bad == 4) s.ds.limit = 0x502;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (bad == 5) s.msw |= 1;
         if (bad == 6) s.idtr.limit = 22;
         if (bad == 7) s.sp = 5;
@@ -292,7 +294,8 @@ static void gaps(fixture_t *f)
             assert(f->count == 9); /* Fetches and frame/IVT, no bounds read. */
             continue;
         }
-        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         a = state(f); same(&a, &s);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation != BM_BUS_WRITE);
         if (bad < 5) assert(f->count == 4); /* No partial bounds read/wrap. */

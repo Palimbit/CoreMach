@@ -128,10 +128,13 @@ static void failures_and_hold(bm_cpu_t *cpu, fixture_t *f)
         bm_286_boundary_t b;
         f->code[0] = mode == 0 ? 0xf0 : mode == 1 ? 0xf3 : 0xed;
         f->code[1] = 0xed;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (mode == 2) s.msw |= 1;
         if (mode == 3) { f->fail_at = 2; f->error = BM_STATUS_UNMAPPED; }
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
-        assert(bm_286_step(cpu, &b) == (mode == 3 ? BM_STATUS_UNMAPPED : BM_STATUS_UNSUPPORTED));
+        assert((s.msw & 1U ? bm_286_step_clocked(cpu->context, 0, &gate_cycles) : bm_286_step(cpu, &b)) == (mode == 3 ? BM_STATUS_UNMAPPED : BM_STATUS_UNSUPPORTED));
+        if (s.msw & 1U) assert(gate_cycles == 0);
         assert(!f->io_reads && !f->io_writes);
     }
     {

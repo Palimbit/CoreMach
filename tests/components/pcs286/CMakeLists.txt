@@ -59,7 +59,312 @@ function(pcs286_acceptance name source implementation)
 endfunction()
 
 pcs286_acceptance(cpu286 cpu286_acceptance.c blumach_cpu_80286)
+include(ioc02_legacy_fixture.cmake)
+include(pit8254_classic_fixture.cmake)
+add_executable(pcs286-kbc8042 kbc8042_test.c)
+target_include_directories(pcs286-kbc8042 PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine")
+target_link_libraries(pcs286-kbc8042 PRIVATE blumach_kbc8042 blumach_at_pic
+    blumach_platform_null portable-failure-injection-host)
+pcs286_test_options(pcs286-kbc8042)
+add_test(NAME pcs286-component.kbc8042 COMMAND pcs286-kbc8042)
+set_tests_properties(pcs286-component.kbc8042 PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-wd37c65 wd37c65_test.c)
+target_link_libraries(pcs286-wd37c65 PRIVATE blumach_pc_components
+    blumach_at_dma blumach_storage blumach_platform_null)
+pcs286_test_options(pcs286-wd37c65)
+add_test(NAME pcs286-component.wd37c65 COMMAND pcs286-wd37c65)
+set_tests_properties(pcs286-component.wd37c65 PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-at-rtc-clock rtc_at_clock_test.c)
+target_include_directories(pcs286-at-rtc-clock PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine"
+    "${PROJECT_SOURCE_DIR}/components/pc/src" "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src")
+target_link_libraries(pcs286-at-rtc-clock PRIVATE blumach_at_engine_adapters blumach_at_pic
+    blumach_pcs286_checks blumach_platform_null portable-failure-injection-host)
+pcs286_test_options(pcs286-at-rtc-clock)
+add_test(NAME pcs286-component.at-rtc-clock COMMAND pcs286-at-rtc-clock)
+set_tests_properties(pcs286-component.at-rtc-clock PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-at-rtc rtc_at_test.c)
+target_include_directories(pcs286-at-rtc PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine"
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src")
+target_link_libraries(pcs286-at-rtc PRIVATE blumach_at_rtc blumach_at_pic
+    blumach_pcs286_checks blumach_platform_null portable-failure-injection-host)
+pcs286_test_options(pcs286-at-rtc)
+add_test(NAME pcs286-component.at-rtc COMMAND pcs286-at-rtc)
+set_tests_properties(pcs286-component.at-rtc PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-checks checks_test.c)
+target_include_directories(pcs286-checks PRIVATE
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src")
+target_link_libraries(pcs286-checks PRIVATE blumach_pcs286_checks
+    blumach_pcs286_refresh blumach_pcs286_port61 blumach_pcs286_memory
+    blumach_cpu_80286 blumach_at_rtc blumach_platform_null)
+pcs286_test_options(pcs286-checks)
+add_test(NAME pcs286-component.checks-nmi COMMAND pcs286-checks)
+set_tests_properties(pcs286-component.checks-nmi PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-refresh refresh_test.c)
+target_include_directories(pcs286-refresh PRIVATE
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src")
+target_link_libraries(pcs286-refresh PRIVATE blumach_pcs286_refresh
+    blumach_pcs286_port61 blumach_cpu_80286 blumach_platform_null)
+pcs286_test_options(pcs286-refresh)
+add_test(NAME pcs286-component.refresh COMMAND pcs286-refresh)
+set_tests_properties(pcs286-component.refresh PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-port61 port61_test.c)
+target_include_directories(pcs286-port61 PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/pc/src"
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+target_link_libraries(pcs286-port61 PRIVATE blumach_pcs286_port61 blumach_platform_null
+    blumach_system_olivetti_pcs286_contracts
+    blumach_pcs286_headland_at blumach_headland_legacy_registers blumach_ioc02_legacy_registers
+    blumach_at_pic blumach_at_dma blumach_at_bus)
+pcs286_test_options(pcs286-port61)
+add_test(NAME pcs286-component.port61 COMMAND pcs286-port61)
+set_tests_properties(pcs286-component.port61 PROPERTIES LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-pit8254-clock pit8254_clock_test.c)
+target_include_directories(pcs286-pit8254-clock PRIVATE
+    "${PROJECT_SOURCE_DIR}/tests/engine" "${PROJECT_SOURCE_DIR}/components/pc/src")
+target_link_libraries(pcs286-pit8254-clock PRIVATE blumach_at_engine_adapters
+    blumach_platform_null portable-failure-injection-host)
+pcs286_test_options(pcs286-pit8254-clock)
+add_test(NAME pcs286-component.pit8254-clock COMMAND pcs286-pit8254-clock)
+set_tests_properties(pcs286-component.pit8254-clock PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+
+add_executable(pcs286-pit8254 pit8254_test.c)
+target_include_directories(pcs286-pit8254 PRIVATE
+    "${PROJECT_SOURCE_DIR}/tests/engine"
+    "${PROJECT_SOURCE_DIR}/components/pc/src"
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+target_link_libraries(pcs286-pit8254 PRIVATE blumach_pit8254 blumach_at_engine_adapters blumach_platform_null
+    pcs286-pit-classic-fixture portable-failure-injection-host
+    blumach_pcs286_headland_at blumach_system_olivetti_pcs286_contracts
+    blumach_headland_legacy_registers blumach_ioc02_legacy_registers
+    blumach_at_pic blumach_at_dma blumach_at_bus)
+pcs286_test_options(pcs286-pit8254)
+add_test(NAME pcs286-component.pit8254 COMMAND pcs286-pit8254)
+set_tests_properties(pcs286-component.pit8254 PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+add_executable(pcs286-board-io board_io.c)
+target_include_directories(pcs286-board-io PRIVATE
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+target_link_libraries(pcs286-board-io PRIVATE blumach_pcs286_headland_at
+    blumach_system_olivetti_pcs286_contracts
+    blumach_headland_legacy_registers blumach_ioc02_legacy_registers
+    blumach_at_pic blumach_at_dma blumach_at_bus blumach_platform_null)
+pcs286_test_options(pcs286-board-io)
+add_test(NAME pcs286-component.board-io COMMAND pcs286-board-io)
+set_tests_properties(pcs286-component.board-io PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+add_executable(pcs286-headland-at-memory headland_at_memory.c)
+target_include_directories(pcs286-headland-at-memory PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src"
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src")
+target_link_libraries(pcs286-headland-at-memory PRIVATE blumach_pcs286_headland_at
+    blumach_ioc02_legacy_registers blumach_at_pic blumach_at_dma
+    blumach_headland_legacy_registers blumach_pcs286_memory blumach_at_bus
+    blumach_cpu_80286 blumach_platform_null)
+pcs286_test_options(pcs286-headland-at-memory)
+add_test(NAME pcs286-component.headland-at-memory COMMAND pcs286-headland-at-memory)
+set_tests_properties(pcs286-component.headland-at-memory PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 120)
+add_executable(pcs286-ioc02-registers ioc02_registers.c)
+target_include_directories(pcs286-ioc02-registers PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src"
+    "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(pcs286-ioc02-registers PRIVATE
+    blumach_ioc02_legacy_registers blumach_bus blumach_platform_null)
+pcs286_test_options(pcs286-ioc02-registers)
+add_test(NAME pcs286-component.ioc02-registers COMMAND pcs286-ioc02-registers)
+set_tests_properties(pcs286-component.ioc02-registers PROPERTIES
+    LABELS "pcs286-p0;component-acceptance" TIMEOUT 30)
+include(headland_legacy_fixture.cmake)
+add_executable(pcs286-headland-registers headland_registers.c)
+target_include_directories(pcs286-headland-registers PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(pcs286-headland-registers PRIVATE blumach_headland_legacy_registers blumach_bus)
+pcs286_test_options(pcs286-headland-registers)
+add_test(NAME pcs286-component.headland-registers COMMAND pcs286-headland-registers)
+set_tests_properties(pcs286-component.headland-registers PROPERTIES
+    LABELS "pcs286-p0;component-acceptance" TIMEOUT 30)
+add_executable(pcs286-headland-control headland_control.c)
+add_executable(pcs286-headland-geometry headland_geometry.c)
+target_include_directories(pcs286-headland-geometry PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src")
+target_link_libraries(pcs286-headland-geometry PRIVATE blumach_pcs286_headland_at
+    blumach_headland_legacy_registers blumach_headland_gc10x_contracts
+    blumach_at_bus blumach_pcs286_memory)
+pcs286_test_options(pcs286-headland-geometry)
+add_test(NAME pcs286-component.headland-geometry COMMAND pcs286-headland-geometry)
+set_tests_properties(pcs286-component.headland-geometry PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 60)
+target_include_directories(pcs286-headland-control PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src")
+target_link_libraries(pcs286-headland-control PRIVATE blumach_headland_legacy_registers
+    blumach_headland_gc10x_contracts)
+pcs286_test_options(pcs286-headland-control)
+add_test(NAME pcs286-component.headland-control COMMAND pcs286-headland-control)
+set_tests_properties(pcs286-component.headland-control PROPERTIES
+    LABELS "pcs286-p0;component-acceptance" TIMEOUT 30)
+add_executable(pcs286-headland-memory headland_memory.c)
+target_include_directories(pcs286-headland-memory PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(pcs286-headland-memory PRIVATE blumach_headland_legacy_registers
+    blumach_headland_gc10x_contracts blumach_pcs286_memory blumach_platform_null)
+pcs286_test_options(pcs286-headland-memory)
+add_test(NAME pcs286-component.headland-memory COMMAND pcs286-headland-memory)
+set_tests_properties(pcs286-component.headland-memory PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 120)
+add_executable(pcs286-headland-context headland_context.c)
+target_include_directories(pcs286-headland-context PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src")
+target_link_libraries(pcs286-headland-context PRIVATE blumach_headland_legacy_registers
+    blumach_headland_gc10x_contracts)
+pcs286_test_options(pcs286-headland-context)
+add_test(NAME pcs286-component.headland-context COMMAND pcs286-headland-context)
+set_tests_properties(pcs286-component.headland-context PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 120)
+add_executable(pcs286-headland-shadow headland_shadow.c)
+target_include_directories(pcs286-headland-shadow PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src")
+target_link_libraries(pcs286-headland-shadow PRIVATE blumach_headland_legacy_registers
+    blumach_headland_gc10x_contracts blumach_pcs286_memory blumach_platform_null)
+pcs286_test_options(pcs286-headland-shadow)
+add_test(NAME pcs286-component.headland-shadow COMMAND pcs286-headland-shadow)
+set_tests_properties(pcs286-component.headland-shadow PROPERTIES
+    LABELS "pcs286-p0;component-integration" TIMEOUT 120)
 if(TARGET blumach_cpu_80286)
+add_executable(pcs286-protected-full-joint cpu286_protected_full_joint.c)
+target_link_libraries(pcs286-protected-full-joint PRIVATE blumach_cpu_80286 blumach_platform_null)
+pcs286_test_options(pcs286-protected-full-joint)
+add_test(NAME pcs286-component.protected-full-joint COMMAND pcs286-protected-full-joint)
+set_tests_properties(pcs286-component.protected-full-joint PROPERTIES LABELS "pcs286-p0;component-integration" TIMEOUT 180)
+
+add_executable(pcs286-protected-tasks cpu286_protected_tasks.c)
+target_include_directories(pcs286-protected-tasks PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+target_link_libraries(pcs286-protected-tasks PRIVATE blumach_cpu_80286 blumach_platform_null)
+pcs286_test_options(pcs286-protected-tasks)
+add_test(NAME pcs286-component.protected-tasks COMMAND pcs286-protected-tasks)
+set_tests_properties(pcs286-component.protected-tasks PROPERTIES LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+
+add_executable(pcs286-protected-inner cpu286_protected_inner.c)
+    target_link_libraries(pcs286-protected-inner PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-inner PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-inner)
+    add_test(NAME pcs286-component.protected-inner COMMAND pcs286-protected-inner)
+    set_tests_properties(pcs286-component.protected-inner PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-calls cpu286_protected_calls.c)
+    target_link_libraries(pcs286-protected-calls PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-calls PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-calls)
+    add_test(NAME pcs286-component.protected-calls COMMAND pcs286-protected-calls)
+    set_tests_properties(pcs286-component.protected-calls PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-returns cpu286_protected_returns.c)
+    target_link_libraries(pcs286-protected-returns PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-returns PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-returns)
+    add_test(NAME pcs286-component.protected-returns COMMAND pcs286-protected-returns)
+    set_tests_properties(pcs286-component.protected-returns PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-joint cpu286_protected_joint.c)
+    target_link_libraries(pcs286-protected-joint PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-joint PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-joint)
+    add_test(NAME pcs286-component.protected-joint COMMAND pcs286-protected-joint)
+    set_tests_properties(pcs286-component.protected-joint PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-instruction-faults cpu286_protected_instruction_faults.c)
+    target_link_libraries(pcs286-protected-instruction-faults PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-instruction-faults PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-instruction-faults)
+    add_test(NAME pcs286-component.protected-instruction-faults COMMAND pcs286-protected-instruction-faults)
+    set_tests_properties(pcs286-component.protected-instruction-faults PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-strings cpu286_protected_strings.c)
+    target_link_libraries(pcs286-protected-strings PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-strings PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-strings)
+    add_test(NAME pcs286-component.protected-strings COMMAND pcs286-protected-strings)
+    set_tests_properties(pcs286-component.protected-strings PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-instructions cpu286_protected_instructions.c)
+    target_link_libraries(pcs286-protected-instructions PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-instructions PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-instructions)
+    add_test(NAME pcs286-component.protected-instructions COMMAND pcs286-protected-instructions)
+    set_tests_properties(pcs286-component.protected-instructions PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-enter cpu286_protected_enter.c)
+    target_link_libraries(pcs286-protected-enter PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-enter PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-enter)
+    add_test(NAME pcs286-component.protected-enter COMMAND pcs286-protected-enter)
+    set_tests_properties(pcs286-component.protected-enter PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-stack cpu286_protected_stack.c)
+    target_link_libraries(pcs286-protected-stack PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-stack PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-stack)
+    add_test(NAME pcs286-component.protected-stack COMMAND pcs286-protected-stack)
+    set_tests_properties(pcs286-component.protected-stack PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-iopl cpu286_protected_iopl.c)
+    target_link_libraries(pcs286-protected-iopl PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-iopl PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-iopl)
+    add_test(NAME pcs286-component.protected-iopl COMMAND pcs286-protected-iopl)
+    set_tests_properties(pcs286-component.protected-iopl PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 90)
+    add_executable(pcs286-protected-queries cpu286_protected_queries.c)
+    target_link_libraries(pcs286-protected-queries PRIVATE blumach_cpu_80286 blumach_platform_null)
+    target_include_directories(pcs286-protected-queries PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    pcs286_test_options(pcs286-protected-queries)
+    add_test(NAME pcs286-component.protected-queries COMMAND pcs286-protected-queries)
+    set_tests_properties(pcs286-component.protected-queries PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 60)
+    add_executable(pcs286-protected-transition cpu286_protected_transition.c)
+    target_include_directories(pcs286-protected-transition PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    target_link_libraries(pcs286-protected-transition PRIVATE blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-protected-transition)
+    add_test(NAME pcs286-component.protected-transition COMMAND pcs286-protected-transition)
+    set_tests_properties(pcs286-component.protected-transition PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 60)
+    add_executable(pcs286-protected-execution cpu286_protected_execution.c)
+    target_include_directories(pcs286-protected-execution PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    target_link_libraries(pcs286-protected-execution PRIVATE blumach_cpu_80286 blumach_platform_null)
+    pcs286_test_options(pcs286-protected-execution)
+    add_test(NAME pcs286-component.protected-execution COMMAND pcs286-protected-execution)
+    set_tests_properties(pcs286-component.protected-execution PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 60)
+    add_executable(pcs286-protected-access cpu286_protected_access.c)
+    target_include_directories(pcs286-protected-access PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+    target_link_libraries(pcs286-protected-access PRIVATE blumach_cpu_80286)
+    pcs286_test_options(pcs286-protected-access)
+    add_test(NAME pcs286-component.protected-access COMMAND pcs286-protected-access)
+    set_tests_properties(pcs286-component.protected-access PROPERTIES
+        LABELS "pcs286-p0;component-acceptance" TIMEOUT 60)
     add_executable(pcs286-protected-delivery cpu286_protected_delivery.c)
     target_include_directories(pcs286-protected-delivery PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
     target_link_libraries(pcs286-protected-delivery PRIVATE blumach_cpu_80286)
@@ -199,6 +504,13 @@ if(TARGET blumach_cpu_80286)
     pcs286_test_options(pcs286-sst-probe)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME pcs286-component.boot-probe
+            COMMAND "${CMAKE_COMMAND}" -E env
+                "BM_PCS286_BOOT_PROBE=$<TARGET_FILE:pcs286-boot-probe>"
+                "${Python3_EXECUTABLE}" -B -m unittest tools.tests.test_pcs286_boot_probe)
+        set_tests_properties(pcs286-component.boot-probe PROPERTIES
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" TIMEOUT 30
+            LABELS "pcs286-p0;component-integration")
         add_test(NAME pcs286-component.sst-adapter
             COMMAND "${CMAKE_COMMAND}" -E env
                 "BM_SST286_PROBE=$<TARGET_FILE:pcs286-sst-probe>"
@@ -252,6 +564,33 @@ if(TARGET blumach_cpu_80286)
 endif()
 pcs286_acceptance(headland headland_acceptance.c blumach_headland_gc10x)
 pcs286_acceptance(at-bus at_bus_acceptance.c blumach_at_bus)
+if(TARGET blumach_at_keyboard AND TARGET blumach_kbc8042 AND TARGET blumach_at_pic)
+    add_executable(pcs286-keyboard-pair keyboard_pair_test.c)
+    target_link_libraries(pcs286-keyboard-pair PRIVATE blumach_at_engine_adapters
+        blumach_at_pic portable-failure-injection-host blumach_platform_null)
+    target_include_directories(pcs286-keyboard-pair PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine")
+    pcs286_test_options(pcs286-keyboard-pair)
+    add_test(NAME pcs286-component.keyboard-pair COMMAND pcs286-keyboard-pair)
+    set_tests_properties(pcs286-component.keyboard-pair PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+    add_executable(pcs286-keyboard-clock keyboard_clock_test.c)
+    target_link_libraries(pcs286-keyboard-clock PRIVATE blumach_at_engine_adapters
+        blumach_at_pic portable-failure-injection-host blumach_platform_null)
+    target_include_directories(pcs286-keyboard-clock PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/engine" "${PROJECT_SOURCE_DIR}/components/pc/src")
+    pcs286_test_options(pcs286-keyboard-clock)
+    add_test(NAME pcs286-component.keyboard-clock COMMAND pcs286-keyboard-clock)
+    set_tests_properties(pcs286-component.keyboard-clock PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+    add_executable(pcs286-at-keyboard-contract keyboard_at_test.c)
+    target_link_libraries(pcs286-at-keyboard-contract PRIVATE blumach_at_keyboard
+        blumach_kbc8042 blumach_at_pic portable-failure-injection-host blumach_platform_null)
+    target_include_directories(pcs286-at-keyboard-contract PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine")
+    pcs286_test_options(pcs286-at-keyboard-contract)
+    add_test(NAME pcs286-component.at-keyboard-contract COMMAND pcs286-at-keyboard-contract)
+    set_tests_properties(pcs286-component.at-keyboard-contract PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+endif()
 pcs286_acceptance(at-pic at_pic_acceptance.c blumach_at_pic)
 if(TARGET blumach_at_pic)
     add_executable(pcs286-at-pic-contract at_pic_test.c)
@@ -264,6 +603,44 @@ if(TARGET blumach_at_pic)
         LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
 endif()
 pcs286_acceptance(at-dma at_dma_acceptance.c blumach_at_dma)
+if(TARGET blumach_at_dma)
+    add_executable(pcs286-dma-coordinator dma_coordinator_test.c)
+    target_include_directories(pcs286-dma-coordinator PRIVATE
+        "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src")
+    target_link_libraries(pcs286-dma-coordinator PRIVATE
+        blumach_pcs286_dma_coordinator blumach_at_dma blumach_at_bus blumach_platform_null)
+    pcs286_test_options(pcs286-dma-coordinator)
+    add_test(NAME pcs286-component.dma-coordinator COMMAND pcs286-dma-coordinator)
+    set_tests_properties(pcs286-component.dma-coordinator PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 15)
+    add_executable(pcs286-at-dma-mem2mem at_dma_mem2mem.c)
+    target_link_libraries(pcs286-at-dma-mem2mem PRIVATE blumach_at_dma blumach_at_bus blumach_platform_null)
+    pcs286_test_options(pcs286-at-dma-mem2mem)
+    add_test(NAME pcs286-component.at-dma-mem2mem COMMAND pcs286-at-dma-mem2mem)
+    set_tests_properties(pcs286-component.at-dma-mem2mem PROPERTIES LABELS "pcs286-p0;component-integration" TIMEOUT 60)
+    add_executable(pcs286-at-dma-pair at_dma_pair.c)
+    target_include_directories(pcs286-at-dma-pair PRIVATE "${PROJECT_SOURCE_DIR}/components/pc/src")
+    target_link_libraries(pcs286-at-dma-pair PRIVATE blumach_at_dma blumach_at_bus blumach_platform_null)
+    pcs286_test_options(pcs286-at-dma-pair)
+    add_test(NAME pcs286-component.at-dma-pair COMMAND pcs286-at-dma-pair)
+    set_tests_properties(pcs286-component.at-dma-pair PROPERTIES LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+    add_executable(pcs286-at-dma-registers at_dma_registers.c)
+    target_include_directories(pcs286-at-dma-registers PRIVATE "${PROJECT_SOURCE_DIR}/tests/engine")
+    target_link_libraries(pcs286-at-dma-registers PRIVATE blumach_at_dma blumach_platform_null portable-failure-injection-host)
+    pcs286_test_options(pcs286-at-dma-registers)
+    add_test(NAME pcs286-component.at-dma-registers COMMAND pcs286-at-dma-registers)
+    set_tests_properties(pcs286-component.at-dma-registers PROPERTIES LABELS "pcs286-p0;component-acceptance" TIMEOUT 30)
+    add_executable(pcs286-at-dma-transfers at_dma_transfers.c)
+    target_link_libraries(pcs286-at-dma-transfers PRIVATE blumach_at_dma blumach_at_bus blumach_platform_null)
+    pcs286_test_options(pcs286-at-dma-transfers)
+    add_test(NAME pcs286-component.at-dma-transfers COMMAND pcs286-at-dma-transfers)
+    set_tests_properties(pcs286-component.at-dma-transfers PROPERTIES LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+    add_executable(pcs286-at-dma-cascade at_dma_cascade.c)
+    target_link_libraries(pcs286-at-dma-cascade PRIVATE blumach_at_dma blumach_at_bus blumach_platform_null)
+    pcs286_test_options(pcs286-at-dma-cascade)
+    add_test(NAME pcs286-component.at-dma-cascade COMMAND pcs286-at-dma-cascade)
+    set_tests_properties(pcs286-component.at-dma-cascade PROPERTIES LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+endif()
 
 if(TARGET blumach_cpu_80286 AND TARGET blumach_at_pic)
     add_executable(pcs286-cpu-interrupts cpu286_interrupts.c)
@@ -286,6 +663,40 @@ if(TARGET blumach_at_bus)
 endif()
 
 if(TARGET blumach_cpu_80286 AND TARGET blumach_at_bus)
+    add_executable(pcs286-page-spare-latches page_spare_latches_test.c)
+    target_include_directories(pcs286-page-spare-latches PRIVATE
+        "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src")
+    target_link_libraries(pcs286-page-spare-latches PRIVATE
+        blumach_pcs286_page_spare_latches)
+    pcs286_test_options(pcs286-page-spare-latches)
+    add_test(NAME pcs286-component.page-spare-latches COMMAND pcs286-page-spare-latches)
+    set_tests_properties(pcs286-component.page-spare-latches PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 15)
+    add_executable(pcs286-board-control board_control_test.c)
+    target_include_directories(pcs286-board-control PRIVATE
+        "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src"
+        "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+        "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+    target_link_libraries(pcs286-board-control PRIVATE blumach_pcs286_control
+        blumach_at_engine_adapters blumach_at_dma blumach_ioc02_legacy_registers
+        blumach_platform_null)
+    pcs286_test_options(pcs286-board-control)
+    add_executable(pcs286-board-services board_services_test.c)
+    target_include_directories(pcs286-board-services PRIVATE
+        "${PROJECT_SOURCE_DIR}/systems/olivetti-pcs286/src"
+        "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+        "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src"
+        "${PROJECT_SOURCE_DIR}/tests/engine")
+    target_link_libraries(pcs286-board-services PRIVATE blumach_pcs286_services
+        blumach_at_dma blumach_ioc02_legacy_registers blumach_platform_null
+        portable-failure-injection-host)
+    pcs286_test_options(pcs286-board-services)
+    add_test(NAME pcs286-component.board-services COMMAND pcs286-board-services)
+    set_tests_properties(pcs286-component.board-services PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 30)
+    add_test(NAME pcs286-component.board-control COMMAND pcs286-board-control)
+    set_tests_properties(pcs286-component.board-control PROPERTIES
+        LABELS "pcs286-p0;component-integration" TIMEOUT 30)
     if(TARGET blumach_at_pic)
         add_executable(pcs286-board-interrupts board_interrupts_test.c)
         target_link_libraries(pcs286-board-interrupts PRIVATE blumach_pcs286_memory

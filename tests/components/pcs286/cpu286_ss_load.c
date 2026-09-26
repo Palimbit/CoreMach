@@ -93,7 +93,7 @@ static void reloads(bm_cpu_t *cpu, fixture_t *f)
             assert(bm_286_step(cpu, &b) == BM_STATUS_OK);
             a = state_of(cpu); expected = s;
             expected.ss.selector = s.ax; expected.ss.base = (uint32_t) s.ax << 4;
-            expected.ss.limit = 0xffffU; expected.ss.valid = 1; expected.ss.access = 0;
+            expected.ss.limit = 0xffffU; expected.ss.valid = 1; expected.ss.access = 0x82;
             expected.ip = (uint16_t) lengths[form];
             expected.interrupt_shadow = BM_286_SHADOW_SS_LOAD;
             if (form == 4) expected.sp = (uint16_t) (s.sp + 2U);
@@ -221,6 +221,8 @@ static void errors_and_import(bm_cpu_t *cpu, fixture_t *f)
         bm_286_boundary_t b;
         if (form == 0) s.bx = 0xffff;
         if (form == 1) s.sp = 0xffff;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (form == 2) s.msw |= 1;
         s.interrupt_shadow = BM_286_SHADOW_SS_LOAD;
         assert(bm_286_set_arch_state(cpu, &s) == BM_STATUS_OK);
@@ -232,7 +234,8 @@ static void errors_and_import(bm_cpu_t *cpu, fixture_t *f)
             assert(a.sp == (uint16_t)(s.sp-6));
             continue;
         }
-        assert(bm_286_step(cpu, &b) == BM_STATUS_UNSUPPORTED);
+        assert((s.msw & 1U ? bm_286_step_clocked(cpu->context, 0, &gate_cycles) : bm_286_step(cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         a = state_of(cpu); same(&s, &a);
         for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);
     }

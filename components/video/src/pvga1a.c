@@ -41,7 +41,101 @@ struct bm_pvga1a {
     uint8_t dac_index;
     uint8_t dac_component;
     uint8_t status_phase;
+    uint8_t clocked_status;
+    uint64_t raster_dot, raster_fraction;
 };
+
+static uint32_t text_character_width(const bm_pvga1a_t *video);
+static uint16_t vertical_display_lines(const bm_pvga1a_t *video);
+static uint16_t vertical_total_lines(const bm_pvga1a_t *video);
+static uint64_t pixel_clock_hz(const bm_pvga1a_t *video);
+static size_t plane_address(unsigned int plane, uint16_t offset);
+static uint8_t attribute_palette_index(const bm_pvga1a_t *video,
+                                       uint8_t color);
+
+/* VGA CRTC totals include retrace: HT+5 characters, VT+2 scan lines.
+ * Functional approximation: display end and vertical retrace are modeled;
+ * blanking skew, preset counters, IRQ and external dot clocks are not. */
+static uint32_t raster_width(const bm_pvga1a_t *v)
+{
+    return ((uint32_t)v->crtc[0]+5U)*text_character_width(v);
+}
+static uint8_t raster_status(const bm_pvga1a_t *v)
+{
+    uint32_t width=raster_width(v), lines=vertical_total_lines(v);
+    uint32_t y=(uint32_t)(v->raster_dot/width%lines);
+    uint32_t x=(uint32_t)(v->raster_dot%width);
+    uint32_t start=v->crtc[0x10] | ((uint32_t)(v->crtc[7]&4U)<<6)
+                   | ((uint32_t)(v->crtc[7]&0x80U)<<2);
+    uint32_t length=(v->crtc[0x11]-start)&15U;
+    uint32_t end=vertical_display_lines(v);
+    uint32_t active=((uint32_t)v->crtc[1]+1U)*text_character_width(v);
+    int retrace=start<lines && (y+lines-start)%lines<(length ? length : 16U);
+    uint8_t diagnostic = 0U;
+
+    if ((v->attribute_palette_enable != 0U) && (x < active) && (y < end)) {
+        uint32_t repeats = (v->crtc[9] & 0x1fU) + 1U;
+        uint32_t row_stride = (uint32_t) v->crtc[0x13] * 2U;
+        uint16_t display_start = (uint16_t) (((uint16_t) v->crtc[0x0c] << 8U) |
+                                             v->crtc[0x0d]);
+        uint16_t offset;
+        uint8_t bit = (uint8_t) (0x80U >> (x & 7U));
+        uint8_t color = 0U;
+        uint8_t output;
+        unsigned int plane;
+
+        if ((v->crtc[9] & 0x80U) != 0U)
+            repeats *= 2U;
+        offset = (uint16_t) (display_start +
+                            (y / repeats) * row_stride + x / 8U);
+        for (plane = 0U; plane < 4U; ++plane) {
+            if ((v->vram[plane_address(plane, offset)] & bit) != 0U)
+                color |= (uint8_t) (1U << plane);
+        }
+        color &= v->attribute[0x12] & 0x0fU;
+        output = attribute_palette_index(v, color);
+        switch (v->attribute[0x12] & 0x30U) {
+            case 0x00U: /* P0 and P2. */
+                diagnostic = (uint8_t) (((output & 0x01U) ? 0x10U : 0U) |
+                                        ((output & 0x04U) ? 0x20U : 0U));
+                break;
+            case 0x10U: /* P4 and P5. */
+                diagnostic = (uint8_t) (((output & 0x10U) ? 0x10U : 0U) |
+                                        ((output & 0x20U) ? 0x20U : 0U));
+                break;
+            case 0x20U: /* P1 and P3. */
+                diagnostic = (uint8_t) (((output & 0x02U) ? 0x10U : 0U) |
+                                        ((output & 0x08U) ? 0x20U : 0U));
+                break;
+            default:    /* P6 and P7. */
+                diagnostic = (uint8_t) (((output & 0x40U) ? 0x10U : 0U) |
+                                        ((output & 0x80U) ? 0x20U : 0U));
+                break;
+        }
+    }
+    /* Input Status 1 follows raster blanking even while Sequencer Clocking
+     * Mode blanks the pixel output. Firmware uses that continuing signal to
+     * qualify the adapter before enabling the screen. */
+    return (uint8_t)(diagnostic | (retrace ? 8U : 0U) |
+        ((retrace || y>=end || x>=active) ? 1U : 0U));
+}
+
+bm_status_t bm_pvga1a_advance_ns(bm_pvga1a_t *v, uint64_t ns)
+{
+    uint64_t rate, frame, subsecond, dots;
+    if (v==NULL) return BM_STATUS_INVALID_ARGUMENT;
+    rate=pixel_clock_hz(v);
+    if (rate==0U) return BM_STATUS_UNSUPPORTED;
+    frame=(uint64_t)raster_width(v)*vertical_total_lines(v);
+    /* Split before multiplying, including UINT64_MAX ns. Fraction retains
+     * elapsed sub-dot time across partitions and internal clock changes. */
+    subsecond=(ns%1000000000U)*rate+v->raster_fraction;
+    dots=((ns/1000000000U)%frame)*rate+subsecond/1000000000U;
+    v->raster_dot=(v->raster_dot+dots)%frame;
+    v->raster_fraction=subsecond%1000000000U;
+    v->clocked_status=1;
+    return BM_STATUS_OK;
+}
 
 static uint8_t
 rotate_right(uint8_t value, unsigned int count)
@@ -197,12 +291,18 @@ static bm_status_t
 memory_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pvga1a_t *video = context;
+    bm_pvga1a_t snapshot;
     uint32_t index;
 
     if ((transaction == NULL) || (transaction->size == 0U) ||
         (transaction->size > sizeof(transaction->value)) ||
         (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
+    if (transaction->attributes & BM_BUS_TRANSACTION_DEBUG) {
+        if (transaction->operation != BM_BUS_READ) return BM_STATUS_UNSUPPORTED;
+        snapshot = *video;
+        video = &snapshot;
+    }
     if (transaction->operation == BM_BUS_READ) {
         transaction->value = 0;
         for (index = 0; index < transaction->size; ++index) {
@@ -245,7 +345,14 @@ read_port(bm_pvga1a_t *video, uint16_t raw_port)
         case 0x03c1U:
             return video->attribute[video->attribute_index & 0x1fU];
         case 0x03c2U:
-            return 0x10U;
+            /* Functional VGA monitor-sense comparator. The PCS 286 firmware
+             * drives DAC entry zero with a dark reference and each primary;
+             * the pixel mask does not disconnect that analogue test path.
+             * The 10h transition is firmware-observed, while the physical
+             * PVGA1A/board voltage threshold remains unqualified. */
+            return (video->palette[0][0] >= 0x10U ||
+                    video->palette[0][1] >= 0x10U ||
+                    video->palette[0][2] >= 0x10U) ? 0U : 0x10U;
         case 0x03c4U:
             return video->sequencer_index;
         case 0x03c5U:
@@ -280,6 +387,7 @@ read_port(bm_pvga1a_t *video, uint16_t raw_port)
             return video->crtc[video->crtc_index & 0x3fU];
         case 0x03daU:
             video->attribute_flip_flop = 0;
+            if (video->clocked_status) return raster_status(video);
             video->status_phase ^= 1U;
             return video->status_phase ? 0x09U : 0U;
         default:
@@ -362,12 +470,18 @@ static bm_status_t
 io_access(void *context, bm_bus_transaction_t *transaction)
 {
     bm_pvga1a_t *video = context;
+    bm_pvga1a_t snapshot;
     uint32_t index;
 
     if ((transaction == NULL) || (transaction->size == 0U) ||
         (transaction->size > sizeof(transaction->value)) ||
         (transaction->operation == BM_BUS_FETCH))
         return BM_STATUS_UNSUPPORTED;
+    if (transaction->attributes & BM_BUS_TRANSACTION_DEBUG) {
+        if (transaction->operation != BM_BUS_READ) return BM_STATUS_UNSUPPORTED;
+        snapshot = *video;
+        video = &snapshot;
+    }
     if (transaction->operation == BM_BUS_READ) {
         transaction->value = 0U;
         for (index = 0U; index < transaction->size; ++index) {
@@ -468,6 +582,8 @@ bm_pvga1a_reset(bm_pvga1a_t *video)
     video->dac_index = 0;
     video->dac_component = 0;
     video->status_phase = 0;
+    video->clocked_status = 0;
+    video->raster_dot = video->raster_fraction = 0;
 }
 
 bm_status_t

@@ -230,7 +230,7 @@ static void fault_state(fixture_t *f, const bm_286_arch_state_t *s,
 {
     bm_286_arch_state_t e = *s, a = state(f);
     e.ip = 0x200; e.cs.selector = 0x4000; e.cs.base = 0x40000;
-    e.cs.limit = 0xffff; e.cs.valid = 1; e.cs.access = 0;
+    e.cs.limit = 0xffff; e.cs.valid = 1; e.cs.access = 0x82;
     e.sp = (uint16_t)(s->sp - 6); e.flags &= 0xfcffU;
     e.trap_pending = 0; e.interrupt_shadow = BM_286_SHADOW_NONE;
     same(&e, &a);
@@ -299,8 +299,11 @@ static void prefixes_and_failures(fixture_t *f)
         if (bad == 2) code[0] = 0xf3;
         if (bad == 3) code[0] = 0xd4;
         bm_286_arch_state_t s = setup(f, code, sizeof(code)), a;
-        bm_286_boundary_t b; if (bad == 3) s.msw |= 1;
-        set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+        bm_286_boundary_t b; /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
+        if (bad == 3) s.msw |= 1;
+        set(f, &s); assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         a = state(f); same(&a, &s);
         /* With an installed lock adapter, F0 is decoded before refusing AAM. */
         assert(f->count == (bad == 3 ? 0U : 2U));

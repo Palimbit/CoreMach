@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2026 BluMach contributors
- * Partial Intel 80286 real-mode data, ALU, stack, control and direct-I/O core.
- * Timing, remaining ISA, faults and protected-mode execution are pending.
+ * Intel 80286 functional real/protected interpreter with an explicit supported
+ * instruction profile. Exact timing, remaining ISA/80287 and board integration
+ * are pending; see doc/architecture/pcs286-protected-public.md.
  */
 #ifndef BLUMACH_COMPONENTS_CPU_80286_H
 #define BLUMACH_COMPONENTS_CPU_80286_H
@@ -17,7 +18,7 @@ extern "C" {
 #define BM_286_STATE_VERSION 3U
 
 /* Inhibition for the next instruction boundary, not a clock count.
- * INTR_ONLY is set by real-mode STI.
+ * INTR_ONLY is set by STI.
  * SS_LOAD additionally inhibits NMI and single-step delivery. Faults are not
  * suppressed. HOLD/idle/error paths do not consume either shadow. */
 typedef enum bm_286_interrupt_shadow {
@@ -98,14 +99,17 @@ typedef struct bm_286_boundary {
     uint8_t vector;
     /* INSTRUCTION + has_vector identifies a completed software interrupt;
      * EXCEPTION identifies sampled traps or delivered synchronous faults
-     * (real-mode #DE, BOUND/system #5/#6/#13, extension #7 and IVT-limit #8);
+     * including protected access/privilege/task faults and double faults;
      * external interrupts use INTERRUPT. SHUTDOWN has no delivered vector. */
     uint8_t has_vector;
 } bm_286_boundary_t;
 
 /* Two interrupt-acknowledge phases per accepted INTR. Requires bus_lock.
  * B-2/later logical exclusion spans both phases through the first stack word;
- * the remainder of the frame and IVT reads are not in that window.
+ * the remainder of a real-mode frame and IVT reads are not in that window.
+ * Protected ordinary entry retains its documented descriptor/first-word
+ * exclusion; task INTA conservatively excludes the complete switch boundary.
+ * These are logical functional policies, not measured pin timing.
  * Phase is 0 then 1;
  * vector is meaningful on phase 1; waits are extra CPU clocks. Device state
  * changes only at these real acknowledge calls, not when INTR is asserted. */
@@ -139,7 +143,9 @@ typedef struct bm_286_config {
      * adapter must establish exclusion synchronously (no failure return).
      * Signal changes are allowed; reset/import/destroy/execution are deferred.
      * Instruction LOCK releases after commit or a latched host-error stop.
-     * INTR releases after its first complete stack word, before frame commit;
+     * Real/ordinary protected INTR releases after its first complete stack word;
+     * task INTR retains exclusion for the switch boundary. Protected descriptor
+     * accessed/busy updates also require this adapter and use its exclusion.
      * odd fragments stay together as a logical-word policy, not timed pins.
      * Operand transfers carry LOCKED, instruction fetches never do. */
     bm_286_pin_fn bus_lock;
@@ -156,20 +162,29 @@ typedef struct bm_286_config {
  * engine's one-boundary-per-tick diagnostic convention; it is not CPU
  * clocks or nanoseconds and must not schedule a PCS 286 machine. Use the
  * strict clocked callback after instruction timing is established.
- * The current extension interface is unpopulated, with BUSY/ERROR inactive.
- * WAIT completes unless MP+TS requests #7. ESC with EM or TS delivers #7;
- * untrapped ESC remains unsupported, not a fabricated no-op/store result.
- * There is no populated 80287, handshake, arithmetic or extension pin API yet.
- * Real-mode SMSW/LMSW/CLTS control MSW. LMSW may set PE, but execution of the
- * next protected boundary remains unsupported, before fetch; no protected
- * descriptor/privilege behavior is implied by storing that bit.
+ * The current extension interface explicitly models an unpopulated 80287,
+ * with BUSY/ERROR/PEREQ inactive. WAIT completes unless MP+TS requests #7.
+ * ESC with EM or TS delivers #7; otherwise it consumes its complete effective-
+ * address encoding and completes without an operand transfer. It therefore
+ * cannot manufacture a store result. There is no populated 80287, arithmetic
+ * or extension pin API yet.
+ * SMSW/LMSW/CLTS control MSW. LMSW may set PE; subsequent functional step/run
+ * boundaries use checked cached accesses, descriptors, IDT delivery/return,
+ * ordinary privilege transfers and task switches under the C/D/E/F contracts.
+ * Retained real caches remain until guest reload. Unsupported encodings and
+ * prefix combinations still stop explicitly; no full CPU/OS/board claim.
+ * run counts successful boundaries (including REP elements and delivered
+ * events), not instructions or clocks. On idle/error, consumed excludes that
+ * boundary and retains prior successes. A zero budget is a no-op even after
+ * a latched stop; it does not recover execution. Only reset clears the stop.
  * Configuration is copied;
  * callback contexts and host services remain valid until CPU destruction. */
 bm_status_t bm_286_create(const bm_host_services_t *host,
                           const bm_286_config_t *config, bm_cpu_t *out_cpu);
 bm_status_t bm_286_get_arch_state(const bm_cpu_t *cpu,
                                   bm_286_arch_state_t *out_state);
-/* Conformance-only state import at a stopped boundary. Validates size,
+/* Conformance-only state import at an idle API boundary (never during callbacks
+ * or after a latched host stop). Validates size,
  * version, Boolean fields, shadow enum and architectural invariants atomically, flushes
  * prefetch and discards any private REP/decode continuation. trap_pending is
  * imported as supplied, never synthesized from the current TF bit. It starts
@@ -181,8 +196,9 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
  * if #8 is outside the IVT too, enter guest shutdown (OK on entry, then IDLE).
  * Real-mode NMI can recover when its vector/frame is usable; failed IVT
  * recovery leaves NMI blocked until reset. Host endpoint errors do not
- * generate guest faults. Stack-fault escalation and protected recovery remain
- * pending. This is functional state/signalling, not bus-cycle timing.
+ * generate guest faults. Protected exceptions, #DF/shutdown and eligible NMI
+ * recovery use the reviewed descriptor/task delivery contracts. This is
+ * functional state/signalling, not bus-cycle timing.
  * Interrupts are accepted before
  * fetch, respecting SS/STI inhibition. Real-mode CLI/STI/HLT/IRET,
  * INT/INT3/INTO, PUSHF/POPF, LAHF/SAHF and carry/direction control are implemented.
@@ -212,8 +228,10 @@ bm_status_t bm_286_set_arch_state(bm_cpu_t *cpu,
  * is not a full saved microarchitectural/prefetch checkpoint.
  * Entry and IRET stage registers until all accesses succeed; completed bus
  * writes/acknowledgements are not undone on host errors, and retry is latched
- * off. Remaining guest faults, protected gates and shutdown recovery are
- * pending, not approximated. Timing remains UNKNOWN for every boundary. */
+ * off. Task-load faults may retain a selected partial task context as defined
+ * in the task contract. Reserved encodings, populated 80287 execution and
+ * revision-specific microstate outside the selected profile are not certified.
+ * Timing remains UNKNOWN for every boundary. */
 bm_status_t bm_286_step(bm_cpu_t *cpu, bm_286_boundary_t *out_boundary);
 /* Exact existing engine callback: start_ns is virtual boundary time; returned
  * cycles are native CPU clocks. Never turn unknown timing into zero/one clocks.

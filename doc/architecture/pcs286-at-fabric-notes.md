@@ -2,6 +2,8 @@
 
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
+Current follow-up (2026-09-25): the separate [AT DMA component](pcs286-at-dma.md) implements registers, requests and normal functional byte/word transfers. External EOP terminates at completed-unit boundaries. Normal/extended/compressed nominal timing is available to memory adapters. External cascade grants a separately advanced master without local data/count/TC effects. An explicit IBM matched-count mem2mem profile now has complete-block tests, while default mem2mem remains gated. DMA is ready for bounded Headland composition; chipset page routing, unrestricted mem2mem and physical timing remain evidence/integration work. The source review below records the original interconnect boundary.
+
 Status: **architectural-boundary interconnect only**. This branch starts at
 `87c3fb4876eaad086921bc3444569da026286c36` and implements the initial
 `bm_at_bus` contract. It does not implement a cascaded PIC, dual DMA, ISA card

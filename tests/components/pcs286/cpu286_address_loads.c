@@ -143,7 +143,7 @@ static void far_loads(fixture_t *f)
                     *reg(&expected, dest) = 0x7654; expected.ip += (uint16_t)length;
                     ds = les ? &expected.es : &expected.ds;
                     ds->selector = selector; ds->base = (uint32_t)selector << 4;
-                    ds->limit = 0xffff; ds->access = 0; ds->valid = 1;
+                    ds->limit = 0xffff; ds->access = 0x82; ds->valid = 1;
                     same(&actual, &expected); assert(!actual.interrupt_shadow);
                     assert(f->count == length + 2 + 2 * odd);
                     assert(f->trace[length].address == seg(&s, source_seg)->base + offset);
@@ -165,7 +165,7 @@ static void far_loads(fixture_t *f)
         f->ram[0x12540] = 0x42; set(f, &s); step(f); step(f);
         s = state(f); dest = les ? &s.es : &s.ds;
         assert(s.ax == 0x7642 && dest->base == 0x12340 && dest->limit == 0xffff);
-        assert(dest->valid && !dest->access && !s.interrupt_shadow);
+        assert(dest->valid && dest->access == 0x82 && !s.interrupt_shadow);
     }
 }
 static void xlat(fixture_t *f)
@@ -216,13 +216,15 @@ static void failures(fixture_t *f)
             a = state(f);
             assert(b.kind == BM_286_BOUNDARY_EXCEPTION && b.has_vector && b.vector == 6);
             s.sp -= 6; s.flags &= 0xfcffU; s.trap_pending = 0;
-            s.cs.selector = 0; s.cs.base = 0; s.cs.access = 0; s.ip = 0;
+            s.cs.selector = 0; s.cs.base = 0; s.cs.access = 0x82; s.ip = 0;
             same(&s, &a); assert(f->count == 7);
         }
     for (unsigned form = 0; form < 4; ++form)
         for (unsigned bad = 0; bad < 6; ++bad) {
             bm_286_arch_state_t s = setup(f, codes[form], 5), a; bm_286_boundary_t b;
             s.bx = 0xffff; /* word access invalid; XLAT wraps to 007F */
+            /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+            uint64_t gate_cycles = 99;
             if (bad == 0) s.msw |= 1;
             if (bad == 1) f->ram[0x30100] = 0xf0;
             if (bad == 2) f->ram[0x30100] = 0xf3;
@@ -245,7 +247,8 @@ static void failures(fixture_t *f)
                 for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);
                 continue;
             }
-            set(f, &s); assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED);
+            set(f, &s); assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED);
+            if (s.msw & 1U) assert(gate_cycles == 0);
             a = state(f); same(&s, &a);
             for (unsigned i = 0; i < f->count; ++i) assert(f->trace[i].operation == BM_BUS_FETCH);
         }

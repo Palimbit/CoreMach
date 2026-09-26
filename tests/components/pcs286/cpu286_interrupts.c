@@ -238,6 +238,8 @@ static void failures(fixture_t *f)
         if (bad == 0) s.idtr.limit = 10;
         if (bad == 1) s.sp = 1;
         if (bad == 2) s.ss.valid = 0;
+        /* Imported PE refusal now tests strict clocks; functional PE is enabled. */
+        uint64_t gate_cycles = 99;
         if (bad == 3) s.msw |= 1;
         set(f, &s);
         if (bad == 0 || bad == 1) {
@@ -247,7 +249,8 @@ static void failures(fixture_t *f)
             assert(b.kind == BM_286_BOUNDARY_SHUTDOWN && !b.has_vector);
             continue;
         }
-        assert(bm_286_step(&f->cpu, &b) == BM_STATUS_UNSUPPORTED && !f->count && !f->acks);
+        assert((s.msw & 1U ? bm_286_step_clocked(f->cpu.context, 0, &gate_cycles) : bm_286_step(&f->cpu, &b)) == BM_STATUS_UNSUPPORTED && !f->count && !f->acks);
+        if (s.msw & 1U) assert(gate_cycles == 0);
         after = state(f); assert(memcmp(&after, &s, sizeof(s)) == 0);
     }
     {
