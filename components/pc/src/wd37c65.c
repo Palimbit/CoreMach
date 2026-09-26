@@ -243,7 +243,7 @@ static bm_status_t execute_command(bm_wd37c65_t *fdc)
     bm_floppy_drive_t *drive;
     const bm_floppy_geometry_t *geometry;
     uint8_t result[2];
-    bm_status_t status;
+    bm_status_t status = BM_STATUS_INVALID_ARGUMENT;
     switch (operation) {
     case 0x03U:
         fdc->specify[0] = fdc->params[0];
