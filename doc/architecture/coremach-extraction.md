@@ -19,7 +19,9 @@ eight paths in `provenance/history-filter.json`, only in the CoreMach copy.
 the component manifest keeps the original IDs and origin repository. Referenced
 source path object IDs are verified unchanged. Retained authors, dates and
 messages remain; artifact-only commits may be pruned. BluMach history is unchanged.
-The candidate's replacement of published `main` requires explicit authorization.
+The owner explicitly authorized replacing published `main` on 2026-09-27.
+Publication uses an explicit force-with-lease against the initial published
+head, so concurrent changes cannot be silently overwritten.
 
 The current tree retains `engine`, `runtime`, `components`, `systems`,
 `platforms`, portable `apps`, engine/component tests, authored test data,
@@ -89,7 +91,8 @@ contains no .rom/.bin/.exe or guest-media paths after filtering. All 85 paths
 referenced by the component provenance manifest have unchanged Git object IDs
 compared with their original source commits. Original IDs stay in the manifest;
 auditing and differential fixtures resolve their local equivalents through the
-versioned map. Published main replacement is pending authorization.
+versioned map. Replacement of published main is authorized; the publication
+result is recorded separately in the preservation worklog.
 
 Candidate validation: all 85 origin path objects verified again against the
 unfiltered source; no forbidden file extensions in the complete reachable
@@ -98,7 +101,7 @@ Python validation: 50 passed, 28 optional/probe skips; two new mapping tests
 verify local origin resolution and ambiguous-map rejection. Component audit:
 70 components, 334 files, zero errors. Production files remain identical to
 the extraction base, so the earlier full engine/Qt tests apply to their code.
-Force-updating main would replace only CoreMach's newly created branch;
+The authorized force-update replaces only CoreMach's newly created branch;
 expected published head is 65361d458ebbe2879613097bdb8a0f3584f1227a.
 Removing reachable refs is not a guarantee of immediate server-side object
 purging; GitHub may retain unreachable objects. Do not publish old ancestry
