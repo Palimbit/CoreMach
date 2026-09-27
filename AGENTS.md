@@ -6,7 +6,7 @@
   Keep platform calls and file parsers outside the engine; no mutable globals.
 - This repository was extracted from BluMach at the immutable commit recorded
   in doc/architecture/coremach-extraction.md. Preserve authors, SPDX notices,
-  provenance origin commits and the full ancestor history. Do not relicense
+  provenance origin commits and the versioned history correspondence. Do not relicense
   or present adapted code as an original implementation.
 - Every component change requires meaningful tests and a provenance update.
   Run tools/provenance_audit.py before publishing.

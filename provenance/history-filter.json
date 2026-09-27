@@ -1,0 +1,20 @@
+{
+  "schema": "coremach-history-filter-v1",
+  "source_repository": "https://github.com/BluMach/BluMach",
+  "original_extraction_commit": "65361d458ebbe2879613097bdb8a0f3584f1227a",
+  "filtered_extraction_commit": "d319e35581dbf6ac56eba9febe53a673bff26414",
+  "tool": "git-filter-repo",
+  "tool_version": "2.47.0",
+  "method": "invert-paths",
+  "commit_map": "history-commit-map.txt",
+  "removed_paths": [
+    "86box/86Box.exe",
+    "src/build/src/86Box.exe",
+    "src/build64/src/86Box.exe",
+    "roms/mda.rom",
+    "nvr/adgold.bin",
+    "nvr/tandy1000hx.bin",
+    "src/.vs/src/v17/workspaceFileList.bin"
+  ],
+  "notes": "Only the new CoreMach history is filtered. BluMach source history is unchanged. Original source commit IDs stay in the component manifest; the map resolves their filtered local equivalents. All referenced origin paths have unchanged Git object IDs. Authors, dates and messages of retained commits are preserved. Artifact-only commits can be pruned by git-filter-repo."
+}

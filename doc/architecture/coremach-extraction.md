@@ -11,10 +11,15 @@ Destination: https://github.com/Palimbit/CoreMach (initially private).
 
 ## Method
 
-The first CoreMach commit is a direct descendant of the source merge commit.
-No history rewrite, orphan branch or new attribution is used. Ancestor trees
-still contain the classic product as historical evidence. Only `main` is
-published, without unrelated source branches or tags.
+The initial extraction was a direct descendant of the source merge commit.
+Review subsequently found a historical MDA character ROM and binary build/state
+artifacts in the inherited ancestors. A filtered candidate removes exactly the
+seven paths in `provenance/history-filter.json`, only in the CoreMach copy.
+`provenance/history-commit-map.txt` records the original and filtered commit IDs;
+the component manifest keeps the original IDs and origin repository. Referenced
+source path object IDs are verified unchanged. Retained authors, dates and
+messages remain; artifact-only commits may be pruned. BluMach history is unchanged.
+The candidate's replacement of published `main` requires explicit authorization.
 
 The current tree retains `engine`, `runtime`, `components`, `systems`,
 `platforms`, portable `apps`, engine/component tests, authored test data,

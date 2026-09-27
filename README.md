@@ -51,5 +51,8 @@ outside the repository. See [extraction record](doc/architecture/coremach-extrac
 [component provenance](provenance/components.json), [COPYING](COPYING),
 [fork notice](FORK-NOTICE.md) and [AUTHORS](AUTHORS).
 
-The complete ancestor history is retained for authorship and immutable origin
-references. Classic implementation files are absent from the current tree.
+Source history and authorship are retained with a versioned commit map.
+Historical firmware, NVR bytes, large executable artifacts and an IDE binary
+are removed from CoreMach's ancestors. Original BluMach commit IDs remain in
+the provenance manifest and resolve to verified filtered commits locally.
+Classic implementation files are absent from the current tree.

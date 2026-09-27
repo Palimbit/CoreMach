@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -67,8 +68,29 @@ def tracked_files(root: Path) -> list[str]:
     return [entry.decode("utf-8").replace("\\", "/") for entry in completed.stdout.split(b"\0") if entry]
 
 
+def load_history_map(root: Path) -> dict[str, str]:
+    """Keep upstream origin IDs while resolving sanitized local ancestors."""
+    path = root / "provenance" / "history-commit-map.txt"
+    if not path.exists():
+        return {}
+    rows = path.read_text(encoding="ascii").splitlines()
+    if not rows or rows[0].split() != ["old", "new"]:
+        raise AuditError("invalid history commit-map header")
+    mapping: dict[str, str] = {}
+    for row in rows[1:]:
+        fields = row.split()
+        if len(fields) != 2 or any(not re.fullmatch(r"[0-9a-f]{40}", field) for field in fields):
+            raise AuditError("invalid history commit-map row")
+        old, new = fields
+        if old in mapping:
+            raise AuditError("duplicate original commit in history map")
+        mapping[old] = new
+    return mapping
+
+
 def audit(root: Path, manifest_path: Path) -> dict:
     manifest = load_manifest(manifest_path)
+    history_map = load_history_map(root)
     errors: list[str] = []
     components = manifest.get("components")
     coverage_roots = manifest.get("coverage_roots")
@@ -103,8 +125,9 @@ def audit(root: Path, manifest_path: Path) -> dict:
 
         if method in {"selective-port", "derived-rewrite"}:
             commit = component.get("origin_commit")
+            local_commit = history_map.get(commit, commit) if isinstance(commit, str) else None
             paths = component.get("origin_paths")
-            if not isinstance(commit, str) or not git_object_exists(root, f"{commit}^{{commit}}"):
+            if not isinstance(commit, str) or not git_object_exists(root, f"{local_commit}^{{commit}}"):
                 errors.append(f"{component_id}: origin_commit is missing or unavailable")
             if not component.get("origin_repository"):
                 errors.append(f"{component_id}: missing origin_repository")
@@ -112,7 +135,7 @@ def audit(root: Path, manifest_path: Path) -> dict:
                 errors.append(f"{component_id}: origin_paths must be a non-empty array")
             elif isinstance(commit, str):
                 for path in paths:
-                    if not git_object_exists(root, f"{commit}:{path}"):
+                    if not git_object_exists(root, f"{local_commit}:{path}"):
                         errors.append(f"{component_id}: origin path does not exist: {path}")
 
     architecture_files = files_under(root, coverage_roots)
