@@ -98,8 +98,9 @@ main(void)
     size_t persistent_state_count = 0U;
     debug_observation_t observation = { 0 };
 
-    assert(bm_frontend_adapter_count() == 2U);
-    assert(bm_frontend_adapter_at(2U) == NULL);
+    assert(bm_frontend_adapter_count() == 3U);
+    assert(bm_frontend_adapter_at(3U) == NULL);
+    assert(bm_frontend_adapter_find("olivetti-pcs286-experimental") != NULL);
     adapter = bm_frontend_adapter_find("olivetti-pcs86");
     assert(adapter != NULL);
     assert(bm_frontend_adapter_find("not-a-machine") == NULL);
@@ -144,7 +145,7 @@ main(void)
     assert(bm_machine_registry_create(&host, bm_frontend_adapter_count(),
                                       &registry) == BM_STATUS_OK);
     assert(bm_frontend_register_machines(registry) == BM_STATUS_OK);
-    assert(bm_machine_registry_count(registry) == 2U);
+    assert(bm_machine_registry_count(registry) == 3U);
     bm_machine_registry_destroy(registry);
 
     assert(bm_frontend_machine_open(adapter, NULL, 0U, &machine) ==

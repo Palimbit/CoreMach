@@ -6,8 +6,10 @@
  */
 #include <blumach/components/cpu_80286.h>
 #include <blumach/platforms/null_host.h>
+#include "fetch_supply_286.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -18,6 +20,9 @@ typedef struct probe {
     unsigned char *ram;
     unsigned *generation;
     unsigned current, writes, addresses[MAX_ENTRIES];
+    unsigned trace_enabled, trace_count;
+    bm_286_fetch_supply_t *supply;
+    struct { unsigned address, write, clock; } *trace;
 } probe_t;
 
 static int read_number(unsigned bytes, unsigned *value)
@@ -46,6 +51,13 @@ static bm_status_t access_bus(void *context, bm_bus_transaction_t *t)
     if (t->size != 1U && t->size != 2U) return BM_STATUS_DEVICE_ERROR;
     if (t->space == BM_ADDRESS_IO) return BM_STATUS_UNSUPPORTED;
     if (t->address > RAM_SIZE - t->size) return BM_STATUS_DEVICE_ERROR;
+    if (p->trace_enabled && t->operation != BM_BUS_FETCH) {
+        if (p->trace_count == MAX_ENTRIES) return BM_STATUS_DEVICE_ERROR;
+        p->trace[p->trace_count].address = (unsigned)t->address;
+        if (p->supply && p->supply->bus.clock > UINT32_MAX) return BM_STATUS_DEVICE_ERROR;
+        p->trace[p->trace_count].clock = p->supply ? (unsigned)p->supply->bus.clock : 0;
+        p->trace[p->trace_count++].write = t->operation == BM_BUS_WRITE;
+    }
     if (t->operation != BM_BUS_WRITE) t->value = 0U;
     for (i = 0U; i < t->size; ++i) {
         unsigned a = (unsigned) t->address + i;
@@ -71,22 +83,37 @@ static void set_segment(bm_286_segment_state_t *s, unsigned value)
     s->valid = 1U;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     probe_t p = {0};
     bm_host_services_t host = bm_null_host_services();
     bm_286_config_t config = {0};
     bm_cpu_t cpu;
+    bm_286_fetch_supply_t supply = {0};
     unsigned first;
+    /* Private optional shape protocol: signed LE32 status, LE32 count,
+     * then (LE32 address, byte write flag). No timestamps or fetch claims. */
+    if (argc == 2 && strcmp(argv[1], "--data-bus") == 0) p.trace_enabled = 1;
+    else if (argc == 2 && strcmp(argv[1], "--supply-data-bus") == 0) { p.trace_enabled = 1; p.supply = &supply; }
+    else if (argc == 2 && strcmp(argv[1], "--supply") == 0) p.supply = &supply;
+    else if (argc != 1) return 2;
 #ifdef _WIN32
     if (_setmode(_fileno(stdin), _O_BINARY) == -1 ||
         _setmode(_fileno(stdout), _O_BINARY) == -1) return 2;
 #endif
     p.ram = calloc(RAM_SIZE, 1U);
     p.generation = calloc(RAM_SIZE, sizeof(*p.generation));
+    if (p.trace_enabled) {
+        p.trace = calloc(MAX_ENTRIES, sizeof(*p.trace));
+        if (p.trace == NULL) return 2;
+    }
     if (p.ram == NULL || p.generation == NULL) return 2;
     config.size = sizeof(config); config.version = BM_286_CONTRACT_VERSION;
     config.access = access_bus; config.access_context = &p;
+    if (p.supply) {
+        supply.source = access_bus; supply.context = &p;
+        config.access = bm_286_fetch_supply_access; config.access_context = &supply;
+    }
     if (bm_286_create(&host, &config, &cpu) != BM_STATUS_OK) return 2;
     while ((first = (unsigned) getchar()) != (unsigned) EOF) {
         unsigned r[14], count, i, high;
@@ -100,6 +127,7 @@ int main(void)
         if (!read_number(4U, &count) || count > MAX_ENTRIES) return 2;
         if (++p.current == 0U) return 2;
         p.writes = 0U;
+        p.trace_count = 0U;
         for (i = 0U; i < count; ++i) {
             unsigned a, v;
             if (!read_number(4U, &a) || a >= RAM_SIZE || !read_number(1U, &v)) return 2;
@@ -115,12 +143,25 @@ int main(void)
         s.si = (uint16_t) r[10]; s.di = (uint16_t) r[11];
         s.ip = (uint16_t) r[12]; s.flags = (uint16_t) r[13];
         status = bm_286_set_arch_state(&cpu, &s);
+        if (status == BM_STATUS_OK && p.supply) {
+            supply.bus.clock = 0; supply.transfers = 0;
+            status = bm_286_fetch_supply_redirect(&supply, s.cs.base + s.ip, s.cs.base + s.cs.limit, false);
+        }
         if (status == BM_STATUS_OK) status = bm_286_step(&cpu, &boundary);
         if (bm_286_get_arch_state(&cpu, &s) != BM_STATUS_OK) return 2;
         r[0]=s.ax; r[1]=s.bx; r[2]=s.cx; r[3]=s.dx;
         r[4]=s.cs.selector; r[5]=s.ss.selector; r[6]=s.ds.selector; r[7]=s.es.selector;
         r[8]=s.sp; r[9]=s.bp; r[10]=s.si; r[11]=s.di; r[12]=s.ip; r[13]=s.flags;
         write_number((unsigned) status, 4U);
+        if (p.trace_enabled) {
+            write_number(p.trace_count, 4U);
+            for (i = 0; i < p.trace_count; ++i) {
+                write_number(p.trace[i].address, 4U);
+                write_number(p.trace[i].write, 1U);
+                if (p.supply) write_number(p.trace[i].clock, 4U);
+            }
+            continue;
+        }
         for (i = 0U; i < 14U; ++i) write_number(r[i], 2U);
         write_number(p.writes, 4U);
         for (i = 0U; i < p.writes; ++i) {
@@ -128,6 +169,6 @@ int main(void)
         }
     }
     cpu.ops.destroy(cpu.context);
-    free(p.ram); free(p.generation);
+    free(p.ram); free(p.generation); free(p.trace);
     return ferror(stdin) ? 2 : 0;
 }

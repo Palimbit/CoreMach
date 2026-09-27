@@ -12,6 +12,8 @@ bm_status_t bm_pcs286_at_convert_waits(bm_clock_rate_t service, bm_clock_rate_t 
     if (status != BM_STATUS_OK) return status;
     status = bm_clock_position_init(&rounded, &requester);
     if (status != BM_STATUS_OK) return status;
+    /* Preserve rate validation even for zero waits. No rounding is needed. */
+    if (clocks == 0U) { *out = 0U; return BM_STATUS_OK; }
     status = bm_clock_position_advance(&duration, clocks);
     if (status != BM_STATUS_OK) return status;
     status = bm_clock_cycles_at_or_before(&requester, &duration, &cycles);

@@ -105,7 +105,18 @@ def cpu_state(data):
             'masks': registers(parts[b'RMSK']) if b'RMSK' in parts else {}}
 
 
-def parse_moo(data):
+def cycle_records(data):
+    """Raw C286 MOO samples, not instruction clocks (upstream CYCL layout)."""
+    record = struct.Struct('<BIBBBB HBBBB')
+    if len(data) < 4:
+        raise ValueError('missing cycle count')
+    count, = struct.unpack_from('<I', data)
+    if not count or len(data) != 4 + count * record.size:
+        raise ValueError('invalid cycle count')
+    return list(record.iter_unpack(data[4:]))
+
+
+def parse_moo(data, include_cycles=False):
     top = iter(chunks(memoryview(data)))
     tag, header = next(top)
     if tag != b'MOO ' or len(header) != 12 or bytes(header[:2]) != b'\x01\x01':
@@ -142,6 +153,10 @@ def parse_moo(data):
                           'initial': initial, 'final': final,
                           'name': counted_bytes(p[b'NAME']).decode('utf-8'),
                           'exception': exception})
+            if include_cycles:
+                if b'CYCL' not in p:
+                    raise ValueError('missing CYCL evidence')
+                tests[-1]['cycles'] = cycle_records(p[b'CYCL'])
     if len(tests) != count or not tests:
         raise ValueError('header/test count mismatch or empty corpus')
     return tests, masks

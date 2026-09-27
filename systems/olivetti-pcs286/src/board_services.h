@@ -39,6 +39,10 @@ typedef struct bm_pcs286_services_state {
 bm_status_t bm_pcs286_services_create(const bm_host_services_t          *host,
                                       const bm_pcs286_services_config_t *config, bm_pcs286_services_t **out);
 void        bm_pcs286_services_destroy(bm_pcs286_services_t *services);
+/* Optional benchmark-only inclusive sync observer. Borrowed counters ordered
+ * PIT, RTC, keyboard; NULL timer disables. Configure while quiescent only. */
+void bm_pcs286_services_profile(bm_pcs286_services_t *services,
+    uint64_t (*now)(void), uint64_t totals[3]);
 /* Map byte resources40..43,60..61,64,70..71 through the existing board decoder.
  * No mirrors/port92. DEBUG reads pure/lazy, no clock or refresh service.
  * Normal I/O syncs all peers first, routes to existing link/port handler, then

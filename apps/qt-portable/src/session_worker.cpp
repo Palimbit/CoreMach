@@ -18,7 +18,6 @@ constexpr uint64_t maximumChunksPerSecond = UINT64_C(200);
  * a Qt event burst ordered like a keyboard byte stream while the pacer account
  * prevents the extra work from making the guest run ahead of wall time. */
 constexpr uint64_t inputTransitionsPerSecond = UINT64_C(500);
-constexpr auto framePeriod = std::chrono::milliseconds(16);
 
 uint64_t
 ticksForInterval(uint64_t ticksPerSecond, uint64_t intervalsPerSecond)
@@ -42,6 +41,7 @@ SessionWorker::SessionWorker(const bm_host_services_t &host,
                              std::vector<PersistentState> persistentStates)
     : host_(host), configuration_(configuration),
       ticksPerSecond_(configuration->definition->scheduler_ticks_per_second),
+      speedMeter_(ticksPerSecond_),
       handler_(std::move(handler)),
       persistentStates_(std::move(persistentStates))
 {
@@ -121,6 +121,12 @@ SessionWorker::replaceStorageMedia(bm_storage_device_kind_t kind,
 }
 
 bm_session_state_t SessionWorker::state() const { return state_.load(); }
+void SessionWorker::setUnlimited(bool enabled)
+{
+    Command command(CommandKind::SpeedMode);
+    command.unlimited = enabled;
+    enqueue(std::move(command));
+}
 uint64_t SessionWorker::ticks() const { return ticks_.load(); }
 
 const std::vector<SessionWorker::PersistentState> &
@@ -158,6 +164,11 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
             case CommandKind::Stop:
                 capturePersistentStates(session);
                 status = bm_session_stop(session);
+                break;
+            case CommandKind::SpeedMode:
+                unlimited_.store(command.unlimited);
+                pacer.reset(TickPacer::Clock::now());
+                speedMeter_.reset();
                 break;
             case CommandKind::Input:
                 failurePhase = FailurePhase::Input;
@@ -198,6 +209,10 @@ SessionWorker::processCommands(bm_session_t *session, TickPacer &pacer)
                 break;
             case CommandKind::Shutdown: return false;
         }
+        if (status == BM_STATUS_OK && command.kind == CommandKind::Reset) {
+            pacer.reset(TickPacer::Clock::now());
+            speedMeter_.reset();
+        }
         publish(session, status, QImage(), lifecycleResult, nullptr, {},
                 failurePhase);
     }
@@ -235,24 +250,28 @@ SessionWorker::renderFrame(bm_session_t *session, QImage &frame,
     if (status != BM_STATUS_OK)
         return status;
     if ((geometry.width == 0U) || (geometry.height == 0U) ||
+        (geometry.width > static_cast<uint32_t>(std::numeric_limits<int>::max() / 4)) ||
+        (geometry.height > static_cast<uint32_t>(std::numeric_limits<int>::max())) ||
         (static_cast<size_t>(geometry.width) >
          std::numeric_limits<size_t>::max() / geometry.height))
         return BM_STATUS_INVALID_STATE;
-    std::vector<uint32_t> pixels(
-        static_cast<size_t>(geometry.width) * geometry.height);
+    // The snapshot owns this image. Rendering happens before publication;
+    // later frames never mutate an image borrowed by the UI.
+    frame = QImage(static_cast<int>(geometry.width), static_cast<int>(geometry.height),
+                   QImage::Format_RGB32);
+    if (frame.isNull()) return BM_STATUS_OUT_OF_MEMORY;
+    frame.fill(0U); // Preserve the previous zero-initialized framebuffer contract.
     bm_video_framebuffer_t framebuffer {
-        pixels.data(), pixels.size(), geometry.width, geometry
+        reinterpret_cast<uint32_t *>(frame.bits()),
+        static_cast<size_t>(frame.sizeInBytes()) / sizeof(uint32_t),
+        static_cast<uint32_t>(frame.bytesPerLine() / sizeof(uint32_t)), geometry
     };
     status = bm_session_render_video(session, &framebuffer);
-    if (status != BM_STATUS_OK)
+    if (status != BM_STATUS_OK) {
+        frame = QImage();
         return status;
-    const QImage view(reinterpret_cast<const uchar *>(pixels.data()),
-                      static_cast<int>(geometry.width),
-                      static_cast<int>(geometry.height),
-                      static_cast<qsizetype>(geometry.width * 4U),
-                      QImage::Format_RGB32);
-    frame = view.copy();
-    return frame.isNull() ? BM_STATUS_OUT_OF_MEMORY : BM_STATUS_OK;
+    }
+    return BM_STATUS_OK;
 }
 
 bm_status_t
@@ -293,6 +312,12 @@ SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
     snapshot.state = session != nullptr ? bm_session_state(session) :
                                           BM_SESSION_NEW;
     snapshot.ticks = session != nullptr ? bm_session_time(session) : 0U;
+    if (snapshot.state == BM_SESSION_RUNNING)
+        realTimePercent_.store(speedMeter_.sample(TickPacer::Clock::now(), snapshot.ticks));
+    else {
+        speedMeter_.reset();
+        realTimePercent_.store(-1.0);
+    }
     if ((session != nullptr) &&
         ((snapshot.state == BM_SESSION_RUNNING) ||
          (snapshot.state == BM_SESSION_PAUSED))) {
@@ -319,8 +344,8 @@ SessionWorker::publish(bm_session_t *session, bm_status_t status, QImage frame,
         LatencyTrace::event("guest-ticks", snapshot.traceFrame, snapshot.ticks);
     }
     snapshot.lifecycleResult = lifecycleResult;
-    state_.store(snapshot.state);
     ticks_.store(snapshot.ticks);
+    state_.store(snapshot.state);
     if (handler_)
         handler_(std::move(snapshot));
 }
@@ -351,7 +376,8 @@ SessionWorker::run()
         ticksPerSecond_,
         ticksForInterval(ticksPerSecond_, maximumChunksPerSecond));
     auto now = TickPacer::Clock::now();
-    auto nextFrame = now;
+    FramePacer frames;
+    frames.reset(now);
     pacer.reset(now);
     bool active = true;
     while (active) {
@@ -361,13 +387,18 @@ SessionWorker::run()
         now = TickPacer::Clock::now();
         if (bm_session_state(session) == BM_SESSION_RUNNING) {
             FailurePhase failurePhase = FailurePhase::Unknown;
-            const uint64_t due = pacer.ticksDue(now);
+            const uint64_t due = unlimited_.load() ?
+                ticksForInterval(ticksPerSecond_, maximumChunksPerSecond) : pacer.ticksDue(now);
             if (due != 0U) {
+                const uint64_t runStart = LatencyTrace::enabled() ? LatencyTrace::now() : 0U;
                 status = bm_session_run_for(session, due);
+                if (LatencyTrace::enabled())
+                    LatencyTrace::event("emulation-us", due, LatencyTrace::now() - runStart);
                 if (status != BM_STATUS_OK)
                     failurePhase = FailurePhase::Emulation;
             }
-            if ((status == BM_STATUS_OK) && (now >= nextFrame)) {
+            now = TickPacer::Clock::now();
+            if ((status == BM_STATUS_OK) && frames.due(now)) {
                 const uint64_t renderStart = LatencyTrace::enabled() ? LatencyTrace::now() : 0U;
                 QImage frame;
                 bm_video_geometry_t geometry {};
@@ -384,7 +415,7 @@ SessionWorker::run()
                 }
                 publish(session, status, std::move(frame), false, &geometry,
                         std::move(storage), failurePhase);
-                nextFrame = now + framePeriod;
+                frames.presented(TickPacer::Clock::now());
             }
             if (status != BM_STATUS_OK) {
                 capturePersistentStates(session);
@@ -394,7 +425,12 @@ SessionWorker::run()
             }
         } else {
             pacer.reset(now);
-            nextFrame = now;
+            frames.reset(now);
+        }
+        if (bm_session_state(session) == BM_SESSION_RUNNING &&
+            (unlimited_.load() || pacer.needsCatchUp(TickPacer::Clock::now()))) {
+            std::this_thread::yield();
+            continue;
         }
         std::unique_lock<std::mutex> lock(mutex_);
         wakeup_.wait(lock, bm_session_state(session) == BM_SESSION_RUNNING,

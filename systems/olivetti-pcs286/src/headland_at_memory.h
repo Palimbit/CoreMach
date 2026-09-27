@@ -57,6 +57,11 @@ typedef struct bm_headland_at_memory {
     bm_headland_at_config_t config;
     bm_headland_at_progress_t last;
     int busy;
+    /* Last successful pure wait conversion. Never caches a memory access. */
+    bm_clock_rate_t cached_service, cached_requester;
+    uint64_t cached_cost;
+    uint32_t cached_waits;
+    int cached_valid;
 } bm_headland_at_memory_t;
 
 /* No allocation, bus publication or child reset. Config copied, dependencies

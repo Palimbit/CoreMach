@@ -7,6 +7,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <mutex>
+#include <vector>
 
 // Opt-in host diagnostics. Never records key values, paths or guest contents.
 namespace LatencyTrace {
@@ -28,11 +31,38 @@ inline uint64_t nextId()
 }
 inline void event(const char *stage, uint64_t id, uint64_t value = 0U)
 {
-    if (enabled())
-        qInfo("bm-latency %s id=%llu us=%llu value=%llu", stage,
-              static_cast<unsigned long long>(id),
-              static_cast<unsigned long long>(now()),
-              static_cast<unsigned long long>(value));
+    if (!enabled()) return;
+    // Bounded, opt-in diagnostics. Per-event stderr writes perturb Windows
+    // scheduling severely. Stage strings are static literals at every callsite.
+    struct Record { const char *stage; uint64_t id, time, value; };
+    struct Buffer {
+        std::mutex mutex;
+        std::vector<Record> records;
+        Buffer() { records.reserve(65536); }
+        ~Buffer() {
+            char chunk[65536];
+            size_t used = 0;
+            for (const auto &record : records) {
+                if (used > sizeof(chunk) - 256) {
+                    (void)std::fwrite(chunk, 1, used, stderr); used = 0;
+                }
+                const int count = std::snprintf(chunk + used, sizeof(chunk) - used,
+                    "bm-latency %s id=%llu us=%llu value=%llu\n", record.stage,
+                    static_cast<unsigned long long>(record.id),
+                    static_cast<unsigned long long>(record.time),
+                    static_cast<unsigned long long>(record.value));
+                if (count > 0 && static_cast<size_t>(count) < sizeof(chunk) - used)
+                    used += static_cast<size_t>(count);
+            }
+            if (used) (void)std::fwrite(chunk, 1, used, stderr);
+            (void)std::fflush(stderr);
+        }
+    };
+    static Buffer buffer;
+    const uint64_t timestamp = now();
+    std::lock_guard<std::mutex> guard(buffer.mutex);
+    if (buffer.records.size() < 65536)
+        buffer.records.push_back({stage, id, timestamp, value});
 }
 }
 #endif

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright 2026 BluMach contributors
- * PCS 286 contracts only: NOT a runnable machine or the separate PCS 286S.
+ * Experimental functional PCS286 profile, not the separate PCS286S.
  */
 #ifndef BLUMACH_SYSTEMS_OLIVETTI_PCS286_H
 #define BLUMACH_SYSTEMS_OLIVETTI_PCS286_H
@@ -43,10 +43,11 @@ typedef struct bm_pcs286_config {
     void *cpu_trace_context;
 } bm_pcs286_config_t;
 
-/* Planned factory signatures only. This branch provides no implementation,
- * does not register the machine and cannot enable a Create/Start action.
- * Future definition MUST select BM_MACHINE_ENGINE_CLOCKED with
- * BM_MACHINE_CLOCKED_TICKS_PER_SECOND; CPU rate is independently 12 MHz.
+/* Experimental factory: combined BIOS, 1 MiB, drive A and provisional GC103.
+ * CLOCKED runtime time is nanoseconds, but each 1000 ns deadline executes one
+ * functional CPU boundary. This is explicitly NOT strict 12 MHz CPU timing.
+ * The strict CPU clocked API remains gated. Cold reset rebuilds the board and
+ * retains CMOS; KBC CPU reset remains a separate hardware path.
  * Firmware ownership follows bm_blob_view_t; file paths stay in the frontend.
  * No implicit 6 MHz mode, >4 MiB expansion, ISA card or 80287 is advertised.
  * The documented possibilities remain explicit follow-up tasks. */

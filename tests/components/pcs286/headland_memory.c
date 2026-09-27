@@ -59,6 +59,27 @@ static void mem_set_mem_state(uint32_t base, uint32_t size, unsigned state)
 #endif
 
 static unsigned long queries, documented_differences, shadow_differences;
+/* Independent old-priority scan: check every 16KiB page after each mutation,
+ * including inactive EMS context writes and transitions back to ordinary RAM. */
+static void check_index(const bm_gc103_memory_t *m)
+{
+    for (unsigned i=0;i<93U;++i) {
+        assert((m->window[i].base & 0x3fffU)==0);
+        assert((m->window[i].size & 0x3fffU)==0);
+        assert(m->window[i].base+m->window[i].size<=0x1000000U);
+    }
+    for (unsigned page=0;page<1024U;++page) {
+        unsigned expected=0;
+        uint32_t address=page<<14;
+        for (int i=92;i>=0;--i) {
+            const bm_gc103_window_t *w=&m->window[i];
+            if (w->enabled && address>=w->base && address-w->base<w->size) {
+                expected=(unsigned)i+1U; break;
+            }
+        }
+        assert(m->page_window[page]==expected);
+    }
+}
 static void classic_initialize(headland_t *c, unsigned mib)
 {
     unsigned i;
@@ -86,6 +107,7 @@ static void classic_initialize(headland_t *c, unsigned mib)
 static void start(bm_gc103_memory_t *m, headland_t *c, unsigned mib)
 {
     assert(bm_gc103_memory_initialize(m,mib*0x100000U)==BM_STATUS_OK);
+    check_index(m);
     classic_initialize(c,mib);
 }
 static void write_port(bm_gc103_memory_t *m, headland_t *c, uint16_t port, unsigned width, uint16_t value)
@@ -93,6 +115,7 @@ static void write_port(bm_gc103_memory_t *m, headland_t *c, uint16_t port, unsig
     unsigned i;
     uint16_t before=value;
     assert(bm_gc103_memory_io(m,port,width,BM_BUS_WRITE,0,&value)==BM_STATUS_OK);
+    check_index(m);
     assert(value==before);
     if(width==1) hl_write(port,(uint8_t)value,c); else hl_writew(port,value,c);
     assert(m->registers.cr0==c->cr[0] && m->registers.mar==c->ems_mar);

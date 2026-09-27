@@ -21,6 +21,9 @@ typedef struct bm_gc103_memory {
      * 16KiB is the smallest mapping unit in this inherited variant. */
     uint8_t access[1024];
     bm_gc103_window_t window[93];
+    /* Derived legacy decode index, rebuilt with register mapping effects.
+     * Zero means no window; otherwise index+1, preserving last-window priority. */
+    uint8_t page_window[1024];
 } bm_gc103_memory_t;
 
 typedef enum bm_gc103_dram {

@@ -6,6 +6,7 @@
 #include "headland_at_memory.h"
 #include <blumach/components/at_pic.h>
 #include <blumach/components/cpu_80286.h>
+#include <blumach/components/cpu_80286_timing.h>
 
 typedef struct bm_pcs286_control_config {
     bm_cpu_t                *cpu;
@@ -23,6 +24,7 @@ typedef struct bm_pcs286_control {
     bm_pcs286_control_config_t config;
     bm_pcs286_control_state_t  state;
     int                        busy;
+    uint64_t                   provisional_fallback; /* Zero preserves functional-only callers. */
 } bm_pcs286_control_t;
 
 typedef enum bm_pcs286_control_event_kind {
@@ -33,6 +35,7 @@ typedef struct bm_pcs286_control_event {
     bm_pcs286_control_event_kind_t kind;
     bm_286_boundary_t              cpu;           /* Meaningful only for CPU kind. */
     int                            reset_applied; /* Can follow a successful CPU boundary. */
+    bm_286_timing_estimate_t        estimate;
 } bm_pcs286_control_event_t;
 
 /* Unused caller storage; initialized children borrowed, no callbacks/reset.

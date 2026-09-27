@@ -68,3 +68,16 @@ TickPacer::ticksDue(Clock::time_point now)
     emitted_ += due;
     return due;
 }
+
+bool
+TickPacer::needsCatchUp(Clock::time_point now) const
+{
+    if (ticksPerSecond_ == 0U || maximumChunk_ == 0U || now <= origin_)
+        return false;
+    const uint64_t target = targetTicks(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now - origin_));
+    // Below one millisecond, retain the interruptible wait instead of spinning
+    // on tiny deficits. Behind by more, spend the next iteration doing work.
+    const uint64_t threshold = std::max(UINT64_C(1), ticksPerSecond_ / 1000U);
+    return target > emitted_ && target - emitted_ >= threshold;
+}

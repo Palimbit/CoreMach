@@ -8,12 +8,25 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <chrono>
+#include <thread>
+
+template<class Predicate> static void waitFor(Predicate predicate)
+{
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (!predicate() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    assert(predicate());
+}
 
 int
 main()
 {
     static uint8_t evenBytes[32768] {};
     static uint8_t oddBytes[32768] {};
+    // Authored reset-vector loop; no preserved firmware in this test.
+    evenBytes[32760] = 0xeb;
+    oddBytes[32760] = 0xfe;
     bm_frontend_asset_binding_t bindings[2] {};
     const bm_frontend_adapter_t *adapter =
         bm_frontend_adapter_find("olivetti-pcs86");
@@ -44,6 +57,20 @@ main()
             host, bm_frontend_machine_config(machine),
             [](SessionWorker::Snapshot) {}, std::move(states));
         assert(worker.start() == BM_STATUS_OK);
+        assert(!worker.unlimited());
+        worker.setUnlimited(true);
+        waitFor([&] { return worker.unlimited(); });
+        worker.pause();
+        waitFor([&] { return worker.state() == BM_SESSION_PAUSED; });
+        const auto pausedTicks = worker.ticks();
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        assert(worker.ticks() == pausedTicks && worker.realTimePercent() < 0.0);
+        worker.setUnlimited(false);
+        waitFor([&] { return !worker.unlimited(); });
+        assert(worker.state() == BM_SESSION_PAUSED);
+        worker.resume();
+        waitFor([&] { return worker.state() == BM_SESSION_RUNNING; });
+        worker.reset();
         worker.shutdown();
         const auto &captured = worker.persistentStates();
         assert(captured.size() == 1U);

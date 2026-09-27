@@ -615,6 +615,32 @@ static void isolation(const uint8_t *image)
     }
     bm_pcs286_memory_destroy(a.bytes); bm_pcs286_memory_destroy(b.bytes);
 }
+static void cached_conversion(const uint8_t *image)
+{
+    fixture_t f;
+    start(&f,1,image);
+    for (unsigned s=1;s<=5;++s) for (unsigned sd=1;sd<=3;++sd)
+    for (unsigned r=1;r<=5;++r) for (unsigned rd=1;rd<=3;++rd)
+    for (unsigned cost=0;cost<=3;++cost) {
+        f.adapter.config.service_clock=(bm_clock_rate_t){s,sd};
+        f.adapter.config.extra_clocks[BM_GC10X_RAM]=cost;
+        unsigned denominator=s*rd, numerator=cost*r*sd;
+        unsigned expected=(numerator+denominator-1)/denominator;
+        for (unsigned repeat=0;repeat<2;++repeat) {
+            bm_at_transfer_t t=request(0,1,BM_BUS_READ);
+            t.requester_clock=(bm_clock_rate_t){r,rd};
+            trace_reset(&f);
+            assert(bm_headland_at_memory_access(&f.adapter,&t)==BM_STATUS_OK);
+            assert(t.bus.wait_states==expected && f.calls==1);
+        }
+    }
+    f.adapter.config.service_clock.cycles_per_second_numerator=0;
+    trace_reset(&f);
+    unchanged(&f,request(0,1,BM_BUS_READ),BM_STATUS_INVALID_ARGUMENT);
+    assert(f.calls==0);
+    bm_pcs286_memory_destroy(f.bytes);
+}
+
 int main(void)
 {
     bm_host_services_t host = bm_null_host_services();
@@ -623,7 +649,7 @@ int main(void)
     assert(image != NULL);
     for (i = 0; i < BM_PCS286_FIRMWARE_BYTES; ++i) image[i] = (uint8_t)(i ^ (i >> 7) ^ 0xa5U);
     matrices(image); writes(image); policies(image); failures(image); clocks(image); arbitration(image);
-    invalid(image); isolation(image); cpu_program(image);
+    invalid(image); isolation(image); cpu_program(image); cached_conversion(image);
     host.release(host.context, image);
     printf("Headland AT: %lu route/backing reads, %lu writes, %lu endpoint failures, %lu rational waits; policy/ownership/CPU checks passed\n",
            matrix_cases, write_cases, failure_cases, clock_cases);

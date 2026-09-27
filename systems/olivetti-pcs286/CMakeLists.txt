@@ -56,12 +56,37 @@ if(CMAKE_CXX_COMPILER_LOADED)
     set_target_properties(blumach_pcs286_contract_check PROPERTIES CXX_EXTENSIONS OFF)
 endif()
 
-# Storage is real; the unresolved chipset and machine factory stay absent.
+# Experimental runtime shares the diagnostic board, including its provisional clock.
+add_library(blumach_system_olivetti_pcs286 STATIC src/composition.c src/olivetti_pcs286.c)
+target_include_directories(blumach_system_olivetti_pcs286 PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+target_link_libraries(blumach_system_olivetti_pcs286 PUBLIC blumach_system_olivetti_pcs286_contracts
+    PRIVATE blumach_pcs286_services blumach_pcs286_page_spare_latches
+    blumach_pcs286_dma_coordinator blumach_at_dma blumach_ioc02_legacy_registers
+    blumach_pc_components blumach_video)
+target_compile_features(blumach_system_olivetti_pcs286 PRIVATE c_std_11)
+set_target_properties(blumach_system_olivetti_pcs286 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_system_olivetti_pcs286 PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_system_olivetti_pcs286 PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
 add_executable(pcs286-boot-probe src/boot_probe.c)
+add_executable(pcs286-runtime-benchmark src/runtime_benchmark.c)
+target_include_directories(pcs286-runtime-benchmark PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+target_link_libraries(pcs286-runtime-benchmark PRIVATE blumach_system_olivetti_pcs286 blumach_platform_null)
+target_compile_features(pcs286-runtime-benchmark PRIVATE c_std_11)
+set_target_properties(pcs286-runtime-benchmark PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_definitions(pcs286-runtime-benchmark PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 target_include_directories(pcs286-boot-probe PRIVATE
     "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
     "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
-target_link_libraries(pcs286-boot-probe PRIVATE blumach_pcs286_services
+target_link_libraries(pcs286-boot-probe PRIVATE blumach_system_olivetti_pcs286 blumach_pcs286_services
     blumach_pcs286_page_spare_latches
     blumach_pcs286_dma_coordinator
     blumach_at_dma blumach_ioc02_legacy_registers blumach_pc_components blumach_video blumach_platform_null)

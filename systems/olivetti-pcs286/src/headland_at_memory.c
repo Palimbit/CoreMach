@@ -93,6 +93,26 @@ static bm_status_t plan(const bm_headland_at_memory_t *memory, const bm_at_trans
     return BM_STATUS_OK;
 }
 
+static bm_status_t convert_cost(bm_headland_at_memory_t *memory,
+                               bm_clock_rate_t requester, uint64_t cost, uint32_t *waits)
+{
+    bm_clock_rate_t service=memory->config.service_clock;
+    if (memory->cached_valid && memory->cached_cost==cost &&
+        memory->cached_service.cycles_per_second_numerator==service.cycles_per_second_numerator &&
+        memory->cached_service.cycles_per_second_denominator==service.cycles_per_second_denominator &&
+        memory->cached_requester.cycles_per_second_numerator==requester.cycles_per_second_numerator &&
+        memory->cached_requester.cycles_per_second_denominator==requester.cycles_per_second_denominator) {
+        *waits=memory->cached_waits;
+        return BM_STATUS_OK;
+    }
+    bm_status_t status=bm_pcs286_at_convert_waits(service,requester,cost,waits);
+    if (status==BM_STATUS_OK) {
+        memory->cached_service=service; memory->cached_requester=requester;
+        memory->cached_cost=cost; memory->cached_waits=*waits; memory->cached_valid=1;
+    }
+    return status;
+}
+
 bm_status_t bm_headland_at_memory_access(void *context, bm_at_transfer_t *transfer)
 {
     bm_headland_at_memory_t *memory = context;
@@ -125,7 +145,7 @@ bm_status_t bm_headland_at_memory_access(void *context, bm_at_transfer_t *transf
     if (status != BM_STATUS_OK) goto complete;
     if (!debug) {
         /* Known configured-cost overflow is rejected before any side effect. */
-        status = bm_pcs286_at_convert_waits(memory->config.service_clock, transfer->requester_clock, cost, &waits);
+        status = convert_cost(memory, transfer->requester_clock, cost, &waits);
         if (status != BM_STATUS_OK) goto complete;
         progress.timing = BM_GC10X_WAIT_PROVISIONAL;
     }
@@ -152,9 +172,11 @@ bm_status_t bm_headland_at_memory_access(void *context, bm_at_transfer_t *transf
         if (status != BM_STATUS_OK) goto complete;
         progress.completed_bytes += f->size;
         if (t->operation != BM_BUS_WRITE) result |= (part.value & mask) << shift;
-        if (!debug) {
+        if (!debug && part.wait_states != 0U) {
+            /* The configured cost was converted before dispatch. With no
+             * additional device waits its conversion is still valid. */
             cost += part.wait_states; /* At most 16 * UINT32_MAX in total. */
-            status = bm_pcs286_at_convert_waits(memory->config.service_clock, transfer->requester_clock, cost, &waits);
+            status = convert_cost(memory, transfer->requester_clock, cost, &waits);
             if (status != BM_STATUS_OK) goto complete;
         }
     }

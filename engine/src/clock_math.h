@@ -23,9 +23,16 @@ bm_status_t bm_clock_position_advance(bm_clock_position_t *clock, uint64_t cycle
 bm_status_t bm_clock_cycles_at_or_before(const bm_clock_rate_t *rate,
                                          const bm_clock_position_t *target,
                                          uint64_t *cycles);
+/* Uses an already initialized clock's immutable period; ignores its cursor. */
+bm_status_t bm_clock_cycles_at_or_before_period(const bm_clock_position_t *period,
+                                                const bm_clock_position_t *target,
+                                                uint64_t *cycles);
 bm_status_t bm_clock_position_next_after(const bm_clock_rate_t *rate,
                                          const bm_clock_position_t *target,
                                          bm_clock_position_t *next);
+bm_status_t bm_clock_position_next_after_period(const bm_clock_position_t *period,
+                                                const bm_clock_position_t *target,
+                                                bm_clock_position_t *next);
 int bm_clock_position_compare(const bm_clock_position_t *left,
                               const bm_clock_position_t *right);
 void bm_clock_position_export(const bm_clock_position_t *clock,

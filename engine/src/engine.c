@@ -23,6 +23,9 @@ typedef struct bm_event_slot {
 
 typedef struct bm_timed_source_slot {
     bm_clock_position_t deadline;
+    bm_clock_position_t cursor_time;
+    uint64_t cursor_cycles;
+    int cursor_valid;
     bm_clock_rate_t rate;
     uint64_t first_delay_cycles;
     bm_timed_source_fire_fn fire;
@@ -316,7 +319,7 @@ bm_engine_arm_timed_source(bm_engine_t *engine, bm_timed_source_id_t id,
         return BM_STATUS_INVALID_STATE;
 
     source = &engine->timed_sources[id];
-    status = bm_clock_position_next_after(&source->rate, effective_time,
+    status = bm_clock_position_next_after_period(&source->deadline, effective_time,
                                           &candidate);
     if (status != BM_STATUS_OK)
         return status;
@@ -350,6 +353,8 @@ bm_engine_timed_source_cycle_count(const bm_engine_t *engine,
                                    uint64_t *out_cycles)
 {
     const bm_clock_position_t *effective_time;
+    bm_timed_source_slot_t *source;
+    bm_status_t status;
 
     if ((engine == NULL) || !engine->clocked ||
         ((size_t) id >= engine->timed_source_count) ||
@@ -357,8 +362,23 @@ bm_engine_timed_source_cycle_count(const bm_engine_t *engine,
         return BM_STATUS_INVALID_ARGUMENT;
     effective_time = engine->dispatch_active ? &engine->dispatch_position :
                                                &engine->clock_now;
-    return bm_clock_cycles_at_or_before(&engine->timed_sources[id].rate,
-                                        effective_time, out_cycles);
+    source=&engine->timed_sources[id];
+    /* Rearming does not change the rate. Cache only identical exact effective
+     * times, including fractional CPU dispatch positions and disarmed sources. */
+    if (source->cursor_valid &&
+        source->cursor_time.nanoseconds==effective_time->nanoseconds &&
+        source->cursor_time.phase==effective_time->phase &&
+        source->cursor_time.phase_denominator==effective_time->phase_denominator) {
+        *out_cycles=source->cursor_cycles;
+        return BM_STATUS_OK;
+    }
+    status=bm_clock_cycles_at_or_before_period(&source->deadline,effective_time,out_cycles);
+    if (status==BM_STATUS_OK) {
+        source->cursor_time=*effective_time;
+        source->cursor_cycles=*out_cycles;
+        source->cursor_valid=1;
+    }
+    return status;
 }
 
 bm_status_t
@@ -379,6 +399,7 @@ bm_engine_reset(bm_engine_t *engine)
     for (index = 0; index < engine->timed_source_count; ++index) {
         bm_timed_source_slot_t *source = &engine->timed_sources[index];
 
+        source->cursor_valid=0;
         status = bm_clock_position_init(&source->deadline, &source->rate);
         if (status != BM_STATUS_OK)
             return status;
