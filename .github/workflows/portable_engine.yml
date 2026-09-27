@@ -1,11 +1,23 @@
-name: Portable engine
+name: CoreMach
 
 on:
   workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: "Also build Windows/MSVC, macOS, Qt6 and Windows package"
+        type: boolean
+        default: false
+      upload_package:
+        description: "Store the Windows package for one day (uses artifact quota)"
+        type: boolean
+        default: false
   push:
-    branches: ["architecture/portable-engine"]
+    branches: ["main"]
     paths:
       - engine/**
+      - cmake/**
+      - CMakePresets.json
+      - tools/**
       - runtime/**
       - components/**
       - systems/**
@@ -25,6 +37,7 @@ on:
       - tools/catalog_builder.py
       - tools/tests/test_catalog_audit.py
       - README-Portable.md
+      - README.md
       - tools/provenance_audit.py
       - tools/portable_package_audit.py
       - tools/validate-pcs86-portable.ps1
@@ -33,9 +46,12 @@ on:
       - tests/CMakeLists.txt
       - .github/workflows/portable_engine.yml
   pull_request:
-    branches: ["architecture/portable-engine"]
+    branches: ["main"]
     paths:
       - engine/**
+      - cmake/**
+      - CMakePresets.json
+      - tools/**
       - runtime/**
       - components/**
       - systems/**
@@ -55,6 +71,7 @@ on:
       - tools/catalog_builder.py
       - tools/tests/test_catalog_audit.py
       - README-Portable.md
+      - README.md
       - tools/provenance_audit.py
       - tools/portable_package_audit.py
       - tools/validate-pcs86-portable.ps1
@@ -74,10 +91,11 @@ jobs:
   engine:
     name: Engine only (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, windows-2022, macos-14]
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.full_matrix && '["ubuntu-26.04","windows-2022","macos-14"]' || '["ubuntu-26.04"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -87,10 +105,8 @@ jobs:
       - name: Configure engine-only build
         run: >-
           cmake -S . -B build/portable
-          -D BLUMACH_BUILD_LEGACY=OFF
-          -D BLUMACH_BUILD_ENGINE=ON
           -D BUILD_TESTING=ON
-          -D QT=OFF
+          -D CMAKE_BUILD_TYPE=Debug
       - name: Build
         run: cmake --build build/portable --config Debug
       - name: Test
@@ -99,13 +115,21 @@ jobs:
         run: python -B tools/provenance_audit.py
       - name: Test provenance audit
         run: python -B -m unittest tools.tests.test_provenance_audit
+      - name: Test Python validation tools
+        run: python -B -m unittest discover -s tools/tests
+      - name: Validate catalogue source
+        run: python -B tools/catalog_builder.py check
 
   qt-frontend:
     name: Portable Qt6 frontend (ubuntu-26.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.full_matrix
     runs-on: ubuntu-26.04
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Install Qt6 development packages
         run: |
           sudo apt-get update
@@ -113,8 +137,6 @@ jobs:
       - name: Configure portable Qt6 build
         run: >-
           cmake -S . -B build/portable-qt
-          -D BLUMACH_BUILD_LEGACY=OFF
-          -D BLUMACH_BUILD_ENGINE=ON
           -D BLUMACH_BUILD_PORTABLE_QT=ON
           -D BUILD_TESTING=ON
           -D CMAKE_BUILD_TYPE=Release
@@ -127,7 +149,9 @@ jobs:
 
   windows-package:
     name: Portable package (Windows x86-64)
+    if: github.event_name == 'workflow_dispatch' && inputs.full_matrix
     runs-on: windows-2022
+    timeout-minutes: 30
     defaults:
       run:
         shell: msys2 {0}
@@ -151,8 +175,6 @@ jobs:
       - name: Configure portable product
         run: >-
           cmake -S . -B build/portable-package -G Ninja
-          -D BLUMACH_BUILD_LEGACY=OFF
-          -D BLUMACH_BUILD_ENGINE=ON
           -D BLUMACH_BUILD_PORTABLE_QT=ON
           -D BUILD_TESTING=ON
           -D CMAKE_BUILD_TYPE=Release
@@ -174,9 +196,9 @@ jobs:
           cpack --config build/portable-package/CPackConfig.cmake
           -B build/portable-packages -G ZIP
       - name: Upload package
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: BluMach-Portable-Windows-x86-64
+          name: CoreMach-Windows-x86-64
           path: build/portable-packages/*
-          retention-days: 7
+          retention-days: 1

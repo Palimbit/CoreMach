@@ -1,4 +1,10 @@
-# BluMach fork notice
+# CoreMach and BluMach fork notice
+
+CoreMach is the portable engine extracted from BluMach at commit
+`a71e403189bd516c0f25c19014ee9748b2793d0d`. Its source is maintained at
+https://github.com/Palimbit/CoreMach. The optional BluMach frontends are included.
+Original authors, notices and the complete ancestor history are preserved.
+The extraction does not change existing component licenses or ownership.
 
 BluMach is a modified distribution of 86Box, an x86 systems emulator.
 

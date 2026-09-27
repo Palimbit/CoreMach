@@ -1,141 +1,55 @@
-# BluMach
+# CoreMach
 
-**Documented preservation and emulation of distinctive historical PCs.**
+CoreMach is the portable emulator engine extracted from BluMach. It contains
+instance-owned CPU and device state, rational virtual time, generic buses,
+machine systems, a runtime API and deterministic tests. The optional BluMach
+Qt 6 launcher and headless frontend are included as consumers of the engine.
 
-[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](COPYING)
-![Project status: active development](https://img.shields.io/badge/status-active%20development-orange.svg)
+This is an experimental **0.2.0-dev** tree. The PCS 86 and M15 are under
+validation; PCS 286 is an experimental system that boots local BIOS 1.42 and
+MS-DOS 3.30a in the validated configuration. POST and boot do not establish
+complete hardware fidelity. Nominal CPU timings include documented estimates
+and explicit fallbacks; this is not cycle-exact emulation.
 
-BluMach is a preservation-focused fork of
-[86Box](https://github.com/86Box/86Box). It combines 86Box's accurate,
-low-level x86 emulation with a curated historical catalogue, explicit evidence
-and reproducible machine configurations.
+The historical catalogue contains additional machines which are not implemented
+by this engine. Availability comes from the runtime registry.
 
-BluMach is an independent project and is not an official 86Box build. Existing
-86Box copyright notices and authorship are preserved. See
-[FORK-NOTICE.md](FORK-NOTICE.md) for provenance and redistribution details.
+## Build
 
-> [!IMPORTANT]
-> BluMach began as a personal preservation fork maintained by rtzor and is
-> developed in public so its research, documentation and emulator improvements
-> can be reviewed, reused and extended by others.
->
-> The project is under active development and is provided as-is, without warranty,
-> under the terms of the GPL-2.0-or-later license. Official binary releases are
-> planned once the emulator and its user experience are sufficiently mature; no
-> release date has been announced.
->
-> BluMach does not distribute ROMs, operating systems or other proprietary
-> machine software.
+Engine, headless frontend and tests require C11, CMake 3.21+ and a build tool:
 
-## What makes BluMach different
+Use a full Git clone for differential tests and provenance checks. Tests export
+pinned historical references from Git into the build directory. Source archives
+can build the engine with `-DBUILD_TESTING=OFF`.
 
-- A built-in **Collection** organised by manufacturer and family.
-- Historical sheets that separate known hardware from the current emulator
-  implementation.
-- Visible preservation states and evidence, including known approximations and
-  unresolved questions.
-- Reproducible profiles for machines that have enough firmware and validation
-  evidence to be created safely.
-- A unified Qt manager for exploring the catalogue and running local machines.
-- Continued access to the broad processor, bus and peripheral emulation inherited
-  from 86Box.
+```sh
+cmake -S . -B build/engine -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/engine --config Debug --parallel
+ctest --test-dir build/engine -C Debug --output-on-failure
+```
 
-Catalogue illustrations are editorial concept images or board recreations, not
-documentary photographs. Their purpose and provenance are recorded in the
-[asset notes](src/qt/catalog/images/README.md).
+For the optional launcher, install Qt 6 and Python 3, then configure with
+`-DBLUMACH_BUILD_PORTABLE_QT=ON`. The headless engine does not require Qt,
+SDL, OpenAL or the classic emulator. Windows local GUI builds use MSYS2 UCRT64;
+launch them with `tools/run-blumach-portable.ps1`. See [launcher instructions](README-Portable.md).
 
-## Historical collection
+CPU/library targets, C headers, executable names and profile keys keep their
+existing `blumach` names in this extraction to avoid changing integration
+behavior. The build project and archive are named CoreMach.
 
-The catalogue is organized by manufacturer and family. Selected public
-machine notes:
+## Validation and provenance
 
-| Manufacturer | Families | Public machine notes |
-| --- | --- | --- |
-| Olivetti | M15, Prodest, PCS, M300 and PCS 4x/C | [M15](doc/machines/olivetti-m15.md), [Prodest PC 1](doc/machines/olivetti-prodest-pc1.md), [PCS family](doc/machines/olivetti-pcs-family.md), [M300 family](doc/machines/olivetti-m300-family.md), [PCS 46/C](doc/machines/olivetti-pcs46c.md) |
-| Triumph-Adler | Dario | Catalogue research in progress |
-| TriGem | SX386 | [SX386M](doc/machines/trigem-sx386m.md) |
+```sh
+python -B tools/provenance_audit.py
+python -B tools/catalog_builder.py check
+python -B -m unittest discover -s tools/tests
+```
 
-Every catalogue entry carries one of these preservation states:
+Firmware and guest media are local inputs and are not shipped. Synthetic
+fixtures are authored tests. External SingleStepTests data is opt-in and stays
+outside the repository. See [extraction record](doc/architecture/coremach-extraction.md),
+[component provenance](provenance/components.json), [COPYING](COPYING),
+[fork notice](FORK-NOTICE.md) and [AUTHORS](AUTHORS).
 
-| State | Meaning |
-| --- | --- |
-| **Validated** | A documented configuration has passed the project's current validation checks. |
-| **Partial** | The machine is usable, with known approximations or incomplete validation. |
-| **Experimental** | An early implementation exists but needs more evidence or testing. |
-| **Research** | The historical record is being developed and no usable profile is offered. |
-| **Not bootable** | The product is identified, but BluMach cannot currently boot it faithfully. |
-
-The state applies to the current BluMach implementation, not to the historical
-importance or completeness of the surviving physical machine.
-
-## Evidence and fidelity
-
-BluMach distinguishes between claims that are:
-
-- **documented** in contemporary or manufacturer material;
-- **observed** in hardware, firmware or a repeatable emulator test;
-- **inferred** from related systems or incomplete evidence; or
-- **hypothetical** and retained only as a research lead.
-
-Machine notes describe the latest known result and remaining approximations.
-They should not present a plausible inference as verified hardware fact.
-
-## Building and running
-
-BluMach currently targets source builds. It retains the CMake build system and
-dependencies of 86Box; the repository workflows provide the exact configurations
-used for [Windows/MSYS2](.github/workflows/cmake_windows_msys2.yml),
-[Linux](.github/workflows/cmake_linux.yml) and
-[macOS](.github/workflows/cmake_macos.yml).
-
-Host-side contract tests are built by default and require neither firmware nor
-guest media. After building, run them with
-`ctest --test-dir <build-directory> --output-on-failure`. Set
-`BUILD_TESTING=OFF` only when a build intentionally does not need the test
-executables, such as static-analysis extraction.
-
-Each regular CI build also installs and audits its distributable package. The
-audit checks the platform layout, starts the packaged executable with
-`--version` without requiring ROMs, and rejects unexpected size growth. It can
-be run locally with `python tools/package_audit.py --help`.
-
-See the [BluMach build guide](doc/building.md) for supported toolchains,
-dependencies and validation commands.
-
-To run an emulated machine, provide a local ROM directory containing firmware
-you are legally entitled to use. See the [firmware policy and setup guide](doc/firmware.md).
-Firmware availability in a preservation record does not imply permission to
-redistribute it.
-
-## Contributing
-
-Contributions are welcome through pull requests. Historical-machine changes
-must cite their evidence, state their limitations and keep firmware or other
-restricted assets out of Git. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
-project checklist.
-
-## Compatibility with 86Box
-
-Internal executable names, configuration files, machine identifiers and source
-paths may continue to use `86Box` where changing them would break compatibility.
-This is an implementation detail and does not imply endorsement by the upstream
-project.
-
-Report BluMach problems to this repository first. If a problem is reproducible
-in an unmodified [86Box](https://github.com/86Box/86Box) build, the BluMach
-maintainers can determine whether to coordinate a fix with the upstream project.
-
-## License and provenance
-
-BluMach is distributed under the
-[GNU General Public License, version 2 or later](COPYING), consistently with its
-86Box base. Optional third-party components remain under their respective
-licenses.
-
-The GPL covers the emulator source and the BluMach-authored assets explicitly
-distributed under it. ROM images, operating systems, proprietary documentation
-and reference photographs are separate works and are not automatically covered
-by the emulator's license.
-
-See [FORK-NOTICE.md](FORK-NOTICE.md) and the source-file headers for authorship
-and redistribution information.
+The complete ancestor history is retained for authorship and immutable origin
+references. Classic implementation files are absent from the current tree.

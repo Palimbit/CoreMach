@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Original handlers/reset compile unchanged, only in the differential test.
-set(ioc02_classic_path "${PROJECT_SOURCE_DIR}/src/chipset/olivetti_ioc02.c")
+include(ClassicTestReference)
+coremach_classic_test_reference("src/chipset/olivetti_ioc02.c" ioc02_classic_path)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ioc02_classic_path}")
 file(READ "${ioc02_classic_path}" ioc02_classic)
 string(REPLACE "\r\n" "\n" ioc02_classic "${ioc02_classic}")

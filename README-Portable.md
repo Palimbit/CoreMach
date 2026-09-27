@@ -5,8 +5,11 @@ desktop frontend. It is an experimental `0.2.0-dev` integration build, not a
 stable release or a promise of compatibility with the inherited BluMach/86Box
 product or its machine configurations.
 
-The historical catalogue includes machines that are not yet emulated by this
-engine. Currently, the Olivetti PCS 86 and M15 can be launched. Both remain
+The engine is now maintained in Palimbit/CoreMach, with this optional BluMach
+launcher as its consumer. The historical catalogue includes machines that are
+not yet emulated by this engine. The Olivetti PCS 86 and M15 can be launched;
+PCS 286 is available through its experimental runtime and local asset bindings.
+These systems remain
 under validation; a successful POST or boot does not prove full hardware
 fidelity.
 

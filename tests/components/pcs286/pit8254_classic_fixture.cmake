@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Compile the actual classic edge core unchanged, only into this test.
-set(pit_classic_path "${PROJECT_SOURCE_DIR}/src/pit_exact.c")
-set(pit_classic_header "${PROJECT_SOURCE_DIR}/src/include/86box/pit_exact.h")
+include(ClassicTestReference)
+coremach_classic_test_reference("src/pit_exact.c" pit_classic_path)
+coremach_classic_test_reference("src/include/86box/pit_exact.h" pit_classic_header)
 foreach(pair IN ITEMS "${pit_classic_path}|9fae55a7f1e7620d1946a33f2d07116e3f966167b6ad788e5498e8ccc3cd21a5"
                       "${pit_classic_header}|8cd027bb3259abcb59213a4951c964c986d44a715e045cba144eff895086a857")
     string(REPLACE "|" ";" fields "${pair}")
@@ -16,6 +17,7 @@ foreach(pair IN ITEMS "${pit_classic_path}|9fae55a7f1e7620d1946a33f2d07116e3f966
     endif()
 endforeach()
 add_library(pcs286-pit-classic-fixture STATIC "${pit_classic_path}")
-target_include_directories(pcs286-pit-classic-fixture PUBLIC "${PROJECT_SOURCE_DIR}/src/include")
+target_include_directories(pcs286-pit-classic-fixture PUBLIC
+    "${PROJECT_BINARY_DIR}/classic-test-reference/src/include")
 target_compile_features(pcs286-pit-classic-fixture PRIVATE c_std_11)
 set_target_properties(pcs286-pit-classic-fixture PROPERTIES C_EXTENSIONS OFF)

@@ -65,3 +65,9 @@ CMakeLists.txt.user
 # Python tooling
 __pycache__/
 *.py[cod]
+
+# Local machine resources and working profiles
+/roms/
+/resources/
+/vms/
+*.blumach.json

@@ -52,12 +52,5 @@ class CatalogBuilderTests(unittest.TestCase):
             ["machine-implementation.md"],
         )
 
-    def test_generated_resource_is_initialized_by_qt_main(self) -> None:
-        repository = Path(__file__).resolve().parents[2]
-        qt_main = (repository / "src" / "qt" / "qt_main.cpp").read_text(encoding="utf-8")
-
-        self.assertIn("Q_INIT_RESOURCE(blumach_catalog);", qt_main)
-
-
 if __name__ == "__main__":
     unittest.main()

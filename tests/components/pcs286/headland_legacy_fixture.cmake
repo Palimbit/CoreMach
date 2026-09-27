@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Compile the actual, unedited classic register handlers as a test oracle.
 # Nothing generated here is linked into the portable component.
-set(classic_path "${PROJECT_SOURCE_DIR}/src/chipset/headland.c")
+include(ClassicTestReference)
+coremach_classic_test_reference("src/chipset/headland.c" classic_path)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${classic_path}")
 file(READ "${classic_path}" classic)
 string(REPLACE "\r\n" "\n" classic "${classic}")

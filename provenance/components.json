@@ -161,6 +161,7 @@
     {
       "id": "pcs286-p0-test-foundation",
       "destination": ["tests/components/pcs286/**"],
+      "extraction_changes": "CoreMach fixture CMake scripts export unchanged Headland, IOC02 and PIT classic references from immutable ancestor a71e403189bd516c0f25c19014ee9748b2793d0d into the build tree. Original SHA-256 pins and authors are retained; no classic source is linked into production.",
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],

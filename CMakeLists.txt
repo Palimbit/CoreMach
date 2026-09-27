@@ -1,358 +1,74 @@
-#
-# 86Box    A hypervisor and IBM PC system emulator that specializes in
-#          running old operating systems and software designed for IBM
-#          PC systems and compatibles from 1981 through fairly recent
-#          system designs based on the PCI bus.
-#
-#          This file is part of the 86Box distribution.
-#
-#          CMake build script.
-#
-# Authors: David Hrdlička, <hrdlickadavid@outlook.com>
-#
-#          Copyright 2020-2021 David Hrdlička.
-#          Copyright 2021-2026 Jasmine Iwanek.
-#
-
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright 2026 CoreMach contributors
 cmake_minimum_required(VERSION 3.21)
-
 cmake_policy(SET CMP0091 NEW)
 cmake_policy(SET CMP0079 NEW)
 if(POLICY CMP0207)
     cmake_policy(SET CMP0207 NEW)
 endif()
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
+option(BLUMACH_BUILD_PORTABLE_QT "Build the optional BluMach Qt6 launcher" OFF)
+# Existing component target names and public headers remain stable during extraction.
+set(BLUMACH_BUILD_LEGACY OFF)
+set(BLUMACH_BUILD_ENGINE ON)
+set(coremach_languages C)
+if(BLUMACH_BUILD_PORTABLE_QT)
+    list(APPEND coremach_languages CXX)
+endif()
+project(CoreMach VERSION 0.2.0
+    DESCRIPTION "Portable emulator engine, components and machine systems"
+    HOMEPAGE_URL "https://github.com/Palimbit/CoreMach"
+    LANGUAGES ${coremach_languages})
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
-
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release;UltraDebug;Optimized" CACHE STRING "")
-
-option(BLUMACH_BUILD_LEGACY "Build the inherited BluMach product" ON)
-option(BLUMACH_BUILD_ENGINE "Build the portable BluMach engine" ON)
-option(BLUMACH_BUILD_PORTABLE_QT "Build the portable Qt6 frontend" OFF)
-
-if(BLUMACH_BUILD_PORTABLE_QT AND NOT BLUMACH_BUILD_ENGINE)
-    message(FATAL_ERROR "The portable Qt6 frontend requires the portable engine.")
-endif()
-
-if(NOT BLUMACH_BUILD_LEGACY AND NOT BLUMACH_BUILD_ENGINE)
-    message(FATAL_ERROR "Enable at least one BluMach implementation.")
-endif()
-
-if(BLUMACH_BUILD_LEGACY)
-    if(NOT DEFINED QT OR QT)
-        list(APPEND VCPKG_MANIFEST_FEATURES "qt-ui")
-    endif()
-
-    if(NOT DEFINED OPENAL OR OPENAL)
-        list(APPEND VCPKG_MANIFEST_FEATURES "openal")
-    endif()
-
-    if(MUNT_EXTERNAL)
-        list(APPEND VCPKG_MANIFEST_FEATURES "munt")
-    endif()
-endif()
-
-set(BLUMACH_PROJECT_LANGUAGES C)
-if(BLUMACH_BUILD_LEGACY OR BLUMACH_BUILD_PORTABLE_QT)
-    list(APPEND BLUMACH_PROJECT_LANGUAGES CXX)
-endif()
-
-project(BluMach
-    VERSION 0.1.0
-    DESCRIPTION "Preservation-focused emulator of x86-based systems, derived from 86Box"
-    HOMEPAGE_URL "https://github.com/BluMach/BluMach"
-    LANGUAGES ${BLUMACH_PROJECT_LANGUAGES})
-
-# CMake requires a numeric project version. Keep the optional SemVer
-# prerelease identifier separate and expose one canonical display/package value.
-set(BLUMACH_VERSION_PRERELEASE "rc.1")
-if(BLUMACH_VERSION_PRERELEASE)
-    set(BLUMACH_VERSION_FULL "${CMAKE_PROJECT_VERSION}-${BLUMACH_VERSION_PRERELEASE}")
-else()
-    set(BLUMACH_VERSION_FULL "${CMAKE_PROJECT_VERSION}")
-endif()
-
-# The portable engine is the next product generation and evolves independently
-# from the legacy product while both coexist in this repository.
 set(BLUMACH_PORTABLE_VERSION "0.2.0-dev")
 set(BLUMACH_PORTABLE_VERSION_NUMERIC "0.2.0")
-
-if (BLUMACH_BUILD_LEGACY AND NOT (CMAKE_SIZEOF_VOID_P STREQUAL "8"))
-    message(FATAL_ERROR "Only 64-bit builds are supported.")
-endif()
-
-if (BLUMACH_BUILD_LEGACY AND CMAKE_C_BYTE_ORDER STREQUAL "BIG_ENDIAN")
-    message(FATAL_ERROR "Big-endian builds are not supported.")
-endif()
-
-include(CMakeDependentOption)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CTest)
-include(FetchContent)
+include(GNUInstallDirs)
 
-# Basic build options
-if(VCPKG_TOOLCHAIN)
-    # For vcpkg builds we have to respect the linking method used by the
-    # specified triplet.
-    set(NO_STATIC_OPTION ON)
-    if(VCPKG_TARGET_TRIPLET MATCHES "-static$")
-        # `-static` triplet, use static linking
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-        set(STATIC_BUILD ON)
-    elseif(VCPKG_TARGET_TRIPLET MATCHES "-static-md$")
-        # `-static-md` triplet, use static linking with dynamic CRT
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-        set(STATIC_BUILD ON)
-    else()
-        # Regular triplet, use dynamic linking
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-        set(STATIC_BUILD OFF)
-    endif()
-
+add_subdirectory(components/buses)
+add_subdirectory(components/memory)
+add_subdirectory(components/storage)
+add_subdirectory(components/cpu/808x)
+add_subdirectory(components/pc)
+add_subdirectory(components/video)
+add_subdirectory(engine)
+add_subdirectory(runtime)
+add_subdirectory(components/cpu/80286)
+add_subdirectory(components/chipsets/headland)
+add_subdirectory(components/chipsets/olivetti-ioc02)
+add_subdirectory(components/pc/contracts)
+add_subdirectory(components/video/contracts)
+add_subdirectory(systems/olivetti-pcs86)
+add_subdirectory(systems/olivetti-m15)
+add_subdirectory(systems/olivetti-pcs286)
+add_subdirectory(platforms/null)
+add_subdirectory(apps/frontend)
+add_subdirectory(apps/headless)
+if(BLUMACH_BUILD_PORTABLE_QT)
+    add_subdirectory(apps/qt-portable)
 endif()
-
-if(WIN32)
-    # Prefer static builds on Windows
-    set(PREFER_STATIC ON)
-
-    # Default value for the `WIN32` target property, which specifies whether
-    # to build the application for the Windows GUI or console subsystem
-    option(CMAKE_WIN32_EXECUTABLE "Build a Windows GUI executable" ON)
-else()
-    # Prefer dynamic builds everywhere else
-    set(PREFER_STATIC OFF)
-endif()
-
-if(APPLE)
-    option(CMAKE_MACOSX_BUNDLE "Build a macOS bundle (.app)" ON)
-endif()
-
-if(NOT NO_STATIC_OPTION)
-    if(PREFER_STATIC)
-        option(STATIC_BUILD "Static build" ON)
-    else()
-        option(STATIC_BUILD "Static build" OFF)
-    endif()
-endif()
-
-if(HAIKU)
-    set(OPENAL ON)
-endif()
-
-if(BLUMACH_BUILD_LEGACY)
-    include(DetectTargetArch)
-    include(CompilerFlags)
-endif()
-
-# Optional features
-#
-#      Option       Description                                                  Def.
-#      ------       -----------                                                  ----
-option(RELEASE      "Release build"                                              OFF)
-option(DYNAREC      "Dynamic recompiler"                                         ON)
-option(OPENAL       "OpenAL"                                                     ON)
-option(RTMIDI       "RtMidi"                                                     ON)
-option(FLUIDSYNTH   "FluidSynth"                                                 ON)
-option(MUNT         "MUNT"                                                       ON)
-option(SOUNDCANVAS  "Sound Canvas (CLAP)"                                        ON)
-option(VNC          "VNC renderer"                                               OFF)
-option(MINITRACE    "Enable Chrome tracing using the modified minitrace library" OFF)
-option(GDBSTUB      "Enable GDB stub server for debugging"                       OFF)
-option(DEV_BRANCH   "Development branch"                                         OFF)
-option(DEBUGREGS486 "Enable debug register opeartion on 486+ CPUs"               OFF)
-option(LIBASAN      "Enable compilation with the addresss sanitizer"             OFF)
-option(QT           "Use the Qt-based user interface"                            ON)
-option(SDL2         "Use SDL2 instead of SDL3"                                   OFF)
-
-if(NOT BLUMACH_BUILD_LEGACY)
-    set(QT OFF CACHE BOOL "Use the Qt-based user interface" FORCE)
-endif()
-
-if((ARCH STREQUAL "arm64"))
-    set(NEW_DYNAREC ON)
-else()
-    option(NEW_DYNAREC "Use the PCem v15 (\"new\") dynamic recompiler" OFF)
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
-    option(AUDIO4 "Use audio(4) as sound backend" ON)
-else()
-    set(AUDIO4 OFF)
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
-    option(SNDIO "Use sndio as sound backend" ON)
-else()
-    set(SNDIO OFF)
-endif()
-
-if(WIN32)
-    option(CPPTHREADS "C++11 threads" OFF)
-else()
-    option(CPPTHREADS "C++11 threads" ON)
-endif()
-
-if(WIN32 AND NOT QT)
-    # Force console subsystem when building the SDL frontend
-    set(CMAKE_WIN32_EXECUTABLE OFF CACHE BOOL "Build a Windows GUI executable" FORCE)
-endif()
-
-if(WIN32 AND GDBSTUB)
-    # Force console subsystem when building with GDBSTUB
-    set(CMAKE_WIN32_EXECUTABLE OFF CACHE BOOL "Build a Windows GUI executable" FORCE)
-endif()
-
-if(GDBSTUB)
-    if(NOT (ARCH STREQUAL "arm64"))
-        set(NEW_DYNAREC OFF CACHE BOOL "Use the PCem v15 (\"new\") dynamic recompiler" OFF)
-    endif()
-    set(DYNAREC OFF CACHE BOOL "Dynamic Recompiler" FORCE)
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
-    SET(CMAKE_EXE_LINKER_FLAGS "-Wl,-z,wxneeded")
-endif()
-
-# Development branch features
-#
-#                      Option         Description                                Def.  Condition     Otherwise
-#                      ------         -----------                                ----  ------------  ---------
-cmake_dependent_option(AMD_K5         "AMD K5"                                   ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(CDROM_MITSUMI  "Mitsumi CDROM"                            ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(G100           "Matrox Productiva G100"                   ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(ISAMEM_RAMPAGE "AST Rampage"                              ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(ISAMEM_IAB     "Intel Above Board"                        ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(ISAMEM_BRAT    "BocaRAM/AT"                               ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(OPL4ML         "OPL4-ML daughterboard"                    ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(SIO_DETECT     "Super I/O Detection Helper"               ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(WACOM          "Wacom Input Devices"                      ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(XL24           "ATI VGA Wonder XL24 (ATI-28800-6)"        ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(VFIO           "Virtual Function I/O"                     ON    "DEV_BRANCH"  OFF)
-cmake_dependent_option(SOFTMODEM      "AC'97 Softmodem"                          ON    "DEV_BRANCH"  OFF)
-
-# Ditto but for Qt
-if(BLUMACH_BUILD_LEGACY AND QT)
-    if(APPLE)
-        option(MOLTENVK "Use MoltenVK libraries for Vulkan support on macOS. Requires a Vulkan-enabled QT." OFF)
-    endif()
-
-    option(LIBRASHADER "Build with librashader support" ON)
-
-    if(LIBRASHADER)
-        option(LIBRASHADER_STATIC "Statically link with librashader" OFF)
-        if(LIBRASHADER_STATIC)
-            option(LIBRASHADER_STATIC_FIND_LIB "Find static librashader library instead of building." OFF)
-            if (NOT LIBRASHADER_STATIC_FIND_LIB)
-                set(FETCHCONTENT_QUIET 0)
-                FetchContent_Declare(librashader
-                                    GIT_REPOSITORY https://github.com/SnowflakePowered/librashader.git
-                                    GIT_TAG f810cdf6e856e5a5215b1e84a21c978bc3367f23 GIT_SUBMODULES "" GIT_PROGRESS 1)
-                                    
-                FetchContent_Declare(corrosion
-                                    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-                                    GIT_TAG c4786e7ae2d5ade784aca29448df362c874ed04e)
-
-                FetchContent_MakeAvailable(librashader corrosion)            
-                FetchContent_GetProperties(librashader SOURCE_DIR LIBRASHADER_SOURCE_DIR)
-                corrosion_import_crate(MANIFEST_PATH ${LIBRASHADER_SOURCE_DIR}/librashader-capi/Cargo.toml NO_DEFAULT_FEATURES FEATURES runtime-vulkan CRATE_TYPES staticlib)
-            endif()
-        endif()
-    endif()
-endif()
-
-# Determine the build type
-set(RELEASE_BUILD   OFF)
-set(BETA_BUILD      OFF)
-set(ALPHA_BUILD     OFF)
-
-string(TOLOWER "${BUILD_TYPE}" BUILD_TYPE_LOWER)
-if(BUILD_TYPE_LOWER STREQUAL "release")
-    # Release build
-    set(RELEASE_BUILD ON)
-    add_compile_definitions(RELEASE_BUILD)
-elseif(BUILD_TYPE_LOWER STREQUAL "beta")
-    # Beta build
-    set(BETA_BUILD ON)
-    add_compile_definitions(BETA_BUILD)
-elseif(BUILD_TYPE_LOWER STREQUAL "alpha")
-    # Alpha build
-    set(ALPHA_BUILD ON)
-    add_compile_definitions(ALPHA_BUILD)
-endif()
-
-# Versioning variables
-if(NOT CMAKE_PROJECT_VERSION_PATCH)
-    set(CMAKE_PROJECT_VERSION_PATCH 0)
-endif()
-if(NOT EMU_BUILD_NUM)
-    set(EMU_BUILD_NUM 0)
-endif()
-if(NOT EMU_COPYRIGHT_YEAR)
-    set(EMU_COPYRIGHT_YEAR 2026)
-endif()
-
-# Libasan
-if(LIBASAN)
-    add_compile_options(-fsanitize=address)
-    add_link_options(-fsanitize=address)
-endif()
-
-set(CMAKE_TOP_LEVEL_PROCESSED TRUE)
-
-if(BLUMACH_BUILD_LEGACY)
-    add_subdirectory(src)
-endif()
-
-if(BLUMACH_BUILD_ENGINE)
-    add_subdirectory(components/buses)
-    add_subdirectory(components/memory)
-    add_subdirectory(components/storage)
-    add_subdirectory(components/cpu/808x)
-    add_subdirectory(components/pc)
-    add_subdirectory(components/video)
-    add_subdirectory(engine)
-    add_subdirectory(runtime)
-    add_subdirectory(components/cpu/80286)
-    add_subdirectory(components/chipsets/headland)
-    add_subdirectory(components/chipsets/olivetti-ioc02)
-    add_subdirectory(components/pc/contracts)
-    add_subdirectory(components/video/contracts)
-    add_subdirectory(systems/olivetti-pcs86)
-    add_subdirectory(systems/olivetti-m15)
-    add_subdirectory(systems/olivetti-pcs286)
-    add_subdirectory(platforms/null)
-    add_subdirectory(apps/frontend)
-    add_subdirectory(apps/headless)
-    if(BLUMACH_BUILD_PORTABLE_QT)
-        add_subdirectory(apps/qt-portable)
-    endif()
-endif()
-
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-if(BLUMACH_BUILD_ENGINE AND NOT BLUMACH_BUILD_LEGACY)
-    set(CPACK_PACKAGE_NAME "BluMach-Portable")
-    set(CPACK_PACKAGE_VENDOR "BluMach")
-    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
-        "Portable BluMach emulator engine and frontends")
-    set(CPACK_PACKAGE_VERSION "${BLUMACH_PORTABLE_VERSION}")
-    set(CPACK_PACKAGE_FILE_NAME
-        "BluMach-Portable-${BLUMACH_PORTABLE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
-    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/COPYING")
-    set(CPACK_PACKAGE_CHECKSUM SHA256)
-    if(WIN32)
-        set(CPACK_GENERATOR ZIP)
-    else()
-        set(CPACK_GENERATOR TGZ)
-    endif()
-    install(FILES COPYING FORK-NOTICE.md AUTHORS DESTINATION .)
-    install(FILES README-Portable.md DESTINATION .)
+set(CPACK_PACKAGE_NAME "CoreMach")
+set(CPACK_PACKAGE_VENDOR "Palimbit")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CoreMach engine with optional BluMach frontends")
+set(CPACK_PACKAGE_VERSION "${BLUMACH_PORTABLE_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME
+    "CoreMach-${BLUMACH_PORTABLE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/COPYING")
+set(CPACK_PACKAGE_CHECKSUM SHA256)
+if(WIN32)
+    set(CPACK_GENERATOR ZIP)
+else()
+    set(CPACK_GENERATOR TGZ)
 endif()
-
-# CPack must see every install rule and the final portable-product metadata.
+install(FILES COPYING FORK-NOTICE.md AUTHORS README.md README-Portable.md DESTINATION .)
+install(FILES doc/architecture/coremach-extraction.md DESTINATION share/coremach)
 include(CPack)
