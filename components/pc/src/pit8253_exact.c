@@ -78,9 +78,14 @@ static void
 load_counting_element(bm_pit_exact_channel_t *channel)
 {
     channel->counting_element = reload_value(channel);
+    if (channel->is_8254) {
+        channel->active_count = channel->count_register;
+        if (channel->mode == 3U && (channel->active_count & 1U))
+            channel->counting_element &= 0xfffeU;
+    }
     channel->null_count = false;
     channel->ce_undefined = false;
-    if ((channel->rw_mode == 3U) && (channel->write_phase == 1U))
+    if (!channel->is_8254 && (channel->rw_mode == 3U) && (channel->write_phase == 1U))
         channel->incomplete_reload = true;
     update_live_latch(channel);
 
@@ -132,6 +137,13 @@ bm_pit_exact_reset(bm_pit_exact_device_t *pit)
         reset_channel(&pit->channel[index]);
 }
 
+void bm_pit_exact_reset_8254(bm_pit_exact_device_t *pit)
+{
+    unsigned int i;
+    bm_pit_exact_reset(pit);
+    for (i = 0; i < 3U; ++i) pit->channel[i].is_8254 = true;
+}
+
 static void
 latch_count(bm_pit_exact_channel_t *channel)
 {
@@ -153,6 +165,7 @@ program_mode(bm_pit_exact_channel_t *channel, uint8_t control)
     channel->write_phase = 0U;
     channel->read_phase = 0U;
     channel->count_latched = false;
+    channel->status_latched = false;
     channel->null_count = true;
     channel->armed = false;
     channel->initial_load = true;
@@ -169,8 +182,22 @@ bm_pit_exact_control_write(bm_pit_exact_device_t *pit, uint8_t value)
     unsigned int selected = value >> 6U;
     bm_pit_exact_channel_t *channel;
     pit->last_control = value;
-    if (selected >= 3U)
-        return; /* 8253 has no 8254 read-back command. */
+    if (selected >= 3U) {
+        /* Selective port of classic pitx read-back; Intel 231164-005 figs10-13.
+         * Public 8254 wrapper rejects reserved D0 before reaching the core. */
+        unsigned int i;
+        for (i = 0; i < 3U; ++i) {
+            bm_pit_exact_channel_t *c = &pit->channel[i];
+            if (!c->is_8254 || !(value & (2U << i))) continue;
+            if (!(value & 0x20U)) latch_count(c);
+            if (!(value & 0x10U) && !c->status_latched) {
+                c->status_latch = (uint8_t)((c->output ? 0x80U : 0U) |
+                    (c->null_count ? 0x40U : 0U) | (c->control & 0x3fU));
+                c->status_latched = true;
+            }
+        }
+        return;
+    }
     channel = &pit->channel[selected];
     if ((value & 0x30U) == 0U) {
         latch_count(channel);
@@ -182,14 +209,17 @@ bm_pit_exact_control_write(bm_pit_exact_device_t *pit, uint8_t value)
 static void
 finalize_write(bm_pit_exact_channel_t *channel)
 {
-    if (channel->count_register == 1U) {
+    if (!channel->is_8254 && channel->count_register == 1U) {
         if (channel->mode == 2U)
             channel->count_register = 2U;
         else if (channel->mode == 3U)
             channel->count_register = 0U;
     }
     channel->null_count = true;
-    channel->armed = true;
+    /* Hardware-triggered 8254 modes become active only on GATE, not a CR
+     * rewrite after the previous one-shot has completed. */
+    if (!channel->is_8254 || (channel->mode != 1U && channel->mode != 5U))
+        channel->armed = true;
     if (channel->initial_load) {
         channel->initial_load = false;
         channel->state = ((channel->mode == 1U) || (channel->mode == 5U)) ?
@@ -222,8 +252,9 @@ bm_pit_exact_data_write(bm_pit_exact_device_t *pit,
             break;
         case 3:
             if (channel->write_phase == 0U) {
-                channel->count_register = (uint16_t)
-                    ((channel->count_register & 0xff00U) | value);
+                if (channel->is_8254) channel->pending_lsb = value;
+                else channel->count_register = (uint16_t)
+                         ((channel->count_register & 0xff00U) | value);
                 channel->write_phase = 1U;
                 if (channel->mode == 0U) {
                     channel->state = BM_PIT_WAIT_COUNT;
@@ -231,7 +262,8 @@ bm_pit_exact_data_write(bm_pit_exact_device_t *pit,
                 }
             } else {
                 channel->count_register = (uint16_t)
-                    ((channel->count_register & 0x00ffU) | ((uint16_t) value << 8U));
+                    ((channel->is_8254 ? channel->pending_lsb : (channel->count_register & 0x00ffU)) |
+                     ((uint16_t) value << 8U));
                 channel->write_phase = 0U;
                 finalize_write(channel);
             }
@@ -249,6 +281,10 @@ bm_pit_exact_data_read(bm_pit_exact_device_t *pit, unsigned int selected)
     if (selected >= 3U)
         return 0xffU;
     channel = &pit->channel[selected];
+    if (channel->is_8254 && channel->status_latched) {
+        channel->status_latched = false;
+        return channel->status_latch;
+    }
     /* A completed count write is transferred on the next input clock. The
      * portable scheduler may execute several adjacent I/O instructions before
      * its next clock event, although a physical bus transaction spans enough
@@ -256,11 +292,11 @@ bm_pit_exact_data_read(bm_pit_exact_device_t *pit, unsigned int selected)
      * pending is hardware-undefined; choose the newly completed count rather
      * than leaking the previous counting element. This changes no active
      * counter and remains independent of scheduler/host granularity. */
-    if (channel->state == BM_PIT_LOAD_NEXT)
+    if (!channel->is_8254 && channel->state == BM_PIT_LOAD_NEXT)
         load_counting_element(channel);
     value = channel->count_latched ? channel->output_latch :
         visible_count(channel->counting_element);
-    if (!channel->count_latched && (channel->rw_mode == 3U) &&
+    if (!channel->is_8254 && !channel->count_latched && (channel->rw_mode == 3U) &&
         (channel->write_phase == 1U))
         return (uint8_t) ~(channel->count_register & 0xffU);
     switch (channel->rw_mode) {
@@ -324,6 +360,26 @@ bm_pit_exact_set_gate(bm_pit_exact_device_t *pit,
 static void
 count_mode3(bm_pit_exact_channel_t *channel)
 {
+    if (channel->is_8254) {
+        /* Classic 8254 even-CE policy, with the ACTIVE divisor's parity until
+         * reload. New/partial CR writes cannot change the current half-cycle.
+         * Intel 231164-005 p13: odd high half defers its reload by one pulse. */
+        decrement_n(channel, 2U);
+        if (visible_count(channel->counting_element) == 0U) {
+            if ((channel->active_count & 1U) && channel->output) {
+                channel->toggle_on_reload = true;
+                channel->state = BM_PIT_RELOAD_NEXT;
+            } else {
+                channel->output = !channel->output;
+                channel->active_count = channel->count_register;
+                channel->counting_element = reload_value(channel);
+                if (channel->active_count & 1U) channel->counting_element &= 0xfffeU;
+                channel->null_count = false;
+                update_live_latch(channel);
+            }
+        }
+        return;
+    }
     bool odd = (channel->count_register & 1U) != 0U;
     if (odd && ((channel->counting_element & 1U) != 0U))
         decrement_n(channel, channel->output ? 1U : 3U);
@@ -347,11 +403,13 @@ tick_channel(bm_pit_exact_device_t *pit, unsigned int selected)
             load_counting_element(channel);
             return;
         case BM_PIT_STROBE_RECOVER:
+            if (channel->is_8254 && (channel->mode == 5U || channel->gate))
+                decrement(channel); /* CE keeps counting while OUT recovers. */
             channel->output = true;
             channel->state = BM_PIT_COUNTING;
             return;
         case BM_PIT_WAIT_TRIGGER:
-            if (channel->ce_undefined && channel->armed) {
+            if (!channel->is_8254 && channel->ce_undefined && channel->armed) {
                 channel->counting_element = 3U;
                 update_live_latch(channel);
             }
@@ -395,15 +453,18 @@ tick_channel(bm_pit_exact_device_t *pit, unsigned int selected)
         case 4:
             if (channel->gate) {
                 decrement(channel);
-                if (visible_count(channel->counting_element) == 0U) {
+                if (visible_count(channel->counting_element) == 0U &&
+                    (!channel->is_8254 || channel->armed)) {
                     channel->output = false;
+                    if (channel->is_8254) channel->armed = false;
                     channel->state = BM_PIT_STROBE_RECOVER;
                 }
             }
             break;
         case 5:
             decrement(channel);
-            if (visible_count(channel->counting_element) == 0U) {
+            if (visible_count(channel->counting_element) == 0U &&
+                (!channel->is_8254 || channel->armed)) {
                 channel->output = false;
                 channel->armed = false;
                 channel->state = BM_PIT_STROBE_RECOVER;
@@ -493,15 +554,17 @@ binary_counting_cycles_until_change(const bm_pit_exact_channel_t *channel)
         case 3:
             if (!channel->gate)
                 return 0U;
+            if (channel->is_8254)
+                return count / 2U + ((channel->active_count & 1U) && channel->output ? 1U : 0U);
             if ((count & 1U) == 0U)
                 return count / 2U;
             if (channel->output)
                 return (count + 1U) / 2U;
             return count == 1U ? 0x8000U : (count - 1U) / 2U;
         case 4:
-            return (channel->gate && channel->output) ? count : 0U;
+            return (channel->gate && channel->output && (!channel->is_8254 || channel->armed)) ? count : 0U;
         case 5:
-            return channel->output ? count : 0U;
+            return (channel->output && (!channel->is_8254 || channel->armed)) ? count : 0U;
         default:
             return 0U;
     }
@@ -519,9 +582,9 @@ counting_can_change_output(const bm_pit_exact_channel_t *channel)
         case 3:
             return channel->gate;
         case 4:
-            return channel->gate && channel->output;
+            return channel->gate && channel->output && (!channel->is_8254 || channel->armed);
         case 5:
-            return channel->output;
+            return channel->output && (!channel->is_8254 || channel->armed);
         default:
             return false;
     }
@@ -601,7 +664,7 @@ bm_pit_exact_cycles_until_output_change(const bm_pit_exact_device_t *pit)
 static void
 skip_channel_without_output_change(bm_pit_exact_device_t *pit,
                                    unsigned int selected,
-                                   uint32_t ticks)
+                                   uint64_t ticks)
 {
     bm_pit_exact_channel_t *channel = &pit->channel[selected];
 
@@ -636,9 +699,11 @@ skip_channel_without_output_change(bm_pit_exact_device_t *pit,
             break;
         case 3:
             if (channel->gate) {
-                uint64_t decrements = (uint64_t) ticks * 2U;
+                /* With gate high a valid mode3 counter has a near output
+                 * deadline, so ticks is bounded before this doubling. */
+                uint64_t decrements = ticks * 2U;
 
-                if (((channel->count_register & 1U) != 0U) &&
+                if (!channel->is_8254 && ((channel->count_register & 1U) != 0U) &&
                     ((channel->counting_element & 1U) != 0U)) {
                     decrements -= 2U;
                     decrements += channel->output ? 1U : 3U;
@@ -651,17 +716,32 @@ skip_channel_without_output_change(bm_pit_exact_device_t *pit,
     }
 }
 
-uint32_t
-bm_pit_exact_advance_until_output_change(bm_pit_exact_device_t *pit,
-                                         uint32_t maximum_ticks)
+uint64_t
+bm_pit_exact_advance_until_output_change64(bm_pit_exact_device_t *pit,
+                                           uint64_t maximum_ticks)
 {
     uint32_t transition;
-    uint32_t consumed;
+    uint64_t consumed;
     unsigned int channel;
 
     if ((pit == NULL) || (maximum_ticks == 0U))
         return 0U;
     transition = bm_pit_exact_cycles_until_output_change(pit);
+    /* 8254 odd mode3 has an internal boundary at CE=0, one pulse BEFORE
+     * the high->low OUT edge. Batch stepping must execute that state change
+     * even though it has no observable output transition yet. */
+    for (channel = 0; channel < 3U; ++channel) {
+        const bm_pit_exact_channel_t *c = &pit->channel[channel];
+        if (c->is_8254 && c->mode == 3U &&
+            (c->state == BM_PIT_LOAD_NEXT || c->state == BM_PIT_RELOAD_NEXT)) {
+            transition = 1U;
+        }
+        if (c->is_8254 && c->mode == 3U && c->state == BM_PIT_COUNTING &&
+            c->gate && c->output && (c->active_count & 1U)) {
+            uint32_t boundary = c->bcd ? 1U : binary_countdown(c->counting_element) / 2U;
+            if (boundary && (!transition || boundary < transition)) transition = boundary;
+        }
+    }
     consumed = ((transition != 0U) && (transition <= maximum_ticks)) ?
         transition : maximum_ticks;
 
@@ -677,6 +757,12 @@ bm_pit_exact_advance_until_output_change(bm_pit_exact_device_t *pit,
             skip_channel_without_output_change(pit, channel, consumed);
     }
     return consumed;
+}
+
+uint32_t bm_pit_exact_advance_until_output_change(bm_pit_exact_device_t *pit,
+                                                  uint32_t maximum_ticks)
+{
+    return (uint32_t)bm_pit_exact_advance_until_output_change64(pit, maximum_ticks);
 }
 
 void

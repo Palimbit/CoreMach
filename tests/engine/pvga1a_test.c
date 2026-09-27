@@ -91,6 +91,14 @@ attribute_write(bm_bus_t *bus, uint8_t index, uint8_t value)
     return status == BM_STATUS_OK ? io_write(bus, 0x03c0U, value) : status;
 }
 
+static bm_status_t
+attribute_enable(bm_bus_t *bus)
+{
+    uint8_t ignored;
+    bm_status_t status = io_read(bus, 0x03daU, &ignored);
+    return status == BM_STATUS_OK ? io_write(bus, 0x03c0U, 0x20U) : status;
+}
+
 static void
 dac_write(bm_bus_t *bus, uint8_t index, uint8_t red, uint8_t green,
           uint8_t blue)
@@ -101,9 +109,230 @@ dac_write(bm_bus_t *bus, uint8_t index, uint8_t red, uint8_t green,
     assert(io_write(bus, 0x03c9U, blue) == BM_STATUS_OK);
 }
 
+static void
+diagnostic_status_test(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    bm_bus_t *bus = NULL;
+    bm_pvga1a_t *video = NULL;
+    bm_pvga1a_config_t config = { BM_PVGA1A_VRAM_SIZE };
+    uint8_t value;
+
+    assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
+    assert(bm_pvga1a_create(&host, bus, &config, &video) == BM_STATUS_OK);
+    /* A small authored planar raster makes the source of the diagnostic
+     * outputs explicit: the first eight active pixels are colour 0fh and the
+     * following blanking interval has no attribute-palette output. */
+    assert(sequencer_write(bus, 1U, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0U, 0U) == BM_STATUS_OK);     /* 40 dots/line. */
+    assert(crtc_write(bus, 1U, 1U) == BM_STATUS_OK);     /* 16 active dots. */
+    assert(crtc_write(bus, 6U, 2U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x12U, 1U) == BM_STATUS_OK);
+    assert(crtc_write(bus, 0x13U, 1U) == BM_STATUS_OK);
+    assert(memory_write(bus, 0xa0000U, 0xffU) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x10U, 1U) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x12U, 0x0fU) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x0fU, 0x05U) == BM_STATUS_OK);
+    assert(attribute_enable(bus) == BM_STATUS_OK);
+    assert(bm_pvga1a_advance_ns(video, 0U) == BM_STATUS_OK);
+
+    /* Attribute Controller register 12h selects two of the eight palette
+     * outputs for Input Status 1 bits 4 and 5. */
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK &&
+           (value & 0x30U) == 0x30U);                   /* P0 and P2. */
+    assert(attribute_write(bus, 0x12U, 0x1fU) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x0fU, 0x30U) == BM_STATUS_OK);
+    assert(attribute_enable(bus) == BM_STATUS_OK);
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK &&
+           (value & 0x30U) == 0x30U);                   /* P4 and P5. */
+    assert(attribute_write(bus, 0x12U, 0x2fU) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x0fU, 0x0aU) == BM_STATUS_OK);
+    assert(attribute_enable(bus) == BM_STATUS_OK);
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK &&
+           (value & 0x30U) == 0x30U);                   /* P1 and P3. */
+    assert(attribute_write(bus, 0x12U, 0x3fU) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x0fU, 0U) == BM_STATUS_OK);
+    assert(attribute_write(bus, 0x14U, 0x0cU) == BM_STATUS_OK);
+    assert(attribute_enable(bus) == BM_STATUS_OK);
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK &&
+           (value & 0x30U) == 0x30U);                   /* P6 and P7. */
+
+    assert(bm_pvga1a_advance_ns(video, 636U) == BM_STATUS_OK);
+    assert(io_read(bus, 0x03daU, &value) == BM_STATUS_OK &&
+           (value & 0x31U) == 0x01U);                   /* Horizontal blank. */
+    bm_bus_destroy(bus);
+    bm_pvga1a_destroy(video);
+}
+
+static void
+dac_post_roundtrip_test(void)
+{
+    bm_host_services_t host = bm_null_host_services();
+    bm_bus_t *bus = NULL;
+    bm_pvga1a_t *video = NULL;
+    bm_pvga1a_config_t config = { BM_PVGA1A_VRAM_SIZE };
+    const uint8_t patterns[] = { 0x2aU, 0x15U, 0U };
+    uint8_t value;
+
+    assert(bm_bus_create(&host, 2, &bus) == BM_STATUS_OK);
+    assert(bm_pvga1a_create(&host, bus, &config, &video) == BM_STATUS_OK);
+    assert(io_write(bus, 0x03c6U, 0U) == BM_STATUS_OK);
+    /* The VGA monitor-sense comparator observes DAC entry zero even while the
+     * pixel mask is zero. The PCS 286 VGA BIOS qualifies the dark level and
+     * then each primary at 10h before accepting the attached display. */
+    assert(io_read(bus, 0x03c2U, &value) == BM_STATUS_OK &&
+           (value & 0x10U) == 0x10U);
+    dac_write(bus, 0U, 0x04U, 0x04U, 0x04U);
+    assert(io_read(bus, 0x03c2U, &value) == BM_STATUS_OK &&
+           (value & 0x10U) == 0x10U);
+    dac_write(bus, 0U, 0x10U, 0x04U, 0x04U);
+    assert(io_read(bus, 0x03c2U, &value) == BM_STATUS_OK &&
+           (value & 0x10U) == 0U);
+    dac_write(bus, 0U, 0x04U, 0x10U, 0x04U);
+    assert(io_read(bus, 0x03c2U, &value) == BM_STATUS_OK &&
+           (value & 0x10U) == 0U);
+    dac_write(bus, 0U, 0x04U, 0x04U, 0x10U);
+    assert(io_read(bus, 0x03c2U, &value) == BM_STATUS_OK &&
+           (value & 0x10U) == 0U);
+    for (unsigned int pattern = 0U;
+         pattern < sizeof(patterns) / sizeof(patterns[0]); ++pattern) {
+        assert(io_write(bus, 0x03c8U, 0U) == BM_STATUS_OK);
+        for (unsigned int component = 0U; component < 768U; ++component)
+            assert(io_write(bus, 0x03c9U, patterns[pattern]) == BM_STATUS_OK);
+        if (patterns[pattern] == 0U)
+            continue;
+        assert(io_write(bus, 0x03c7U, 0U) == BM_STATUS_OK);
+        for (unsigned int component = 0U; component < 768U; ++component)
+            assert(io_read(bus, 0x03c9U, &value) == BM_STATUS_OK &&
+                   value == patterns[pattern]);
+    }
+    bm_bus_destroy(bus);
+    bm_pvga1a_destroy(video);
+}
+
+static void clocked_status_test(void)
+{
+    bm_host_services_t host=bm_null_host_services();
+    bm_bus_t *bus[2]={NULL,NULL};
+    bm_pvga1a_t *v[2]={NULL,NULL};
+    bm_pvga1a_config_t config={BM_PVGA1A_VRAM_SIZE};
+    uint8_t a,b;
+    bm_bus_transaction_t t={BM_ADDRESS_IO,BM_BUS_READ,0x3da,0,1,1,0,
+                            BM_ENDIAN_LITTLE,BM_BUS_TRANSACTION_DEBUG};
+    for (unsigned i=0;i<2;++i) {
+        assert(bm_bus_create(&host,2,&bus[i])==BM_STATUS_OK);
+        assert(bm_pvga1a_create(&host,bus[i],&config,&v[i])==BM_STATUS_OK);
+        /* 40 dots per line, four lines, 16 active dots/two active lines.
+         * Vertical retrace spans only line two. */
+        assert(sequencer_write(bus[i],1,1)==BM_STATUS_OK);
+        assert(crtc_write(bus[i],0,0)==BM_STATUS_OK);
+        assert(crtc_write(bus[i],1,1)==BM_STATUS_OK);
+        assert(crtc_write(bus[i],6,2)==BM_STATUS_OK);
+        assert(crtc_write(bus[i],0x12,1)==BM_STATUS_OK);
+        assert(crtc_write(bus[i],0x10,2)==BM_STATUS_OK);
+        assert(crtc_write(bus[i],0x11,3)==BM_STATUS_OK);
+        assert(bm_pvga1a_advance_ns(v[i],0)==BM_STATUS_OK);
+        for (unsigned n=0;n<100;++n)
+            assert(io_read(bus[i],0x3da,&a)==BM_STATUS_OK && a==0);
+        /* Sequencer screen-off blanks pixels, but the raster/display-enable
+         * diagnostic signal continues. PCS 286 POST samples it while blanked;
+         * this matches the inherited SVGA timer rather than a BIOS special. */
+        assert(sequencer_write(bus[i],1,0x21)==BM_STATUS_OK);
+        assert(io_read(bus[i],0x3da,&a)==BM_STATUS_OK && a==0);
+        assert(sequencer_write(bus[i],1,1)==BM_STATUS_OK);
+    }
+    assert(bm_pvga1a_advance_ns(NULL,0)==BM_STATUS_INVALID_ARGUMENT);
+    /* ceil(16 dots / 25.175 MHz): horizontal inactive, no vertical retrace. */
+    assert(bm_pvga1a_advance_ns(v[0],636)==BM_STATUS_OK);
+    assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK && a==1);
+    /* ceil(80 dots / clock): vertical retrace. Partitioning and polling have
+     * no effect on phase, including sub-dot calls. */
+    assert(bm_pvga1a_advance_ns(v[0],2542)==BM_STATUS_OK);
+    for (unsigned n=0;n<3178;++n) {
+        assert(bm_pvga1a_advance_ns(v[1],1)==BM_STATUS_OK);
+        assert(io_read(bus[1],0x3da,&b)==BM_STATUS_OK);
+    }
+    assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK && a==9 && a==b);
+    assert(io_read(bus[0],0x3ba,&a)==BM_STATUS_OK && a==0xff);
+    assert(io_write(bus[0],0x3c2,0)==BM_STATUS_OK);
+    assert(io_read(bus[0],0x3ba,&a)==BM_STATUS_OK && a==9);
+    assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK && a==0xff);
+    assert(io_write(bus[0],0x3c2,9)==BM_STATUS_OK);
+    assert(bm_pvga1a_advance_ns(v[0],UINT64_MAX)==BM_STATUS_UNSUPPORTED);
+    assert(io_write(bus[0],0x3c2,1)==BM_STATUS_OK);
+    assert(bm_pvga1a_advance_ns(v[0],UINT64_MAX)==BM_STATUS_OK);
+    assert(bm_pvga1a_advance_ns(v[1],UINT64_MAX/2)==BM_STATUS_OK);
+    assert(bm_pvga1a_advance_ns(v[1],UINT64_MAX-UINT64_MAX/2)==BM_STATUS_OK);
+    assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK);
+    assert(io_read(bus[1],0x3da,&b)==BM_STATUS_OK && a==b);
+    for (unsigned n=0;n<200;++n) {
+        assert(bm_pvga1a_advance_ns(v[0],39)==BM_STATUS_OK);
+        assert(bm_pvga1a_advance_ns(v[1],39)==BM_STATUS_OK);
+        assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK);
+        assert(io_read(bus[1],0x3da,&b)==BM_STATUS_OK && a==b);
+    }
+    /* DEBUG status cannot reset the attribute data/index flip-flop. */
+    assert(io_write(bus[0],0x3c0,0x12)==BM_STATUS_OK);
+    assert(bm_bus_transact(bus[0],&t)==BM_STATUS_OK);
+    assert(io_write(bus[0],0x3c0,0x34)==BM_STATUS_OK);
+    assert(bm_pvga1a_inspect_register(v[0],BM_PVGA1A_ATTRIBUTE,0x12,&a)==BM_STATUS_OK && a==0x34);
+    dac_write(bus[0],2,11,22,33);
+    assert(io_write(bus[0],0x3c7,2)==BM_STATUS_OK);
+    t.address=0x3c9;
+    for (unsigned n=0;n<3;++n)
+        assert(bm_bus_transact(bus[0],&t)==BM_STATUS_OK && t.value==11);
+    assert(io_read(bus[0],0x3c9,&a)==BM_STATUS_OK && a==11);
+    t.operation=BM_BUS_WRITE;
+    assert(bm_bus_transact(bus[0],&t)==BM_STATUS_UNSUPPORTED);
+    assert(io_read(bus[0],0x3c9,&a)==BM_STATUS_OK && a==22);
+    /* DEBUG VRAM reads must not change the four write-mode-1 latches. */
+    assert(memory_write(bus[0],0xa0000,0x55)==BM_STATUS_OK);
+    assert(memory_write(bus[0],0xa0001,0xaa)==BM_STATUS_OK);
+    t=(bm_bus_transaction_t){BM_ADDRESS_MEMORY,BM_BUS_READ,0xa0000,0,1,1,0,BM_ENDIAN_LITTLE,0};
+    assert(bm_bus_transact(bus[0],&t)==BM_STATUS_OK && t.value==0x55);
+    t.address=0xa0001; t.attributes=BM_BUS_TRANSACTION_DEBUG;
+    assert(bm_bus_transact(bus[0],&t)==BM_STATUS_OK && t.value==0xaa);
+    t.operation=BM_BUS_WRITE; t.value=0xff;
+    assert(bm_bus_transact(bus[0],&t)==BM_STATUS_UNSUPPORTED);
+    assert(graphics_write(bus[0],5,1)==BM_STATUS_OK);
+    assert(memory_write(bus[0],0xa0002,0)==BM_STATUS_OK);
+    for (unsigned plane=0;plane<4;++plane) {
+        assert(bm_pvga1a_inspect_vram(v[0],plane,2,&a)==BM_STATUS_OK && a==0x55);
+        assert(bm_pvga1a_inspect_vram(v[0],plane,1,&a)==BM_STATUS_OK && a==0xaa);
+    }
+    /* Both internal clocks, nine-dot and doubled characters, and overflow
+     * bits in VT/VDE/VRS use the same geometry as the existing renderer. */
+    for (unsigned clock=0;clock<2;++clock) {
+        uint64_t rate=clock ? 28322000U : 25175000U;
+        uint64_t edge=(UINT64_C(90)*514U*1000000000U+rate-1U)/rate;
+        bm_pvga1a_reset(v[0]);
+        assert(io_write(bus[0],0x3c2,(uint8_t)(1U+4U*clock))==BM_STATUS_OK);
+        assert(sequencer_write(bus[0],1,8)==BM_STATUS_OK);
+        assert(crtc_write(bus[0],0,0)==BM_STATUS_OK);
+        assert(crtc_write(bus[0],1,4)==BM_STATUS_OK);
+        assert(crtc_write(bus[0],6,4)==BM_STATUS_OK);
+        assert(crtc_write(bus[0],7,0xe0)==BM_STATUS_OK); /* VT=516+2,VDE=513+1,VRS=514. */
+        assert(crtc_write(bus[0],0x12,1)==BM_STATUS_OK);
+        assert(crtc_write(bus[0],0x10,2)==BM_STATUS_OK);
+        assert(crtc_write(bus[0],0x11,3)==BM_STATUS_OK);
+        assert(bm_pvga1a_advance_ns(v[0],edge-1U)==BM_STATUS_OK);
+        assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK && a==0);
+        assert(bm_pvga1a_advance_ns(v[0],1)==BM_STATUS_OK);
+        assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK && a==9);
+    }
+    /* Reset keeps the pre-existing PCS86 status contract until explicit opt-in. */
+    bm_pvga1a_reset(v[0]);
+    assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK && a==9);
+    assert(io_read(bus[0],0x3da,&a)==BM_STATUS_OK && a==0);
+    for (unsigned i=0;i<2;++i) { bm_bus_destroy(bus[i]); bm_pvga1a_destroy(v[i]); }
+}
+
 int
 main(void)
 {
+    clocked_status_test();
+    diagnostic_status_test();
+    dac_post_roundtrip_test();
     bm_host_services_t host = bm_null_host_services();
     bm_bus_t *bus = NULL;
     bm_pvga1a_t *video = NULL;

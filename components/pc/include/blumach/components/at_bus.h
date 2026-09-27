@@ -16,7 +16,8 @@ typedef enum bm_at_master {
     BM_AT_MASTER_CPU = 0,
     BM_AT_MASTER_DMA8,
     BM_AT_MASTER_DMA16,
-    BM_AT_MASTER_ISA
+    BM_AT_MASTER_ISA,
+    BM_AT_MASTER_REFRESH /* Ownership only: never an ordinary memory/I/O access. */
 } bm_at_master_t;
 typedef struct bm_at_transfer {
     bm_at_master_t master;
@@ -64,8 +65,18 @@ bm_status_t bm_at_bus_set_lock(bm_at_bus_t *bus, int asserted);
 bm_status_t bm_at_bus_request(bm_at_bus_t *bus, bm_at_master_t master, int asserted);
 bm_status_t bm_at_bus_hold_ack(bm_at_bus_t *bus, int asserted);
 
+/* Pure snapshot for single-threaded board coordinators. requester is CPU when
+ * requested is false, including the interval waiting for stale HLDA to fall.
+ * This does not grant ownership or advance any device. */
+typedef struct bm_at_bus_arbitration {
+    bm_at_master_t requester;
+    int requested, locked, hold, hlda;
+} bm_at_bus_arbitration_t;
+bm_status_t bm_at_bus_arbitration(const bm_at_bus_t *bus,
+                                 bm_at_bus_arbitration_t *state);
+
 /* P0 boundary arbitration: reset leaves the CPU owner, LOCK/HOLD/HLDA clear.
- * request() records one external requester (DMA8, DMA16 or ISA); competing
+ * request() records one external requester (DMA8, DMA16, ISA or REFRESH); competing
  * requests return UNSUPPORTED without changing state until an arbitration
  * policy is implemented/tested. CPU is not a valid external requester.
  * A pending request asserts HOLD only outside LOCK. HLDA may grant it only
@@ -73,11 +84,18 @@ bm_status_t bm_at_bus_hold_ack(bm_at_bus_t *bus, int asserted);
  * asserted with HLDA high. Cancelling the request drops HOLD; CPU ownership
  * resumes only after HLDA goes low. A stale HIGH HLDA without HOLD is invalid.
  * Access by a non-owner returns IDLE with no callback or transaction mutation.
+ * A new request after cancellation is rejected while the old HLDA remains
+ * high; duplicate levels of a still-active request are idempotent.
  * DEBUG bypasses ownership read-only, never issuing grants or pin transitions.
+ * DEBUG WRITE returns UNSUPPORTED before decode; successful DEBUG reads return
+ * zero waits. Decode endpoints must themselves avoid inspection side effects.
  * The CPU's synchronous callback must not be retried mid-instruction: its
  * step adapter services HOLD at boundaries and performs no access while held.
  * Reset/cancel/duplicate levels must not synthesize extra edges. Setters do not
  * recursively execute CPUs/devices; the coordinator wires/advances them.
+ * REFRESH reserves the bus for a logical refresh event; access() rejects it,
+ * including DEBUG. It must not cause RAM/MMIO reads, DMA address/count changes
+ * or invented memory wait states. This API assigns no physical refresh duration.
  */
 
 /* Initial ISA cards are fixed during construction. No hotplug promise.

@@ -30,6 +30,7 @@ set(pcs286_contract_headers
     blumach/components/uart16450.h
     blumach/components/lpt_spp.h
     blumach/systems/pcs286_board.h
+    blumach/systems/pcs286_memory.h
     blumach/systems/olivetti_pcs286.h)
 set(pcs286_contract_sources)
 foreach(header IN LISTS pcs286_contract_headers)
@@ -53,6 +54,129 @@ set_target_properties(blumach_pcs286_contract_check PROPERTIES C_EXTENSIONS OFF)
 if(CMAKE_CXX_COMPILER_LOADED)
     target_compile_features(blumach_pcs286_contract_check PRIVATE cxx_std_17)
     set_target_properties(blumach_pcs286_contract_check PROPERTIES CXX_EXTENSIONS OFF)
+endif()
+
+# Storage is real; the unresolved chipset and machine factory stay absent.
+add_executable(pcs286-boot-probe src/boot_probe.c)
+target_include_directories(pcs286-boot-probe PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+target_link_libraries(pcs286-boot-probe PRIVATE blumach_pcs286_services
+    blumach_pcs286_page_spare_latches
+    blumach_pcs286_dma_coordinator
+    blumach_at_dma blumach_ioc02_legacy_registers blumach_pc_components blumach_video blumach_platform_null)
+target_compile_features(pcs286-boot-probe PRIVATE c_std_11)
+set_target_properties(pcs286-boot-probe PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(pcs286-boot-probe PRIVATE /W4 /WX)
+    # fopen is the portable C API used for immutable local inputs and
+    # diagnostic outputs; do not require Microsoft's incompatible fopen_s.
+    target_compile_definitions(pcs286-boot-probe PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(pcs286-boot-probe PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_dma_coordinator STATIC src/dma_coordinator.c)
+target_link_libraries(blumach_pcs286_dma_coordinator PUBLIC blumach_at_dma blumach_at_bus)
+target_compile_features(blumach_pcs286_dma_coordinator PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_dma_coordinator PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_dma_coordinator PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_dma_coordinator PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_page_spare_latches STATIC src/page_spare_latches.c)
+target_link_libraries(blumach_pcs286_page_spare_latches PUBLIC blumach_at_bus)
+target_compile_features(blumach_pcs286_page_spare_latches PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_page_spare_latches PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_page_spare_latches PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_page_spare_latches PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_services STATIC src/board_services.c)
+target_include_directories(blumach_pcs286_services PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src")
+target_link_libraries(blumach_pcs286_services PUBLIC blumach_pcs286_control
+    blumach_pcs286_port61 blumach_pcs286_checks blumach_pcs286_refresh)
+target_compile_features(blumach_pcs286_services PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_services PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_services PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_services PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_control STATIC src/board_control.c)
+target_include_directories(blumach_pcs286_control PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src")
+target_link_libraries(blumach_pcs286_control PUBLIC blumach_cpu_80286
+    blumach_at_bus blumach_at_pic blumach_pcs286_headland_at
+    blumach_system_olivetti_pcs286_contracts)
+target_compile_features(blumach_pcs286_control PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_control PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_control PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_control PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_checks STATIC src/checks.c)
+target_link_libraries(blumach_pcs286_checks PUBLIC blumach_at_bus)
+target_compile_features(blumach_pcs286_checks PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_checks PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_checks PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_checks PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_refresh STATIC src/refresh.c)
+target_link_libraries(blumach_pcs286_refresh PUBLIC blumach_at_bus)
+target_compile_features(blumach_pcs286_refresh PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_refresh PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_refresh PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_refresh PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_port61 STATIC src/port61.c)
+target_link_libraries(blumach_pcs286_port61 PUBLIC blumach_at_engine_adapters)
+target_compile_features(blumach_pcs286_port61 PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_port61 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_port61 PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_port61 PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_headland_at STATIC src/headland_at_memory.c src/at_decode_clock.c src/board_io.c)
+target_include_directories(blumach_pcs286_headland_at PRIVATE
+    "${PROJECT_SOURCE_DIR}/components/chipsets/headland/src"
+    "${PROJECT_SOURCE_DIR}/engine/src"
+    "${PROJECT_SOURCE_DIR}/components/chipsets/olivetti-ioc02/src")
+target_link_libraries(blumach_pcs286_headland_at PRIVATE
+    blumach_pcs286_memory blumach_headland_legacy_registers
+    blumach_ioc02_legacy_registers blumach_at_pic blumach_at_dma)
+target_compile_features(blumach_pcs286_headland_at PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_headland_at PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_headland_at PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_headland_at PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_library(blumach_pcs286_memory STATIC src/pcs286_memory.c)
+target_link_libraries(blumach_pcs286_memory PUBLIC blumach_system_olivetti_pcs286_contracts)
+target_compile_features(blumach_pcs286_memory PRIVATE c_std_11)
+set_target_properties(blumach_pcs286_memory PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_pcs286_memory PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_pcs286_memory PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 if(MSVC)
     target_compile_options(blumach_pcs286_contract_check PRIVATE /W4 /WX)

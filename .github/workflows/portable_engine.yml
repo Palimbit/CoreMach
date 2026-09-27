@@ -12,6 +12,10 @@ on:
       - platforms/**
       - apps/**
       - tests/engine/**
+      - tests/components/**
+      - tests/data/sst286-lock.json
+      - tools/sst286.py
+      - tools/tests/test_sst286.py
       - provenance/**
       - doc/validation/**
       - doc/releases/portable-*.md
@@ -38,6 +42,10 @@ on:
       - platforms/**
       - apps/**
       - tests/engine/**
+      - tests/components/**
+      - tests/data/sst286-lock.json
+      - tools/sst286.py
+      - tools/tests/test_sst286.py
       - provenance/**
       - doc/validation/**
       - doc/releases/portable-*.md
