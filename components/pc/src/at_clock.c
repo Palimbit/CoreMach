@@ -14,17 +14,17 @@ struct bm_at_clock_link {
     void **owner;
     bm_timed_source_id_t source;
     uint64_t serviced;
+    uint64_t scheduled_cycle;
+    int schedule_known; /* 0 unknown, 1 disarmed, 2 armed. Owned source only. */
     bm_status_t failure;
     int busy;
 };
 
-static bm_status_t advance(bm_at_clock_link_t *link)
+static bm_status_t advance_to(bm_at_clock_link_t *link, uint64_t cursor)
 {
-    uint64_t cursor;
-    bm_status_t status;
+    bm_status_t status = BM_STATUS_OK;
     if (link->failure != BM_STATUS_OK) return link->failure;
-    status = bm_engine_timed_source_cycle_count(link->engine, link->source, &cursor);
-    if (status == BM_STATUS_OK && cursor < link->serviced)
+    if (cursor < link->serviced)
         status = BM_STATUS_INVALID_STATE; /* Never infer a device reset. */
     if (status == BM_STATUS_OK) {
         status = link->ops->advance(link->device, cursor - link->serviced);
@@ -36,14 +36,38 @@ static bm_status_t advance(bm_at_clock_link_t *link)
     return status;
 }
 
+static bm_status_t advance(bm_at_clock_link_t *link)
+{
+    uint64_t cursor;
+    bm_status_t status;
+    if (link->failure != BM_STATUS_OK) return link->failure;
+    status = bm_engine_timed_source_cycle_count(link->engine, link->source, &cursor);
+    if (status != BM_STATUS_OK) return (link->failure = status);
+    return advance_to(link, cursor);
+}
+
 static bm_status_t rearm(bm_at_clock_link_t *link)
 {
     uint64_t delay;
     bm_status_t status = link->ops->next(link->device, &delay);
-    if (status == BM_STATUS_IDLE)
+    if (status == BM_STATUS_IDLE) {
+        if (link->schedule_known == 1) return BM_STATUS_OK;
         status = bm_engine_disarm_timed_source(link->engine, link->source);
-    else if (status == BM_STATUS_OK)
+        if (status == BM_STATUS_OK) link->schedule_known = 1;
+    } else if (status == BM_STATUS_OK) {
+        /* Repeated sync may shorten the relative delay without changing the
+         * absolute native-clock deadline. Still query the device every time. */
+        int representable = delay != 0 && delay <= UINT64_MAX - link->serviced;
+        uint64_t due = representable ? link->serviced + delay : 0;
+        if (representable && link->schedule_known == 2 && link->scheduled_cycle == due)
+            return BM_STATUS_OK;
         status = bm_engine_arm_timed_source(link->engine, link->source, delay);
+        link->schedule_known = 0;
+        if (status == BM_STATUS_OK && representable) {
+            link->scheduled_cycle = due;
+            link->schedule_known = 2;
+        }
+    }
     if (status != BM_STATUS_OK) link->failure = status;
     return status;
 }
@@ -56,6 +80,7 @@ static bm_status_t fire(bm_engine_t *engine, void *context,
     (void)engine; (void)when;
     *next = 0;
     if (link->busy || *link->device_busy) return BM_STATUS_INVALID_STATE;
+    link->schedule_known = 0; /* Engine owns callback consumption/rearming. */
     link->busy = 1;
     status = advance(link);
     if (status == BM_STATUS_OK) status = link->ops->next(link->device, next);
@@ -93,10 +118,20 @@ bm_status_t bm_at_clock_attach(const bm_host_services_t *host, bm_engine_t *engi
 bm_status_t bm_at_clock_link_sync(bm_at_clock_link_t *link)
 {
     bm_status_t status;
+    uint64_t cursor;
     if (!link) return BM_STATUS_INVALID_ARGUMENT;
     if (link->busy || *link->device_busy) return BM_STATUS_INVALID_STATE;
+    if (link->failure != BM_STATUS_OK) return link->failure;
+    status = bm_engine_timed_source_cycle_count(link->engine, link->source, &cursor);
+    if (status != BM_STATUS_OK) return (link->failure = status);
+    if (cursor < link->serviced) return (link->failure = BM_STATUS_INVALID_STATE);
+    /* Pure synchronization at an already serviced boundary changes neither
+     * device state nor its deadline. Mutations use changed/io/apply/reset,
+     * which must still rearm even without elapsed cycles. */
+    if (cursor == link->serviced) return BM_STATUS_OK;
     link->busy = 1;
-    status = advance(link);
+    /* No callback or mutation occurred since this cursor was read. */
+    status = advance_to(link, cursor);
     if (status == BM_STATUS_OK) status = rearm(link);
     link->busy = 0;
     return status;
@@ -152,6 +187,7 @@ bm_status_t bm_at_clock_link_reset(bm_at_clock_link_t *link)
     if (now.nanoseconds || now.subnanosecond_numerator) return BM_STATUS_INVALID_STATE;
     link->busy = 1;
     link->serviced = 0; link->failure = BM_STATUS_OK;
+    link->schedule_known = 0;
     status = link->ops->reset(link->device);
     if (status == BM_STATUS_OK) status = rearm(link);
     if (status != BM_STATUS_OK) link->failure = status;

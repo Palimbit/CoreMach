@@ -203,8 +203,18 @@ position_after_cycles(const bm_clock_rate_t *rate, uint64_t cycles,
     return BM_STATUS_OK;
 }
 
+static bm_status_t
+position_for_period(const bm_clock_position_t *period, uint64_t cycles,
+                    bm_clock_position_t *position)
+{
+    *position = *period;
+    position->nanoseconds = 0;
+    position->phase = 0;
+    return bm_clock_position_advance(position, cycles);
+}
+
 bm_status_t
-bm_clock_cycles_at_or_before(const bm_clock_rate_t *rate,
+bm_clock_cycles_at_or_before_period(const bm_clock_position_t *period,
                              const bm_clock_position_t *target,
                              uint64_t *cycles)
 {
@@ -213,20 +223,39 @@ bm_clock_cycles_at_or_before(const bm_clock_rate_t *rate,
     uint64_t upper = 1U;
     bm_status_t status;
 
-    if ((rate == NULL) || (target == NULL) || (cycles == NULL) ||
+    if ((period == NULL) || !period->phase_denominator ||
+        !period->nanoseconds_per_cycle_numerator ||
+        (target == NULL) || (cycles == NULL) ||
         (target->phase_denominator == 0U) ||
         (target->phase >= target->phase_denominator))
         return BM_STATUS_INVALID_ARGUMENT;
 
-    status = position_after_cycles(rate, 0U, &candidate);
-    if (status != BM_STATUS_OK)
+    candidate = *period;
+
+    /* An integral timestamp has a direct exact inverse. Avoid searching from
+     * cycle zero on every peripheral sync. Fractional timestamps retain the
+     * general comparison-based path below. multiply_divide also handles the
+     * full 64-bit product without requiring a wider host integer type. */
+    if (target->phase == 0U) {
+        uint64_t remainder;
+        status = multiply_divide(target->nanoseconds,
+                                 candidate.phase_denominator,
+                                 candidate.nanoseconds_per_cycle_numerator,
+                                 cycles, &remainder);
+        if (status == BM_STATUS_CAPACITY_EXCEEDED) {
+            /* As in the search below, saturate when every representable
+             * cycle index is at or before the requested timestamp. */
+            *cycles = UINT64_MAX;
+            return BM_STATUS_OK;
+        }
         return status;
+    }
 
     /* Find an upper source-cycle index whose position is strictly after the
      * target. An overflowing position is still a valid binary-search upper
      * bound; the final selected position must itself remain representable. */
     for (;;) {
-        status = position_after_cycles(rate, upper, &candidate);
+        status = position_for_period(period, upper, &candidate);
         if ((status == BM_STATUS_CAPACITY_EXCEEDED) ||
             ((status == BM_STATUS_OK) &&
              (bm_clock_position_compare(&candidate, target) > 0)))
@@ -236,7 +265,7 @@ bm_clock_cycles_at_or_before(const bm_clock_rate_t *rate,
         lower = upper;
         if (upper > (UINT64_MAX / 2U)) {
             upper = UINT64_MAX;
-            status = position_after_cycles(rate, upper, &candidate);
+            status = position_for_period(period, upper, &candidate);
             if ((status == BM_STATUS_OK) &&
                 (bm_clock_position_compare(&candidate, target) <= 0)) {
                 *cycles = UINT64_MAX;
@@ -253,7 +282,7 @@ bm_clock_cycles_at_or_before(const bm_clock_rate_t *rate,
     while ((upper - lower) > 1U) {
         uint64_t middle = lower + ((upper - lower) / 2U);
 
-        status = position_after_cycles(rate, middle, &candidate);
+        status = position_for_period(period, middle, &candidate);
         if ((status == BM_STATUS_CAPACITY_EXCEEDED) ||
             ((status == BM_STATUS_OK) &&
              (bm_clock_position_compare(&candidate, target) > 0)))
@@ -266,6 +295,20 @@ bm_clock_cycles_at_or_before(const bm_clock_rate_t *rate,
 
     *cycles = lower;
     return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_clock_cycles_at_or_before(const bm_clock_rate_t *rate,
+                             const bm_clock_position_t *target, uint64_t *cycles)
+{
+    bm_clock_position_t period;
+    bm_status_t status;
+    if (!target || !cycles || !target->phase_denominator ||
+        target->phase >= target->phase_denominator)
+        return BM_STATUS_INVALID_ARGUMENT;
+    status = bm_clock_position_init(&period, rate);
+    if (status != BM_STATUS_OK) return status;
+    return bm_clock_cycles_at_or_before_period(&period, target, cycles);
 }
 
 bm_status_t
@@ -286,12 +329,32 @@ bm_clock_position_next_after(const bm_clock_rate_t *rate,
     return position_after_cycles(rate, cycles + 1U, next);
 }
 
+bm_status_t
+bm_clock_position_next_after_period(const bm_clock_position_t *period,
+                                    const bm_clock_position_t *target,
+                                    bm_clock_position_t *next)
+{
+    uint64_t cycles;
+    bm_status_t status;
+    if (!next) return BM_STATUS_INVALID_ARGUMENT;
+    status = bm_clock_cycles_at_or_before_period(period, target, &cycles);
+    if (status != BM_STATUS_OK) return status;
+    if (cycles == UINT64_MAX) return BM_STATUS_CAPACITY_EXCEEDED;
+    return position_for_period(period, cycles + 1U, next);
+}
+
 int
 bm_clock_position_compare(const bm_clock_position_t *left,
                           const bm_clock_position_t *right)
 {
     if (left->nanoseconds != right->nanoseconds)
         return left->nanoseconds < right->nanoseconds ? -1 : 1;
+    /* Same-domain cursors and integral timestamps dominate scheduler ties.
+     * Compare directly rather than dividing both fractions repeatedly. */
+    if (left->phase_denominator == right->phase_denominator)
+        return (left->phase > right->phase) - (left->phase < right->phase);
+    if (!left->phase || !right->phase)
+        return (left->phase != 0U) - (right->phase != 0U);
     return compare_fractions(left->phase, left->phase_denominator,
                              right->phase, right->phase_denominator);
 }

@@ -15,6 +15,51 @@ function(pcs286_test_options target)
     endif()
 endfunction()
 
+add_executable(pcs286-runtime-machine runtime_machine.c)
+target_link_libraries(pcs286-runtime-machine PRIVATE blumach_system_olivetti_pcs286 blumach_platform_null)
+pcs286_test_options(pcs286-runtime-machine)
+add_test(NAME pcs286-component.runtime-machine COMMAND pcs286-runtime-machine)
+
+add_executable(pcs286-cpu-nominal-timing cpu286_nominal_timing.c)
+target_link_libraries(pcs286-cpu-nominal-timing PRIVATE blumach_cpu_80286)
+pcs286_test_options(pcs286-cpu-nominal-timing)
+add_test(NAME pcs286-component.cpu-nominal-timing COMMAND pcs286-cpu-nominal-timing)
+
+add_executable(pcs286-cpu-prefetch cpu286_prefetch.c)
+target_include_directories(pcs286-cpu-prefetch PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+target_link_libraries(pcs286-cpu-prefetch PRIVATE blumach_cpu_80286)
+pcs286_test_options(pcs286-cpu-prefetch)
+add_test(NAME pcs286-component.cpu-prefetch COMMAND pcs286-cpu-prefetch)
+
+add_executable(pcs286-cpu-bus-priority cpu286_bus_priority.c)
+target_include_directories(pcs286-cpu-bus-priority PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+target_link_libraries(pcs286-cpu-bus-priority PRIVATE blumach_cpu_80286)
+pcs286_test_options(pcs286-cpu-bus-priority)
+add_test(NAME pcs286-component.cpu-bus-priority COMMAND pcs286-cpu-bus-priority)
+
+add_executable(pcs286-cpu-bus-phase cpu286_bus_phase.c)
+target_include_directories(pcs286-cpu-bus-phase PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+target_link_libraries(pcs286-cpu-bus-phase PRIVATE blumach_cpu_80286)
+pcs286_test_options(pcs286-cpu-bus-phase)
+add_test(NAME pcs286-component.cpu-bus-phase COMMAND pcs286-cpu-bus-phase)
+
+add_executable(pcs286-cpu-fetch-supply cpu286_fetch_supply.c)
+target_include_directories(pcs286-cpu-fetch-supply PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+target_link_libraries(pcs286-cpu-fetch-supply PRIVATE blumach_cpu_80286 blumach_platform_null)
+pcs286_test_options(pcs286-cpu-fetch-supply)
+add_test(NAME pcs286-component.cpu-fetch-supply COMMAND pcs286-cpu-fetch-supply)
+
+add_executable(pcs286-cpu-write-buffer cpu286_write_buffer.c)
+target_include_directories(pcs286-cpu-write-buffer PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
+target_link_libraries(pcs286-cpu-write-buffer PRIVATE blumach_cpu_80286)
+pcs286_test_options(pcs286-cpu-write-buffer)
+add_test(NAME pcs286-component.cpu-write-buffer COMMAND pcs286-cpu-write-buffer)
+
+add_executable(pcs286-cpu-provisional-timing cpu286_provisional_timing.c)
+target_link_libraries(pcs286-cpu-provisional-timing PRIVATE blumach_cpu_80286 blumach_platform_null)
+pcs286_test_options(pcs286-cpu-provisional-timing)
+add_test(NAME pcs286-component.cpu-provisional-timing COMMAND pcs286-cpu-provisional-timing)
+
 add_library(pcs286-test-fixtures STATIC bus_fixture.c)
 target_include_directories(pcs286-test-fixtures PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(pcs286-test-fixtures PUBLIC blumach_bus)
@@ -510,6 +555,7 @@ add_executable(pcs286-protected-inner cpu286_protected_inner.c)
         LABELS "pcs286-p0;component-acceptance" TIMEOUT 15)
     # Test-only single-boundary probe. No downloaded data or parser in the core.
     add_executable(pcs286-sst-probe cpu286_sst_probe.c)
+    target_include_directories(pcs286-sst-probe PRIVATE "${PROJECT_SOURCE_DIR}/components/cpu/80286/src")
     target_link_libraries(pcs286-sst-probe PRIVATE blumach_cpu_80286 blumach_platform_null)
     pcs286_test_options(pcs286-sst-probe)
     find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -524,7 +570,7 @@ add_executable(pcs286-protected-inner cpu286_protected_inner.c)
         add_test(NAME pcs286-component.sst-adapter
             COMMAND "${CMAKE_COMMAND}" -E env
                 "BM_SST286_PROBE=$<TARGET_FILE:pcs286-sst-probe>"
-                "${Python3_EXECUTABLE}" -B -m unittest tools.tests.test_sst286)
+                "${Python3_EXECUTABLE}" -B -m unittest tools.tests.test_sst286 tools.tests.test_sst286_trace)
         set_tests_properties(pcs286-component.sst-adapter PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" TIMEOUT 30
             LABELS "pcs286-p0;test-infrastructure")

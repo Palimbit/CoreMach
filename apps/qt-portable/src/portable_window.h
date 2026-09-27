@@ -98,6 +98,7 @@ private:
     QAction *pauseAction_;
     QAction *resetAction_;
     QAction *stopAction_;
+    QAction *unlimitedAction_;
     QAction *retainStateAction_;
     QAction *insertFloppyAction_;
     QAction *ejectFloppyAction_;

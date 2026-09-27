@@ -32,6 +32,7 @@
  * These inherited works are GPL-2.0-or-later. No global core is embedded.
  */
 #include <blumach/components/cpu_80286.h>
+#include <blumach/components/cpu_80286_timing.h>
 #include "access_286.h"
 #include "execution_286.h"
 
@@ -2920,6 +2921,83 @@ static bm_status_t cpu_run(void *context, bm_tick_t budget,
     }
     *consumed = completed;
     return BM_STATUS_OK;
+}
+
+typedef struct estimate_capture_286 {
+    bm_bus_access_fn access;
+    void *context;
+    uint8_t bytes[10], length;
+    uint32_t address;
+    uint8_t has_memory, invalid_fetch;
+} estimate_capture_286_t;
+
+static bm_status_t estimate_capture_access(void *context, bm_bus_transaction_t *t)
+{
+    estimate_capture_286_t *capture = context;
+    bm_status_t status = capture->access(capture->context, t);
+    if (status == BM_STATUS_OK && !(t->attributes & BM_BUS_TRANSACTION_DEBUG)) {
+        if (t->operation == BM_BUS_FETCH) {
+            if (t->size != 1 || capture->length >= sizeof(capture->bytes)) capture->invalid_fetch = 1;
+            else capture->bytes[capture->length++] = (uint8_t)t->value;
+        } else if (t->space != BM_ADDRESS_IO && !capture->has_memory) {
+            if (t->address <= ADDRESS_MASK) {
+                capture->address = (uint32_t)t->address; capture->has_memory = 1;
+            }
+        }
+    }
+    return status;
+}
+
+bm_status_t bm_286_step_provisional(bm_cpu_t *cpu, uint64_t fallback_clocks,
+    bm_286_boundary_t *boundary, bm_286_timing_estimate_t *estimate)
+{
+    bm_286_private_t *state;
+    estimate_capture_286_t capture = {0};
+    bm_286_timing_estimate_t result = {0};
+    bm_286_nominal_memory_cost_t memory_cost;
+    bm_286_timing_mode_t mode;
+    uint8_t cl;
+    uint64_t base = 0;
+    bm_status_t status, lookup = BM_STATUS_UNSUPPORTED;
+    if (!is_286_cpu(cpu) || !boundary || !estimate) return BM_STATUS_INVALID_ARGUMENT;
+    state = cpu->context;
+    capture.access = state->config.access; capture.context = state->config.access_context;
+    cl = (uint8_t)state->arch.cx;
+    mode = state->arch.msw & MSW_PE ? BM_286_TIMING_PROTECTED : BM_286_TIMING_REAL;
+    state->config.access = estimate_capture_access; state->config.access_context = &capture;
+    status = bm_286_step(cpu, boundary);
+    state->config.access = capture.access; state->config.access_context = capture.context;
+    result.length = capture.length;
+    memcpy(result.bytes, capture.bytes, capture.length);
+    result.wait_clocks = boundary->bus_wait_cycles;
+    if (status != BM_STATUS_OK) { *estimate = result; return status; }
+    if (boundary->kind == BM_286_BOUNDARY_INSTRUCTION && !boundary->has_vector &&
+        capture.length && !capture.invalid_fetch) {
+        lookup = bm_286_nominal_instruction_clocks_with_cl(capture.bytes, capture.length, cl, &base);
+        if (lookup != BM_STATUS_OK && capture.has_memory) {
+            lookup = bm_286_nominal_memory_clocks_with_cl(capture.bytes, capture.length,
+                capture.address, cl, &memory_cost);
+            if (lookup == BM_STATUS_OK) base = memory_cost.total_clocks;
+        }
+        /* Segment bases omit descriptor/null-selector variations, so remain
+         * pending here: the pure table API alone cannot check its preconditions. */
+        if (lookup != BM_STATUS_OK && mode == BM_286_TIMING_REAL) {
+            lookup = bm_286_nominal_segment_base_clocks(capture.bytes, capture.length, mode, &base);
+            if (lookup == BM_STATUS_OK) result.assumptions |= BM_286_ESTIMATE_SEGMENT_BASE_ONLY;
+        }
+    }
+    if (lookup == BM_STATUS_OK) result.source = BM_286_ESTIMATE_MANUAL;
+    else if (fallback_clocks) { base = fallback_clocks; result.source = BM_286_ESTIMATE_DIAGNOSTIC_FALLBACK; }
+    if (result.source != BM_286_ESTIMATE_PENDING && base <= UINT64_MAX - result.wait_clocks) {
+        result.base_clocks = base; result.estimated_clocks = base + result.wait_clocks;
+        result.quality = BM_286_TIMING_PROVISIONAL;
+        result.assumptions |= BM_286_ESTIMATE_SERIALIZED_WAITS | BM_286_ESTIMATE_NO_PIPELINE;
+    } else {
+        /* Estimation overflow does not replay or invalidate successful execution. */
+        result.source = BM_286_ESTIMATE_PENDING;
+    }
+    *estimate = result;
+    return status;
 }
 
 bm_status_t bm_286_step_clocked(void *context, bm_tick_t start_ns,

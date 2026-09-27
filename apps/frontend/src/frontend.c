@@ -5,7 +5,8 @@
 
 static const bm_frontend_adapter_t *const adapters[] = {
     &bm_frontend_pcs86_adapter,
-    &bm_frontend_m15_adapter
+    &bm_frontend_m15_adapter,
+    &bm_frontend_pcs286_adapter
 };
 
 size_t

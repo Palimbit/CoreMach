@@ -14,12 +14,21 @@ struct bm_pcs286_services {
     bm_at_rtc_t                *rtc;
     bm_at_keyboard_pair_t      *keyboard;
     bm_at_clock_link_t         *links[3]; /* PIT, RTC, keyboard: explicit sync/reset order. */
+    uint64_t (*profile_now)(void);
+    uint64_t *profile_totals;
     bm_pcs286_port61_t          port;
     bm_pcs286_checks_t          checks;
     bm_pcs286_refresh_t         refresh;
     bm_status_t                 failure;
     int                         busy, cpu_active, io_active, notifying, resetting, completed_refresh;
 };
+void bm_pcs286_services_profile(bm_pcs286_services_t *s,
+    uint64_t (*now)(void), uint64_t totals[3])
+{
+    if (!s || s->busy) return;
+    s->profile_now=totals ? now : NULL;
+    s->profile_totals=totals;
+}
 static bm_status_t
 retain(bm_pcs286_services_t *s, bm_status_t error)
 {
@@ -52,7 +61,12 @@ static bm_status_t
 sync(bm_pcs286_services_t *s)
 {
     for (unsigned i = 0; i < 3; ++i) {
+        uint64_t before=s->profile_now ? s->profile_now() : 0;
         bm_status_t r = bm_at_clock_link_sync(s->links[i]);
+        if (s->profile_now) {
+            uint64_t after=s->profile_now();
+            if (after>=before) s->profile_totals[i]+=after-before;
+        }
         if (r != BM_STATUS_OK)
             return retain(s, r);
         if (s->failure != BM_STATUS_OK)

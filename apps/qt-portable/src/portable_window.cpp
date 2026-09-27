@@ -61,6 +61,7 @@ PortableWindow::PortableWindow(QWidget *parent)
       pauseAction_(new QAction(tr("Pause"), this)),
       resetAction_(new QAction(tr("Reset"), this)),
       stopAction_(new QAction(tr("Stop"), this)),
+      unlimitedAction_(new QAction(tr("Velocidad sin límite (benchmark)"), this)),
       retainStateAction_(new QAction(tr("Retain battery-backed state"), this)),
       insertFloppyAction_(new QAction(tr("Insert disk in A…"), this)),
       ejectFloppyAction_(new QAction(tr("Eject disk from A"), this)),
@@ -81,6 +82,11 @@ PortableWindow::PortableWindow(QWidget *parent)
     pauseAction_->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
     resetAction_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
     stopAction_->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
+    unlimitedAction_->setCheckable(true);
+    unlimitedAction_->setToolTip(tr("Quita la espera del anfitrión; no cambia los relojes emulados. Puede consumir un núcleo completo."));
+    connect(unlimitedAction_, &QAction::toggled, this, [this](bool checked) {
+        if (worker_) worker_->setUnlimited(checked);
+    });
     retainStateAction_->setCheckable(true);
     retainStateAction_->setVisible(false);
     openAction->setShortcut(QKeySequence::Open);
@@ -110,6 +116,7 @@ PortableWindow::PortableWindow(QWidget *parent)
     machineMenu->addAction(pauseAction_);
     machineMenu->addAction(resetAction_);
     machineMenu->addAction(stopAction_);
+    machineMenu->addAction(unlimitedAction_);
     machineMenu->addSeparator();
     machineMenu->addAction(retainStateAction_);
     machineMenu->addSeparator();
@@ -607,6 +614,8 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
                 queueSnapshot(generation, std::move(snapshot));
             }, std::move(captureStates));
         result = worker_->start();
+        const QSignalBlocker speedBlocker(unlimitedAction_);
+        unlimitedAction_->setChecked(false);
     }
     if (result != BM_STATUS_OK) {
         QMessageBox::critical(this, tr("Could not start machine"),
@@ -1182,6 +1191,8 @@ PortableWindow::updateActions()
     const bool canChangeMedia = !lifecyclePending_ &&
         (replaceableFloppy_ != nullptr) &&
         (state == BM_SESSION_RUNNING || state == BM_SESSION_PAUSED);
+    unlimitedAction_->setEnabled(!lifecyclePending_ &&
+        (state == BM_SESSION_RUNNING || state == BM_SESSION_PAUSED));
     insertFloppyAction_->setEnabled(canChangeMedia);
     ejectFloppyAction_->setEnabled(canChangeMedia &&
                                     replaceableFloppyPresent_);
@@ -1217,6 +1228,10 @@ PortableWindow::showStatus(const QString &detail)
             static_cast<double>(config->definition->scheduler_ticks_per_second);
         text += tr(" — guest %1 s").arg(
             QLocale().toString(guestSeconds, 'f', 1));
+        const double speed = worker_->realTimePercent();
+        if (worker_->state() == BM_SESSION_RUNNING && speed >= 0.0)
+            text += tr(" — %1% tiempo real").arg(QLocale().toString(speed, 'f', 0));
+        if (worker_->unlimited()) text += tr(" — SIN LÍMITE");
     }
     if (hasVideoGeometry_) {
         QString refresh;
@@ -1241,5 +1256,6 @@ PortableWindow::showStatus(const QString &detail)
     }
     status_->setText(text);
     status_->setToolTip(tr("Emulated time: %1 ticks")
-                            .arg(static_cast<qulonglong>(worker_->ticks())));
+                            .arg(static_cast<qulonglong>(worker_->ticks())) +
+        tr("\n100% = un segundo virtual por segundo real. No certifica la precisión del reloj de la máquina. FPS mide presentación, no velocidad emulada."));
 }

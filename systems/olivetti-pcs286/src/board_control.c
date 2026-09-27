@@ -163,7 +163,10 @@ bm_pcs286_control_step(bm_pcs286_control_t *c, bm_pcs286_control_event_t *event)
     } else if (c->state.reset_level) {
         s = BM_STATUS_IDLE;
     } else {
-        s = bm_286_step(c->config.cpu, &result.cpu);
+        s = c->provisional_fallback
+            ? bm_286_step_provisional(c->config.cpu, c->provisional_fallback,
+                                     &result.cpu, &result.estimate)
+            : bm_286_step(c->config.cpu, &result.cpu);
         if (c->state.failure != BM_STATUS_OK)
             s = c->state.failure;
         if (s == BM_STATUS_OK && c->state.reset_pending) {

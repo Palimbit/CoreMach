@@ -274,9 +274,91 @@ test_invalid_and_overflow_are_atomic(void)
     assert(clock.phase == 0U);
 }
 
+static void
+test_integral_inverse_floor_property(void)
+{
+    const bm_clock_rate_t rates[] = {
+        {1, 1}, {3, 1}, {1193182, 1}, {32768, 1}, {8000000, 1},
+        {12000000, 1}, {20000000000ULL, 1}, {UINT64_MAX, 1},
+        {14318180, 12}, {1, UINT64_MAX / 1000000000}
+    };
+    const uint64_t times[] = {0, 1, 999, 1000, 999999999, 1000000000,
+                             UINT64_MAX / 2, UINT64_MAX - 1, UINT64_MAX};
+    uint64_t random = 7;
+    for (size_t r = 0; r < sizeof(rates) / sizeof(rates[0]); ++r) {
+        for (size_t i = 0; i < 109; ++i) {
+            bm_clock_position_t target, selected, following, period;
+            uint64_t cycles, cached_cycles;
+            bm_status_t status;
+            assert(bm_clock_position_init(&target, &rates[r]) == BM_STATUS_OK);
+            random = random * UINT64_C(6364136223846793005) + 1;
+            target.nanoseconds = i < 9 ? times[i] : random;
+            if (i >= 9 && (i & 1U)) target.phase = random % target.phase_denominator;
+            assert(bm_clock_cycles_at_or_before(&rates[r], &target, &cycles) == BM_STATUS_OK);
+            assert(bm_clock_position_init(&period, &rates[r]) == BM_STATUS_OK);
+            /* Cached period may belong to a future deadline, not time zero. */
+            period.nanoseconds = UINT64_MAX;
+            period.phase = period.phase_denominator - 1;
+            assert(bm_clock_cycles_at_or_before_period(&period, &target, &cached_cycles) == BM_STATUS_OK);
+            assert(cached_cycles == cycles && period.nanoseconds == UINT64_MAX);
+            assert(period.phase == period.phase_denominator - 1);
+            {
+                bm_clock_position_t rate_next, cached_next;
+                bm_status_t rate_status = bm_clock_position_next_after(&rates[r], &target, &rate_next);
+                bm_status_t cached_status = bm_clock_position_next_after_period(&period, &target, &cached_next);
+                assert(rate_status == cached_status);
+                if (rate_status == BM_STATUS_OK) {
+                    assert(bm_clock_position_compare(&rate_next, &cached_next) == 0);
+                    assert(bm_clock_position_compare(&cached_next, &target) > 0);
+                    assert(rate_next.phase_denominator == cached_next.phase_denominator);
+                }
+            }
+            assert(bm_clock_position_init(&selected, &rates[r]) == BM_STATUS_OK);
+            assert(bm_clock_position_advance(&selected, cycles) == BM_STATUS_OK);
+            assert(bm_clock_position_compare(&selected, &target) <= 0);
+            if (cycles == UINT64_MAX) continue;
+            following = selected;
+            status = bm_clock_position_advance(&following, 1);
+            assert(status == BM_STATUS_CAPACITY_EXCEEDED ||
+                   (status == BM_STATUS_OK && bm_clock_position_compare(&following, &target) > 0));
+        }
+    }
+}
+
 int
 main(void)
 {
+    /* Exercise equal denominators, zero fractions and general comparisons
+     * against a bounded exact cross-product oracle. */
+    for (uint64_t a=1;a<=32;++a) for (uint64_t b=1;b<=32;++b)
+        for (uint64_t x=0;x<a;++x) for (uint64_t y=0;y<b;++y) {
+            bm_clock_position_t left={42,x,a,1}, right={42,y,b,1};
+            int expected=(x*b>y*a)-(x*b<y*a);
+            assert(bm_clock_position_compare(&left,&right)==expected);
+        }
+    {
+        bm_clock_position_t period = {UINT64_MAX, 0, 1, 1000};
+        bm_clock_position_t target = {999, UINT64_MAX - 1, UINT64_MAX, 1};
+        uint64_t cycles;
+        assert(bm_clock_cycles_at_or_before_period(&period, &target, &cycles) == BM_STATUS_OK);
+        assert(cycles == 0); // 999.999...ns does not reach the 1000ns edge.
+        target.nanoseconds = 1000;
+        assert(bm_clock_cycles_at_or_before_period(&period, &target, &cycles) == BM_STATUS_OK);
+        assert(cycles == 1);
+        target.nanoseconds = UINT64_MAX;
+        period.nanoseconds_per_cycle_numerator = 1;
+        assert(bm_clock_cycles_at_or_before_period(&period, &target, &cycles) == BM_STATUS_OK);
+        assert(cycles == UINT64_MAX);
+    }
+    {
+        bm_clock_position_t invalid = {0}, target = {0,0,1,1};
+        uint64_t untouched = 17;
+        assert(bm_clock_cycles_at_or_before_period(&invalid, &target, &untouched) == BM_STATUS_INVALID_ARGUMENT);
+        assert(bm_clock_cycles_at_or_before_period(NULL, &target, &untouched) == BM_STATUS_INVALID_ARGUMENT);
+        assert(bm_clock_position_next_after_period(NULL, &target, &invalid) == BM_STATUS_INVALID_ARGUMENT);
+        assert(bm_clock_position_next_after_period(&target, &target, NULL) == BM_STATUS_INVALID_ARGUMENT);
+        assert(untouched == 17);
+    }
     test_distinct_domains_and_exact_rendezvous();
     test_no_accumulated_rounding();
     test_rational_crystal_divider_has_no_drift();
@@ -287,5 +369,6 @@ main(void)
     test_next_domain_edge_is_strict_and_exact();
     test_cycle_cursor_is_exact_across_fractional_and_large_ranges();
     test_invalid_and_overflow_are_atomic();
+    test_integral_inverse_floor_property();
     return 0;
 }

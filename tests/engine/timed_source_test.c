@@ -117,6 +117,11 @@ fire_once(bm_engine_t *engine, void *context,
 
     source->cursor_status = bm_engine_timed_source_cycle_count(
         engine, source->id, &source->fired_cycle_count);
+    if (source->cursor_status == BM_STATUS_OK) {
+        uint64_t repeated = UINT64_MAX;
+        assert(bm_engine_timed_source_cycle_count(engine,source->id,&repeated)==BM_STATUS_OK);
+        assert(repeated==source->fired_cycle_count);
+    }
     source->fired_at = *when;
     ++source->fire_count;
     *cycles_until_next = 0U;
@@ -468,6 +473,14 @@ test_source_cycle_cursor_tracks_domain_while_disarmed(void)
     assert(bm_engine_timed_source_cycle_count(engine, source.id, &cycles) ==
            BM_STATUS_OK);
     assert(cycles == 2U);
+    for (unsigned repeat=0;repeat<100;++repeat) {
+        assert(bm_engine_arm_timed_source(engine,source.id,1U)==BM_STATUS_OK);
+        assert(bm_engine_timed_source_cycle_count(engine,source.id,&cycles)==BM_STATUS_OK);
+        assert(cycles==2U);
+        assert(bm_engine_disarm_timed_source(engine,source.id)==BM_STATUS_OK);
+        assert(bm_engine_timed_source_cycle_count(engine,source.id,&cycles)==BM_STATUS_OK);
+        assert(cycles==2U);
+    }
     assert(bm_engine_reset(engine) == BM_STATUS_OK);
     assert(bm_engine_timed_source_cycle_count(engine, source.id, &cycles) ==
            BM_STATUS_OK);

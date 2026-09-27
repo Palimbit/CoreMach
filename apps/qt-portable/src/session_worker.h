@@ -6,6 +6,7 @@
 
 #include <QImage>
 #include "worker_wakeup.h"
+#include "tick_pacer.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -64,6 +65,9 @@ public:
     void resume();
     void reset();
     void stop();
+    void setUnlimited(bool enabled);
+    bool unlimited() const { return unlimited_.load(); }
+    double realTimePercent() const { return realTimePercent_.load(); }
     void sendInput(const bm_input_event_t &event);
     void replaceStorageMedia(bm_storage_device_kind_t kind, uint32_t unit,
                              const bm_storage_media_change_t &change,
@@ -74,13 +78,14 @@ public:
 
 private:
     enum class CommandKind {
-        Pause, Resume, Reset, Stop, Input, StorageMedia, Shutdown
+        Pause, Resume, Reset, Stop, Input, StorageMedia, SpeedMode, Shutdown
     };
     struct Command {
         explicit Command(CommandKind value) : kind(value) {}
         CommandKind kind;
         bm_input_event_t input {};
         uint64_t traceInput = 0U;
+        bool unlimited = false;
         bm_storage_device_kind_t storageKind = BM_STORAGE_DEVICE_FLOPPY;
         uint32_t storageUnit = 0U;
         bm_storage_media_change_t mediaChange {};
@@ -110,6 +115,9 @@ private:
     bm_host_services_t host_;
     const bm_machine_config_t *configuration_;
     uint64_t ticksPerSecond_;
+    SimulationSpeedMeter speedMeter_;
+    std::atomic<bool> unlimited_ {false};
+    std::atomic<double> realTimePercent_ {-1.0};
     SnapshotHandler handler_;
     std::atomic<bm_session_state_t> state_ { BM_SESSION_NEW };
     std::atomic<uint64_t> ticks_ { 0U };

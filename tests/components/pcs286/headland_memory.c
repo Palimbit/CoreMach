@@ -59,6 +59,29 @@ static void mem_set_mem_state(uint32_t base, uint32_t size, unsigned state)
 #endif
 
 static unsigned long queries, documented_differences, shadow_differences;
+/* Independent reverse-priority oracle: the first window covering a page wins.
+ * Visit each window's range rather than scanning 93 windows for every page.
+ * Rebuild from scratch and compare ALL pages after EVERY mutation, including
+ * inactive EMS writes. No production index values or cached expectations are
+ * used to construct the oracle; the separate classic route oracle is unchanged. */
+static void check_index(const bm_gc103_memory_t *m)
+{
+    uint8_t expected[1024]={0};
+    for (unsigned i=0;i<93U;++i) {
+        assert((m->window[i].base & 0x3fffU)==0);
+        assert((m->window[i].size & 0x3fffU)==0);
+        assert(m->window[i].base+m->window[i].size<=0x1000000U);
+    }
+    for (int i=92;i>=0;--i) {
+        const bm_gc103_window_t *w=&m->window[i];
+        if (!w->enabled) continue;
+        for (uint32_t address=w->base;address<w->base+w->size;address+=0x4000U) {
+            unsigned page=address/0x4000U;
+            if (!expected[page]) expected[page]=(uint8_t)(i+1);
+        }
+    }
+    assert(memcmp(m->page_window,expected,sizeof(expected))==0);
+}
 static void classic_initialize(headland_t *c, unsigned mib)
 {
     unsigned i;
@@ -86,6 +109,7 @@ static void classic_initialize(headland_t *c, unsigned mib)
 static void start(bm_gc103_memory_t *m, headland_t *c, unsigned mib)
 {
     assert(bm_gc103_memory_initialize(m,mib*0x100000U)==BM_STATUS_OK);
+    check_index(m);
     classic_initialize(c,mib);
 }
 static void write_port(bm_gc103_memory_t *m, headland_t *c, uint16_t port, unsigned width, uint16_t value)
@@ -93,6 +117,7 @@ static void write_port(bm_gc103_memory_t *m, headland_t *c, uint16_t port, unsig
     unsigned i;
     uint16_t before=value;
     assert(bm_gc103_memory_io(m,port,width,BM_BUS_WRITE,0,&value)==BM_STATUS_OK);
+    check_index(m);
     assert(value==before);
     if(width==1) hl_write(port,(uint8_t)value,c); else hl_writew(port,value,c);
     assert(m->registers.cr0==c->cr[0] && m->registers.mar==c->ems_mar);

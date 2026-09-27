@@ -356,11 +356,69 @@ static void cpu_boundary(void)
       assert(!memcmp(&snapshot,&f.pit->exact,sizeof(snapshot)) && bm_engine_now(f.engine)==20); }
     finish(&f);
 }
+static void repeated_sync_preserves_edges(void)
+{
+    fixture_t once, repeated;
+    start(&once, &crystal); start(&repeated, &crystal);
+    program(&once, 0, 2, 0, 7); program(&repeated, 0, 2, 0, 7);
+    for (unsigned step = 0; step < 200; ++step) {
+        run(&once, 117); run(&repeated, 117);
+        assert(bm_at_clock_link_sync(once.link) == BM_STATUS_OK);
+        for (unsigned repeat = 0; repeat < 100; ++repeat)
+            assert(bm_at_clock_link_sync(repeated.link) == BM_STATUS_OK);
+        assert(!memcmp(&once.pit->exact, &repeated.pit->exact, sizeof(once.pit->exact)));
+        assert(once.count == repeated.count);
+        assert(!memcmp(once.edges, repeated.edges, once.count * sizeof(once.edges[0])));
+        if (step == 50 || step == 100) {
+            /* External mutations at the same timestamp must still rearm. */
+            gate(&once, 0, step == 100); gate(&repeated, 0, step == 100);
+        }
+    }
+    finish(&once); finish(&repeated);
+}
+
+static void unchanged_deadline_across_cursors(void)
+{
+    /* Reference advances only via scheduler deadlines; the other instance
+     * synchronizes at every host nanosecond chunk between those deadlines. */
+    for (unsigned mode=0;mode<6;++mode) {
+        fixture_t reference, frequent;
+        start(&reference,&crystal); start(&frequent,&crystal);
+        for (unsigned epoch=0;epoch<2;++epoch) {
+            if (epoch) {
+                assert(bm_engine_reset(reference.engine)==BM_STATUS_OK);
+                assert(bm_engine_reset(frequent.engine)==BM_STATUS_OK);
+                assert(bm_at_clock_link_reset(reference.link)==BM_STATUS_OK);
+                assert(bm_at_clock_link_reset(frequent.link)==BM_STATUS_OK);
+            }
+            program(&reference,0,mode,0,11); program(&frequent,0,mode,0,11);
+            reference.count=frequent.count=0;
+            for (unsigned phase=0;phase<3;++phase) {
+                run(&reference,91700);
+                for (unsigned i=0;i<100;++i) {
+                    run(&frequent,917);
+                    assert(bm_at_clock_link_sync(frequent.link)==BM_STATUS_OK);
+                    /* Read-only I/O must not move a cached deadline either. */
+                    (void)rd(&frequent,0x40,1);
+                }
+                assert(bm_at_clock_link_sync(reference.link)==BM_STATUS_OK);
+                assert(!memcmp(&reference.pit->exact,&frequent.pit->exact,sizeof(reference.pit->exact)));
+                assert(reference.count==frequent.count);
+                assert(!memcmp(reference.edges,frequent.edges,reference.count*sizeof(reference.edges[0])));
+                gate(&reference,0,phase!=0); gate(&frequent,0,phase!=0);
+            }
+        }
+        finish(&reference); finish(&frequent);
+    }
+}
+
 int main(void)
 {
     phase_and_reentry(); idle_debug_and_errors(); compare_chunks(); reset_lifecycle();
     errors_and_ownership(); programmed_attachment(); simultaneous_channels_and_instances();
     retained_failure(); cpu_boundary();
+    repeated_sync_preserves_edges();
+    unchanged_deadline_across_cursors();
     printf("8254 clock: %u chunk/state/edge comparisons; rational phase, idle/debug, CPU boundaries, reset and host failures\n",comparisons);
     return 0;
 }

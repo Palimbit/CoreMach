@@ -119,6 +119,19 @@ static void map_update(bm_gc103_memory_t *m)
     }
 }
 
+/* All legacy windows have 16KiB-aligned bounds. Build only route selection;
+ * translation, permissions, A20 and backing limits remain live on each access. */
+static void index_windows(bm_gc103_memory_t *m)
+{
+    memset(m->page_window, 0, sizeof(m->page_window));
+    for (unsigned i=0; i<93U; ++i) {
+        const bm_gc103_window_t *w=&m->window[i];
+        if (!w->enabled) continue;
+        for (uint32_t page=w->base>>14; page<(w->base+w->size)>>14; ++page)
+            m->page_window[page]=(uint8_t)(i+1U);
+    }
+}
+
 bm_status_t bm_gc103_memory_initialize(bm_gc103_memory_t *m, uint32_t ram_bytes)
 {
     bm_gc103_registers_t registers;
@@ -137,6 +150,7 @@ bm_status_t bm_gc103_memory_initialize(bm_gc103_memory_t *m, uint32_t ram_bytes)
         window_set(m, EMS + i, ((i & 31U) + ((i & 31U) >= 24U ? 24U : 16U)) << 14,
                    0x4000U, 0, (int)i);
     map_update(m);
+    index_windows(m);
     return BM_STATUS_OK;
 }
 
@@ -248,6 +262,8 @@ bm_status_t bm_gc103_memory_io(bm_gc103_memory_t *m, uint16_t port,
     if (m->physical_bank_bytes) return BM_STATUS_OK; /* Pure live decode. */
     if (effect.mapping == BM_GC103_MAPPING_EMS_SLOT) ems_update(m, effect.slot);
     else if (effect.mapping == BM_GC103_MAPPING_ALL) map_update(m);
+    if (effect.mapping == BM_GC103_MAPPING_EMS_SLOT || effect.mapping == BM_GC103_MAPPING_ALL)
+        index_windows(m);
     return BM_STATUS_OK;
 }
 bm_status_t bm_gc103_memory_resolve(const bm_gc103_memory_t *m,
@@ -257,7 +273,6 @@ bm_status_t bm_gc103_memory_resolve(const bm_gc103_memory_t *m,
 {
     bm_gc10x_route_t route = {0};
     uint8_t access;
-    int i;
     if (m == NULL || out_route == NULL || address > 0xffffffU ||
         requester < BM_GC10X_CPU || requester > BM_GC10X_ISA_MASTER ||
         (cpu_a20 != 0 && cpu_a20 != 1) ||
@@ -286,9 +301,10 @@ bm_status_t bm_gc103_memory_resolve(const bm_gc103_memory_t *m,
     } else {
         /* Classic mappings are registered in this order; later enabled
          * internal handlers take precedence. No fast-path host pointers. */
-        for (i = 92; i >= 0; --i) {
+        unsigned selected=m->page_window[address >> 14];
+        if (selected) {
+            unsigned i=selected-1U;
             const bm_gc103_window_t *w = &m->window[i];
-            if (!w->enabled || address < w->base || address - w->base >= w->size) continue;
             route.offset = get_address(m, address, w->ems_slot);
             if (route.offset < m->ram_bytes) {
                 uint32_t available = m->ram_bytes - route.offset;
@@ -296,7 +312,6 @@ bm_status_t bm_gc103_memory_resolve(const bm_gc103_memory_t *m,
                 route.writable = !(access & WRITE_DISABLED);
                 if (available < route.contiguous_bytes) route.contiguous_bytes = available;
             } else route.offset = 0;
-            break;
         }
     }
     *out_route = route;
