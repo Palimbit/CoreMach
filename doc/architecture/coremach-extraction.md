@@ -14,7 +14,7 @@ Destination: https://github.com/Palimbit/CoreMach (initially private).
 The initial extraction was a direct descendant of the source merge commit.
 Review subsequently found a historical MDA character ROM and binary build/state
 artifacts in the inherited ancestors. A filtered candidate removes exactly the
-seven paths in `provenance/history-filter.json`, only in the CoreMach copy.
+eight paths in `provenance/history-filter.json`, only in the CoreMach copy.
 `provenance/history-commit-map.txt` records the original and filtered commit IDs;
 the component manifest keeps the original IDs and origin repository. Referenced
 source path object IDs are verified unchanged. Retained authors, dates and
@@ -80,8 +80,29 @@ Local extraction validation on 2026-09-27:
 Private-repository CI defaults to one Linux engine job if Actions is enabled.
 Full Windows/macOS/Qt/package runs require manual full_matrix selection.
 Artifact upload is separately opt-in and retained for one day. At extraction,
-Palimbit uses the Free organization plan and repository Actions is disabled;
+  Palimbit uses the Free organization plan and repository Actions is disabled;
 this setting is retained. Local results do not claim new remote CI results.
+
+History-cleaning candidate: inherited Git pack reduced from 262.16 MiB to
+151.17 MiB before final metadata commit. The complete reachable path inventory
+contains no .rom/.bin/.exe or guest-media paths after filtering. All 85 paths
+referenced by the component provenance manifest have unchanged Git object IDs
+compared with their original source commits. Original IDs stay in the manifest;
+auditing and differential fixtures resolve their local equivalents through the
+versioned map. Published main replacement is pending authorization.
+
+Candidate validation: all 85 origin path objects verified again against the
+unfiltered source; no forbidden file extensions in the complete reachable
+historical path log. IOC02/PIT/Headland differential tests: three passed.
+Python validation: 50 passed, 28 optional/probe skips; two new mapping tests
+verify local origin resolution and ambiguous-map rejection. Component audit:
+70 components, 334 files, zero errors. Production files remain identical to
+the extraction base, so the earlier full engine/Qt tests apply to their code.
+Force-updating main would replace only CoreMach's newly created branch;
+expected published head is 65361d458ebbe2879613097bdb8a0f3584f1227a.
+Removing reachable refs is not a guarantee of immediate server-side object
+purging; GitHub may retain unreachable objects. Do not publish old ancestry
+branches or tags when adopting this candidate.
 
 Differential Headland, IOC02 and PIT tests export their original references
 from the immutable ancestor commit into the build directory. Existing SHA-256
