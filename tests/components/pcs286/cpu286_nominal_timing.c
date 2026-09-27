@@ -42,7 +42,7 @@ static void test_register_and_immediate_forms(void)
         b[1] = (uint8_t)m;
         for (size_t i = 0; i < sizeof(alu); ++i)
             for (unsigned direction_width = 0; direction_width < 4; ++direction_width) {
-                b[0] = alu[i] + direction_width;
+                b[0] = (uint8_t)(alu[i] + direction_width);
                 check(b,2,m >= 192 ? 2 : 0);
             }
         for (size_t i = 0; i < sizeof(pairs); ++i) {
@@ -56,11 +56,11 @@ static void test_register_and_immediate_forms(void)
         b[0] = 0x83;
         check(b,3,m >= 192 && (group == 0 || group == 2 || group == 3 || group == 5 || group == 7) ? 3 : 0);
         for (unsigned width = 0; width < 2; ++width) {
-            b[0] = 0xc6 + width;
+            b[0] = (uint8_t)(0xc6 + width);
             check(b,3+width,m >= 192 && group == 0 ? 2 : 0);
-            b[0] = 0xfe + width;
+            b[0] = (uint8_t)(0xfe + width);
             check(b,2,m >= 192 && group <= 1 ? 2 : 0);
-            b[0] = 0xf6 + width;
+            b[0] = (uint8_t)(0xf6 + width);
             static const unsigned group_cost[2][8] = {
                 {0,0,2,2,13,13,14,17}, {0,0,2,2,21,21,22,25}
             };
@@ -71,12 +71,12 @@ static void test_register_and_immediate_forms(void)
     for (unsigned immediate = 0; immediate < 256; ++immediate) {
         b[1] = (uint8_t)immediate; b[2] = (uint8_t)(255-immediate);
         for (size_t i = 0; i < sizeof(alu); ++i) {
-            b[0] = alu[i]+4; check(b,2,3);
-            b[0] = alu[i]+5; check(b,3,3);
+            b[0] = (uint8_t)(alu[i]+4); check(b,2,3);
+            b[0] = (uint8_t)(alu[i]+5); check(b,3,3);
         }
         for (unsigned reg = 0; reg < 8; ++reg) {
-            b[0] = 0xb0+reg; check(b,2,2);
-            b[0] = 0xb8+reg; check(b,3,2);
+            b[0] = (uint8_t)(0xb0+reg); check(b,2,2);
+            b[0] = (uint8_t)(0xb8+reg); check(b,3,2);
         }
         b[0] = 0xa8; check(b,2,3);
         b[0] = 0xa9; check(b,3,3);
