@@ -681,6 +681,57 @@ test_partial_creation_releases_timed_source_storage(void)
     }
 }
 
+static void
+test_short_runs_preserve_mutated_pending_deadlines(void)
+{
+    bm_engine_t *engine = make_clocked_engine(2U);
+    controlled_source_t later = { 0 }, earlier = { 0 };
+
+    assert(bm_engine_add_timed_source(engine, fire_once, &later,
+                                      &rate_1_ghz, 100U, &later.id) == BM_STATUS_OK);
+    assert(bm_engine_add_timed_source(engine, fire_once, &earlier,
+                                      &rate_1_ghz, 60U, &earlier.id) == BM_STATUS_OK);
+    /* Multiple host slices stop before either source. Removing the earliest
+     * source and adding an earlier integer event must both take effect. */
+    assert(bm_engine_run_for(engine, 10U) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 5U) == BM_STATUS_OK);
+    assert(bm_engine_disarm_timed_source(engine, earlier.id) == BM_STATUS_OK);
+    earlier.delay_cycles = 3U;
+    assert(bm_engine_schedule_at(engine, 20U, arm_source_after_event,
+                                 &earlier) == BM_STATUS_OK);
+    for (unsigned i = 0; i < 7U; ++i)
+        assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+    assert(bm_engine_now(engine) == 22U);
+    assert(earlier.control_status == BM_STATUS_OK);
+    assert(earlier.fire_count == 0U && later.fire_count == 0U);
+    assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+    assert(earlier.fire_count == 1U && earlier.fired_at.nanoseconds == 23U);
+    /* Consuming the earliest source must expose the later one. Failed
+     * rearming leaves that pending deadline intact across further slices. */
+    assert(bm_engine_arm_timed_source(engine, later.id, UINT64_MAX) ==
+           BM_STATUS_CAPACITY_EXCEEDED);
+    assert(bm_engine_run_for(engine, 76U) == BM_STATUS_OK);
+    assert(later.fire_count == 0U);
+    assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+    assert(later.fire_count == 1U && later.fired_at.nanoseconds == 100U);
+    assert(bm_engine_run_for(engine, 10U) == BM_STATUS_OK);
+    assert(bm_engine_arm_timed_source(engine, earlier.id, 2U) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 2U) == BM_STATUS_OK);
+    assert(earlier.fire_count == 2U && earlier.fired_at.nanoseconds == 112U);
+
+    /* Reset discards integer events and restores both original source
+     * registrations, even after an empty interval was already observed. */
+    assert(bm_engine_schedule_at(engine, 120U, must_not_run, NULL) == BM_STATUS_OK);
+    assert(bm_engine_reset(engine) == BM_STATUS_OK);
+    assert(bm_engine_run_for(engine, 59U) == BM_STATUS_OK);
+    assert(earlier.fire_count == 2U && later.fire_count == 1U);
+    assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+    assert(earlier.fire_count == 3U && earlier.fired_at.nanoseconds == 60U);
+    assert(bm_engine_run_for(engine, 100U) == BM_STATUS_OK);
+    assert(later.fire_count == 2U && later.fired_at.nanoseconds == 100U);
+    bm_engine_destroy(engine);
+}
+
 int
 main(void)
 {
@@ -695,5 +746,6 @@ main(void)
     test_control_validation_and_overflow_are_atomic();
     test_validation_and_invalid_progress();
     test_partial_creation_releases_timed_source_storage();
+    test_short_runs_preserve_mutated_pending_deadlines();
     return 0;
 }

@@ -39,6 +39,7 @@ struct bm_engine {
     bm_event_slot_t *events;
     bm_timed_source_slot_t *timed_sources;
     size_t cpu_count;
+    size_t event_count; /* Avoid scanning capacity when no integer events exist. */
     size_t timed_source_count;
     size_t max_cpus;
     size_t max_events;
@@ -391,6 +392,7 @@ bm_engine_reset(bm_engine_t *engine)
         return BM_STATUS_INVALID_ARGUMENT;
     engine->now = 0;
     engine->next_sequence = 0;
+    engine->event_count = 0;
     engine->clock_now.nanoseconds = 0U;
     engine->clock_now.phase = 0U;
     engine->clock_deadline_changed = 1;
@@ -449,6 +451,7 @@ bm_engine_schedule_at(bm_engine_t *engine,
             engine->events[index].callback = callback;
             engine->events[index].context = context;
             engine->events[index].active = 1;
+            ++engine->event_count;
             engine->clock_deadline_changed = 1;
             return BM_STATUS_OK;
         }
@@ -462,6 +465,8 @@ next_event_time(const bm_engine_t *engine, bm_tick_t limit)
     size_t index;
     bm_tick_t next = limit;
 
+    if (engine->event_count == 0U)
+        return next;
     for (index = 0; index < engine->max_events; ++index) {
         /* The requested boundary is inclusive for scheduled events. */
         if (engine->events[index].active && (engine->events[index].when <= next))
@@ -514,7 +519,7 @@ next_clocked_deadline(const bm_engine_t *engine,
     size_t index;
 
     *deadline = *finish;
-    for (index = 0U; index < engine->max_events; ++index) {
+    for (index = 0U; (engine->event_count != 0U) && (index < engine->max_events); ++index) {
         bm_clock_position_t event_time;
 
         if (!engine->events[index].active)
@@ -599,6 +604,8 @@ take_next_event(bm_engine_t *engine, bm_tick_t when, bm_engine_event_fn *callbac
     size_t selected = SIZE_MAX;
     uint64_t sequence = UINT64_MAX;
 
+    if (engine->event_count == 0U)
+        return 0;
     for (index = 0; index < engine->max_events; ++index) {
         if (engine->events[index].active && (engine->events[index].when == when) &&
             (engine->events[index].sequence < sequence)) {
@@ -611,6 +618,7 @@ take_next_event(bm_engine_t *engine, bm_tick_t when, bm_engine_event_fn *callbac
     *callback = engine->events[selected].callback;
     *context = engine->events[selected].context;
     engine->events[selected].active = 0;
+    --engine->event_count;
     return 1;
 }
 

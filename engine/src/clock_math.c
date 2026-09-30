@@ -62,6 +62,20 @@ multiply_divide(uint64_t left, uint64_t right, uint64_t denominator,
 
     if ((denominator == 0U) || (quotient == NULL) || (remainder == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
+#if defined(__GNUC__) || defined(__clang__)
+    /* Ordinary advances and cursor queries usually have a 64-bit product.
+     * A checked native multiply avoids the divisions needed to decompose it.
+     * Keep the portable algorithm for wider products and other compilers. */
+    {
+        uint64_t product;
+
+        if (!__builtin_mul_overflow(left, right, &product)) {
+            *quotient = product / denominator;
+            *remainder = product % denominator;
+            return BM_STATUS_OK;
+        }
+    }
+#endif
     whole = left / denominator;
     residual = left % denominator;
     if ((whole != 0U) && (right > (UINT64_MAX / whole)))
@@ -233,8 +247,7 @@ bm_clock_cycles_at_or_before_period(const bm_clock_position_t *period,
     candidate = *period;
 
     /* An integral timestamp has a direct exact inverse. Avoid searching from
-     * cycle zero on every peripheral sync. Fractional timestamps retain the
-     * general comparison-based path below. multiply_divide also handles the
+     * cycle zero on every peripheral sync. multiply_divide also handles the
      * full 64-bit product without requiring a wider host integer type. */
     if (target->phase == 0U) {
         uint64_t remainder;
@@ -249,6 +262,32 @@ bm_clock_cycles_at_or_before_period(const bm_clock_position_t *period,
             return BM_STATUS_OK;
         }
         return status;
+    }
+
+    /* For periods >= 1 ns, less than one extra cycle can elapse in the
+     * target's fractional nanosecond. Start at the exact integral inverse
+     * and check just its successor; keep the general search for shorter
+     * periods. This preserves fractional edges without a search from zero. */
+    if (period->nanoseconds_per_cycle_numerator >= period->phase_denominator) {
+        uint64_t remainder;
+
+        status = multiply_divide(target->nanoseconds, period->phase_denominator,
+                                 period->nanoseconds_per_cycle_numerator,
+                                 cycles, &remainder);
+        if (status == BM_STATUS_CAPACITY_EXCEEDED) {
+            *cycles = UINT64_MAX;
+            return BM_STATUS_OK;
+        }
+        if ((status != BM_STATUS_OK) || (*cycles == UINT64_MAX))
+            return status;
+        status = position_for_period(period, *cycles + 1U, &candidate);
+        if ((status == BM_STATUS_OK) &&
+            (bm_clock_position_compare(&candidate, target) <= 0))
+            ++*cycles;
+        else if ((status != BM_STATUS_OK) &&
+                 (status != BM_STATUS_CAPACITY_EXCEEDED))
+            return status;
+        return BM_STATUS_OK;
     }
 
     /* Find an upper source-cycle index whose position is strictly after the

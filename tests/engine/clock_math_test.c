@@ -144,6 +144,50 @@ test_fraction_comparison_without_overflow(void)
 }
 
 static void
+test_product_width_boundary_and_atomic_overflow(void)
+{
+    /* Consecutive advances straddle a 64-bit intermediate product. The
+     * quotient still fits, so rejecting the second product would be wrong. */
+    bm_clock_position_t below = { 0U, 0U, 3U, 2U };
+    bm_clock_position_t above = below;
+    const uint64_t half = UINT64_MAX / 2U;
+
+    assert(bm_clock_position_advance(&below, half) == BM_STATUS_OK);
+    assert(below.nanoseconds == UINT64_C(6148914691236517204));
+    assert(below.phase == 2U);
+    assert(bm_clock_position_advance(&above, half + 1U) == BM_STATUS_OK);
+    assert(above.nanoseconds == UINT64_C(6148914691236517205));
+    assert(above.phase == 1U);
+    assert(bm_clock_position_advance(&below, 1U) == BM_STATUS_OK);
+    assert(bm_clock_position_compare(&below, &above) == 0);
+
+    /* Exercise an exactly full-width product, a zero advance, fractional
+     * carry, and overflow of the final timestamp without a product overflow. */
+    {
+        bm_clock_position_t clock = { 0U, 0U, 7U, UINT64_MAX };
+        assert(bm_clock_position_advance(&clock, 1U) == BM_STATUS_OK);
+        assert(clock.nanoseconds == UINT64_C(2635249153387078802));
+        assert(clock.phase == 1U);
+        assert(bm_clock_position_advance(&clock, 0U) == BM_STATUS_OK);
+        assert(clock.nanoseconds == UINT64_C(2635249153387078802));
+        assert(clock.phase == 1U);
+        clock = (bm_clock_position_t) { UINT64_MAX - 1U, 2U, 3U, 2U };
+        assert(bm_clock_position_advance(&clock, 1U) == BM_STATUS_OK);
+        assert(clock.nanoseconds == UINT64_MAX && clock.phase == 1U);
+        assert(bm_clock_position_advance(&clock, 1U) == BM_STATUS_CAPACITY_EXCEEDED);
+        assert(clock.nanoseconds == UINT64_MAX && clock.phase == 1U);
+    }
+
+    /* A wider product can also overflow the result; failure is atomic. */
+    {
+        bm_clock_position_t clock = { 17U, 0U, 1U, 2U };
+        assert(bm_clock_position_advance(&clock, UINT64_MAX) ==
+               BM_STATUS_CAPACITY_EXCEEDED);
+        assert(clock.nanoseconds == 17U && clock.phase == 0U);
+    }
+}
+
+static void
 test_export_normalizes_public_fraction(void)
 {
     bm_clock_position_t clock = { 7U, 3U, 9U, 1U };
@@ -325,6 +369,52 @@ test_integral_inverse_floor_property(void)
     }
 }
 
+static void
+test_fractional_inverse_against_bounded_integer_oracle(void)
+{
+    /* Independent exact cross-products fit comfortably in uint64_t here.
+     * Cover unequal denominators, both sides of fractional cycle edges, and
+     * periods below, equal to and above the 1 ns fast-path boundary. */
+    const uint64_t times[] = { 0U, 1U, 2U, 7U, 99U, 1000000U };
+    for (uint64_t numerator = 1U; numerator <= 17U; ++numerator) {
+        for (uint64_t denominator = 1U; denominator <= 17U; ++denominator) {
+            bm_clock_position_t period = {
+                UINT64_MAX, denominator - 1U, denominator, numerator
+            };
+            for (size_t i = 0U; i < sizeof(times) / sizeof(times[0]); ++i) {
+                for (uint64_t target_den = 2U; target_den <= 11U; ++target_den) {
+                    for (uint64_t phase = 1U; phase < target_den; ++phase) {
+                        bm_clock_position_t target = { times[i], phase, target_den, 1U };
+                        uint64_t expected = ((times[i] * target_den + phase) * denominator) /
+                                            (target_den * numerator);
+                        uint64_t cycles;
+                        assert(bm_clock_cycles_at_or_before_period(&period, &target,
+                                                                   &cycles) == BM_STATUS_OK);
+                        assert(cycles == expected);
+                    }
+                }
+            }
+        }
+    }
+
+    /* The successor can overflow its timestamp even when the selected edge
+     * fits. At a 1 ns period, the cycle index instead saturates at UINT64_MAX. */
+    {
+        bm_clock_position_t period = { 0U, 0U, 1U, 2U };
+        bm_clock_position_t target = { UINT64_MAX, 1U, 2U, 1U };
+        uint64_t cycles;
+        assert(bm_clock_cycles_at_or_before_period(&period, &target, &cycles) == BM_STATUS_OK);
+        assert(cycles == UINT64_MAX / 2U);
+        period.nanoseconds_per_cycle_numerator = 1U;
+        assert(bm_clock_cycles_at_or_before_period(&period, &target, &cycles) == BM_STATUS_OK);
+        assert(cycles == UINT64_MAX);
+        period.phase_denominator = UINT64_MAX - 1U;
+        period.nanoseconds_per_cycle_numerator = UINT64_MAX;
+        assert(bm_clock_cycles_at_or_before_period(&period, &target, &cycles) == BM_STATUS_OK);
+        assert(cycles == UINT64_MAX - 1U);
+    }
+}
+
 int
 main(void)
 {
@@ -364,11 +454,13 @@ main(void)
     test_rational_crystal_divider_has_no_drift();
     test_integral_period_large_advance_and_overflow();
     test_fractional_fast_and_large_advance_agree();
+    test_product_width_boundary_and_atomic_overflow();
     test_fraction_comparison_without_overflow();
     test_export_normalizes_public_fraction();
     test_next_domain_edge_is_strict_and_exact();
     test_cycle_cursor_is_exact_across_fractional_and_large_ranges();
     test_invalid_and_overflow_are_atomic();
     test_integral_inverse_floor_property();
+    test_fractional_inverse_against_bounded_integer_oracle();
     return 0;
 }
