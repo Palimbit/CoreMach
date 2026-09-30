@@ -392,9 +392,41 @@ test_reset_and_time_overflow(void)
     bm_engine_destroy(engine);
 }
 
+static void
+test_repeated_empty_queue_and_callback_slot_reuse(void)
+{
+    /* An empty queue can become full, reject an enqueue, drain through a
+     * callback that immediately reuses its slot, and become empty again. */
+    for (int clocked = 0; clocked <= 1; ++clocked) {
+        bm_host_services_t host = bm_null_host_services();
+        bm_engine_config_t config = { 1U, 1U, 0U };
+        bm_engine_t *engine = NULL;
+        test_log_t log = { { 0U }, 0U };
+        test_event_t followup = { &log, 2U, NULL };
+        test_event_t first = { &log, 1U, &followup };
+        assert((clocked ? bm_engine_create_clocked(&host, &config, &engine) :
+                         bm_engine_create(&host, &config, &engine)) == BM_STATUS_OK);
+        for (unsigned cycle = 0; cycle < 8U; ++cycle) {
+            assert(bm_engine_run_for(engine, 3U) == BM_STATUS_OK);
+            assert(bm_engine_schedule_at(engine, bm_engine_now(engine) + 2U,
+                                         record_event, &first) == BM_STATUS_OK);
+            assert(bm_engine_schedule_at(engine, bm_engine_now(engine) + 1U,
+                                         record_event, &first) == BM_STATUS_CAPACITY_EXCEEDED);
+            assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+            assert(log.count == cycle * 2U);
+            assert(bm_engine_run_for(engine, 1U) == BM_STATUS_OK);
+            assert(log.count == (cycle + 1U) * 2U);
+            assert(log.values[cycle * 2U] == 1U);
+            assert(log.values[cycle * 2U + 1U] == 2U);
+        }
+        bm_engine_destroy(engine);
+    }
+}
+
 int
 main(void)
 {
+    test_repeated_empty_queue_and_callback_slot_reuse();
     test_engine_validation_and_cpu_ownership();
     test_event_order_boundary_and_reuse();
     test_event_capacity();
