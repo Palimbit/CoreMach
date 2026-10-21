@@ -662,6 +662,9 @@ target_link_libraries(portable-engine-i8085-test-support
 )
 set(BLUMACH_I8085_TESTS
     lifecycle
+    instructions
+    flags
+    timing
 )
 foreach(name IN LISTS BLUMACH_I8085_TESTS)
     add_executable(portable-engine-i8085-${name} cpu_i8085_${name}_test.c)

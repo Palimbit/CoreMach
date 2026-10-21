@@ -1,7 +1,17 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/*
+ * Intel 8085A / OKI MSM80C85A CPU component.
+ *
+ * The 8080-compatible instruction semantics are adapted from the NEC V30
+ * 8080 emulation mode in components/cpu/808x/src/cpu_808x.c; no code is
+ * shared with that component. Sources are listed in cpu_i8085.h.
+ */
 #include <blumach/components/cpu_i8085.h>
 
 #include <string.h>
+
+#define REG_M 6U
+#define REG_A 7U
 
 typedef struct bm_i8085_state {
     bm_host_services_t host;
@@ -15,14 +25,9 @@ typedef struct bm_i8085_state {
     bm_i8085_timing_fn timing;
     void *timing_context;
 
-    uint8_t a;
+    /* Register file indexed by the instruction encoding: B C D E H L - A. */
+    uint8_t registers[8];
     uint8_t f;
-    uint8_t b;
-    uint8_t c;
-    uint8_t d;
-    uint8_t e;
-    uint8_t h;
-    uint8_t l;
     uint16_t sp;
     uint16_t pc;
     uint8_t interrupt_enable;
@@ -44,6 +49,13 @@ typedef struct bm_i8085_state {
     uint8_t reset_line;
     uint8_t wait_line;
     uint8_t sid_line;
+
+    /* Accounting for the boundary in progress. */
+    uint8_t boundary_opcode;
+    uint8_t boundary_taken;
+    uint64_t boundary_transactions;
+    uint64_t boundary_wait_states;
+    bm_i8085_timing_observation_t last;
 } bm_i8085_state_t;
 
 static const char *
@@ -54,6 +66,752 @@ model_name(bm_i8085_model_t model)
         case BM_I8085_OKI_MSM80C85A: return "OKI MSM80C85A";
         default: return NULL;
     }
+}
+
+/* ---------------------------------------------------------------------
+ * Documented timing.
+ *
+ * T-states and machine cycles for the Intel 8085A from [MCS85] §5.6,
+ * pp. 5-4..5-18, where each instruction lists "Cycles" and "States" with
+ * the 8085 value first. [OKI86] Table 8, pp. 30-32, lists identical clock
+ * counts for the MSM80C85A. Conditional instructions have a not-taken and
+ * a taken value (Note 2 of both tables). HLT is listed as "1+" cycles and
+ * 5 states (p. 5-17); Figure 2-20 (p. 2-16) shows M1 and the first T-state
+ * of M2 before THALT, reported here as two machine cycles.
+ * Returns zero when no cited value exists.
+ * --------------------------------------------------------------------- */
+static int
+documented_timing(uint8_t op, int taken, uint8_t *t_states, uint8_t *cycles)
+{
+    uint8_t t = 0U;
+    uint8_t m = 0U;
+
+    if (bm_i8085_classify_opcode(op) == BM_I8085_OPCODE_UNDOCUMENTED)
+        return 0;
+    if (op == 0x76U) {                                  /* HLT, p. 5-17 */
+        t = 5U; m = 2U;
+    } else if ((op & 0xc0U) == 0x40U) {                 /* MOV, p. 5-4 */
+        int memory = ((op & 7U) == REG_M) || (((op >> 3U) & 7U) == REG_M);
+        t = memory ? 7U : 4U; m = memory ? 2U : 1U;
+    } else if ((op & 0xc0U) == 0x80U) {                 /* ALU r/M, pp. 5-6..5-11 */
+        t = (op & 7U) == REG_M ? 7U : 4U; m = (op & 7U) == REG_M ? 2U : 1U;
+    } else if (((op & 0xc7U) == 0x04U) || ((op & 0xc7U) == 0x05U)) {
+        int memory = ((op >> 3U) & 7U) == REG_M;        /* INR/DCR, p. 5-8 */
+        t = memory ? 10U : 4U; m = memory ? 3U : 1U;
+    } else if ((op & 0xc7U) == 0x06U) {                 /* MVI, p. 5-4 */
+        int memory = ((op >> 3U) & 7U) == REG_M;
+        t = memory ? 10U : 7U; m = memory ? 3U : 2U;
+    } else if ((op & 0xcfU) == 0x01U) {                 /* LXI, p. 5-5 */
+        t = 10U; m = 3U;
+    } else if (((op & 0xcfU) == 0x03U) || ((op & 0xcfU) == 0x0bU)) {
+        t = 6U; m = 1U;                                 /* INX/DCX, p. 5-9 */
+    } else if ((op & 0xcfU) == 0x09U) {                 /* DAD, p. 5-9 */
+        t = 10U; m = 3U;
+    } else if ((op & 0xc7U) == 0xc0U) {                 /* Rcc, p. 5-14 */
+        t = taken ? 12U : 6U; m = taken ? 3U : 1U;
+    } else if ((op & 0xc7U) == 0xc2U) {                 /* Jcc, p. 5-13 */
+        t = taken ? 10U : 7U; m = taken ? 3U : 2U;
+    } else if ((op & 0xc7U) == 0xc4U) {                 /* Ccc, p. 5-14 */
+        t = taken ? 18U : 9U; m = taken ? 5U : 2U;
+    } else if ((op & 0xc7U) == 0xc6U) {                 /* ALU imm, pp. 5-6..5-11 */
+        t = 7U; m = 2U;
+    } else if ((op & 0xc7U) == 0xc7U) {                 /* RST, p. 5-14 */
+        t = 12U; m = 3U;
+    } else if ((op & 0xcfU) == 0xc1U) {                 /* POP, pp. 5-15..5-16 */
+        t = 10U; m = 3U;
+    } else if ((op & 0xcfU) == 0xc5U) {                 /* PUSH, p. 5-15 */
+        t = 12U; m = 3U;
+    } else {
+        switch (op) {
+            case 0x02U: case 0x12U:                     /* STAX, p. 5-6 */
+            case 0x0aU: case 0x1aU:                     /* LDAX, p. 5-5 */
+                t = 7U; m = 2U; break;
+            case 0x22U: case 0x2aU:                     /* SHLD/LHLD, p. 5-5 */
+                t = 16U; m = 5U; break;
+            case 0x32U: case 0x3aU:                     /* STA/LDA, p. 5-5 */
+                t = 13U; m = 4U; break;
+            case 0x00U:                                 /* NOP, p. 5-17 */
+            case 0x07U: case 0x0fU: case 0x17U: case 0x1fU: /* p. 5-11..5-12 */
+            case 0x27U:                                 /* DAA, p. 5-9 */
+            case 0x2fU: case 0x37U: case 0x3fU:         /* CMA/STC/CMC, p. 5-12 */
+            case 0x20U: case 0x30U:                     /* RIM/SIM, pp. 5-17..5-18 */
+            case 0xebU:                                 /* XCHG, p. 5-6 */
+            case 0xf3U: case 0xfbU:                     /* DI/EI, p. 5-17 */
+                t = 4U; m = 1U; break;
+            case 0xc3U: case 0xc9U:                     /* JMP p. 5-13, RET p. 5-14 */
+                t = 10U; m = 3U; break;
+            case 0xcdU:                                 /* CALL, p. 5-13 */
+                t = 18U; m = 5U; break;
+            case 0xd3U: case 0xdbU:                     /* OUT/IN, p. 5-16 */
+                t = 10U; m = 3U; break;
+            case 0xe3U:                                 /* XTHL, p. 5-16 */
+                t = 16U; m = 5U; break;
+            case 0xe9U: case 0xf9U:                     /* PCHL p. 5-15, SPHL p. 5-16 */
+                t = 6U; m = 1U; break;
+            default:
+                return 0;
+        }
+    }
+    *t_states = t;
+    *cycles = m;
+    return 1;
+}
+
+/* ---------------------------------------------------------------------
+ * Bus access. Every transfer is one byte; endpoint waits count CLK periods.
+ * --------------------------------------------------------------------- */
+static bm_status_t
+bus_transfer(bm_i8085_state_t *state, bm_address_space_t space,
+             bm_bus_operation_t operation, uint16_t address, uint8_t *value)
+{
+    bm_bus_transaction_t txn;
+    bm_status_t status;
+
+    memset(&txn, 0, sizeof(txn));
+    txn.space = space;
+    txn.operation = operation;
+    txn.address = address;
+    txn.value = operation == BM_BUS_WRITE ? *value : 0U;
+    txn.size = 1U;
+    txn.alignment = 1U;
+    txn.endianness = BM_ENDIAN_LITTLE;
+    status = bm_bus_transact(state->bus, &txn);
+    if (status != BM_STATUS_OK)
+        return status;
+    ++state->boundary_transactions;
+    state->boundary_wait_states += txn.wait_states;
+    if (operation != BM_BUS_WRITE)
+        *value = (uint8_t) txn.value;
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+memory_read(bm_i8085_state_t *state, uint16_t address, uint8_t *value)
+{
+    return bus_transfer(state, BM_ADDRESS_MEMORY, BM_BUS_READ, address, value);
+}
+
+static bm_status_t
+memory_write(bm_i8085_state_t *state, uint16_t address, uint8_t value)
+{
+    return bus_transfer(state, BM_ADDRESS_MEMORY, BM_BUS_WRITE, address,
+                        &value);
+}
+
+/* Operand bytes are ordinary memory-read machine cycles. */
+static bm_status_t
+fetch_byte(bm_i8085_state_t *state, uint8_t *value)
+{
+    bm_status_t status = memory_read(state, state->pc, value);
+    if (status == BM_STATUS_OK)
+        state->pc = (uint16_t) (state->pc + 1U);
+    return status;
+}
+
+static bm_status_t
+fetch_word(bm_i8085_state_t *state, uint16_t *value)
+{
+    uint8_t low = 0U;
+    uint8_t high = 0U;
+    bm_status_t status = fetch_byte(state, &low);
+    if (status == BM_STATUS_OK)
+        status = fetch_byte(state, &high);
+    if (status == BM_STATUS_OK)
+        *value = (uint16_t) (((unsigned int) high << 8U) | low);
+    return status;
+}
+
+/* ---------------------------------------------------------------------
+ * Registers and flags.
+ * --------------------------------------------------------------------- */
+static uint16_t
+get_pair(const bm_i8085_state_t *state, unsigned int pair)
+{
+    if (pair == 3U)
+        return state->sp;
+    return (uint16_t) (((unsigned int) state->registers[pair * 2U] << 8U) |
+                       state->registers[pair * 2U + 1U]);
+}
+
+static void
+set_pair(bm_i8085_state_t *state, unsigned int pair, uint16_t value)
+{
+    if (pair == 3U) {
+        state->sp = value;
+        return;
+    }
+    state->registers[pair * 2U] = (uint8_t) (value >> 8U);
+    state->registers[pair * 2U + 1U] = (uint8_t) value;
+}
+
+static uint16_t
+get_hl(const bm_i8085_state_t *state)
+{
+    return get_pair(state, 2U);
+}
+
+static bm_status_t
+read_operand(bm_i8085_state_t *state, unsigned int code, uint8_t *value)
+{
+    if (code == REG_M)
+        return memory_read(state, get_hl(state), value);
+    *value = state->registers[code];
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+write_operand(bm_i8085_state_t *state, unsigned int code, uint8_t value)
+{
+    if (code == REG_M)
+        return memory_write(state, get_hl(state), value);
+    state->registers[code] = value;
+    return BM_STATUS_OK;
+}
+
+static int
+even_parity(uint8_t value)
+{
+    value = (uint8_t) (value ^ (value >> 4U));
+    value = (uint8_t) (value ^ (value >> 2U));
+    value = (uint8_t) (value ^ (value >> 1U));
+    return (value & 1U) == 0U;
+}
+
+static void
+set_flag(bm_i8085_state_t *state, uint8_t flag, int condition)
+{
+    if (condition)
+        state->f = (uint8_t) (state->f | flag);
+    else
+        state->f = (uint8_t) (state->f & (uint8_t) ~flag);
+}
+
+static void
+set_szp(bm_i8085_state_t *state, uint8_t value)
+{
+    set_flag(state, BM_I8085_FLAG_S, (value & 0x80U) != 0U);
+    set_flag(state, BM_I8085_FLAG_Z, value == 0U);
+    set_flag(state, BM_I8085_FLAG_P, even_parity(value));
+}
+
+/* The ALU adds both operands and a carry input; subtraction adds the
+ * complement with an inverted borrow ([KS1302]). V is the carry into bit 7
+ * XOR the carry out of bit 7 and K is V XOR S for these operations.
+ * Returns the result and the raw carry out of bit 7. */
+static uint8_t
+alu_sum(bm_i8085_state_t *state, uint8_t left, uint8_t right,
+        unsigned int carry_in, unsigned int *carry_out)
+{
+    unsigned int sum = (unsigned int) left + right + carry_in;
+    unsigned int carry6 = (((left & 0x7fU) + (right & 0x7fU) + carry_in) >> 7U) & 1U;
+    unsigned int carry7 = (sum >> 8U) & 1U;
+    uint8_t result = (uint8_t) sum;
+    int overflow = (carry6 ^ carry7) != 0U;
+
+    set_szp(state, result);
+    set_flag(state, BM_I8085_FLAG_AC,
+             ((left & 0x0fU) + (right & 0x0fU) + carry_in) > 0x0fU);
+    set_flag(state, BM_I8085_FLAG_V, overflow);
+    set_flag(state, BM_I8085_FLAG_K, overflow != ((result & 0x80U) != 0U));
+    *carry_out = carry7;
+    return result;
+}
+
+static uint8_t
+alu_add(bm_i8085_state_t *state, uint8_t left, uint8_t right,
+        unsigned int carry_in)
+{
+    unsigned int carry = 0U;
+    uint8_t result = alu_sum(state, left, right, carry_in, &carry);
+    set_flag(state, BM_I8085_FLAG_CY, carry != 0U);
+    return result;
+}
+
+/* CY reports the borrow; AC keeps the carry produced by the two's-complement
+ * addition, as on the 8080 ([KS1302] flag-circuit notes). */
+static uint8_t
+alu_subtract(bm_i8085_state_t *state, uint8_t left, uint8_t right,
+             unsigned int borrow)
+{
+    unsigned int carry = 0U;
+    uint8_t result = alu_sum(state, left, (uint8_t) ~right,
+                             borrow ? 0U : 1U, &carry);
+    set_flag(state, BM_I8085_FLAG_CY, carry == 0U);
+    return result;
+}
+
+/* ANA sets AC on the 8085 ([MCS85] p. 5-9); XRA and ORA clear it. All three
+ * clear CY. V is zero and therefore K equals S ([KS1302] note 4). */
+static void
+alu_logic(bm_i8085_state_t *state, unsigned int operation, uint8_t value)
+{
+    uint8_t accumulator = state->registers[REG_A];
+
+    if (operation == 4U)
+        accumulator = (uint8_t) (accumulator & value);
+    else if (operation == 5U)
+        accumulator = (uint8_t) (accumulator ^ value);
+    else
+        accumulator = (uint8_t) (accumulator | value);
+    state->registers[REG_A] = accumulator;
+    set_szp(state, accumulator);
+    set_flag(state, BM_I8085_FLAG_CY, 0);
+    set_flag(state, BM_I8085_FLAG_AC, operation == 4U);
+    set_flag(state, BM_I8085_FLAG_V, 0);
+    set_flag(state, BM_I8085_FLAG_K, (accumulator & 0x80U) != 0U);
+}
+
+static void
+alu_execute(bm_i8085_state_t *state, unsigned int operation, uint8_t value)
+{
+    uint8_t accumulator = state->registers[REG_A];
+    unsigned int carry = (state->f & BM_I8085_FLAG_CY) != 0U;
+
+    switch (operation) {
+        case 0U: state->registers[REG_A] = alu_add(state, accumulator, value, 0U); break;
+        case 1U: state->registers[REG_A] = alu_add(state, accumulator, value, carry); break;
+        case 2U: state->registers[REG_A] = alu_subtract(state, accumulator, value, 0U); break;
+        case 3U: state->registers[REG_A] = alu_subtract(state, accumulator, value, carry); break;
+        case 7U: (void) alu_subtract(state, accumulator, value, 0U); break;
+        default: alu_logic(state, operation, value); break;
+    }
+}
+
+/* DAA as described in [MCS85] p. 5-9; the correction goes through the
+ * adder, which also produces AC, V and K. */
+static void
+decimal_adjust(bm_i8085_state_t *state)
+{
+    uint8_t accumulator = state->registers[REG_A];
+    uint8_t correction = 0U;
+    int carry = (state->f & BM_I8085_FLAG_CY) != 0U;
+    unsigned int ignored = 0U;
+
+    if (((accumulator & 0x0fU) > 9U) || ((state->f & BM_I8085_FLAG_AC) != 0U))
+        correction = (uint8_t) (correction | 0x06U);
+    if ((accumulator > 0x99U) || carry) {
+        correction = (uint8_t) (correction | 0x60U);
+        carry = 1;
+    }
+    state->registers[REG_A] = alu_sum(state, accumulator, correction, 0U,
+                                      &ignored);
+    set_flag(state, BM_I8085_FLAG_CY, carry);
+}
+
+static int
+condition_true(const bm_i8085_state_t *state, unsigned int condition)
+{
+    switch (condition & 7U) {
+        case 0U: return (state->f & BM_I8085_FLAG_Z) == 0U;
+        case 1U: return (state->f & BM_I8085_FLAG_Z) != 0U;
+        case 2U: return (state->f & BM_I8085_FLAG_CY) == 0U;
+        case 3U: return (state->f & BM_I8085_FLAG_CY) != 0U;
+        case 4U: return (state->f & BM_I8085_FLAG_P) == 0U;
+        case 5U: return (state->f & BM_I8085_FLAG_P) != 0U;
+        case 6U: return (state->f & BM_I8085_FLAG_S) == 0U;
+        default: return (state->f & BM_I8085_FLAG_S) != 0U;
+    }
+}
+
+/* PUSH writes the high byte to SP-1 first, then the low byte to SP-2
+ * ([MCS85] p. 5-15; Figure 2-18 shows the same order for CALL). */
+static bm_status_t
+push_word(bm_i8085_state_t *state, uint16_t value)
+{
+    bm_status_t status;
+
+    state->sp = (uint16_t) (state->sp - 1U);
+    status = memory_write(state, state->sp, (uint8_t) (value >> 8U));
+    if (status != BM_STATUS_OK)
+        return status;
+    state->sp = (uint16_t) (state->sp - 1U);
+    return memory_write(state, state->sp, (uint8_t) value);
+}
+
+static bm_status_t
+pop_word(bm_i8085_state_t *state, uint16_t *value)
+{
+    uint8_t low = 0U;
+    uint8_t high = 0U;
+    bm_status_t status = memory_read(state, state->sp, &low);
+
+    if (status == BM_STATUS_OK)
+        status = memory_read(state, (uint16_t) (state->sp + 1U), &high);
+    if (status != BM_STATUS_OK)
+        return status;
+    state->sp = (uint16_t) (state->sp + 2U);
+    *value = (uint16_t) (((unsigned int) high << 8U) | low);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+call_address(bm_i8085_state_t *state, uint16_t address)
+{
+    bm_status_t status = push_word(state, state->pc);
+    if (status == BM_STATUS_OK)
+        state->pc = address;
+    return status;
+}
+
+/* ---------------------------------------------------------------------
+ * Instruction execution.
+ * --------------------------------------------------------------------- */
+static bm_status_t
+execute_instruction(bm_i8085_state_t *state)
+{
+    uint16_t start = state->pc;
+    uint8_t op = 0U;
+    bm_status_t status;
+
+    status = bus_transfer(state, BM_ADDRESS_MEMORY, BM_BUS_FETCH, state->pc,
+                          &op);
+    if (status != BM_STATUS_OK)
+        return status;
+    state->pc = (uint16_t) (state->pc + 1U);
+    state->boundary_opcode = op;
+    state->boundary_taken = 0U;
+
+    if (bm_i8085_classify_opcode(op) == BM_I8085_OPCODE_UNDOCUMENTED) {
+        state->pc = start;
+        return BM_STATUS_UNSUPPORTED;
+    }
+    if (op == 0x76U) {                                  /* HLT */
+        state->halted = 1U;
+        return BM_STATUS_OK;
+    }
+    if ((op & 0xc0U) == 0x40U) {                        /* MOV dst,src */
+        uint8_t value = 0U;
+        status = read_operand(state, op & 7U, &value);
+        return status == BM_STATUS_OK ?
+               write_operand(state, (op >> 3U) & 7U, value) : status;
+    }
+    if ((op & 0xc0U) == 0x80U) {                        /* ALU r/M */
+        uint8_t value = 0U;
+        status = read_operand(state, op & 7U, &value);
+        if (status == BM_STATUS_OK)
+            alu_execute(state, (op >> 3U) & 7U, value);
+        return status;
+    }
+    if (((op & 0xc7U) == 0x04U) || ((op & 0xc7U) == 0x05U)) { /* INR/DCR */
+        unsigned int code = (op >> 3U) & 7U;
+        uint8_t carry = (uint8_t) (state->f & BM_I8085_FLAG_CY);
+        uint8_t value = 0U;
+        status = read_operand(state, code, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        value = (op & 1U) == 0U ? alu_add(state, value, 1U, 0U) :
+                                  alu_subtract(state, value, 1U, 0U);
+        state->f = (uint8_t) ((state->f & (uint8_t) ~BM_I8085_FLAG_CY) | carry);
+        return write_operand(state, code, value);
+    }
+    if ((op & 0xc7U) == 0x06U) {                        /* MVI */
+        uint8_t value = 0U;
+        status = fetch_byte(state, &value);
+        return status == BM_STATUS_OK ?
+               write_operand(state, (op >> 3U) & 7U, value) : status;
+    }
+    if ((op & 0xcfU) == 0x01U) {                        /* LXI */
+        uint16_t value = 0U;
+        status = fetch_word(state, &value);
+        if (status == BM_STATUS_OK)
+            set_pair(state, (op >> 4U) & 3U, value);
+        return status;
+    }
+    if (((op & 0xcfU) == 0x03U) || ((op & 0xcfU) == 0x0bU)) { /* INX/DCX */
+        unsigned int pair = (op >> 4U) & 3U;
+        int increment = (op & 0x08U) == 0U;
+        uint16_t value = (uint16_t) (increment ? get_pair(state, pair) + 1U :
+                                                 get_pair(state, pair) - 1U);
+        set_pair(state, pair, value);
+        /* K receives the incrementer carry ([KS1302]); V is not stated and
+         * remains unchanged. */
+        set_flag(state, BM_I8085_FLAG_K,
+                 increment ? value == 0x0000U : value == 0xffffU);
+        return BM_STATUS_OK;
+    }
+    if ((op & 0xcfU) == 0x09U) {                        /* DAD */
+        uint16_t left = get_hl(state);
+        uint16_t right = get_pair(state, (op >> 4U) & 3U);
+        uint32_t sum = (uint32_t) left + right;
+        uint16_t result = (uint16_t) sum;
+        set_pair(state, 2U, result);
+        set_flag(state, BM_I8085_FLAG_CY, sum > 0xffffU);
+        /* V is the 16-bit signed overflow of the high-order addition
+         * ([KS1302] note 4); K is not stated and remains unchanged. */
+        set_flag(state, BM_I8085_FLAG_V,
+                 (((left ^ result) & (right ^ result)) & 0x8000U) != 0U);
+        return BM_STATUS_OK;
+    }
+    if ((op & 0xc7U) == 0xc0U) {                        /* Rcc */
+        uint16_t address = 0U;
+        if (!condition_true(state, (op >> 3U) & 7U))
+            return BM_STATUS_OK;
+        state->boundary_taken = 1U;
+        status = pop_word(state, &address);
+        if (status == BM_STATUS_OK)
+            state->pc = address;
+        return status;
+    }
+    if (((op & 0xc7U) == 0xc2U) || ((op & 0xc7U) == 0xc4U)) { /* Jcc/Ccc */
+        uint8_t low = 0U;
+        uint8_t high = 0U;
+        uint16_t address;
+
+        /* The 8085 evaluates the condition while fetching the second byte
+         * and skips the third when it is false ([ASM85] p. 1-25). */
+        status = fetch_byte(state, &low);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (!condition_true(state, (op >> 3U) & 7U)) {
+            state->pc = (uint16_t) (state->pc + 1U);
+            return BM_STATUS_OK;
+        }
+        state->boundary_taken = 1U;
+        status = fetch_byte(state, &high);
+        if (status != BM_STATUS_OK)
+            return status;
+        address = (uint16_t) (((unsigned int) high << 8U) | low);
+        if ((op & 0xc7U) == 0xc4U)
+            return call_address(state, address);
+        state->pc = address;
+        return BM_STATUS_OK;
+    }
+    if ((op & 0xc7U) == 0xc6U) {                        /* ALU immediate */
+        uint8_t value = 0U;
+        status = fetch_byte(state, &value);
+        if (status == BM_STATUS_OK)
+            alu_execute(state, (op >> 3U) & 7U, value);
+        return status;
+    }
+    if ((op & 0xc7U) == 0xc7U)                          /* RST n */
+        return call_address(state, (uint16_t) (op & 0x38U));
+    if ((op & 0xcfU) == 0xc1U) {                        /* POP */
+        uint16_t value = 0U;
+        unsigned int pair = (op >> 4U) & 3U;
+        status = pop_word(state, &value);
+        if (status != BM_STATUS_OK)
+            return status;
+        if (pair == 3U) {
+            state->registers[REG_A] = (uint8_t) (value >> 8U);
+            /* Bit 3 is driven to zero ([KS1302]); V and K are loaded. */
+            state->f = (uint8_t) (value & 0xf7U);
+        } else {
+            set_pair(state, pair, value);
+        }
+        return BM_STATUS_OK;
+    }
+    if ((op & 0xcfU) == 0xc5U) {                        /* PUSH */
+        unsigned int pair = (op >> 4U) & 3U;
+        uint16_t value = pair == 3U ?
+            (uint16_t) (((unsigned int) state->registers[REG_A] << 8U) | state->f) :
+            get_pair(state, pair);
+        return push_word(state, value);
+    }
+
+    switch (op) {
+        case 0x00U:                                     /* NOP */
+            return BM_STATUS_OK;
+        case 0x02U: case 0x12U:                         /* STAX B/D */
+            return memory_write(state, get_pair(state, (op >> 4U) & 1U),
+                                state->registers[REG_A]);
+        case 0x0aU: case 0x1aU:                         /* LDAX B/D */
+            return memory_read(state, get_pair(state, (op >> 4U) & 1U),
+                               &state->registers[REG_A]);
+        case 0x07U: {                                   /* RLC */
+            uint8_t a = state->registers[REG_A];
+            state->registers[REG_A] = (uint8_t) ((a << 1U) | (a >> 7U));
+            set_flag(state, BM_I8085_FLAG_CY, (a & 0x80U) != 0U);
+            /* RLC adds A to itself: V = A7 XOR A6 ([KS1302] note 4). */
+            set_flag(state, BM_I8085_FLAG_V, ((a ^ (a << 1U)) & 0x80U) != 0U);
+            return BM_STATUS_OK;
+        }
+        case 0x0fU: {                                   /* RRC */
+            uint8_t a = state->registers[REG_A];
+            state->registers[REG_A] = (uint8_t) ((a >> 1U) | (a << 7U));
+            set_flag(state, BM_I8085_FLAG_CY, (a & 1U) != 0U);
+            set_flag(state, BM_I8085_FLAG_V, 0);
+            return BM_STATUS_OK;
+        }
+        case 0x17U: {                                   /* RAL */
+            uint8_t a = state->registers[REG_A];
+            unsigned int carry = (state->f & BM_I8085_FLAG_CY) != 0U;
+            state->registers[REG_A] = (uint8_t) ((a << 1U) | carry);
+            set_flag(state, BM_I8085_FLAG_CY, (a & 0x80U) != 0U);
+            set_flag(state, BM_I8085_FLAG_V, ((a ^ (a << 1U)) & 0x80U) != 0U);
+            return BM_STATUS_OK;
+        }
+        case 0x1fU: {                                   /* RAR */
+            uint8_t a = state->registers[REG_A];
+            unsigned int carry = (state->f & BM_I8085_FLAG_CY) != 0U;
+            state->registers[REG_A] = (uint8_t) ((a >> 1U) | (carry << 7U));
+            set_flag(state, BM_I8085_FLAG_CY, (a & 1U) != 0U);
+            set_flag(state, BM_I8085_FLAG_V, 0);
+            return BM_STATUS_OK;
+        }
+        case 0x22U: case 0x2aU: {                       /* SHLD/LHLD */
+            uint16_t address = 0U;
+            status = fetch_word(state, &address);
+            if (status != BM_STATUS_OK)
+                return status;
+            if (op == 0x22U) {
+                status = memory_write(state, address, state->registers[5]);
+                return status == BM_STATUS_OK ?
+                       memory_write(state, (uint16_t) (address + 1U),
+                                    state->registers[4]) : status;
+            }
+            status = memory_read(state, address, &state->registers[5]);
+            return status == BM_STATUS_OK ?
+                   memory_read(state, (uint16_t) (address + 1U),
+                               &state->registers[4]) : status;
+        }
+        case 0x27U:                                     /* DAA */
+            decimal_adjust(state);
+            return BM_STATUS_OK;
+        case 0x2fU:                                     /* CMA */
+            state->registers[REG_A] = (uint8_t) ~state->registers[REG_A];
+            return BM_STATUS_OK;
+        case 0x32U: case 0x3aU: {                       /* STA/LDA */
+            uint16_t address = 0U;
+            status = fetch_word(state, &address);
+            if (status != BM_STATUS_OK)
+                return status;
+            return op == 0x32U ?
+                   memory_write(state, address, state->registers[REG_A]) :
+                   memory_read(state, address, &state->registers[REG_A]);
+        }
+        case 0x37U:                                     /* STC */
+            set_flag(state, BM_I8085_FLAG_CY, 1);
+            return BM_STATUS_OK;
+        case 0x3fU:                                     /* CMC */
+            state->f = (uint8_t) (state->f ^ BM_I8085_FLAG_CY);
+            return BM_STATUS_OK;
+        case 0xc3U: {                                   /* JMP */
+            uint16_t address = 0U;
+            status = fetch_word(state, &address);
+            if (status == BM_STATUS_OK)
+                state->pc = address;
+            return status;
+        }
+        case 0xc9U: {                                   /* RET */
+            uint16_t address = 0U;
+            status = pop_word(state, &address);
+            if (status == BM_STATUS_OK)
+                state->pc = address;
+            return status;
+        }
+        case 0xcdU: {                                   /* CALL */
+            uint16_t address = 0U;
+            status = fetch_word(state, &address);
+            return status == BM_STATUS_OK ? call_address(state, address) :
+                                            status;
+        }
+        case 0xd3U: case 0xdbU: {                       /* OUT/IN port */
+            uint8_t port = 0U;
+            status = fetch_byte(state, &port);
+            if (status != BM_STATUS_OK)
+                return status;
+            return bus_transfer(state, BM_ADDRESS_IO,
+                                op == 0xd3U ? BM_BUS_WRITE : BM_BUS_READ,
+                                port, &state->registers[REG_A]);
+        }
+        case 0xe3U: {                                   /* XTHL */
+            uint8_t low = 0U;
+            uint8_t high = 0U;
+            /* The order of the two stack writes is not stated in the cited
+             * pages; only the exchanged values are part of the contract. */
+            status = memory_read(state, state->sp, &low);
+            if (status == BM_STATUS_OK)
+                status = memory_read(state, (uint16_t) (state->sp + 1U), &high);
+            if (status == BM_STATUS_OK)
+                status = memory_write(state, (uint16_t) (state->sp + 1U),
+                                      state->registers[4]);
+            if (status == BM_STATUS_OK)
+                status = memory_write(state, state->sp, state->registers[5]);
+            if (status == BM_STATUS_OK) {
+                state->registers[4] = high;
+                state->registers[5] = low;
+            }
+            return status;
+        }
+        case 0xe9U:                                     /* PCHL */
+            state->pc = get_hl(state);
+            return BM_STATUS_OK;
+        case 0xebU: {                                   /* XCHG */
+            uint16_t de = get_pair(state, 1U);
+            set_pair(state, 1U, get_hl(state));
+            set_pair(state, 2U, de);
+            return BM_STATUS_OK;
+        }
+        case 0xf3U:                                     /* DI */
+            state->interrupt_enable = 0U;
+            state->interrupt_enable_delay = 0U;
+            return BM_STATUS_OK;
+        case 0xf9U:                                     /* SPHL */
+            state->sp = get_hl(state);
+            return BM_STATUS_OK;
+        case 0xfbU:                                     /* EI */
+            state->interrupt_enable = 1U;
+            state->interrupt_enable_delay = 1U;
+            return BM_STATUS_OK;
+        default:
+            /* RIM and SIM are added with the 8085 interrupt system. */
+            state->pc = start;
+            return BM_STATUS_UNSUPPORTED;
+    }
+}
+
+/* ---------------------------------------------------------------------
+ * Boundaries.
+ * --------------------------------------------------------------------- */
+static void
+begin_boundary(bm_i8085_state_t *state)
+{
+    state->boundary_opcode = 0U;
+    state->boundary_taken = 0U;
+    state->boundary_transactions = 0U;
+    state->boundary_wait_states = 0U;
+}
+
+static void
+finish_boundary(bm_i8085_state_t *state, bm_i8085_boundary_kind_t kind,
+                bm_i8085_interrupt_source_t source, uint8_t t_states,
+                uint8_t machine_cycles, int known)
+{
+    bm_i8085_timing_observation_t *last = &state->last;
+
+    memset(last, 0, sizeof(*last));
+    last->size = sizeof(*last);
+    last->version = BM_I8085_TIMING_OBSERVATION_VERSION;
+    last->kind = kind;
+    last->interrupt_source = source;
+    last->opcode = state->boundary_opcode;
+    last->machine_cycles = known ? machine_cycles : 0U;
+    last->branch_taken = state->boundary_taken;
+    last->clock_kind = known ? BM_I8085_CLOCKS_EXACT : BM_I8085_CLOCKS_UNKNOWN;
+    last->t_states = known ? t_states : 0U;
+    last->logical_bus_transactions = state->boundary_transactions;
+    last->reported_wait_states = state->boundary_wait_states;
+    if (state->timing != NULL)
+        state->timing(state->timing_context, last);
+}
+
+static bm_status_t
+run_instruction_boundary(bm_i8085_state_t *state)
+{
+    uint8_t t_states = 0U;
+    uint8_t machine_cycles = 0U;
+    int known;
+    bm_status_t status;
+
+    begin_boundary(state);
+    status = execute_instruction(state);
+    if (status != BM_STATUS_OK)
+        return status;
+    known = documented_timing(state->boundary_opcode, state->boundary_taken,
+                              &t_states, &machine_cycles);
+    finish_boundary(state, BM_I8085_BOUNDARY_INSTRUCTION,
+                    BM_I8085_INTERRUPT_NONE, t_states, machine_cycles, known);
+    return BM_STATUS_OK;
 }
 
 /* RESET IN clears PC, the interrupt enable, the RST 7.5 and TRAP flip-flops
@@ -89,11 +847,21 @@ cpu_reset(void *context)
 static bm_status_t
 cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
 {
-    (void) budget;
-    if ((context == NULL) || (consumed == NULL))
+    bm_i8085_state_t *state = context;
+    bm_status_t status;
+
+    if ((state == NULL) || (consumed == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     *consumed = 0U;
-    return BM_STATUS_UNSUPPORTED;
+    while (*consumed < budget) {
+        if (state->halted)
+            return BM_STATUS_IDLE;
+        status = run_instruction_boundary(state);
+        if (status != BM_STATUS_OK)
+            return status;
+        ++*consumed;
+    }
+    return BM_STATUS_OK;
 }
 
 static bm_status_t
@@ -147,32 +915,29 @@ cpu_signal(void *context, uint32_t line, int asserted)
 static bm_status_t
 cpu_inspect(const void *context, const char *name, uint64_t *value)
 {
+    static const char *const register_names[8] = {
+        "b", "c", "d", "e", "h", "l", NULL, "a"
+    };
     const bm_i8085_state_t *state = context;
+    unsigned int index;
 
     if ((state == NULL) || (name == NULL) || (value == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
-    if (strcmp(name, "a") == 0)
-        *value = state->a;
-    else if (strcmp(name, "f") == 0)
+    for (index = 0U; index < 8U; ++index) {
+        if ((register_names[index] != NULL) &&
+            (strcmp(name, register_names[index]) == 0)) {
+            *value = state->registers[index];
+            return BM_STATUS_OK;
+        }
+    }
+    if (strcmp(name, "f") == 0)
         *value = state->f;
-    else if (strcmp(name, "b") == 0)
-        *value = state->b;
-    else if (strcmp(name, "c") == 0)
-        *value = state->c;
-    else if (strcmp(name, "d") == 0)
-        *value = state->d;
-    else if (strcmp(name, "e") == 0)
-        *value = state->e;
-    else if (strcmp(name, "h") == 0)
-        *value = state->h;
-    else if (strcmp(name, "l") == 0)
-        *value = state->l;
     else if (strcmp(name, "bc") == 0)
-        *value = ((unsigned int) state->b << 8U) | state->c;
+        *value = get_pair(state, 0U);
     else if (strcmp(name, "de") == 0)
-        *value = ((unsigned int) state->d << 8U) | state->e;
+        *value = get_pair(state, 1U);
     else if (strcmp(name, "hl") == 0)
-        *value = ((unsigned int) state->h << 8U) | state->l;
+        *value = get_pair(state, 2U);
     else if (strcmp(name, "sp") == 0)
         *value = state->sp;
     else if (strcmp(name, "pc") == 0)
@@ -189,6 +954,8 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
         *value = state->trap_pending;
     else if (strcmp(name, "sod") == 0)
         *value = state->sod;
+    else if (strcmp(name, "last_t_states") == 0)
+        *value = state->last.t_states;
     else
         return BM_STATUS_UNSUPPORTED;
     return BM_STATUS_OK;
@@ -261,14 +1028,14 @@ bm_i8085_get_arch_state(const bm_cpu_t *cpu, bm_i8085_arch_state_t *out_state)
     out_state->size = sizeof(*out_state);
     out_state->version = BM_I8085_ARCH_STATE_VERSION;
     out_state->model = state->model;
-    out_state->a = state->a;
+    out_state->a = state->registers[REG_A];
     out_state->f = state->f;
-    out_state->b = state->b;
-    out_state->c = state->c;
-    out_state->d = state->d;
-    out_state->e = state->e;
-    out_state->h = state->h;
-    out_state->l = state->l;
+    out_state->b = state->registers[0];
+    out_state->c = state->registers[1];
+    out_state->d = state->registers[2];
+    out_state->e = state->registers[3];
+    out_state->h = state->registers[4];
+    out_state->l = state->registers[5];
     out_state->sp = state->sp;
     out_state->pc = state->pc;
     out_state->interrupt_enable = state->interrupt_enable;
@@ -305,14 +1072,14 @@ bm_i8085_set_arch_state(bm_cpu_t *cpu, const bm_i8085_arch_state_t *image)
         (image->interrupt_enable_delay && !image->interrupt_enable))
         return BM_STATUS_INVALID_ARGUMENT;
     state = cpu->context;
-    state->a = image->a;
+    state->registers[REG_A] = image->a;
     state->f = image->f;
-    state->b = image->b;
-    state->c = image->c;
-    state->d = image->d;
-    state->e = image->e;
-    state->h = image->h;
-    state->l = image->l;
+    state->registers[0] = image->b;
+    state->registers[1] = image->c;
+    state->registers[2] = image->d;
+    state->registers[3] = image->e;
+    state->registers[4] = image->h;
+    state->registers[5] = image->l;
     state->sp = image->sp;
     state->pc = image->pc;
     state->interrupt_enable = image->interrupt_enable;
@@ -358,9 +1125,20 @@ bm_i8085_step(bm_cpu_t *cpu, bm_tick_t *consumed)
 bm_status_t
 bm_i8085_step_clocked(void *context, bm_tick_t start_ns, uint64_t *cycles)
 {
+    bm_i8085_state_t *state = context;
+    bm_tick_t consumed = 0U;
+    bm_status_t status;
+
     (void) start_ns;
-    if ((context == NULL) || (cycles == NULL))
+    if ((state == NULL) || (cycles == NULL))
         return BM_STATUS_INVALID_ARGUMENT;
     *cycles = 0U;
-    return BM_STATUS_UNSUPPORTED;
+    status = cpu_run(state, 1U, &consumed);
+    if (status != BM_STATUS_OK)
+        return status;
+    if ((consumed != 1U) || (state->last.clock_kind != BM_I8085_CLOCKS_EXACT) ||
+        (state->last.t_states == 0U))
+        return BM_STATUS_UNSUPPORTED;
+    *cycles = state->last.t_states + state->last.reported_wait_states;
+    return BM_STATUS_OK;
 }
