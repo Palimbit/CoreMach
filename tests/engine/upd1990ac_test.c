@@ -192,6 +192,79 @@ test_chip_select(void)
     bm_upd1990ac_destroy(chip);
 }
 
+/* The TP deadline matches the advance needed to change TP. */
+static void
+test_tp_deadline(void)
+{
+    const bm_upd1990ac_time_t zero = { 0, 0, 0, 1, 0, 1 };
+    tp_log_t log = { 0U, 0U, 0 };
+    bm_upd1990ac_t *chip = make(&zero, &log);
+    unsigned int step;
+
+    command(chip, BM_UPD1990AC_TP_256HZ);
+    for (step = 0U; step < 6U; ++step) {
+        uint64_t wait = bm_upd1990ac_cycles_until_tp_change(chip);
+        unsigned int before = log.changes;
+        assert(wait >= 1U && wait <= 64U);
+        bm_upd1990ac_advance(chip, wait - 1U);
+        assert(log.changes == before);
+        bm_upd1990ac_advance(chip, 1U);
+        assert(log.changes == before + 1U);
+    }
+    bm_upd1990ac_advance(chip, 5U);
+    assert(bm_upd1990ac_cycles_until_tp_change(chip) == 59U);
+    bm_upd1990ac_destroy(chip);
+}
+
+/* Saved state restores counter, divider phase and latched commands; the
+ * seconds advance carries the calendar but not a held counter. */
+static void
+test_state_round_trip(void)
+{
+    const bm_upd1990ac_time_t start = { 58, 59, 23, 28, 6, 2 };
+    const bm_upd1990ac_time_t zero = { 0, 0, 0, 1, 0, 1 };
+    uint8_t state[BM_UPD1990AC_STATE_SIZE];
+    bm_upd1990ac_t *chip = make(&start, NULL);
+    bm_upd1990ac_t *copy = make(&zero, NULL);
+    bm_upd1990ac_time_t t;
+
+    command(chip, BM_UPD1990AC_TP_256HZ);
+    command(chip, BM_UPD1990AC_TIME_READ);
+    bm_upd1990ac_advance(chip, 1234U);
+    assert(bm_upd1990ac_save_state(chip, state, sizeof(state)) == BM_STATUS_OK);
+    assert(bm_upd1990ac_load_state(copy, state, sizeof(state)) == BM_STATUS_OK);
+    assert(bm_upd1990ac_tp_hz(copy) == 256U);
+    assert(bm_upd1990ac_mode(copy) == BM_UPD1990AC_TIME_READ);
+    assert(bm_upd1990ac_cycles_until_tp_change(copy) ==
+           bm_upd1990ac_cycles_until_tp_change(chip));
+    assert(bm_upd1990ac_tp(copy) == bm_upd1990ac_tp(chip));
+    bm_upd1990ac_advance(chip, 32768U);
+    bm_upd1990ac_advance(copy, 32768U);
+    bm_upd1990ac_get_time(copy, &t);
+    assert(t.second == 59U && t.minute == 59U && t.hour == 23U && t.day == 28U);
+    bm_upd1990ac_advance_seconds(copy, 1U);
+    bm_upd1990ac_get_time(copy, &t);
+    /* Feb. 28 is followed by Mar. 1; weekday 6 wraps to 0. */
+    assert(t.second == 0U && t.minute == 0U && t.hour == 0U && t.day == 1U &&
+           t.month == 3U && t.weekday == 0U);
+    bm_upd1990ac_set_time(copy, &start);
+    bm_upd1990ac_get_time(copy, &t);
+    assert(memcmp(&t, &start, sizeof(t)) == 0);
+    state[0] = 0U;
+    assert(bm_upd1990ac_load_state(copy, state, sizeof(state)) == BM_STATUS_INVALID_ARGUMENT);
+    assert(bm_upd1990ac_load_state(copy, state, sizeof(state) - 1U) == BM_STATUS_INVALID_ARGUMENT);
+    command(copy, BM_UPD1990AC_TIME_SET);
+    bm_upd1990ac_get_time(copy, &t);
+    bm_upd1990ac_advance_seconds(copy, 10U);
+    {
+        bm_upd1990ac_time_t held;
+        bm_upd1990ac_get_time(copy, &held);
+        assert(memcmp(&held, &t, sizeof(t)) == 0);
+    }
+    bm_upd1990ac_destroy(chip);
+    bm_upd1990ac_destroy(copy);
+}
+
 int
 main(void)
 {
@@ -200,5 +273,7 @@ main(void)
     test_calendar_rollover();
     test_tp_and_hold_output();
     test_chip_select();
+    test_tp_deadline();
+    test_state_round_trip();
     return 0;
 }

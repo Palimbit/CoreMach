@@ -101,11 +101,16 @@ tick_second(bm_upd1990ac_time_t *t)
 
 /* 64, 256 and 2048 Hz are divider stages 8, 6 and 3 of the 32.768 kHz
  * chain (page 793); duty 50 % (page 797). */
+static unsigned int
+tp_stage(const bm_upd1990ac_t *chip)
+{
+    return chip->tp_hz == 2048U ? 3U : chip->tp_hz == 256U ? 6U : 8U;
+}
+
 static uint8_t
 tp_from_divider(const bm_upd1990ac_t *chip)
 {
-    unsigned int stage = chip->tp_hz == 2048U ? 3U : chip->tp_hz == 256U ? 6U : 8U;
-    return (uint8_t) ((chip->divider >> stage) & 1U);
+    return (uint8_t) ((chip->divider >> tp_stage(chip)) & 1U);
 }
 
 static void
@@ -280,4 +285,85 @@ unsigned int
 bm_upd1990ac_tp_hz(const bm_upd1990ac_t *chip)
 {
     return chip->tp_hz;
+}
+
+uint64_t
+bm_upd1990ac_cycles_until_tp_change(const bm_upd1990ac_t *chip)
+{
+    /* Stage n toggles whenever the low n bits of the divider wrap. Held
+     * counting keeps stages 1-10, which include every TP stage. */
+    const unsigned int span = 1U << tp_stage(chip);
+    return span - (chip->divider & (span - 1U));
+}
+
+void
+bm_upd1990ac_set_time(bm_upd1990ac_t *chip, const bm_upd1990ac_time_t *time)
+{
+    chip->time = *time;
+    if (chip->mode == BM_UPD1990AC_TIME_READ)
+        chip->shift_register = pack(&chip->time);
+}
+
+void
+bm_upd1990ac_advance_seconds(bm_upd1990ac_t *chip, uint64_t seconds)
+{
+    if (chip->counter_held)
+        return;
+    while (seconds-- != 0U)
+        tick_second(&chip->time);
+    if (chip->mode == BM_UPD1990AC_TIME_READ)
+        chip->shift_register = pack(&chip->time);
+}
+
+#define STATE_VERSION 1U
+
+bm_status_t
+bm_upd1990ac_save_state(const bm_upd1990ac_t *chip, uint8_t *data, size_t size)
+{
+    unsigned int index;
+
+    if ((chip == NULL) || (data == NULL) || (size != BM_UPD1990AC_STATE_SIZE))
+        return BM_STATUS_INVALID_ARGUMENT;
+    memset(data, 0, size);
+    data[0] = STATE_VERSION;
+    data[1] = chip->time.second;
+    data[2] = chip->time.minute;
+    data[3] = chip->time.hour;
+    data[4] = chip->time.day;
+    data[5] = chip->time.weekday;
+    data[6] = chip->time.month;
+    data[7] = (uint8_t) (chip->divider & 0xffU);
+    data[8] = (uint8_t) (chip->divider >> 8U);
+    data[9] = chip->mode;
+    data[10] = chip->test_mode;
+    data[11] = (uint8_t) (chip->tp_hz == 2048U ? 2U : chip->tp_hz == 256U ? 1U : 0U);
+    data[12] = chip->counter_held;
+    for (index = 0U; index < 5U; ++index)
+        data[13U + index] = (uint8_t) (chip->shift_register >> (8U * index));
+    return BM_STATUS_OK;
+}
+
+bm_status_t
+bm_upd1990ac_load_state(bm_upd1990ac_t *chip, const uint8_t *data, size_t size)
+{
+    unsigned int index;
+    uint64_t shift = 0U;
+
+    if ((chip == NULL) || (data == NULL) || (size != BM_UPD1990AC_STATE_SIZE) ||
+        (data[0] != STATE_VERSION) || (data[9] > 3U) || (data[10] > 1U) ||
+        (data[11] > 2U) || (data[12] > 1U) || ((data[8] & 0x80U) != 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    for (index = 0U; index < 5U; ++index)
+        shift |= (uint64_t) data[13U + index] << (8U * index);
+    chip->time = (bm_upd1990ac_time_t) {
+        data[1], data[2], data[3], data[4], data[5], data[6]
+    };
+    chip->divider = (uint16_t) (data[7] | (data[8] << 8U));
+    chip->mode = data[9];
+    chip->test_mode = data[10];
+    chip->tp_hz = data[11] == 2U ? 2048U : data[11] == 1U ? 256U : 64U;
+    chip->counter_held = data[12];
+    chip->shift_register = shift;
+    update_tp(chip);
+    return BM_STATUS_OK;
 }

@@ -2,6 +2,7 @@
 #ifndef BLUMACH_COMPONENTS_RTC_UPD1990AC_H
 #define BLUMACH_COMPONENTS_RTC_UPD1990AC_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <blumach/engine/host.h>
 
@@ -82,6 +83,29 @@ void bm_upd1990ac_get_time(const bm_upd1990ac_t *chip,
 bm_upd1990ac_command_t bm_upd1990ac_mode(const bm_upd1990ac_t *chip);
 /* TP frequency in Hz selected by group-1 commands (64, 256 or 2048). */
 unsigned int bm_upd1990ac_tp_hz(const bm_upd1990ac_t *chip);
+
+/* Oscillator periods until the next TP level change (always >= 1). */
+uint64_t bm_upd1990ac_cycles_until_tp_change(const bm_upd1990ac_t *chip);
+
+/* Load new counter contents, as a completed Time Set would, without
+ * touching the divider, mode or shift register. */
+void bm_upd1990ac_set_time(bm_upd1990ac_t *chip,
+                           const bm_upd1990ac_time_t *time);
+
+/* Advance the counter by whole seconds without stepping the divider. It
+ * stands for an interval in which nobody observes the pins, such as a
+ * battery-backed machine that is switched off; TP does not change. A held
+ * counter (after Time Set) does not count. */
+void bm_upd1990ac_advance_seconds(bm_upd1990ac_t *chip, uint64_t seconds);
+
+/* Battery-backed contents: counter, divider, latched commands and shift
+ * register. Pin levels belong to the owner and are not part of the state.
+ * The format is versioned; load rejects other versions and invalid sizes. */
+#define BM_UPD1990AC_STATE_SIZE 20U
+bm_status_t bm_upd1990ac_save_state(const bm_upd1990ac_t *chip,
+                                    uint8_t *data, size_t size);
+bm_status_t bm_upd1990ac_load_state(bm_upd1990ac_t *chip,
+                                    const uint8_t *data, size_t size);
 
 #ifdef __cplusplus
 }
