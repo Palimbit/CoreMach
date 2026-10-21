@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <time.h>
 
 #define CLK_HZ 2457600U
@@ -230,6 +231,15 @@ typedef struct probe {
     uint8_t rtc_last_e_write;
     bm_upd1990ac_time_t rtc_final;
     unsigned int rtc_final_tp_hz;
+    /* Keyboard (service manual 6.8, Fig. 6-7): PA0-PA7 and PB0 strobe nine
+     * rows active low, KR0-KR7 return through a 40H244 at E0h-EFh with
+     * pull-ups, so a pressed key reads 0 on its bit. */
+    uint8_t key_rows[9];
+    unsigned int lang;          /* PC5:PC4 language jumpers, 6.16.3 */
+    struct key_event *key_events;
+    size_t key_event_count;
+    size_t key_event_next;
+    uint64_t keys_pressed;
     uint8_t port_a;
     uint8_t port_b;
     bm_hd44102_t *lcd[LCD_CHIPS];
@@ -411,6 +421,174 @@ memory_access(void *context, bm_bus_transaction_t *txn)
     return BM_STATUS_OK;
 }
 
+typedef struct key_event {
+    uint64_t t_state;
+    uint8_t code;     /* row * 8 + return bit */
+    uint8_t pressed;
+} key_event_t;
+
+/* Physical keys by matrix code, named after the English legends of the
+ * service manual Fig. 6-7 and the control codes in the ROM table. Names
+ * for row PB0 bits 6-7 are read from the figure and are uncertain. */
+static const struct { const char *name; uint8_t code; } key_names[] = {
+    { "LEFT", 48 }, { "RIGHT", 49 }, { "UP", 50 }, { "DOWN", 51 },
+    { "DEL", 52 }, { "TAB", 53 }, { "ENTER", 54 }, { "PASTE", 55 },
+    { "F1", 56 }, { "F2", 57 }, { "F3", 58 }, { "F4", 59 },
+    { "F5", 60 }, { "F6", 61 }, { "F7", 62 }, { "F8", 63 },
+    { "LABEL", 64 }, { "PRINT", 65 }, { "SHIFT", 66 }, { "CTRL", 67 },
+    { "GRPH", 68 }, { "NUM", 69 }, { "CAPS", 70 }, { "PAUSE", 71 },
+    { "SPACE", 47 }
+};
+
+#define KEY_SHIFT 66U
+#define KEY_ENTER 54U
+
+/* Translate one character with the firmware's own tables for the selected
+ * language: codes 0-26 from the national pairs at 7864h + 27 * (lang * 2
+ * + shift + 1), codes 27-46 from 793Ch (unshifted) and 796Bh (shifted),
+ * as selected by the ROM at 6E48h-6EC4h. */
+static int
+key_for_char(const probe_t *probe, char ch, uint8_t *code, int *shift)
+{
+    unsigned int c;
+    int s;
+    if (ch == ' ') { *code = 47U; *shift = 0; return 1; }
+    for (s = 0; s < 2; ++s) {
+        const uint8_t *national = probe->rom + 0x7864U + 27U * (probe->lang * 2U + (unsigned int) s + 1U);
+        const uint8_t *letters = probe->rom + (s ? 0x796BU : 0x793CU);
+        for (c = 0U; c < 27U; ++c)
+            if (national[c] == (uint8_t) ch) { *code = (uint8_t) c; *shift = s; return 1; }
+        for (c = 27U; c < 47U; ++c)
+            if (letters[c] == (uint8_t) ch) { *code = (uint8_t) c; *shift = s; return 1; }
+    }
+    return 0;
+}
+
+static int
+add_key_event(probe_t *probe, size_t *capacity, uint64_t t, uint8_t code, int pressed)
+{
+    if (probe->key_event_count == *capacity) {
+        size_t grown = *capacity ? *capacity * 2U : 64U;
+        key_event_t *events = realloc(probe->key_events, grown * sizeof(*events));
+        if (events == NULL)
+            return 0;
+        probe->key_events = events;
+        *capacity = grown;
+    }
+    probe->key_events[probe->key_event_count++] = (key_event_t) { t, code, (uint8_t) pressed };
+    return 1;
+}
+
+/* Key script, one event per line:
+ *   <seconds> type <text>        text; {ENTER} presses ENTER
+ *   <seconds> key <NAME> [ms]    one physical key held for ms (100)
+ * Typed keys are held 80 ms with 80 ms between keys; shifted characters
+ * hold SHIFT around them. Lines starting with # are comments. */
+static int
+load_key_script(probe_t *probe, const char *path)
+{
+    const uint64_t ms = CLK_HZ / 1000U;
+    FILE *file = fopen(path, "r");
+    char line[512];
+    size_t capacity = 0U;
+    if (file == NULL)
+        return 0;
+    while (fgets(line, sizeof(line), file) != NULL) {
+        double seconds;
+        char verb[16];
+        int used = 0;
+        uint64_t at;
+        char *rest;
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[0] == '#' || line[0] == '\0')
+            continue;
+        if (sscanf(line, "%lf %15s %n", &seconds, verb, &used) < 2) {
+            fclose(file);
+            return 0;
+        }
+        at = (uint64_t) (seconds * CLK_HZ);
+        rest = line + used;
+        if (strcmp(verb, "key") == 0) {
+            char name[16];
+            unsigned int hold = 100U;
+            size_t i;
+            int found = -1;
+            if (sscanf(rest, "%15s %u", name, &hold) < 1) { fclose(file); return 0; }
+            for (i = 0U; i < sizeof(key_names) / sizeof(key_names[0]); ++i)
+                if (strcmp(name, key_names[i].name) == 0)
+                    found = key_names[i].code;
+            if (found < 0 || !add_key_event(probe, &capacity, at, (uint8_t) found, 1) ||
+                !add_key_event(probe, &capacity, at + hold * ms, (uint8_t) found, 0)) {
+                fclose(file);
+                return 0;
+            }
+        } else if (strcmp(verb, "type") == 0) {
+            while (*rest != '\0') {
+                uint8_t code;
+                int shift = 0;
+                if (strncmp(rest, "{ENTER}", 7) == 0) {
+                    code = KEY_ENTER;
+                    rest += 7;
+                } else if (!key_for_char(probe, *rest++, &code, &shift)) {
+                    fclose(file);
+                    return 0;
+                }
+                if (shift && !add_key_event(probe, &capacity, at, KEY_SHIFT, 1)) { fclose(file); return 0; }
+                if (!add_key_event(probe, &capacity, at + 20U * ms, code, 1) ||
+                    !add_key_event(probe, &capacity, at + 100U * ms, code, 0)) { fclose(file); return 0; }
+                if (shift && !add_key_event(probe, &capacity, at + 120U * ms, KEY_SHIFT, 0)) { fclose(file); return 0; }
+                at += 200U * ms;
+            }
+        } else {
+            fclose(file);
+            return 0;
+        }
+    }
+    fclose(file);
+    /* Events are applied in time order. */
+    {
+        size_t i, j;
+        for (i = 1U; i < probe->key_event_count; ++i)
+            for (j = i; j > 0U && probe->key_events[j - 1U].t_state > probe->key_events[j].t_state; --j) {
+                key_event_t swap = probe->key_events[j];
+                probe->key_events[j] = probe->key_events[j - 1U];
+                probe->key_events[j - 1U] = swap;
+            }
+    }
+    return 1;
+}
+
+static void
+apply_key_events(probe_t *probe)
+{
+    while (probe->key_event_next < probe->key_event_count &&
+           probe->key_events[probe->key_event_next].t_state <= probe->t_states) {
+        const key_event_t *e = &probe->key_events[probe->key_event_next++];
+        uint8_t bit = (uint8_t) (1U << (e->code & 7U));
+        if (e->pressed) {
+            probe->key_rows[e->code >> 3U] = (uint8_t) (probe->key_rows[e->code >> 3U] | bit);
+            ++probe->keys_pressed;
+        } else {
+            probe->key_rows[e->code >> 3U] = (uint8_t) (probe->key_rows[e->code >> 3U] & ~bit);
+        }
+    }
+}
+
+/* Return lines for E0h-EFh reads: every row whose strobe is low adds its
+ * pressed keys; pressed reads 0. */
+static uint8_t
+keyboard_return(const probe_t *probe)
+{
+    uint8_t pressed = 0U;
+    unsigned int row;
+    for (row = 0U; row < 8U; ++row)
+        if (((probe->port_a >> row) & 1U) == 0U)
+            pressed = (uint8_t) (pressed | probe->key_rows[row]);
+    if ((probe->port_b & 1U) == 0U)
+        pressed = (uint8_t) (pressed | probe->key_rows[8]);
+    return (uint8_t) ~pressed;
+}
+
 /* 2 457 600 / 32 768 = 75 CPU clocks per crystal period. */
 #define RTC_T_PER_OSC 75U
 
@@ -476,6 +654,10 @@ io_access(void *context, bm_bus_transaction_t *txn)
         uint8_t device = lcd_access(probe, port, write, (uint8_t) txn->value);
         uint8_t bus = port >= 0xf0U ? device : probe->open_bus;
         bus = rtc_access(probe, port, write, (uint8_t) txn->value, bus);
+        if (!write && (port & 0xf0U) == 0xe0U)
+            bus = keyboard_return(probe);
+        if (!write && (port == 0xbbU || port == 0xb3U))
+            bus = (uint8_t) ((bus & 0xcfU) | (probe->lang << 4U));
         if (!write)
             txn->value = probe->io_value[port] >= 0 ? (uint8_t) probe->io_value[port] : bus;
     }
@@ -621,6 +803,7 @@ probe_run(probe_t *probe)
             lcd_capture(probe, label);
             ++probe->lcd_captures_done;
         }
+        apply_key_events(probe);
         if (probe->t_states >= probe->max_t_states) {
             probe->stop = STOP_TSTATE_LIMIT;
             return;
@@ -713,7 +896,14 @@ print_report(FILE *out, const probe_t *probe, const char *rom_hash)
                 probe->rtc_host_time ? "host time" : "fixed time",
                 probe->rtc_initial.month, probe->rtc_initial.day, probe->rtc_initial.hour,
                 probe->rtc_initial.minute, probe->rtc_initial.second, probe->rtc_initial.weekday);
-    fprintf(out, "devices: ten HD44102CH and a uPD1990AC; other I/O reads are fixed\n\n");
+    {
+        static const char *const lang_names[4] = { "English", "German", "Italian", "French" };
+        fprintf(out, "language jumpers: PC5:PC4 = %u (%s table pair in the ROM)\n",
+                probe->lang, lang_names[probe->lang & 3U]);
+        fprintf(out, "keyboard: %zu scripted events, %" PRIu64 " presses applied\n",
+                probe->key_event_count, probe->keys_pressed);
+    }
+    fprintf(out, "devices: ten HD44102CH, a uPD1990AC and the key matrix; other I/O reads are fixed\n\n");
 
     fprintf(out, "stop: %s\n", stop_names[probe->stop]);
     if (probe->stop == STOP_CPU_STATUS)
@@ -1002,6 +1192,8 @@ usage(const char *name)
             "  --lcd PREFIX            write LCD captures as PREFIX-<label>.pgm\n"
             "  --lcd-at SECONDS        add an increasing capture time (up to 8)\n"
             "  --lcd-busy-t N          HD44102 BUSY period in CPU T-states (default 23)\n"
+            "  --lang en|de|it|fr      language jumpers on PC5:PC4 (default fr = floating 1s)\n"
+            "  --keys FILE             timed key script (see load_key_script)\n"
             "  --rtc-time host|\"MM-DD hh:mm:ss W\"  uPD1990AC start (default host, W 0=Sun)\n",
             name, name);
 }
@@ -1013,6 +1205,7 @@ main(int argc, char **argv)
     probe_t *probe;
     uint8_t *rom;
     const char *report_path = NULL;
+    const char *key_script = NULL;
     char hash[65];
     FILE *file;
     size_t count;
@@ -1036,6 +1229,7 @@ main(int argc, char **argv)
     probe->poll_limit = 100000U;
     probe->lcd_busy_t = LCD_DEFAULT_BUSY_T;
     probe->rtc_host_time = 1U;
+    probe->lang = 3U;
     for (index = 0; index < 256; ++index)
         probe->io_value[index] = -1;
     for (index = 2; index < argc; ++index) {
@@ -1088,6 +1282,18 @@ main(int argc, char **argv)
             }
         } else if ((strcmp(arg, "--report") == 0) && next) {
             report_path = next;
+        } else if ((strcmp(arg, "--lang") == 0) && next) {
+            static const char *const codes[4] = { "en", "de", "it", "fr" };
+            unsigned int l;
+            for (l = 0U; l < 4U && strcmp(next, codes[l]) != 0; ++l)
+                ;
+            if (l == 4U) {
+                usage(argv[0]);
+                return 2;
+            }
+            probe->lang = l;
+        } else if ((strcmp(arg, "--keys") == 0) && next) {
+            key_script = next;
         } else if ((strcmp(arg, "--rtc-time") == 0) && next) {
             unsigned int mo, d, h, mi, s, w;
             if (strcmp(next, "host") == 0) {
@@ -1147,6 +1353,10 @@ main(int argc, char **argv)
             };
     }
     probe->rom = rom;
+    if (key_script != NULL && !load_key_script(probe, key_script)) {
+        fprintf(stderr, "cannot load key script %s\n", key_script);
+        return 2;
+    }
     if (!probe_setup(probe, &host)) {
         fprintf(stderr, "probe setup failed\n");
         return 2;
@@ -1165,6 +1375,7 @@ main(int argc, char **argv)
         }
     }
     probe_teardown(probe);
+    free(probe->key_events);
     free(rom);
     free(probe);
     return 0;
