@@ -677,7 +677,16 @@ foreach(name IN LISTS BLUMACH_I8085_TESTS)
     )
     set_tests_properties(portable-engine.i8085-${name} PROPERTIES TIMEOUT 10)
 endforeach()
-set(BLUMACH_I8085_TARGETS portable-engine-i8085-test-support)
+# Manual exerciser runner: CP/M programs such as 8080EXM are passed by path
+# and never bundled, so this is intentionally not a CTest.
+add_executable(portable-engine-i8085-cpm-runner cpu_i8085_cpm_runner.c)
+target_link_libraries(portable-engine-i8085-cpm-runner
+    PRIVATE portable-engine-i8085-test-support
+)
+set(BLUMACH_I8085_TARGETS
+    portable-engine-i8085-test-support
+    portable-engine-i8085-cpm-runner
+)
 foreach(name IN LISTS BLUMACH_I8085_TESTS)
     list(APPEND BLUMACH_I8085_TARGETS portable-engine-i8085-${name})
 endforeach()
