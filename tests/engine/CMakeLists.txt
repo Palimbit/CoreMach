@@ -654,3 +654,35 @@ set_tests_properties(
     portable-engine.legacy-io
     PROPERTIES TIMEOUT 10
 )
+
+# Intel 8085 / OKI MSM80C85A component contracts.
+add_library(portable-engine-i8085-test-support STATIC cpu_i8085_test_harness.c)
+target_link_libraries(portable-engine-i8085-test-support
+    PUBLIC blumach_cpu_i8085 blumach_platform_null
+)
+set(BLUMACH_I8085_TESTS
+    lifecycle
+)
+foreach(name IN LISTS BLUMACH_I8085_TESTS)
+    add_executable(portable-engine-i8085-${name} cpu_i8085_${name}_test.c)
+    target_link_libraries(portable-engine-i8085-${name}
+        PRIVATE portable-engine-i8085-test-support
+    )
+    add_test(NAME portable-engine.i8085-${name}
+        COMMAND portable-engine-i8085-${name}
+    )
+    set_tests_properties(portable-engine.i8085-${name} PROPERTIES TIMEOUT 10)
+endforeach()
+set(BLUMACH_I8085_TARGETS portable-engine-i8085-test-support)
+foreach(name IN LISTS BLUMACH_I8085_TESTS)
+    list(APPEND BLUMACH_I8085_TARGETS portable-engine-i8085-${name})
+endforeach()
+foreach(target IN LISTS BLUMACH_I8085_TARGETS)
+    target_compile_features(${target} PRIVATE c_std_11)
+    set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /UNDEBUG)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+    endif()
+endforeach()

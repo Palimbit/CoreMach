@@ -11,6 +11,13 @@
   ],
   "components": [
     {
+      "id": "intel-8085-cpu",
+      "destination": ["components/cpu/i8085/**"],
+      "method": "new", "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Instance-owned Intel 8085A/OKI MSM80C85A lifecycle skeleton: positive-logic INTR, TRAP, RST 5.5/6.5/7.5, RESET, READY and SID lines, RESET IN actions from Intel MCS-80/85 User's Manual p2-18, edge latches for TRAP and RST 7.5, versioned boundary state transfer and undocumented-opcode classification. No instruction execution yet."
+    },
+    {
       "id": "intel-80286-write-buffer",
       "destination": ["components/cpu/80286/src/write_buffer_286.c", "components/cpu/80286/src/write_buffer_286.h"],
       "method": "new", "license": "GPL-2.0-or-later",
