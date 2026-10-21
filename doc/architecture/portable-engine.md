@@ -82,6 +82,14 @@ unclassified, so the functional model cannot be registered as an exact clocked
 CPU. The evidence, provenance boundary and exact next timing step are recorded
 in [Portable Intel 8088 core](intel-8088-core.md).
 
+## Reusable Intel 8085 boundary
+
+The separate i8085 component models the Intel 8085A and OKI MSM80C85A with
+the documented instruction set, RIM/SIM, SID/SOD and the TRAP and RST
+interrupt system. It reports exact documented T-states per boundary but is
+not a cycle-exact bus model. Sources, undocumented-flag evidence and limits
+are recorded in [Portable Intel 8085 CPU](intel-8085-cpu.md).
+
 ### PCS86-1 bring-up status
 
 The first real-machine cut now models the documented NEC V30 at 10 MHz, 640 KiB

@@ -11,6 +11,16 @@
   ],
   "components": [
     {
+      "id": "intel-8085-cpu",
+      "destination": ["components/cpu/i8085/**"],
+      "origin_repository": "https://github.com/Palimbit/CoreMach",
+      "origin_commit": "b9f7bb7edcf46514b5041fb40309086facf360b2",
+      "origin_paths": ["components/cpu/808x/src/cpu_808x.c"],
+      "method": "derived-rewrite", "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Separate instance-owned Intel 8085A/OKI MSM80C85A component adapting the 8080 instruction semantics of the NEC V30 emulation mode without sharing or changing 808x code: native 8085 register file and 16-bit address space, byte bus cycles with BM_BUS_FETCH opcode fetches, PUSH/CALL high-byte-first order, conditional jumps and calls that skip the third byte when false, ANA setting AC, PSW bit 3 forced to zero, undocumented V and K flags from Shirriff's silicon analysis with unestablished cases left unchanged, undocumented opcodes rejected without architectural change, and exact 8085 T-states and machine cycles cited to Intel MCS-80/85 pp5-4..5-18 and OKI Table 8. 8085 interrupt system: RIM/SIM with SID/SOD and the first-RIM-after-TRAP enable, fixed TRAP/RST 7.5/6.5/5.5/INTR priority and vectors, one-instruction EI delay, INTR acknowledge of RST or CALL through INTA cycles, internal RESTART timing from MCS-80/85 Figures 2-17..2-19, HALT exit with one THALT clock, RESET IN and READY-low hold boundaries, RESET IN actions from p2-18, positive-logic input lines with TRAP and RST 7.5 edge latches, versioned boundary state and clocked stepping including bus wait states."
+    },
+    {
       "id": "intel-80286-write-buffer",
       "destination": ["components/cpu/80286/src/write_buffer_286.c", "components/cpu/80286/src/write_buffer_286.h"],
       "method": "new", "license": "GPL-2.0-or-later",
