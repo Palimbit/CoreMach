@@ -104,7 +104,20 @@ in the research library, not in Git.
 - The order of the two XTHL stack writes is not stated in the cited pages.
 - RESET IN preserves general registers and flags; on hardware they are
   indeterminate after a reset that occurs mid-instruction.
-- 8080EXM and CPUTEST have not been run. They can be run manually with
-  `portable-engine-i8085-cpm-runner <program.com>`, using scanned local
-  copies only. They target the 8080, so the 8085's AC on ANA and its PSW bits
-  can legitimately change their CRCs.
+- V and K are not covered by the exerciser results below, which mask them.
+
+## External exercisers
+
+`portable-engine-i8085-cpm-runner <program.com>` runs CP/M exercisers passed by
+path. The programs, their scans and the run logs are kept in the research
+library, never in Git. Results at commit a4b72f2e1:
+
+| Program | Result | Meaning |
+|---|---|---|
+| 8085EXM (flag mask D5h, CRCs from Intel D8085AH-1 silicon) | 25/25 pass | S, Z, AC (including ANA), P and CY match real 8085 hardware |
+| 8080EXM (flag mask FFh, 8080 CRCs) | 25/25 differ | Expected: it checks the 8080's fixed PSW bits 1, 3 and 5 |
+| SuperSoft CPUTEST | 1 error, INR B flags 00h vs 02h | Expected: 8080 bit 1 is always 1; on the 8085 it is V, which is 0 here |
+
+In 8080EXM, every test family that does not change V or K produces the 8085
+silicon CRC from Ian Bartholomew's published table, confirming that the only
+difference is PSW bit 1.
