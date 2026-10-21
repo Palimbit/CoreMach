@@ -700,7 +700,7 @@ target_link_libraries(portable-engine-i8085-cpm-runner
 # by SHA-256. Only its authored --self-test mode runs as a CTest.
 add_executable(portable-engine-m10-firmware-probe m10_firmware_probe.c)
 target_link_libraries(portable-engine-m10-firmware-probe
-    PRIVATE blumach_cpu_i8085 blumach_platform_null
+    PRIVATE blumach_cpu_i8085 blumach_video blumach_platform_null
 )
 add_test(NAME portable-engine.m10-firmware-probe-self-test
     COMMAND portable-engine-m10-firmware-probe --self-test

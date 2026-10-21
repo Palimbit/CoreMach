@@ -7,6 +7,7 @@
  * --self-test runs authored synthetic programs instead of firmware. */
 #include <blumach/components/bus.h>
 #include <blumach/components/cpu_i8085.h>
+#include <blumach/components/hd44102.h>
 #include <blumach/platforms/null_host.h>
 
 #include <inttypes.h>
@@ -146,27 +147,22 @@ typedef struct anomaly {
     uint8_t value;
 } anomaly_t;
 
-/* Observation-only HD44102 model. It decodes what the firmware writes and
- * never changes the values returned on the bus. Instruction formats from
- * the Hitachi 1983 MOS LSI Data Book, LCD Driver LSI, HD44102CH (PDF pages
- * 170 and 173-175); display OFF at power up from Note 16 (PDF page 166).
- * UP mode after reset is taken from MAME hd44102.cpp (secondary). */
+/* The M10 LCD: ten HD44102CH column drivers (components/video). Chip
+ * select lines CS20-CS27 are 81C55 PA0-PA7 and CS28-CS29 PB0-PB1, Y7
+ * enables F0h-FFh and A8 (port bit 0) is D/I, data when high (M10 service
+ * manual 6.14, pp. 6-16/6-17). Active-high selection is inferred from the
+ * firmware and matches MAME kyocera.cpp. Chip i covers columns
+ * (i % 5) * 50 and rows (i / 5) * 32 after MAME kyocera_v.cpp; the
+ * manual does not give the panel placement. Reads with several chips
+ * selected are combined with OR as in MAME (secondary). */
 #define LCD_CHIPS 10U
-#define LCD_COLUMNS 50U
 #define LCD_WIDTH 240U
 #define LCD_HEIGHT 64U
 #define LCD_MAX_CAPTURES 8U
-
-typedef struct lcd_chip {
-    uint8_t ram[4][LCD_COLUMNS];
-    uint8_t x;
-    uint8_t y;
-    uint8_t up;
-    uint8_t on;
-    uint8_t start_page;
-    uint64_t commands;
-    uint64_t data_writes;
-} lcd_chip_t;
+/* T_BUSY <= 2/F_phi with F_phi half of the HD44103 oscillation (Hitachi
+ * PDF page 171); about 430 kHz in the M10 (service manual 6.18), so at most
+ * about 9.3 us = 22.9 CPU clocks. Approximate; --lcd-busy-t overrides. */
+#define LCD_DEFAULT_BUSY_T 23U
 
 typedef struct probe {
     /* Configuration. */
@@ -214,28 +210,18 @@ typedef struct probe {
     uint64_t poll_count;
     stop_reason_t stop;
     bm_status_t cpu_status;
-    /* LCD observation: 81C55 PA/PB latches select chips CS20-CS29. */
+    /* LCD: 81C55 PA/PB latches select chips CS20-CS29. */
+    uint64_t lcd_busy_t;
     uint8_t port_a;
     uint8_t port_b;
-    lcd_chip_t lcd[LCD_CHIPS];
+    bm_hd44102_t *lcd[LCD_CHIPS];
     uint64_t lcd_unselected;
+    uint64_t lcd_rejected[4];
+    uint64_t lcd_multi_reads;
+    bm_hd44102_state_t lcd_final[LCD_CHIPS];
+    uint8_t lcd_image[LCD_HEIGHT][LCD_WIDTH];
 } probe_t;
 
-static void
-lcd_reset(probe_t *probe)
-{
-    unsigned int index;
-
-    for (index = 0U; index < LCD_CHIPS; ++index) {
-        memset(&probe->lcd[index], 0, sizeof(probe->lcd[index]));
-        probe->lcd[index].up = 1U;
-    }
-}
-
-/* CS20-CS27 are PA0-PA7 and CS28-CS29 PB0-PB1 (M10 service manual 6.14,
- * Fig. 6-14 and Table 6-5). Active high is inferred from the firmware,
- * which writes one-hot PA values with PB0-1 clear, and all ones to
- * broadcast; MAME kyocera.cpp uses the same polarity. */
 static int
 lcd_selected(const probe_t *probe, unsigned int chip)
 {
@@ -243,90 +229,83 @@ lcd_selected(const probe_t *probe, unsigned int chip)
                        (probe->port_b >> (chip - 8U)) & 1U;
 }
 
-static void
-lcd_step(lcd_chip_t *chip)
+/* Device access for ports F0h-FFh. Returns the value the bus carries for
+ * a read; writes return 0. The time is the T-state of the I/O machine
+ * cycle of IN/OUT, which starts seven clocks into the instruction. */
+static uint8_t
+lcd_access(probe_t *probe, uint8_t port, int write, uint8_t value)
 {
-    if (chip->up)
-        chip->y = (uint8_t) (chip->y == LCD_COLUMNS - 1U ? 0U : chip->y + 1U);
-    else
-        chip->y = (uint8_t) (chip->y == 0U ? LCD_COLUMNS - 1U : chip->y - 1U);
-}
-
-static void
-lcd_command(lcd_chip_t *chip, uint8_t value)
-{
-    ++chip->commands;
-    if ((value & 0x3fU) == 0x3eU)
-        chip->start_page = (uint8_t) (value >> 6U);
-    else if (value == 0x39U || value == 0x38U)
-        chip->on = (uint8_t) (value & 1U);
-    else if (value == 0x3bU || value == 0x3aU)
-        chip->up = (uint8_t) (value & 1U);
-    else if ((value & 0x3fU) < LCD_COLUMNS) {
-        chip->x = (uint8_t) (value >> 6U);
-        chip->y = (uint8_t) (value & 0x3fU);
-    }
-}
-
-static void
-lcd_observe(probe_t *probe, uint8_t port, int write, uint8_t value)
-{
+    uint64_t now = probe->t_states + 7U;
     unsigned int index;
-    int any = 0;
+    unsigned int selected = 0U;
+    uint8_t bus = 0U;
 
     if (write && port == 0xb9U)
         probe->port_a = value;
     if (write && port == 0xbaU)
         probe->port_b = value;
     if (port < 0xf0U)
-        return;
+        return 0U;
     for (index = 0U; index < LCD_CHIPS; ++index) {
-        lcd_chip_t *chip = &probe->lcd[index];
+        bm_hd44102_t *chip = probe->lcd[index];
+        bm_hd44102_result_t result = BM_HD44102_ACCEPTED;
+        uint8_t data = 0U;
         if (!lcd_selected(probe, index))
             continue;
-        any = 1;
+        ++selected;
         if ((port & 1U) == 0U) {
             if (write)
-                lcd_command(chip, value);
+                result = bm_hd44102_write_instruction(chip, value, now);
+            else
+                data = bm_hd44102_read_status(chip, now);
         } else {
-            if (write) {
-                chip->ram[chip->x][chip->y] = value;
-                ++chip->data_writes;
-            }
-            /* Display data reads and writes both advance Y (PDF page 170). */
-            lcd_step(chip);
+            if (write)
+                result = bm_hd44102_write_data(chip, value, now);
+            else
+                result = bm_hd44102_read_data(chip, now, &data);
         }
+        ++probe->lcd_rejected[result];
+        bus = (uint8_t) (bus | data);
     }
-    if (!any)
+    if (selected == 0U) {
         ++probe->lcd_unselected;
+        return probe->open_bus;
+    }
+    if (!write && selected > 1U)
+        ++probe->lcd_multi_reads;
+    return bus;
 }
 
-/* Chip i covers columns (i % 5) * 50 and rows (i / 5) * 32, after MAME
- * kyocera_v.cpp; the service manual does not give the panel placement.
- * Data bit 0 is the top dot of a page (PDF page 173). */
 static void
 lcd_render(const probe_t *probe, uint8_t image[LCD_HEIGHT][LCD_WIDTH])
 {
+    static uint8_t dots[BM_HD44102_ROWS][BM_HD44102_COLUMNS];
     unsigned int index;
     unsigned int column;
     unsigned int row;
 
     memset(image, 0, LCD_HEIGHT * LCD_WIDTH);
     for (index = 0U; index < LCD_CHIPS; ++index) {
-        const lcd_chip_t *chip = &probe->lcd[index];
-        if (!chip->on)
-            continue;
-        for (column = 0U; column < LCD_COLUMNS; ++column) {
-            unsigned int x = (index % 5U) * LCD_COLUMNS + column;
+        bm_hd44102_render(probe->lcd[index], dots);
+        for (column = 0U; column < BM_HD44102_COLUMNS; ++column) {
+            unsigned int x = (index % 5U) * BM_HD44102_COLUMNS + column;
             if (x >= LCD_WIDTH)
                 continue;
-            for (row = 0U; row < 32U; ++row) {
-                unsigned int page = ((row >> 3U) + chip->start_page) & 3U;
-                image[(index / 5U) * 32U + row][x] =
-                    (uint8_t) ((chip->ram[page][column] >> (row & 7U)) & 1U);
-            }
+            for (row = 0U; row < BM_HD44102_ROWS; ++row)
+                image[(index / 5U) * BM_HD44102_ROWS + row][x] = dots[row][column];
         }
     }
+}
+
+/* Keep the final LCD state and image in the probe so they survive
+ * teardown. */
+static void
+lcd_finish(probe_t *probe)
+{
+    unsigned int index;
+    for (index = 0U; index < LCD_CHIPS; ++index)
+        bm_hd44102_get_state(probe->lcd[index], &probe->lcd_final[index]);
+    lcd_render(probe, probe->lcd_image);
 }
 
 static int
@@ -418,9 +397,12 @@ io_access(void *context, bm_bus_transaction_t *txn)
     port_summary_t *summary = &probe->ports[port];
     int write = txn->operation == BM_BUS_WRITE;
 
-    if (!write)
-        txn->value = probe->io_value[port] >= 0 ? (uint8_t) probe->io_value[port] :
-                                                  probe->open_bus;
+    {
+        uint8_t device = lcd_access(probe, port, write, (uint8_t) txn->value);
+        if (!write)
+            txn->value = probe->io_value[port] >= 0 ? (uint8_t) probe->io_value[port] :
+                         port >= 0xf0U ? device : probe->open_bus;
+    }
     if (!probe->io_log_filtered || probe->io_log_port[port]) {
         if (probe->io_logged < IO_LOG_CAPACITY)
             probe->io_log[probe->io_logged] = (io_entry_t) {
@@ -434,7 +416,6 @@ io_access(void *context, bm_bus_transaction_t *txn)
         summary->first_pc = probe->pc;
     summary->seen = 1U;
     summary->last_pc = probe->pc;
-    lcd_observe(probe, port, write, (uint8_t) txn->value);
     if (write) {
         ++summary->writes;
         summary->last_written = (uint8_t) txn->value;
@@ -489,13 +470,22 @@ probe_setup(probe_t *probe, const bm_host_services_t *host)
            0x10000U - probe->ram_base);
     probe->ram_write_low = 0x10000U;
     probe->ram_write_high = 0x10000U;
-    lcd_reset(probe);
     if ((bm_bus_create(host, 2U, &probe->bus) != BM_STATUS_OK) ||
         (bm_bus_map(probe->bus, BM_ADDRESS_MEMORY, 0U, 0xffffU, memory_access,
                     probe) != BM_STATUS_OK) ||
         (bm_bus_map(probe->bus, BM_ADDRESS_IO, 0U, 0xffU, io_access, probe) !=
          BM_STATUS_OK))
         return 0;
+    {
+        unsigned int index;
+        for (index = 0U; index < LCD_CHIPS; ++index) {
+            if (bm_hd44102_create(host, probe->lcd_busy_t, &probe->lcd[index]) !=
+                BM_STATUS_OK)
+                return 0;
+            bm_hd44102_set_reset(probe->lcd[index], 1);
+            bm_hd44102_set_reset(probe->lcd[index], 0);
+        }
+    }
     config = (bm_i8085_config_t) {
         .model = BM_I8085_OKI_MSM80C85A,
         .frequency_hz = CLK_HZ,
@@ -512,6 +502,11 @@ probe_teardown(probe_t *probe)
     if (probe->cpu.ops.destroy != NULL)
         probe->cpu.ops.destroy(probe->cpu.context);
     bm_bus_destroy(probe->bus);
+    {
+        unsigned int index;
+        for (index = 0U; index < LCD_CHIPS; ++index)
+            bm_hd44102_destroy(probe->lcd[index]);
+    }
 }
 
 /* Run until a stop condition. RST 7.5 pulses, when enabled, are injected
@@ -669,16 +664,19 @@ print_report(FILE *out, const probe_t *probe, const char *rom_hash)
         fprintf(out, "  PC %04X address %04X value %02X\n", probe->unpopulated_log[index].pc,
                 probe->unpopulated_log[index].address, probe->unpopulated_log[index].value);
 
-    fprintf(out, "\nLCD (observation only; HD44102 per Hitachi 1983 data book, layout per MAME):\n");
+    fprintf(out, "\nLCD: ten HD44102CH (Hitachi 1983 data book), BUSY %" PRIu64
+            " T-states, layout per MAME:\n", probe->lcd_busy_t);
     for (index = 0U; index < LCD_CHIPS; ++index) {
-        const lcd_chip_t *c = &probe->lcd[index];
-        fprintf(out, "  chip %u (CS2%u) %s start page %u, %s, X=%u Y=%u, commands %" PRIu64
-                ", data writes %" PRIu64 "\n", index, index, c->on ? "ON " : "OFF",
-                c->start_page, c->up ? "up" : "down", c->x, c->y, c->commands,
-                c->data_writes);
+        const bm_hd44102_state_t *c = &probe->lcd_final[index];
+        fprintf(out, "  chip %u (CS2%u) %s start page %u, %s, X=%u Y=%u\n", index, index,
+                c->display_on ? "ON " : "OFF", c->start_page, c->up ? "up" : "down",
+                c->x, c->y);
     }
-    fprintf(out, "  LCD accesses with no chip selected: %" PRIu64 "\n",
-            probe->lcd_unselected);
+    fprintf(out, "  accepted %" PRIu64 ", rejected busy %" PRIu64 ", reset %" PRIu64
+            ", undefined code %" PRIu64 "\n", probe->lcd_rejected[0], probe->lcd_rejected[1],
+            probe->lcd_rejected[2], probe->lcd_rejected[3]);
+    fprintf(out, "  accesses with no chip selected: %" PRIu64 ", reads with several chips: %"
+            PRIu64 "\n", probe->lcd_unselected, probe->lcd_multi_reads);
     fprintf(out, "\nI/O ports (reads, writes, first PC, last PC, last written):\n");
     for (index = 0U; index < 256U; ++index) {
         const port_summary_t *p = &probe->ports[index];
@@ -734,12 +732,14 @@ self_case(const uint8_t *program, size_t size, stop_reason_t expected,
     probe->max_t_states = 100000U;
     probe->stop_at = -1;
     probe->poll_limit = 1000U;
+    probe->lcd_busy_t = LCD_DEFAULT_BUSY_T;
     for (index = 0U; index < 256U; ++index)
         probe->io_value[index] = -1;
     ok = probe_setup(probe, &host);
     if (ok) {
         probe_run(probe);
         ok = probe->stop == expected;
+        lcd_finish(probe);
         if (result != NULL)
             *result = *probe;
         probe_teardown(probe);
@@ -793,25 +793,28 @@ self_test(void)
         puts("self-test: ROM write case failed");
     {
         static const uint8_t lcd[] = {
+            0x31, 0xc0, 0xfc,       /* LXI SP,FCC0h */
             0x3e, 0x01, 0xd3, 0xb9, /* PA=01h: CS20 */
             0x3e, 0xfc, 0xd3, 0xba, /* PB=FCh */
-            0x3e, 0x39, 0xd3, 0xfe, /* display ON */
-            0x3e, 0x7e, 0xd3, 0xfe, /* display start page 1 */
-            0x3e, 0x45, 0xd3, 0xfe, /* X page 1, Y 5 */
-            0x3e, 0x81, 0xd3, 0xff, /* data 81h */
-            0x76
+            0xcd, 0x40, 0x00, 0x3e, 0x39, 0xd3, 0xfe, /* display ON */
+            0xcd, 0x40, 0x00, 0x3e, 0x7e, 0xd3, 0xfe, /* start page 1 */
+            0xcd, 0x40, 0x00, 0x3e, 0x45, 0xd3, 0xfe, /* X page 1, Y 5 */
+            0xcd, 0x40, 0x00, 0x3e, 0x81, 0xd3, 0xff, /* data 81h */
+            0xcd, 0x40, 0x00, 0x3e, 0x45, 0xd3, 0xfe, /* X page 1, Y 5 */
+            0xcd, 0x40, 0x00, 0xdb, 0xff,             /* dummy read */
+            0xcd, 0x40, 0x00, 0xdb, 0xff, 0x47,       /* read 81h; MOV B,A */
+            0xcd, 0x40, 0x00, 0x76,                   /* HLT */
+            0x00, 0x00, 0x00,
+            0xdb, 0xfe, 0x17, 0xda, 0x40, 0x00, 0xc9  /* 0040h: wait while BUSY */
         };
-        static uint8_t image[LCD_HEIGHT][LCD_WIDTH];
         ok = ok && self_case(lcd, sizeof(lcd), STOP_HALTED_NO_SOURCE, result) &&
-             result->lcd[0].on && result->lcd[0].start_page == 1U &&
-             result->lcd[0].ram[1][5] == 0x81U && result->lcd[0].y == 6U &&
-             !result->lcd[1].on && result->lcd_unselected == 0U;
-        if (ok) {
-            /* With start page 1, RAM page 1 is shown in the top eight rows. */
-            lcd_render(result, image);
-            ok = image[0][5] == 1U && image[7][5] == 1U && image[1][5] == 0U &&
-                 image[8][5] == 0U;
-        }
+             result->lcd_final[0].display_on && result->lcd_final[0].start_page == 1U &&
+             result->lcd_final[0].ram[1][5] == 0x81U && result->lcd_final[0].y == 7U &&
+             !result->lcd_final[1].display_on && result->lcd_unselected == 0U &&
+             result->lcd_rejected[1] == 0U;
+        /* With start page 1, RAM page 1 is shown in the top eight rows. */
+        ok = ok && result->lcd_image[0][5] == 1U && result->lcd_image[7][5] == 1U &&
+             result->lcd_image[1][5] == 0U && result->lcd_image[8][5] == 0U;
         if (!ok)
             puts("self-test: LCD case failed");
     }
@@ -832,6 +835,7 @@ self_test(void)
             probe->max_t_states = 100000U;
             probe->stop_at = -1;
             probe->poll_limit = 1000U;
+            probe->lcd_busy_t = LCD_DEFAULT_BUSY_T;
             for (index = 0U; index < 256U; ++index)
                 probe->io_value[index] = -1;
             ok = ok && probe_setup(probe, &host);
@@ -878,7 +882,8 @@ usage(const char *name)
             "  --io-log-ports P,P,...   log only these hex ports in order\n"
             "  --report FILE           also write the report to FILE\n"
             "  --lcd PREFIX            write LCD captures as PREFIX-<label>.pgm\n"
-            "  --lcd-at SECONDS        add an increasing capture time (up to 8)\n",
+            "  --lcd-at SECONDS        add an increasing capture time (up to 8)\n"
+            "  --lcd-busy-t N          HD44102 BUSY period in CPU T-states (default 23)\n",
             name, name);
 }
 
@@ -910,6 +915,7 @@ main(int argc, char **argv)
     probe->max_t_states = 50000000U;
     probe->stop_at = -1;
     probe->poll_limit = 100000U;
+    probe->lcd_busy_t = LCD_DEFAULT_BUSY_T;
     for (index = 0; index < 256; ++index)
         probe->io_value[index] = -1;
     for (index = 2; index < argc; ++index) {
@@ -962,6 +968,8 @@ main(int argc, char **argv)
             }
         } else if ((strcmp(arg, "--report") == 0) && next) {
             report_path = next;
+        } else if ((strcmp(arg, "--lcd-busy-t") == 0) && next) {
+            probe->lcd_busy_t = strtoull(next, NULL, 10);
         } else if ((strcmp(arg, "--lcd") == 0) && next) {
             probe->lcd_prefix = next;
         } else if ((strcmp(arg, "--lcd-at") == 0) && next &&
@@ -1003,6 +1011,7 @@ main(int argc, char **argv)
     }
     probe_run(probe);
     lcd_capture(probe, "final");
+    lcd_finish(probe);
     print_report(stdout, probe, hash);
     if (report_path != NULL) {
         FILE *report = fopen(report_path, "w");
