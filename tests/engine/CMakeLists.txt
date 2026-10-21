@@ -683,9 +683,20 @@ add_executable(portable-engine-i8085-cpm-runner cpu_i8085_cpm_runner.c)
 target_link_libraries(portable-engine-i8085-cpm-runner
     PRIVATE portable-engine-i8085-test-support
 )
+# Manual Olivetti M10 firmware probe: the ROM is passed by path and verified
+# by SHA-256. Only its authored --self-test mode runs as a CTest.
+add_executable(portable-engine-m10-firmware-probe m10_firmware_probe.c)
+target_link_libraries(portable-engine-m10-firmware-probe
+    PRIVATE blumach_cpu_i8085 blumach_platform_null
+)
+add_test(NAME portable-engine.m10-firmware-probe-self-test
+    COMMAND portable-engine-m10-firmware-probe --self-test
+)
+set_tests_properties(portable-engine.m10-firmware-probe-self-test PROPERTIES TIMEOUT 10)
 set(BLUMACH_I8085_TARGETS
     portable-engine-i8085-test-support
     portable-engine-i8085-cpm-runner
+    portable-engine-m10-firmware-probe
 )
 foreach(name IN LISTS BLUMACH_I8085_TESTS)
     list(APPEND BLUMACH_I8085_TARGETS portable-engine-i8085-${name})
