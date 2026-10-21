@@ -8,12 +8,14 @@
 #include <blumach/components/bus.h>
 #include <blumach/components/cpu_i8085.h>
 #include <blumach/components/hd44102.h>
+#include <blumach/components/rtc_upd1990ac.h>
 #include <blumach/platforms/null_host.h>
 
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define CLK_HZ 2457600U
 #define ROM_SIZE 0x8000U
@@ -212,6 +214,22 @@ typedef struct probe {
     bm_status_t cpu_status;
     /* LCD: 81C55 PA/PB latches select chips CS20-CS29. */
     uint64_t lcd_busy_t;
+    /* uPD1990AC (M10 service manual 6.15, pp. 6-18..6-20): C0-C2 on PA0-PA2,
+     * CLK on PA3, DATA IN on PA4, DATA OUT on 81C55 PC0 with a pull-up, STB
+     * from AD2 latched by writes to E0h-EFh, CS and OUT ENBL on the system
+     * RESET (high while running), TP on RST 7.5. */
+    bm_upd1990ac_t *rtc;
+    bm_upd1990ac_time_t rtc_initial;
+    uint8_t rtc_host_time;
+    uint64_t rtc_t_accounted;
+    uint64_t tp_rising;
+    uint64_t tp_last_rising_t;
+    uint64_t tp_period_min;
+    uint64_t tp_period_max;
+    uint8_t rtc_stb_writes;
+    uint8_t rtc_last_e_write;
+    bm_upd1990ac_time_t rtc_final;
+    unsigned int rtc_final_tp_hz;
     uint8_t port_a;
     uint8_t port_b;
     bm_hd44102_t *lcd[LCD_CHIPS];
@@ -303,6 +321,10 @@ static void
 lcd_finish(probe_t *probe)
 {
     unsigned int index;
+    if (probe->rtc != NULL) {
+        bm_upd1990ac_get_time(probe->rtc, &probe->rtc_final);
+        probe->rtc_final_tp_hz = bm_upd1990ac_tp_hz(probe->rtc);
+    }
     for (index = 0U; index < LCD_CHIPS; ++index)
         bm_hd44102_get_state(probe->lcd[index], &probe->lcd_final[index]);
     lcd_render(probe, probe->lcd_image);
@@ -389,6 +411,59 @@ memory_access(void *context, bm_bus_transaction_t *txn)
     return BM_STATUS_OK;
 }
 
+/* 2 457 600 / 32 768 = 75 CPU clocks per crystal period. */
+#define RTC_T_PER_OSC 75U
+
+static void
+rtc_catch_up(probe_t *probe)
+{
+    uint64_t periods;
+    if (probe->rtc == NULL)
+        return;
+    periods = (probe->t_states - probe->rtc_t_accounted) / RTC_T_PER_OSC;
+    probe->rtc_t_accounted += periods * RTC_T_PER_OSC;
+    bm_upd1990ac_advance(probe->rtc, periods);
+}
+
+static void
+rtc_tp_changed(void *context, int level)
+{
+    probe_t *probe = context;
+    uint64_t now = probe->rtc_t_accounted;
+    probe->cpu.ops.signal(probe->cpu.context, BM_I8085_SIGNAL_RST75, level);
+    if (!level)
+        return;
+    if (probe->tp_rising != 0U) {
+        uint64_t period = now - probe->tp_last_rising_t;
+        if (probe->tp_period_min == 0U || period < probe->tp_period_min)
+            probe->tp_period_min = period;
+        if (period > probe->tp_period_max)
+            probe->tp_period_max = period;
+    }
+    probe->tp_last_rising_t = now;
+    ++probe->tp_rising;
+}
+
+/* Pin effects of 81C55 PA and E0h-EFh writes, and the PC0 input. */
+static uint8_t
+rtc_access(probe_t *probe, uint8_t port, int write, uint8_t value, uint8_t bus)
+{
+    if (probe->rtc == NULL)
+        return bus;
+    rtc_catch_up(probe);
+    if (write && (port == 0xb9U || port == 0xb1U)) {
+        bm_upd1990ac_set_command_pins(probe->rtc, (uint8_t) (value & 7U));
+        bm_upd1990ac_set_data_in(probe->rtc, (value >> 4U) & 1U);
+        bm_upd1990ac_set_clk(probe->rtc, (value >> 3U) & 1U);
+    } else if (write && (port & 0xf0U) == 0xe0U) {
+        bm_upd1990ac_set_stb(probe->rtc, (value >> 2U) & 1U);
+    } else if (!write && (port == 0xbbU || port == 0xb3U)) {
+        /* Other port C bits are not modelled and keep the floating value. */
+        return (uint8_t) ((bus & 0xfeU) | (bm_upd1990ac_data_out(probe->rtc) & 1));
+    }
+    return bus;
+}
+
 static bm_status_t
 io_access(void *context, bm_bus_transaction_t *txn)
 {
@@ -399,9 +474,10 @@ io_access(void *context, bm_bus_transaction_t *txn)
 
     {
         uint8_t device = lcd_access(probe, port, write, (uint8_t) txn->value);
+        uint8_t bus = port >= 0xf0U ? device : probe->open_bus;
+        bus = rtc_access(probe, port, write, (uint8_t) txn->value, bus);
         if (!write)
-            txn->value = probe->io_value[port] >= 0 ? (uint8_t) probe->io_value[port] :
-                         port >= 0xf0U ? device : probe->open_bus;
+            txn->value = probe->io_value[port] >= 0 ? (uint8_t) probe->io_value[port] : bus;
     }
     if (!probe->io_log_filtered || probe->io_log_port[port]) {
         if (probe->io_logged < IO_LOG_CAPACITY)
@@ -486,6 +562,15 @@ probe_setup(probe_t *probe, const bm_host_services_t *host)
             bm_hd44102_set_reset(probe->lcd[index], 0);
         }
     }
+    if (probe->rst75_period_t == 0U) {
+        bm_upd1990ac_config_t rtc_config;
+        memset(&rtc_config, 0, sizeof(rtc_config));
+        rtc_config.initial_time = probe->rtc_initial;
+        rtc_config.tp_changed = rtc_tp_changed;
+        rtc_config.tp_context = probe;
+        if (bm_upd1990ac_create(host, &rtc_config, &probe->rtc) != BM_STATUS_OK)
+            return 0;
+    }
     config = (bm_i8085_config_t) {
         .model = BM_I8085_OKI_MSM80C85A,
         .frequency_hz = CLK_HZ,
@@ -493,7 +578,12 @@ probe_setup(probe_t *probe, const bm_host_services_t *host)
         .sod = sod_changed,
         .sod_context = probe
     };
-    return bm_i8085_create(host, &config, &probe->cpu) == BM_STATUS_OK;
+    if (bm_i8085_create(host, &config, &probe->cpu) != BM_STATUS_OK)
+        return 0;
+    if (probe->rtc != NULL)
+        probe->cpu.ops.signal(probe->cpu.context, BM_I8085_SIGNAL_RST75,
+                              bm_upd1990ac_tp(probe->rtc));
+    return 1;
 }
 
 static void
@@ -506,6 +596,7 @@ probe_teardown(probe_t *probe)
         unsigned int index;
         for (index = 0U; index < LCD_CHIPS; ++index)
             bm_hd44102_destroy(probe->lcd[index]);
+        bm_upd1990ac_destroy(probe->rtc);
     }
 }
 
@@ -553,6 +644,17 @@ probe_run(probe_t *probe)
             ++probe->pc_ring_count;
         }
         status = bm_i8085_step_clocked(probe->cpu.context, 0U, &cycles);
+        if ((status == BM_STATUS_IDLE) && (probe->rtc != NULL)) {
+            /* TP on RST 7.5 is the only interrupt source wired. */
+            if (!state.interrupt_enable ||
+                (state.interrupt_mask & BM_I8085_MASK_RST75) != 0U) {
+                probe->stop = STOP_HALTED_NO_SOURCE;
+                return;
+            }
+            probe->t_states += RTC_T_PER_OSC;
+            rtc_catch_up(probe);
+            continue;
+        }
         if (status == BM_STATUS_IDLE) {
             if (probe->rst75_period_t == 0U) {
                 probe->stop = STOP_HALTED_NO_SOURCE;
@@ -568,6 +670,7 @@ probe_run(probe_t *probe)
         }
         probe->t_states += cycles;
         ++probe->instructions;
+        rtc_catch_up(probe);
         if (probe->poll_count >= probe->poll_limit) {
             probe->stop = STOP_DEVICE_POLL;
             return;
@@ -603,9 +706,14 @@ print_report(FILE *out, const probe_t *probe, const char *rom_hash)
         if (probe->io_value[index] >= 0)
             fprintf(out, "io override: port %02Xh reads %02Xh\n", index,
                     (unsigned int) probe->io_value[index]);
-    fprintf(out, "interrupts: %s\n", probe->rst75_period_t ?
-            "RST 7.5 pulse enabled" : "none driven (no RST 7.5, TRAP, INTR)");
-    fprintf(out, "no peripheral is modelled; I/O values are fixed\n\n");
+    if (probe->rst75_period_t)
+        fprintf(out, "interrupts: fixed RST 7.5 pulse (uPD1990AC disconnected)\n");
+    else
+        fprintf(out, "uPD1990AC: initial %s %02u-%02u %02u:%02u:%02u weekday %u; TP drives RST 7.5\n",
+                probe->rtc_host_time ? "host time" : "fixed time",
+                probe->rtc_initial.month, probe->rtc_initial.day, probe->rtc_initial.hour,
+                probe->rtc_initial.minute, probe->rtc_initial.second, probe->rtc_initial.weekday);
+    fprintf(out, "devices: ten HD44102CH and a uPD1990AC; other I/O reads are fixed\n\n");
 
     fprintf(out, "stop: %s\n", stop_names[probe->stop]);
     if (probe->stop == STOP_CPU_STATUS)
@@ -619,6 +727,16 @@ print_report(FILE *out, const probe_t *probe, const char *rom_hash)
             (double) probe->t_states / CLK_HZ);
     if (probe->rst75_period_t)
         fprintf(out, "RST 7.5 pulses: %" PRIu64 "\n", probe->rst75_pulses);
+    if (probe->rtc != NULL) {
+        fprintf(out, "uPD1990AC TP: %u Hz selected, %" PRIu64 " rising edges, period %" PRIu64
+                "-%" PRIu64 " T-states (%.3f-%.3f ms)\n", probe->rtc_final_tp_hz, probe->tp_rising,
+                probe->tp_period_min, probe->tp_period_max,
+                1000.0 * (double) probe->tp_period_min / CLK_HZ,
+                1000.0 * (double) probe->tp_period_max / CLK_HZ);
+        fprintf(out, "uPD1990AC final: %02u-%02u %02u:%02u:%02u weekday %u\n",
+                probe->rtc_final.month, probe->rtc_final.day, probe->rtc_final.hour,
+                probe->rtc_final.minute, probe->rtc_final.second, probe->rtc_final.weekday);
+    }
 
     fprintf(out, "\nregisters: A=%02X F=%02X B=%02X C=%02X D=%02X E=%02X H=%02X L=%02X "
             "SP=%04X PC=%04X halted=%u\n", s.a, s.f, s.b, s.c, s.d, s.e, s.h, s.l,
@@ -883,7 +1001,8 @@ usage(const char *name)
             "  --report FILE           also write the report to FILE\n"
             "  --lcd PREFIX            write LCD captures as PREFIX-<label>.pgm\n"
             "  --lcd-at SECONDS        add an increasing capture time (up to 8)\n"
-            "  --lcd-busy-t N          HD44102 BUSY period in CPU T-states (default 23)\n",
+            "  --lcd-busy-t N          HD44102 BUSY period in CPU T-states (default 23)\n"
+            "  --rtc-time host|\"MM-DD hh:mm:ss W\"  uPD1990AC start (default host, W 0=Sun)\n",
             name, name);
 }
 
@@ -916,6 +1035,7 @@ main(int argc, char **argv)
     probe->stop_at = -1;
     probe->poll_limit = 100000U;
     probe->lcd_busy_t = LCD_DEFAULT_BUSY_T;
+    probe->rtc_host_time = 1U;
     for (index = 0; index < 256; ++index)
         probe->io_value[index] = -1;
     for (index = 2; index < argc; ++index) {
@@ -968,6 +1088,19 @@ main(int argc, char **argv)
             }
         } else if ((strcmp(arg, "--report") == 0) && next) {
             report_path = next;
+        } else if ((strcmp(arg, "--rtc-time") == 0) && next) {
+            unsigned int mo, d, h, mi, s, w;
+            if (strcmp(next, "host") == 0) {
+                probe->rtc_host_time = 1U;
+            } else if (sscanf(next, "%u-%u %u:%u:%u %u", &mo, &d, &h, &mi, &s, &w) == 6) {
+                probe->rtc_host_time = 0U;
+                probe->rtc_initial = (bm_upd1990ac_time_t) {
+                    (uint8_t) s, (uint8_t) mi, (uint8_t) h, (uint8_t) d, (uint8_t) w, (uint8_t) mo
+                };
+            } else {
+                usage(argv[0]);
+                return 2;
+            }
         } else if ((strcmp(arg, "--lcd-busy-t") == 0) && next) {
             probe->lcd_busy_t = strtoull(next, NULL, 10);
         } else if ((strcmp(arg, "--lcd") == 0) && next) {
@@ -1003,6 +1136,15 @@ main(int argc, char **argv)
     if (strcmp(hash, m10_rom_sha256) != 0) {
         fprintf(stderr, "unexpected ROM SHA-256 %s\n", hash);
         return 2;
+    }
+    if (probe->rtc_host_time) {
+        time_t now = time(NULL);
+        struct tm *local = localtime(&now);
+        if (local != NULL)
+            probe->rtc_initial = (bm_upd1990ac_time_t) {
+                (uint8_t) local->tm_sec, (uint8_t) local->tm_min, (uint8_t) local->tm_hour,
+                (uint8_t) local->tm_mday, (uint8_t) local->tm_wday, (uint8_t) (local->tm_mon + 1)
+            };
     }
     probe->rom = rom;
     if (!probe_setup(probe, &host)) {
