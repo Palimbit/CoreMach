@@ -11,6 +11,19 @@
   ],
   "components": [
     {
+      "id": "oki-msm81c55-io-timer",
+      "destination": [
+        "components/pc/include/blumach/components/msm81c55.h",
+        "components/pc/src/msm81c55.c"
+      ],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": [
+        "BluMach contributors"
+      ],
+      "local_changes": "Instance-owned MSM81C55 I/O ports and timer written from the OKI 1986 Microprocessor Data Book, MSM81C55RS/GS, book pp102-114: command/status register with port A/B directions and the ALT1/ALT2/ALT3 port C directions, interrupt-enable status bits, timer flag set at TC and cleared by a status read, output latches read back on output bits and owner pin levels on input bits, 14-bit count length with the four output modes, STOP, STOP AFTER TC and START including a START while running that takes effect at TC, square wave high for the longer half, pulse low for the last cycle, and RESET clearing ports and stopping the timer without reinitialising the count. Time is owner-supplied TIMER IN cycles. The RAM, strobed ALT3/ALT4 handshakes and count-by-twos internals are not modelled; TIMER OUT idles high by assumption. No MAME code is used."
+    },
+    {
       "id": "nec-upd1990ac-calendar-clock",
       "destination": ["components/pc/include/blumach/components/rtc_upd1990ac.h", "components/pc/src/rtc_upd1990ac.c"],
       "method": "new", "license": "GPL-2.0-or-later",

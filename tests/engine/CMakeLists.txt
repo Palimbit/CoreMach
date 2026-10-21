@@ -656,6 +656,18 @@ set_tests_properties(
 )
 
 # NEC uPD1990AC calendar clock contracts.
+add_executable(portable-engine-msm81c55 msm81c55_test.c)
+target_link_libraries(portable-engine-msm81c55 PRIVATE blumach_msm81c55 blumach_platform_null)
+target_compile_features(portable-engine-msm81c55 PRIVATE c_std_11)
+set_target_properties(portable-engine-msm81c55 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-msm81c55 PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-msm81c55 PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.msm81c55 COMMAND portable-engine-msm81c55)
+set_tests_properties(portable-engine.msm81c55 PROPERTIES TIMEOUT 10)
+
 add_executable(portable-engine-upd1990ac upd1990ac_test.c)
 target_link_libraries(portable-engine-upd1990ac PRIVATE blumach_upd1990ac blumach_platform_null)
 target_compile_features(portable-engine-upd1990ac PRIVATE c_std_11)
