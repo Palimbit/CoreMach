@@ -180,6 +180,9 @@ typedef struct probe {
     uint8_t ram_fill;
     uint8_t open_bus;
     int16_t io_value[256];
+    uint8_t io_log_filtered;
+    uint8_t io_log_port[256];
+    uint64_t io_logged;
     uint64_t max_t_states;
     int32_t stop_at;
     uint32_t rst75_period_t;
@@ -418,11 +421,14 @@ io_access(void *context, bm_bus_transaction_t *txn)
     if (!write)
         txn->value = probe->io_value[port] >= 0 ? (uint8_t) probe->io_value[port] :
                                                   probe->open_bus;
-    if (probe->io_count < IO_LOG_CAPACITY)
-        probe->io_log[probe->io_count] = (io_entry_t) {
-            probe->pc, port, (uint8_t) write, (uint8_t) txn->value,
-            probe->t_states
-        };
+    if (!probe->io_log_filtered || probe->io_log_port[port]) {
+        if (probe->io_logged < IO_LOG_CAPACITY)
+            probe->io_log[probe->io_logged] = (io_entry_t) {
+                probe->pc, port, (uint8_t) write, (uint8_t) txn->value,
+                probe->t_states
+            };
+        ++probe->io_logged;
+    }
     ++probe->io_count;
     if (!summary->seen)
         summary->first_pc = probe->pc;
@@ -629,6 +635,16 @@ print_report(FILE *out, const probe_t *probe, const char *rom_hash)
             s.interrupt_mask & 1U, s.rst75_pending, s.trap_pending, s.sod);
     fprintf(out, "RIM would read: %02Xh (SID, I6.5 and I5.5 not driven)%s\n", rim,
             s.trap_saved_valid ? ", IE bit from before TRAP" : "");
+    fprintf(out, "stack words from SP:");
+    for (index = 0U; index < 4U; ++index) {
+        uint16_t at = (uint16_t) (s.sp + 2U * index);
+        if (at >= probe->ram_base && (uint16_t) (at + 1U) >= probe->ram_base)
+            fprintf(out, " %04X", (unsigned int) (probe->memory[at] |
+                    (probe->memory[(uint16_t) (at + 1U)] << 8U)));
+        else
+            fprintf(out, " ----");
+    }
+    fprintf(out, "\n");
 
     fprintf(out, "\nSOD changes: %" PRIu64 "\n", probe->sod_count);
     shown = probe->sod_count < SOD_LOG_CAPACITY ? probe->sod_count : SOD_LOG_CAPACITY;
@@ -675,9 +691,10 @@ print_report(FILE *out, const probe_t *probe, const char *rom_hash)
         fprintf(out, "\n");
     }
 
-    fprintf(out, "\nI/O accesses: %" PRIu64 " (first %u in order)\n", probe->io_count,
-            IO_LOG_CAPACITY);
-    shown = probe->io_count < IO_LOG_CAPACITY ? probe->io_count : IO_LOG_CAPACITY;
+    fprintf(out, "\nI/O accesses: %" PRIu64 "; logged %s: %" PRIu64 " (first %u in order)\n",
+            probe->io_count, probe->io_log_filtered ? "for selected ports" : "all ports",
+            probe->io_logged, IO_LOG_CAPACITY);
+    shown = probe->io_logged < IO_LOG_CAPACITY ? probe->io_logged : IO_LOG_CAPACITY;
     for (index = 0U; index < shown; ++index) {
         const io_entry_t *e = &probe->io_log[index];
         fprintf(out, "  T %10" PRIu64 "  PC %04X  %s %02Xh  %02X\n", e->t_state, e->pc,
@@ -858,6 +875,7 @@ usage(const char *name)
             "  --stop-at AAAA          stop before executing this address\n"
             "  --rst75-ms N            pulse RST 7.5 every N ms\n"
             "  --poll-limit N          device polling threshold (default 100000)\n"
+            "  --io-log-ports P,P,...   log only these hex ports in order\n"
             "  --report FILE           also write the report to FILE\n"
             "  --lcd PREFIX            write LCD captures as PREFIX-<label>.pgm\n"
             "  --lcd-at SECONDS        add an increasing capture time (up to 8)\n",
@@ -928,6 +946,20 @@ main(int argc, char **argv)
             probe->rst75_period_t = (uint32_t) (strtoul(next, NULL, 10) * (CLK_HZ / 1000U));
         } else if ((strcmp(arg, "--poll-limit") == 0) && next) {
             probe->poll_limit = strtoull(next, NULL, 10);
+        } else if ((strcmp(arg, "--io-log-ports") == 0) && next) {
+            /* Comma-separated hexadecimal ports, for example FE,FF,B9,BA. */
+            const char *cursor = next;
+            probe->io_log_filtered = 1U;
+            while (*cursor != '\0') {
+                char *end = NULL;
+                unsigned long port = strtoul(cursor, &end, 16);
+                if ((end == cursor) || (port > 0xffU) || ((*end != ',') && (*end != '\0'))) {
+                    usage(argv[0]);
+                    return 2;
+                }
+                probe->io_log_port[port] = 1U;
+                cursor = *end == ',' ? end + 1 : end;
+            }
         } else if ((strcmp(arg, "--report") == 0) && next) {
             report_path = next;
         } else if ((strcmp(arg, "--lcd") == 0) && next) {
