@@ -11,6 +11,13 @@
   ],
   "components": [
     {
+      "id": "hitachi-hd44102-lcd-column-driver",
+      "destination": ["components/video/include/blumach/components/hd44102.h", "components/video/src/hd44102.c"],
+      "method": "new", "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Instance-owned HD44102CH column driver written from the Hitachi 1983 MOS LSI Data Book, LCD Driver LSI (bitsavers PDF pp166-175): 4x50-byte display RAM, X page and 0-49 Y counter with UP/DOWN wrap, display ON/OFF and start page, Status Read bits BUSY/UP/OFF/RESET, RST holding display OFF and UP mode, BUSY rejection over an owner-supplied period, the output-register dummy-read pipeline and 32x50 dot rendering. 4-bit bus mode, drive waveforms and the HD44103 are not modelled. No MAME code is used."
+    },
+    {
       "id": "intel-8085-cpu",
       "destination": ["components/cpu/i8085/**"],
       "origin_repository": "https://github.com/Palimbit/CoreMach",

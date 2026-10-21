@@ -655,6 +655,19 @@ set_tests_properties(
     PROPERTIES TIMEOUT 10
 )
 
+# Hitachi HD44102CH LCD column driver contracts.
+add_executable(portable-engine-hd44102 hd44102_test.c)
+target_link_libraries(portable-engine-hd44102 PRIVATE blumach_video blumach_platform_null)
+target_compile_features(portable-engine-hd44102 PRIVATE c_std_11)
+set_target_properties(portable-engine-hd44102 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-hd44102 PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-hd44102 PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.hd44102 COMMAND portable-engine-hd44102)
+set_tests_properties(portable-engine.hd44102 PROPERTIES TIMEOUT 10)
+
 # Intel 8085 / OKI MSM80C85A component contracts.
 add_library(portable-engine-i8085-test-support STATIC cpu_i8085_test_harness.c)
 target_link_libraries(portable-engine-i8085-test-support
