@@ -454,6 +454,50 @@ call_address(bm_i8085_state_t *state, uint16_t address)
 }
 
 /* ---------------------------------------------------------------------
+ * RIM and SIM ([MCS85] pp. 5-17..5-18).
+ * --------------------------------------------------------------------- */
+
+/* RIM loads SID, the RST 7.5 flip-flop, the RST 6.5/5.5 pins, the interrupt
+ * enable and the three masks. Only the first RIM after a TRAP reports the
+ * enable that existed before the TRAP. */
+static void
+read_interrupt_masks(bm_i8085_state_t *state)
+{
+    uint8_t enable = state->trap_saved_valid ?
+                     state->trap_saved_interrupt_enable :
+                     state->interrupt_enable;
+
+    state->trap_saved_valid = 0U;
+    state->registers[REG_A] = (uint8_t) (
+        ((unsigned int) state->sid_line << 7U) |
+        ((unsigned int) state->rst75_pending << 6U) |
+        ((unsigned int) state->rst65_line << 5U) |
+        ((unsigned int) state->rst55_line << 4U) |
+        ((unsigned int) enable << 3U) |
+        state->interrupt_mask);
+}
+
+/* SIM: bit 3 (MSE) loads the masks from bits 0-2, bit 4 resets the RST 7.5
+ * flip-flop and bit 6 (SOE) loads bit 7 into the SOD latch. The SOD pin
+ * changes during M1-T2 with CLK low of the next machine cycle ([MCS85]
+ * Figure 2-25, p. 2-20): three half clocks after this boundary ends. */
+static void
+set_interrupt_masks(bm_i8085_state_t *state)
+{
+    uint8_t a = state->registers[REG_A];
+
+    if ((a & 0x08U) != 0U)
+        state->interrupt_mask = (uint8_t) (a & 0x07U);
+    if ((a & 0x10U) != 0U)
+        state->rst75_pending = 0U;
+    if ((a & 0x40U) != 0U) {
+        state->sod = (uint8_t) (a >> 7U);
+        if (state->sod_output != NULL)
+            state->sod_output(state->sod_context, state->sod, 3U);
+    }
+}
+
+/* ---------------------------------------------------------------------
  * Instruction execution.
  * --------------------------------------------------------------------- */
 static bm_status_t
@@ -753,8 +797,13 @@ execute_instruction(bm_i8085_state_t *state)
             state->interrupt_enable = 1U;
             state->interrupt_enable_delay = 1U;
             return BM_STATUS_OK;
+        case 0x20U:                                     /* RIM */
+            read_interrupt_masks(state);
+            return BM_STATUS_OK;
+        case 0x30U:                                     /* SIM */
+            set_interrupt_masks(state);
+            return BM_STATUS_OK;
         default:
-            /* RIM and SIM are added with the 8085 interrupt system. */
             state->pc = start;
             return BM_STATUS_UNSUPPORTED;
     }
@@ -800,6 +849,7 @@ run_instruction_boundary(bm_i8085_state_t *state)
 {
     uint8_t t_states = 0U;
     uint8_t machine_cycles = 0U;
+    uint8_t delayed = state->interrupt_enable_delay;
     int known;
     bm_status_t status;
 
@@ -807,11 +857,125 @@ run_instruction_boundary(bm_i8085_state_t *state)
     status = execute_instruction(state);
     if (status != BM_STATUS_OK)
         return status;
+    /* EI takes effect after the following instruction ([MCS85] p. 5-17). */
+    if (delayed && (state->boundary_opcode != 0xfbU))
+        state->interrupt_enable_delay = 0U;
     known = documented_timing(state->boundary_opcode, state->boundary_taken,
                               &t_states, &machine_cycles);
     finish_boundary(state, BM_I8085_BOUNDARY_INSTRUCTION,
                     BM_I8085_INTERRUPT_NONE, t_states, machine_cycles, known);
     return BM_STATUS_OK;
+}
+
+/* Fixed priority TRAP > RST 7.5 > RST 6.5 > RST 5.5 > INTR ([ASM85]
+ * p. 1-24; [OKI86] Table 1). TRAP needs its latched edge and a high level;
+ * the others need IE (after any EI delay) and, for RST n.5, a clear mask. */
+static bm_i8085_interrupt_source_t
+pending_interrupt(const bm_i8085_state_t *state)
+{
+    if (state->trap_pending && state->trap_line)
+        return BM_I8085_INTERRUPT_TRAP;
+    if (!state->interrupt_enable || state->interrupt_enable_delay)
+        return BM_I8085_INTERRUPT_NONE;
+    if (state->rst75_pending && !(state->interrupt_mask & BM_I8085_MASK_RST75))
+        return BM_I8085_INTERRUPT_RST75;
+    if (state->rst65_line && !(state->interrupt_mask & BM_I8085_MASK_RST65))
+        return BM_I8085_INTERRUPT_RST65;
+    if (state->rst55_line && !(state->interrupt_mask & BM_I8085_MASK_RST55))
+        return BM_I8085_INTERRUPT_RST55;
+    if (state->intr_line && (state->interrupt_ack != NULL))
+        return BM_I8085_INTERRUPT_INTR;
+    return BM_I8085_INTERRUPT_NONE;
+}
+
+/* Accepting any interrupt disables further maskable interrupts; TRAP keeps
+ * the previous enable for the next RIM ([MCS85] p. 5-17). TRAP and RST n.5
+ * use an internal RESTART: a six-state Bus Idle M1 and two stack writes,
+ * 12 T-states ([MCS85] §2.3.5, Figure 2-19, p. 2-15). INTR reads RST n or
+ * CALL through INTA cycles: a six-state M1 then RST pushes in two writes
+ * (12 T-states) and CALL reads two more INTA cycles before them
+ * (18 T-states, Figures 2-17 and 2-18, pp. 2-13..2-14). Leaving HALT adds
+ * the THALT state that ends after the request is sampled (p. 2-16). */
+static bm_status_t
+run_interrupt_boundary(bm_i8085_state_t *state,
+                       bm_i8085_interrupt_source_t source)
+{
+    uint8_t t_states = 12U;
+    uint8_t machine_cycles = 3U;
+    uint8_t was_halted = state->halted;
+    uint8_t enable = state->interrupt_enable;
+    uint16_t target;
+    bm_status_t status;
+
+    begin_boundary(state);
+    state->interrupt_enable = 0U;
+    state->interrupt_enable_delay = 0U;
+    switch (source) {
+        case BM_I8085_INTERRUPT_TRAP:
+            state->trap_pending = 0U;
+            state->trap_saved_interrupt_enable = enable;
+            state->trap_saved_valid = 1U;
+            target = 0x0024U;
+            break;
+        case BM_I8085_INTERRUPT_RST75:
+            state->rst75_pending = 0U;
+            target = 0x003cU;
+            break;
+        case BM_I8085_INTERRUPT_RST65:
+            target = 0x0034U;
+            break;
+        case BM_I8085_INTERRUPT_RST55:
+            target = 0x002cU;
+            break;
+        default: {
+            uint8_t opcode = 0U;
+            uint8_t low = 0U;
+            uint8_t high = 0U;
+
+            status = state->interrupt_ack(state->interrupt_context, 0U, &opcode);
+            if ((status == BM_STATUS_OK) && (opcode == 0xcdU)) {
+                status = state->interrupt_ack(state->interrupt_context, 1U, &low);
+                if (status == BM_STATUS_OK)
+                    status = state->interrupt_ack(state->interrupt_context, 2U,
+                                                  &high);
+                t_states = 18U;
+                machine_cycles = 5U;
+                target = (uint16_t) (((unsigned int) high << 8U) | low);
+            } else if ((status == BM_STATUS_OK) && ((opcode & 0xc7U) == 0xc7U)) {
+                target = (uint16_t) (opcode & 0x38U);
+            } else if (status == BM_STATUS_OK) {
+                status = BM_STATUS_UNSUPPORTED;
+                target = 0U;
+            } else {
+                target = 0U;
+            }
+            if (status != BM_STATUS_OK) {
+                state->interrupt_enable = enable;
+                return status;
+            }
+            state->boundary_opcode = opcode;
+            break;
+        }
+    }
+    status = push_word(state, state->pc);
+    if (status != BM_STATUS_OK)
+        return status;
+    state->pc = target;
+    state->halted = 0U;
+    if (was_halted)
+        t_states = (uint8_t) (t_states + 1U);
+    finish_boundary(state, BM_I8085_BOUNDARY_INTERRUPT, source, t_states,
+                    machine_cycles, 1);
+    return BM_STATUS_OK;
+}
+
+/* RESET IN and READY low each hold the CPU for one documented clock per
+ * boundary (TRESET, TWAIT). */
+static void
+run_hold_boundary(bm_i8085_state_t *state, bm_i8085_boundary_kind_t kind)
+{
+    begin_boundary(state);
+    finish_boundary(state, kind, BM_I8085_INTERRUPT_NONE, 1U, 0U, 1);
 }
 
 /* RESET IN clears PC, the interrupt enable, the RST 7.5 and TRAP flip-flops
@@ -854,9 +1018,24 @@ cpu_run(void *context, bm_tick_t budget, bm_tick_t *consumed)
         return BM_STATUS_INVALID_ARGUMENT;
     *consumed = 0U;
     while (*consumed < budget) {
-        if (state->halted)
+        bm_i8085_interrupt_source_t source;
+
+        if (state->reset_line) {
+            run_hold_boundary(state, BM_I8085_BOUNDARY_RESET);
+            ++*consumed;
+            continue;
+        }
+        source = pending_interrupt(state);
+        if (state->halted && (source == BM_I8085_INTERRUPT_NONE))
             return BM_STATUS_IDLE;
-        status = run_instruction_boundary(state);
+        if (state->wait_line) {
+            run_hold_boundary(state, BM_I8085_BOUNDARY_WAIT);
+            ++*consumed;
+            continue;
+        }
+        status = source != BM_I8085_INTERRUPT_NONE ?
+                 run_interrupt_boundary(state, source) :
+                 run_instruction_boundary(state);
         if (status != BM_STATUS_OK)
             return status;
         ++*consumed;

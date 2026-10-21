@@ -132,9 +132,6 @@ test_every_documented_opcode(void)
                    BM_I8085_OPCODE_UNDOCUMENTED);
             continue;
         }
-        /* RIM and SIM arrive with the 8085 interrupt system. */
-        if ((op == 0x20U) || (op == 0x30U))
-            continue;
         measure((uint8_t) op, 0, 0U);
         measure((uint8_t) op, 0, 2U);
         if (is_conditional((uint8_t) op)) {

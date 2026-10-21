@@ -665,6 +665,7 @@ set(BLUMACH_I8085_TESTS
     instructions
     flags
     timing
+    interrupts
 )
 foreach(name IN LISTS BLUMACH_I8085_TESTS)
     add_executable(portable-engine-i8085-${name} cpu_i8085_${name}_test.c)
