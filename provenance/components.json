@@ -11,6 +11,13 @@
   ],
   "components": [
     {
+      "id": "nec-upd1990ac-calendar-clock",
+      "destination": ["components/pc/include/blumach/components/rtc_upd1990ac.h", "components/pc/src/rtc_upd1990ac.c"],
+      "method": "new", "license": "GPL-2.0-or-later",
+      "copyright_holders": ["BluMach contributors"],
+      "local_changes": "Instance-owned uPD1990AC written from NEC 1983 Integrated Circuits for Consumer Use, book pp792-799: 40-bit shift register in seconds-first BCD order with hexadecimal month, Register Hold/Shift/Time Set/Time Read commands latched by STB with CS gating, Time Set preset with divider stages 11-15 reset and counter hold, 15-stage divider from owner-advanced 32.768 kHz periods, TP 64/256/2048 Hz square wave with change callback, 1 Hz DATA OUT in hold, open-drain DATA OUT with OUT ENBL, and month-length correction without leap years or a year counter. TEST MODE counting is not modelled. No MAME code is used."
+    },
+    {
       "id": "hitachi-hd44102-lcd-column-driver",
       "destination": ["components/video/include/blumach/components/hd44102.h", "components/video/src/hd44102.c"],
       "method": "new", "license": "GPL-2.0-or-later",

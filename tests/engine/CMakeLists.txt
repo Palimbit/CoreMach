@@ -655,6 +655,19 @@ set_tests_properties(
     PROPERTIES TIMEOUT 10
 )
 
+# NEC uPD1990AC calendar clock contracts.
+add_executable(portable-engine-upd1990ac upd1990ac_test.c)
+target_link_libraries(portable-engine-upd1990ac PRIVATE blumach_upd1990ac blumach_platform_null)
+target_compile_features(portable-engine-upd1990ac PRIVATE c_std_11)
+set_target_properties(portable-engine-upd1990ac PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-upd1990ac PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-upd1990ac PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.upd1990ac COMMAND portable-engine-upd1990ac)
+set_tests_properties(portable-engine.upd1990ac PROPERTIES TIMEOUT 10)
+
 # Hitachi HD44102CH LCD column driver contracts.
 add_executable(portable-engine-hd44102 hd44102_test.c)
 target_link_libraries(portable-engine-hd44102 PRIVATE blumach_video blumach_platform_null)
