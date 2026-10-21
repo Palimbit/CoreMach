@@ -105,6 +105,9 @@ in the research library, not in Git.
 - RESET IN preserves general registers and flags; on hardware they are
   indeterminate after a reset that occurs mid-instruction.
 - V and K are not covered by the exerciser results below, which mask them.
+- Only GCC (MSYS2 UCRT64) has built and tested the component. The MSVC
+  `/W4 /WX` build stays pending until CI runs: GitHub Actions is disabled
+  while the repository is private.
 
 ## External exercisers
 
