@@ -668,6 +668,18 @@ endif()
 add_test(NAME portable-engine.m10-keyboard COMMAND portable-engine-m10-keyboard)
 set_tests_properties(portable-engine.m10-keyboard PROPERTIES TIMEOUT 10)
 
+add_executable(portable-engine-m10-tolerance m10_tolerance_test.c)
+target_link_libraries(portable-engine-m10-tolerance PRIVATE blumach_system_olivetti_m10 blumach_platform_null)
+target_compile_features(portable-engine-m10-tolerance PRIVATE c_std_11)
+set_target_properties(portable-engine-m10-tolerance PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-m10-tolerance PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-m10-tolerance PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.m10-tolerance COMMAND portable-engine-m10-tolerance)
+set_tests_properties(portable-engine.m10-tolerance PROPERTIES TIMEOUT 10)
+
 add_executable(portable-engine-m10-board m10_board_test.c)
 target_link_libraries(portable-engine-m10-board PRIVATE blumach_system_olivetti_m10 blumach_platform_null)
 target_compile_features(portable-engine-m10-board PRIVATE c_std_11)
@@ -728,6 +740,7 @@ set(BLUMACH_I8085_TESTS
     flags
     timing
     interrupts
+    extended
 )
 foreach(name IN LISTS BLUMACH_I8085_TESTS)
     add_executable(portable-engine-i8085-${name} cpu_i8085_${name}_test.c)

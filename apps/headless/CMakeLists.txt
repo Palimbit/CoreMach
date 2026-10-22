@@ -97,4 +97,10 @@ if(BUILD_TESTING)
     set_tests_properties(portable-headless.reject-unknown-machine PROPERTIES
         WILL_FAIL TRUE
     )
+    add_test(NAME portable-headless.i8085-failure-dump
+        COMMAND "${CMAKE_COMMAND}"
+            "-DHEADLESS=$<TARGET_FILE:blumach_headless>"
+            "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/i8085-failure-dump"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/i8085_failure_dump.cmake"
+    )
 endif()
