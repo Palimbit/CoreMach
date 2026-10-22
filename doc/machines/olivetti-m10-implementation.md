@@ -91,3 +91,16 @@ year: the firmware stores it in RAM and prints a fixed century of 19.
 - Cassette, RS-232C UART, printer, bar-code reader, modem, the low-battery
   TRAP and the 81C55 RAM are not modelled.
 - Bits of port C without a modelled source read high.
+
+## Tolerant hosts
+
+Every host gets the same fallbacks: unmodelled ports (C0h-DFh UART, A0h-AFh,
+81C55 registers 6 and 7 and the rest) and addresses between the ROM and the
+installed RAM read FFh and ignore writes, and an undefined HD44102
+instruction leaves the chip unchanged. A host with
+`BM_HOST_CAPABILITY_TOLERANCE` also receives one report per port and
+direction, per memory direction and per undefined LCD instruction, with the
+PC and opcode of the instruction (from the CPU's `instruction_pc` and
+`instruction_opcode`). The extended 8085 instructions are executed only for
+such a host, as assumed NMOS behaviour for the MSM80C85A
+(doc/architecture/intel-8085-cpu.md).

@@ -55,6 +55,7 @@ typedef struct bm_i8085_state {
     uint8_t sid_line;
 
     /* Accounting for the boundary in progress. */
+    uint16_t boundary_pc;
     uint8_t boundary_opcode;
     uint8_t boundary_taken;
     uint64_t boundary_transactions;
@@ -690,6 +691,7 @@ execute_instruction(bm_i8085_state_t *state)
     uint8_t op = 0U;
     bm_status_t status;
 
+    state->boundary_pc = start;
     status = bus_transfer(state, BM_ADDRESS_MEMORY, BM_BUS_FETCH, state->pc,
                           &op);
     if (status != BM_STATUS_OK)
@@ -1326,6 +1328,12 @@ cpu_inspect(const void *context, const char *name, uint64_t *value)
         *value = state->sod;
     else if (strcmp(name, "last_t_states") == 0)
         *value = state->last.t_states;
+    /* Address and opcode of the instruction in progress, for devices that
+     * report what the program was doing when it reached them. */
+    else if (strcmp(name, "instruction_pc") == 0)
+        *value = state->boundary_pc;
+    else if (strcmp(name, "instruction_opcode") == 0)
+        *value = state->boundary_opcode;
     else
         return BM_STATUS_UNSUPPORTED;
     return BM_STATUS_OK;
