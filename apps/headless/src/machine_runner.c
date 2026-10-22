@@ -464,13 +464,13 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
 {
     bm_frontend_asset_binding_t bindings[4];
     bm_frontend_machine_option_t machine_options[HEADLESS_MAX_MACHINE_OPTIONS];
-    bm_frontend_persistent_state_binding_t state_binding;
-    size_t binding_count = 2U;
+    bm_frontend_persistent_state_binding_t state_bindings[HEADLESS_MAX_STATES * 2U];
+    size_t binding_count = 0U;
     size_t state_binding_count = 0U;
     bm_host_services_t host = bm_null_host_services();
     bm_frontend_blob_t even = { NULL, 0U };
     bm_frontend_blob_t odd = { NULL, 0U };
-    bm_frontend_blob_t persistent_state_blob = { NULL, 0U };
+    bm_frontend_blob_t persistent_state_blobs[HEADLESS_MAX_STATES] = { { NULL, 0U } };
     bm_frontend_readonly_media_t floppy = { 0 };
     bm_frontend_readonly_media_t swap_floppy = { 0 };
     bm_frontend_readonly_media_t hard_disk = { 0 };
@@ -486,7 +486,7 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
     size_t nonblack = 0U;
     size_t storage_count = 0U;
     uint32_t frame_crc = 0U;
-    uint8_t *depleted_state = NULL;
+    uint8_t *depleted_states[HEADLESS_MAX_STATES] = { NULL };
     int frame_matches = !options->expect_frame_crc32;
     int frame_written = options->frame_path == NULL;
     int persistent_state_saved = 1;
@@ -510,18 +510,55 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
               stderr);
         return 2;
     }
-    if (!bm_frontend_blob_read_exact(options->firmware_even_path, 32768U,
-                                     &even) ||
-        !bm_frontend_blob_read_exact(options->firmware_odd_path, 32768U,
-                                     &odd)) {
-        fputs("firmware halves must each be exactly 32768 bytes\n", stderr);
-        result = 2;
-        goto cleanup;
+    if (options->firmware_path != NULL) {
+        /* Single-image firmware: the size comes from the adapter. */
+        const bm_frontend_asset_requirement_t *requirements;
+        size_t requirement_count = 0U;
+        size_t index;
+        uint64_t size = 0U;
+        requirements = bm_frontend_adapter_assets(adapter, &requirement_count);
+        for (index = 0U; index < requirement_count; ++index) {
+            if ((strcmp(requirements[index].role, "firmware") == 0) &&
+                (requirements[index].accepted_size_count == 1U))
+                size = requirements[index].accepted_sizes[0];
+        }
+        if ((size == 0U) || (size > SIZE_MAX) ||
+            !bm_frontend_blob_read_exact(options->firmware_path, (size_t) size,
+                                         &even)) {
+            fputs("firmware image is missing, unreadable or of the wrong size\n",
+                  stderr);
+            result = 2;
+            goto cleanup;
+        }
+        bindings[binding_count++] = (bm_frontend_asset_binding_t) {
+            "firmware", BM_FRONTEND_ASSET_BLOB,
+            { .blob = { NULL, even.data, even.size, NULL } }
+        };
+    } else {
+        if (!bm_frontend_blob_read_exact(options->firmware_even_path, 32768U,
+                                         &even) ||
+            !bm_frontend_blob_read_exact(options->firmware_odd_path, 32768U,
+                                         &odd)) {
+            fputs("firmware halves must each be exactly 32768 bytes\n", stderr);
+            result = 2;
+            goto cleanup;
+        }
+        bindings[binding_count++] = (bm_frontend_asset_binding_t) {
+            "firmware-even", BM_FRONTEND_ASSET_BLOB,
+            { .blob = { NULL, even.data, even.size, NULL } }
+        };
+        bindings[binding_count++] = (bm_frontend_asset_binding_t) {
+            "firmware-odd", BM_FRONTEND_ASSET_BLOB,
+            { .blob = { NULL, odd.data, odd.size, NULL } }
+        };
     }
-    if ((options->persistent_state_path != NULL) ||
-        (options->depleted_state_role[0] != '\0')) {
-        const char *role = options->persistent_state_path != NULL ?
-            options->persistent_state_role : options->depleted_state_role;
+    for (size_t state = 0U;
+         state < options->persistent_state_count + options->depleted_state_count;
+         ++state) {
+        const int depleted = state >= options->persistent_state_count;
+        const size_t slot = depleted ? state - options->persistent_state_count : state;
+        const char *role = depleted ? options->depleted_state_role[slot] :
+                                      options->persistent_state_role[slot];
         const bm_frontend_persistent_state_requirement_t *requirements;
         const bm_frontend_persistent_state_requirement_t *requirement = NULL;
         size_t requirement_count = 0U;
@@ -537,47 +574,39 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             result = 2;
             goto cleanup;
         }
-        if (options->persistent_state_path != NULL) {
+        if (!depleted) {
             int exists = 0;
-            if (!input_file_exists(options->persistent_state_path, &exists)) {
+            if (!input_file_exists(options->persistent_state_path[slot], &exists)) {
                 fputs("persistent-state file is not readable\n", stderr);
                 result = 2;
                 goto cleanup;
             }
             if (exists) {
                 if (!bm_frontend_blob_read_exact(
-                        options->persistent_state_path, requirement->size,
-                        &persistent_state_blob)) {
+                        options->persistent_state_path[slot], requirement->size,
+                        &persistent_state_blobs[slot])) {
                     fputs("persistent-state file has the wrong size\n", stderr);
                     result = 2;
                     goto cleanup;
                 }
-                state_binding = (bm_frontend_persistent_state_binding_t) {
-                    requirement->role, persistent_state_blob.data,
-                    persistent_state_blob.size
-                };
-                state_binding_count = 1U;
+                state_bindings[state_binding_count++] =
+                    (bm_frontend_persistent_state_binding_t) {
+                        requirement->role, persistent_state_blobs[slot].data,
+                        persistent_state_blobs[slot].size
+                    };
             }
         } else {
-            depleted_state = calloc(requirement->size, 1U);
-            if (depleted_state == NULL) {
+            depleted_states[slot] = calloc(requirement->size, 1U);
+            if (depleted_states[slot] == NULL) {
                 result = 2;
                 goto cleanup;
             }
-            state_binding = (bm_frontend_persistent_state_binding_t) {
-                requirement->role, depleted_state, requirement->size
-            };
-            state_binding_count = 1U;
+            state_bindings[state_binding_count++] =
+                (bm_frontend_persistent_state_binding_t) {
+                    requirement->role, depleted_states[slot], requirement->size
+                };
         }
     }
-    bindings[0] = (bm_frontend_asset_binding_t) {
-        "firmware-even", BM_FRONTEND_ASSET_BLOB,
-        { .blob = { NULL, even.data, even.size, NULL } }
-    };
-    bindings[1] = (bm_frontend_asset_binding_t) {
-        "firmware-odd", BM_FRONTEND_ASSET_BLOB,
-        { .blob = { NULL, odd.data, odd.size, NULL } }
-    };
     if (options->floppy_path != NULL) {
         if (!bm_frontend_readonly_media_open(options->floppy_path, 512U,
                                              &floppy) ||
@@ -587,11 +616,10 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             result = 2;
             goto cleanup;
         }
-        bindings[2] = (bm_frontend_asset_binding_t) {
+        bindings[binding_count++] = (bm_frontend_asset_binding_t) {
             "floppy-0", BM_FRONTEND_ASSET_READ_ONLY_MEDIA,
             { .media = floppy.media }
         };
-        binding_count = 3U;
     }
     if (options->swap_floppy_path != NULL) {
         if (!bm_frontend_readonly_media_open(options->swap_floppy_path, 512U,
@@ -626,7 +654,7 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
     }
     status = bm_frontend_machine_open_configured(
         adapter, bindings, binding_count,
-        state_binding_count != 0U ? &state_binding : NULL,
+        state_binding_count != 0U ? state_bindings : NULL,
         state_binding_count, machine_options,
         options->machine_option_count, &machine);
     if (status != BM_STATUS_OK) {
@@ -794,6 +822,21 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
             printf("rtc_bcd=%02" PRIx64 ":%02" PRIx64 ":%02" PRIx64
                    " dow=%02" PRIx64 " date=%02" PRIx64 "-%02" PRIx64 "\n",
                    hours, minutes, seconds, day_of_week, month, day_of_month);
+        else if ((bm_session_inspect_machine(session, "rtc_second", &seconds) ==
+                  BM_STATUS_OK) &&
+                 (bm_session_inspect_machine(session, "rtc_minute", &minutes) ==
+                  BM_STATUS_OK) &&
+                 (bm_session_inspect_machine(session, "rtc_hour", &hours) ==
+                  BM_STATUS_OK) &&
+                 (bm_session_inspect_machine(session, "rtc_weekday", &day_of_week) ==
+                  BM_STATUS_OK) &&
+                 (bm_session_inspect_machine(session, "rtc_day", &day_of_month) ==
+                  BM_STATUS_OK) &&
+                 (bm_session_inspect_machine(session, "rtc_month", &month) ==
+                  BM_STATUS_OK))
+            printf("rtc=%02" PRIu64 ":%02" PRIu64 ":%02" PRIu64
+                   " weekday=%" PRIu64 " date=%02" PRIu64 "-%02" PRIu64 "\n",
+                   hours, minutes, seconds, day_of_week, month, day_of_month);
     }
     {
         size_t index;
@@ -837,20 +880,23 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
                options->expected_frame_crc32, frame_matches);
     if (!frame_written)
         fputs("could not write framebuffer capture\n", stderr);
-    if ((options->persistent_state_path != NULL) && (session != NULL)) {
+    for (size_t state = 0U;
+         (session != NULL) && (state < options->persistent_state_count);
+         ++state) {
         size_t state_size = 0U;
         uint8_t *saved_state = NULL;
         bm_status_t state_status = bm_session_persistent_state_size(
-            session, options->persistent_state_role, &state_size);
+            session, options->persistent_state_role[state], &state_size);
         if (state_status == BM_STATUS_OK)
             saved_state = malloc(state_size);
         if ((saved_state == NULL) ||
             (bm_session_save_persistent_state(
-                 session, options->persistent_state_role,
+                 session, options->persistent_state_role[state],
                  saved_state, state_size) != BM_STATUS_OK) ||
-            !write_bytes(options->persistent_state_path,
+            !write_bytes(options->persistent_state_path[state],
                          saved_state, state_size)) {
-            fputs("could not save persistent state\n", stderr);
+            fprintf(stderr, "could not save persistent state %s\n",
+                    options->persistent_state_role[state]);
             persistent_state_saved = 0;
         }
         free(saved_state);
@@ -871,7 +917,9 @@ cleanup:
     bm_frontend_readonly_media_close(&hard_disk);
     bm_frontend_blob_release(&even);
     bm_frontend_blob_release(&odd);
-    bm_frontend_blob_release(&persistent_state_blob);
-    free(depleted_state);
+    for (size_t state = 0U; state < HEADLESS_MAX_STATES; ++state) {
+        bm_frontend_blob_release(&persistent_state_blobs[state]);
+        free(depleted_states[state]);
+    }
     return result;
 }
