@@ -1,0 +1,129 @@
+{
+  "order": 5,
+  "machine": {
+    "id": "olivetti-m10",
+    "manufacturer_id": "olivetti",
+    "family_id": "olivetti-m10",
+    "platform_id": "olivetti-m10-platform",
+    "name": "Olivetti M10",
+    "summary_key": "product.olivetti-m10.summary",
+    "history_key": "product.olivetti-m10.history",
+    "warning_key": "product.olivetti-m10.warning",
+    "status": "experimental",
+    "period": "1983",
+    "aliases": ["Olivetti M-10", "M10 Portable Computer"],
+    "tags": ["80C85", "2.4576 MHz", "LCD", "portable", "BASIC", "battery-backed RAM"],
+    "facets": {
+      "form_factor": ["laptop"],
+      "mobility": ["portable"],
+      "display_technology": ["lcd"],
+      "display_color": ["monochrome"]
+    },
+    "hardware": {
+      "cpu": "OKI MSM80C85A at 2.4576 MHz",
+      "memory": "32 KB system ROM; 8, 16, 24 or 32 KB battery-backed RAM",
+      "video": "240x64 dot LCD (8 lines of 40 characters) driven by ten Hitachi HD44102CH column drivers",
+      "rtc": "NEC uPD1990AC serial calendar clock; TP drives RST 7.5",
+      "interfaces": "Cassette, RS-232C, Centronics printer, bar-code reader and system bus; integrated modem on the M10 MODEM",
+      "keyboard": "72-key matrix with four national layouts selected by board jumpers"
+    },
+    "firmware": {
+      "known_sets": ["International system ROM, 32 KB (local custody only)"],
+      "required": true,
+      "identity_note": "The first 32 KB of the owner's dump. The ROM holds English, German, Italian and French keyboard tables selected by the language jumpers. It remains local-only."
+    },
+    "portable_resources": [
+      {"role": "firmware", "folder": "olivetti/m10/firmware", "known": [
+        {"name": "M10 international system ROM", "size": 32768, "sha256": "43f85e3ac5cc264be3ad4c3b36dea82381409a66381146ce06a78c22704b0dbc", "preferred": true}
+      ]}
+    ],
+    "creation": {
+      "status": "experimental",
+      "directory_prefix": "olivetti-m10",
+      "facts": [
+        {"label_key": "creation.label.commercial_model", "value_key": "product.olivetti-m10.creation.model"}
+      ],
+      "fields": [
+        {
+          "id": "memory",
+          "label_key": "creation.label.memory",
+          "default": "32",
+          "portable_option": "ram_kib",
+          "choices": [
+            {"id": "8", "label_key": "product.olivetti-m10.creation.memory.8", "status": "validated", "portable_value": 8},
+            {"id": "16", "label_key": "product.olivetti-m10.creation.memory.16", "status": "validated", "portable_value": 16},
+            {"id": "24", "label_key": "product.olivetti-m10.creation.memory.24", "status": "validated", "portable_value": 24},
+            {"id": "32", "label_key": "product.olivetti-m10.creation.memory.32", "status": "validated", "portable_value": 32}
+          ]
+        },
+        {
+          "id": "language",
+          "label_key": "product.olivetti-m10.creation.label.language",
+          "default": "it",
+          "portable_option": "language",
+          "choices": [
+            {"id": "it", "label_key": "product.olivetti-m10.creation.language.it", "status": "documented", "portable_value": 2},
+            {"id": "fr", "label_key": "product.olivetti-m10.creation.language.fr", "status": "validated", "portable_value": 3},
+            {"id": "de", "label_key": "product.olivetti-m10.creation.language.de", "status": "documented", "portable_value": 1},
+            {"id": "en", "label_key": "product.olivetti-m10.creation.language.en", "status": "validated", "portable_value": 0}
+          ]
+        },
+        {
+          "id": "clock",
+          "label_key": "product.olivetti-m10.creation.label.clock",
+          "help_key": "product.olivetti-m10.creation.help.clock",
+          "default": "host",
+          "portable_option": "rtc_time",
+          "choices": [
+            {"id": "host", "label_key": "product.olivetti-m10.creation.clock.host", "status": "experimental", "portable_value": 0},
+            {"id": "fixed", "label_key": "product.olivetti-m10.creation.clock.fixed", "status": "experimental", "portable_value": 1}
+          ]
+        }
+      ],
+      "note_keys": ["product.olivetti-m10.creation.note"],
+      "generated_files": []
+    },
+    "implementation": {
+      "document": "olivetti-m10-implementation.md",
+      "language": "en"
+    },
+    "technical": [
+      {
+        "title_key": "technical.section.architecture",
+        "evidence_key": "technical.evidence.documented",
+        "entries": [
+          {"label_key": "technical.label.cpu_bus", "value_key": "product.olivetti-m10.technical.cpu_bus"},
+          {"label_key": "technical.label.memory_map", "value_key": "product.olivetti-m10.technical.memory_map"},
+          {"label_key": "technical.label.video", "value_key": "product.olivetti-m10.technical.video"},
+          {"label_key": "technical.label.keyboard_mouse", "value_key": "product.olivetti-m10.technical.keyboard"},
+          {"label_key": "technical.label.rtc", "value_key": "product.olivetti-m10.technical.rtc"},
+          {"label_key": "technical.label.board_control", "value_key": "product.olivetti-m10.technical.buzzer_power"},
+          {"label_key": "technical.label.firmware_evidence", "value_key": "product.olivetti-m10.technical.firmware"}
+        ]
+      },
+      {
+        "title_key": "technical.section.emulation",
+        "evidence_key": "technical.evidence.implementation",
+        "entries": [
+          {"label_key": "technical.label.implementation_lineage", "value_key": "product.olivetti-m10.technical.implementation"},
+          {"label_key": "technical.label.verified", "value_key": "product.olivetti-m10.technical.status"},
+          {"label_key": "technical.label.limitations", "value_key": "product.olivetti-m10.technical.limitations"}
+        ]
+      },
+      {
+        "title_key": "technical.section.sources",
+        "evidence_key": "technical.evidence.traceable",
+        "entries": [
+          {"label_key": "technical.label.manual", "value_key": "product.olivetti-m10.source.service_manual", "url": "https://archive.org/download/m10portablecomputer_assistenza/M10%20portable%20computer%20-%20Manuale%20generale%20per%20l%27assistenza.pdf"},
+          {"label_key": "technical.label.manual", "value_key": "product.olivetti-m10.source.operations_guide", "url": "https://archive.org/download/m10portablecomputeroperationsguide/M10%20Portable%20Computer%20-%20Operations%20Guide.pdf"}
+        ]
+      }
+    ]
+  },
+  "platform_order": 5,
+  "platform": {
+    "id": "olivetti-m10-platform",
+    "portable_adapter_id": "olivetti-m10",
+    "architecture": "80C85"
+  }
+}
