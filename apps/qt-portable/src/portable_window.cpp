@@ -13,6 +13,7 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QImage>
@@ -553,9 +554,19 @@ PortableWindow::openMachine(const bm_frontend_adapter_t *adapter,
             storage->retain = !requirement.battery_backed || settings.value(
                 persistentStateKey(activeStateId_, role, QStringLiteral("retain")),
                 true).toBool();
-            const QByteArray saved = settings.value(
-                persistentStateKey(activeStateId_, role, QStringLiteral("data")))
-                .toByteArray();
+            /* Saved machines keep their battery-backed state as files in
+             * their own folder; earlier releases kept it in the settings,
+             * which remain the fallback and the store for unsaved ones. */
+            QByteArray saved;
+            const QString stateFile = persistentStateFile(role);
+            if (!stateFile.isEmpty()) {
+                QFile input(stateFile);
+                if (input.open(QIODevice::ReadOnly))
+                    saved = input.readAll();
+            }
+            if (saved.size() != static_cast<qsizetype>(requirement.size))
+                saved = settings.value(persistentStateKey(
+                    activeStateId_, role, QStringLiteral("data"))).toByteArray();
             if (!storage->retain) {
                 storage->data = QByteArray(
                     static_cast<qsizetype>(requirement.size), '\0');
@@ -670,11 +681,27 @@ PortableWindow::closeMachine()
                 (captured.data.size() != (*stored)->requirement->size))
                 continue;
             const QString role = QString::fromUtf8((*stored)->requirement->role);
+            const QByteArray data(
+                reinterpret_cast<const char *>(captured.data.data()),
+                static_cast<qsizetype>(captured.data.size()));
+            const QString stateFile = persistentStateFile(role);
+            if (!stateFile.isEmpty()) {
+                QSaveFile output(stateFile);
+                if (QDir().mkpath(QFileInfo(stateFile).absolutePath()) &&
+                    output.open(QIODevice::WriteOnly) &&
+                    (output.write(data) == data.size()) && output.commit()) {
+                    settings.remove(persistentStateKey(
+                        activeStateId_, role, QStringLiteral("data")));
+                    continue;
+                }
+                statusBar()->showMessage(
+                    tr("Could not save %1 in the machine folder")
+                        .arg(QString::fromUtf8((*stored)->requirement->label)),
+                    5000);
+            }
             settings.setValue(
                 persistentStateKey(activeStateId_, role,
-                                   QStringLiteral("data")),
-                QByteArray(reinterpret_cast<const char *>(captured.data.data()),
-                           static_cast<qsizetype>(captured.data.size())));
+                                   QStringLiteral("data")), data);
         }
     }
     worker_.reset();
@@ -714,6 +741,22 @@ PortableWindow::closeMachine()
     updateActions();
 }
 
+/* <machine folder>/state/<role>.bin for a saved machine; empty for a
+ * machine opened without a saved profile. */
+QString
+PortableWindow::persistentStateFile(const QString &role) const
+{
+    const bool saved = std::any_of(profiles_.cbegin(), profiles_.cend(),
+        [this](const PortableMachineProfile &profile) {
+            return profile.id == activeStateId_;
+        });
+    if (!saved || activeStateId_.isEmpty())
+        return QString();
+    return QDir(profileStore_.root()).filePath(
+        activeStateId_ + QStringLiteral("/state/") + role +
+        QStringLiteral(".bin"));
+}
+
 void
 PortableWindow::setPersistentStateRetention(bool enabled)
 {
@@ -728,9 +771,13 @@ PortableWindow::setPersistentStateRetention(bool enabled)
         settings.setValue(
             persistentStateKey(activeStateId_, role,
                                QStringLiteral("retain")), enabled);
-        if (!enabled)
+        if (!enabled) {
+            const QString stateFile = persistentStateFile(role);
             settings.remove(persistentStateKey(
                 activeStateId_, role, QStringLiteral("data")));
+            if (!stateFile.isEmpty())
+                QFile::remove(stateFile);
+        }
     }
     statusBar()->showMessage(
         enabled ? tr("Battery-backed state will be retained after power-off") :

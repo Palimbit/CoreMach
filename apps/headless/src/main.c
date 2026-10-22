@@ -21,12 +21,12 @@ print_usage(const char *program)
             "  %s --version\n"
             "  %s --list-machines\n"
             "  %s --describe <machine-id>\n"
-            "  %s --machine <machine-id> --firmware-even <path>"
-            " --firmware-odd <path> [--floppy <path>]"
+            "  %s --machine <machine-id> (--firmware <path> |"
+            " --firmware-even <path> --firmware-odd <path>) [--floppy <path>]"
             " [--machine-option name=value]..."
             " [--swap-floppy-at <tick> --swap-floppy <path>]"
             " [--hard-disk <path> | --working-hard-disk <path>]"
-            " [--persistent-state <role=path> | --depleted-state <role>]"
+            " [--persistent-state <role=path> | --depleted-state <role>]..."
             " [--ticks <count>]"
             " [--frame <path>] [--type-at <tick> --type-text <text>]..."
             " [--key-ticks <count>] [--trace-tail <1..4096>]"
@@ -37,12 +37,12 @@ print_usage(const char *program)
             " [--freeze-trace-physical <hex-address>]"
             " [--freeze-trace-after <event-sequence>]"
             " [--expect-frame-crc32 <hex>]\n"
-            "  %s --machine <machine-id> --firmware-even <path>"
-            " --firmware-odd <path> [--floppy <path>]"
+            "  %s --machine <machine-id> (--firmware <path> |"
+            " --firmware-even <path> --firmware-odd <path>) [--floppy <path>]"
             " [--machine-option name=value]..."
             " [--swap-floppy-at <tick> --swap-floppy <path>]"
             " [--hard-disk <path> | --working-hard-disk <path>]"
-    " [--persistent-state <role=path> | --depleted-state <role>]"
+    " [--persistent-state <role=path> | --depleted-state <role>]..."
             " --scenario <path> [--frame <path>] [--trace-tail <1..4096>]\n"
             "     scenario v2 adds key=<tick>:<name>:down|up and"
             " tap=<tick>:<name>\n"
@@ -66,6 +66,19 @@ parse_persistent_state(const char *value, char *role, size_t role_size,
     role[length] = '\0';
     *path = separator + 1;
     return 1;
+}
+
+static int
+state_role_used(const headless_run_options_t *options, const char *role)
+{
+    size_t index;
+    for (index = 0U; index < options->persistent_state_count; ++index)
+        if (strcmp(options->persistent_state_role[index], role) == 0)
+            return 1;
+    for (index = 0U; index < options->depleted_state_count; ++index)
+        if (strcmp(options->depleted_state_role[index], role) == 0)
+            return 1;
+    return 0;
 }
 
 static int
@@ -220,8 +233,6 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
     int key_ticks_was_set = 0;
     int frame_crc_was_set = 0;
     int scenario_was_set = 0;
-    int persistent_state_was_set = 0;
-    int depleted_state_was_set = 0;
     int trace_tail_was_set = 0;
     int trace_memory_was_set = 0;
     int trace_memory_image_was_set = 0;
@@ -241,6 +252,9 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
         value = argv[index];
         if (strcmp(argument, "--machine") == 0) {
             if (!assign_once(&options->machine_id, value))
+                return 0;
+        } else if (strcmp(argument, "--firmware") == 0) {
+            if (!assign_once(&options->firmware_path, value))
                 return 0;
         } else if (strcmp(argument, "--firmware-even") == 0) {
             if (!assign_once(&options->firmware_even_path, value))
@@ -292,20 +306,23 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
                 return 0;
             scenario_was_set = 1;
         } else if (strcmp(argument, "--persistent-state") == 0) {
-            if (persistent_state_was_set || depleted_state_was_set ||
+            const size_t state = options->persistent_state_count;
+            if ((state >= HEADLESS_MAX_STATES) ||
                 !parse_persistent_state(
-                    value, options->persistent_state_role,
-                    sizeof(options->persistent_state_role),
-                    &options->persistent_state_path))
+                    value, options->persistent_state_role[state],
+                    sizeof(options->persistent_state_role[state]),
+                    &options->persistent_state_path[state]) ||
+                state_role_used(options, options->persistent_state_role[state]))
                 return 0;
-            persistent_state_was_set = 1;
+            ++options->persistent_state_count;
         } else if (strcmp(argument, "--depleted-state") == 0) {
-            if (persistent_state_was_set || depleted_state_was_set ||
-                (value[0] == '\0') ||
-                (strlen(value) >= sizeof(options->depleted_state_role)))
+            const size_t state = options->depleted_state_count;
+            if ((state >= HEADLESS_MAX_STATES) || (value[0] == '\0') ||
+                (strlen(value) >= sizeof(options->depleted_state_role[state])) ||
+                state_role_used(options, value))
                 return 0;
-            memcpy(options->depleted_state_role, value, strlen(value) + 1U);
-            depleted_state_was_set = 1;
+            memcpy(options->depleted_state_role[state], value, strlen(value) + 1U);
+            ++options->depleted_state_count;
         } else if (strcmp(argument, "--type-text") == 0) {
             if (!pending_type_at ||
                 !assign_once(&options->text_actions[
@@ -413,8 +430,11 @@ parse_run_options(int argc, char **argv, headless_run_options_t *options)
         return 0;
     return
            (options->machine_id != NULL) &&
-           (options->firmware_even_path != NULL) &&
-           (options->firmware_odd_path != NULL);
+           ((options->firmware_path != NULL) ?
+            ((options->firmware_even_path == NULL) &&
+             (options->firmware_odd_path == NULL)) :
+            ((options->firmware_even_path != NULL) &&
+             (options->firmware_odd_path != NULL)));
 }
 
 static int

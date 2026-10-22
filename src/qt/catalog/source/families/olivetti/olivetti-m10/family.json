@@ -1,0 +1,10 @@
+{
+  "order": 5,
+  "family": {
+    "id": "olivetti-m10",
+    "manufacturer_id": "olivetti",
+    "parent_family_id": "",
+    "name": "M10",
+    "description_key": "family.olivetti-m10.description"
+  }
+}

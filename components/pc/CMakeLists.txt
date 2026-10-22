@@ -146,3 +146,31 @@ else()
         PRIVATE -Wall -Wextra -Wpedantic -Werror
     )
 endif()
+
+# NEC uPD1990AC serial I/O calendar and clock (Olivetti M10).
+add_library(blumach_upd1990ac STATIC src/rtc_upd1990ac.c)
+target_include_directories(blumach_upd1990ac PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    "$<INSTALL_INTERFACE:include>")
+target_link_libraries(blumach_upd1990ac PUBLIC blumach_engine)
+target_compile_features(blumach_upd1990ac PUBLIC c_std_11)
+set_target_properties(blumach_upd1990ac PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_upd1990ac PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_upd1990ac PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+# OKI MSM81C55 I/O ports and timer (Olivetti M10).
+add_library(blumach_msm81c55 STATIC src/msm81c55.c)
+target_include_directories(blumach_msm81c55 PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    "$<INSTALL_INTERFACE:include>")
+target_link_libraries(blumach_msm81c55 PUBLIC blumach_engine)
+target_compile_features(blumach_msm81c55 PUBLIC c_std_11)
+set_target_properties(blumach_msm81c55 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_msm81c55 PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_msm81c55 PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()

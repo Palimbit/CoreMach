@@ -655,6 +655,68 @@ set_tests_properties(
     PROPERTIES TIMEOUT 10
 )
 
+# NEC uPD1990AC calendar clock contracts.
+add_executable(portable-engine-m10-keyboard m10_keyboard_test.c)
+target_link_libraries(portable-engine-m10-keyboard PRIVATE blumach_system_olivetti_m10 blumach_platform_null)
+target_compile_features(portable-engine-m10-keyboard PRIVATE c_std_11)
+set_target_properties(portable-engine-m10-keyboard PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-m10-keyboard PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-m10-keyboard PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.m10-keyboard COMMAND portable-engine-m10-keyboard)
+set_tests_properties(portable-engine.m10-keyboard PROPERTIES TIMEOUT 10)
+
+add_executable(portable-engine-m10-board m10_board_test.c)
+target_link_libraries(portable-engine-m10-board PRIVATE blumach_system_olivetti_m10 blumach_platform_null)
+target_compile_features(portable-engine-m10-board PRIVATE c_std_11)
+set_target_properties(portable-engine-m10-board PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-m10-board PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-m10-board PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.m10-board COMMAND portable-engine-m10-board)
+set_tests_properties(portable-engine.m10-board PROPERTIES TIMEOUT 10)
+
+add_executable(portable-engine-msm81c55 msm81c55_test.c)
+target_link_libraries(portable-engine-msm81c55 PRIVATE blumach_msm81c55 blumach_platform_null)
+target_compile_features(portable-engine-msm81c55 PRIVATE c_std_11)
+set_target_properties(portable-engine-msm81c55 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-msm81c55 PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-msm81c55 PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.msm81c55 COMMAND portable-engine-msm81c55)
+set_tests_properties(portable-engine.msm81c55 PROPERTIES TIMEOUT 10)
+
+add_executable(portable-engine-upd1990ac upd1990ac_test.c)
+target_link_libraries(portable-engine-upd1990ac PRIVATE blumach_upd1990ac blumach_platform_null)
+target_compile_features(portable-engine-upd1990ac PRIVATE c_std_11)
+set_target_properties(portable-engine-upd1990ac PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-upd1990ac PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-upd1990ac PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.upd1990ac COMMAND portable-engine-upd1990ac)
+set_tests_properties(portable-engine.upd1990ac PROPERTIES TIMEOUT 10)
+
+# Hitachi HD44102CH LCD column driver contracts.
+add_executable(portable-engine-hd44102 hd44102_test.c)
+target_link_libraries(portable-engine-hd44102 PRIVATE blumach_video blumach_platform_null)
+target_compile_features(portable-engine-hd44102 PRIVATE c_std_11)
+set_target_properties(portable-engine-hd44102 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(portable-engine-hd44102 PRIVATE /W4 /WX /UNDEBUG)
+else()
+    target_compile_options(portable-engine-hd44102 PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+endif()
+add_test(NAME portable-engine.hd44102 COMMAND portable-engine-hd44102)
+set_tests_properties(portable-engine.hd44102 PROPERTIES TIMEOUT 10)
+
 # Intel 8085 / OKI MSM80C85A component contracts.
 add_library(portable-engine-i8085-test-support STATIC cpu_i8085_test_harness.c)
 target_link_libraries(portable-engine-i8085-test-support
@@ -683,9 +745,20 @@ add_executable(portable-engine-i8085-cpm-runner cpu_i8085_cpm_runner.c)
 target_link_libraries(portable-engine-i8085-cpm-runner
     PRIVATE portable-engine-i8085-test-support
 )
+# Manual Olivetti M10 firmware probe: the ROM is passed by path and verified
+# by SHA-256. Only its authored --self-test mode runs as a CTest.
+add_executable(portable-engine-m10-firmware-probe m10_firmware_probe.c)
+target_link_libraries(portable-engine-m10-firmware-probe
+    PRIVATE blumach_cpu_i8085 blumach_video blumach_upd1990ac blumach_platform_null
+)
+add_test(NAME portable-engine.m10-firmware-probe-self-test
+    COMMAND portable-engine-m10-firmware-probe --self-test
+)
+set_tests_properties(portable-engine.m10-firmware-probe-self-test PROPERTIES TIMEOUT 10)
 set(BLUMACH_I8085_TARGETS
     portable-engine-i8085-test-support
     portable-engine-i8085-cpm-runner
+    portable-engine-m10-firmware-probe
 )
 foreach(name IN LISTS BLUMACH_I8085_TESTS)
     list(APPEND BLUMACH_I8085_TARGETS portable-engine-i8085-${name})

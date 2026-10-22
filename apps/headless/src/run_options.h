@@ -13,6 +13,7 @@
 #define HEADLESS_MAX_STATE_ROLE 64U
 #define HEADLESS_MAX_MACHINE_OPTIONS 16U
 #define HEADLESS_MAX_OPTION_NAME 64U
+#define HEADLESS_MAX_STATES 4U
 
 typedef struct headless_machine_option {
     char name[HEADLESS_MAX_OPTION_NAME];
@@ -21,6 +22,8 @@ typedef struct headless_machine_option {
 
 typedef struct headless_run_options {
     const char *machine_id;
+    /* A single "firmware" asset, or the two halves of the PCS 86. */
+    const char *firmware_path;
     const char *firmware_even_path;
     const char *firmware_odd_path;
     const char *floppy_path;
@@ -32,9 +35,13 @@ typedef struct headless_run_options {
     const char *scenario_path;
     headless_machine_option_t machine_options[HEADLESS_MAX_MACHINE_OPTIONS];
     size_t machine_option_count;
-    char persistent_state_role[HEADLESS_MAX_STATE_ROLE];
-    const char *persistent_state_path;
-    char depleted_state_role[HEADLESS_MAX_STATE_ROLE];
+    /* Each role appears at most once, either loaded and saved through a
+     * file or depleted (blank). */
+    char persistent_state_role[HEADLESS_MAX_STATES][HEADLESS_MAX_STATE_ROLE];
+    const char *persistent_state_path[HEADLESS_MAX_STATES];
+    size_t persistent_state_count;
+    char depleted_state_role[HEADLESS_MAX_STATES][HEADLESS_MAX_STATE_ROLE];
+    size_t depleted_state_count;
     uint64_t ticks;
     uint64_t key_ticks;
     size_t trace_tail;

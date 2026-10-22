@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <blumach/frontend/frontend.h>
 #include <blumach/platforms/null_host.h>
+#include <blumach/systems/olivetti_m10.h>
 #include <blumach/systems/olivetti_pcs86.h>
 
 #include <assert.h>
@@ -98,8 +99,8 @@ main(void)
     size_t persistent_state_count = 0U;
     debug_observation_t observation = { 0 };
 
-    assert(bm_frontend_adapter_count() == 3U);
-    assert(bm_frontend_adapter_at(3U) == NULL);
+    assert(bm_frontend_adapter_count() == 4U);
+    assert(bm_frontend_adapter_at(4U) == NULL);
     assert(bm_frontend_adapter_find("olivetti-pcs286-experimental") != NULL);
     adapter = bm_frontend_adapter_find("olivetti-pcs86");
     assert(adapter != NULL);
@@ -145,7 +146,7 @@ main(void)
     assert(bm_machine_registry_create(&host, bm_frontend_adapter_count(),
                                       &registry) == BM_STATUS_OK);
     assert(bm_frontend_register_machines(registry) == BM_STATUS_OK);
-    assert(bm_machine_registry_count(registry) == 3U);
+    assert(bm_machine_registry_count(registry) == 4U);
     bm_machine_registry_destroy(registry);
 
     assert(bm_frontend_machine_open(adapter, NULL, 0U, &machine) ==
@@ -461,6 +462,95 @@ main(void)
             bm_session_destroy(session);
             bm_frontend_machine_close(machine);
         }
+    }
+    {
+        /* M10: one firmware asset, battery-backed RAM and clock, typed
+         * options. The firmware is synthetic (HLT). */
+        static uint8_t m10_firmware[BM_M10_FIRMWARE_SIZE];
+        static uint8_t m10_ram[BM_M10_RAM_STATE_SIZE];
+        static uint8_t m10_rtc[BM_M10_RTC_STATE_SIZE];
+        const bm_frontend_adapter_t *m10 = bm_frontend_adapter_find("olivetti-m10");
+        const bm_frontend_asset_binding_t m10_binding = {
+            "firmware", BM_FRONTEND_ASSET_BLOB,
+            { .blob = { "synthetic-test", m10_firmware, sizeof(m10_firmware), NULL } }
+        };
+        const bm_frontend_machine_option_t good[] = {
+            { "ram_kib", 8U }, { "language", 3U }, { "rtc_time", 1U }
+        };
+        static const bm_frontend_machine_option_t bad[] = {
+            { "ram_kib", 12U }, { "language", 4U }, { "rtc_time", 2U },
+            { "floppy_a_type", 1U }
+        };
+        size_t count = 0U;
+        const bm_frontend_persistent_state_requirement_t *states;
+        const bm_frontend_asset_requirement_t *m10_assets;
+        bm_frontend_persistent_state_binding_t state_bindings[2];
+        uint64_t value = UINT64_MAX;
+        size_t index;
+
+        assert(m10 != NULL);
+        m10_assets = bm_frontend_adapter_assets(m10, &count);
+        assert(count == 1U && strcmp(m10_assets[0].role, "firmware") == 0 &&
+               m10_assets[0].required && m10_assets[0].accepted_sizes[0] == 32768U);
+        states = bm_frontend_adapter_persistent_states(m10, &count);
+        assert(count == 2U);
+        assert(strcmp(states[0].role, "ram") == 0 && states[0].size == 32768U &&
+               states[0].battery_backed);
+        assert(strcmp(states[1].role, "rtc") == 0 && states[1].size == 40U &&
+               states[1].battery_backed);
+        assert(bm_frontend_machine_open(m10, NULL, 0U, &machine) ==
+               BM_STATUS_INVALID_ARGUMENT);
+        for (index = 0U; index < sizeof(bad) / sizeof(bad[0]); ++index)
+            assert(bm_frontend_machine_open_configured(
+                       m10, &m10_binding, 1U, NULL, 0U, &bad[index], 1U,
+                       &machine) == BM_STATUS_INVALID_ARGUMENT);
+
+        memset(m10_firmware, 0x76, sizeof(m10_firmware));
+        assert(bm_frontend_machine_open_configured(
+                   m10, &m10_binding, 1U, NULL, 0U, good, 3U, &machine) == BM_STATUS_OK);
+        assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+        assert(bm_session_configure(session, bm_frontend_machine_config(machine)) ==
+               BM_STATUS_OK);
+        assert(bm_session_start(session) == BM_STATUS_OK);
+        assert(bm_session_inspect_machine(session, "ram_kib", &value) == BM_STATUS_OK &&
+               value == 8U);
+        assert(bm_session_inspect_machine(session, "language", &value) == BM_STATUS_OK &&
+               value == 3U);
+        /* Fixed start: Sunday 1 January 00:00:00. */
+        assert(bm_session_inspect_machine(session, "rtc_month", &value) == BM_STATUS_OK &&
+               value == 1U);
+        assert(bm_session_inspect_machine(session, "rtc_hour", &value) == BM_STATUS_OK &&
+               value == 0U);
+        assert(bm_session_run_for(session, UINT64_C(3000000000)) == BM_STATUS_OK);
+        assert(bm_session_save_persistent_state(session, "ram", m10_ram,
+                                                sizeof(m10_ram)) == BM_STATUS_OK);
+        assert(bm_session_save_persistent_state(session, "rtc", m10_rtc,
+                                                sizeof(m10_rtc)) == BM_STATUS_OK);
+        bm_session_destroy(session);
+        bm_frontend_machine_close(machine);
+
+        /* The saved clock continues; the fixed option never advances it. */
+        state_bindings[0] = (bm_frontend_persistent_state_binding_t) {
+            "ram", m10_ram, sizeof(m10_ram)
+        };
+        state_bindings[1] = (bm_frontend_persistent_state_binding_t) {
+            "rtc", m10_rtc, sizeof(m10_rtc)
+        };
+        assert(bm_frontend_machine_open_configured(
+                   m10, &m10_binding, 1U, state_bindings, 2U, good, 3U,
+                   &machine) == BM_STATUS_OK);
+        assert(bm_session_create(&host, &session) == BM_STATUS_OK);
+        assert(bm_session_configure(session, bm_frontend_machine_config(machine)) ==
+               BM_STATUS_OK);
+        assert(bm_session_start(session) == BM_STATUS_OK);
+        assert(bm_session_inspect_machine(session, "rtc_second", &value) == BM_STATUS_OK &&
+               value == 3U);
+        bm_session_destroy(session);
+        bm_frontend_machine_close(machine);
+        state_bindings[1].size = 39U;
+        assert(bm_frontend_machine_open_configured(
+                   m10, &m10_binding, 1U, state_bindings, 2U, good, 3U,
+                   &machine) == BM_STATUS_INVALID_ARGUMENT);
     }
     return 0;
 }
