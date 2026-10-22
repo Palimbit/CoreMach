@@ -114,6 +114,29 @@ bm_host_capability_lookup(const bm_host_services_t *services,
     return BM_STATUS_UNSUPPORTED;
 }
 
+const bm_host_tolerance_services_t *
+bm_host_tolerance(const bm_host_services_t *services)
+{
+    const bm_host_capability_t *capability = NULL;
+    const bm_host_tolerance_services_t *tolerance;
+
+    if (bm_host_capability_lookup(services, BM_HOST_CAPABILITY_TOLERANCE,
+                                  BM_HOST_TOLERANCE_VERSION,
+                                  sizeof(bm_host_tolerance_services_t),
+                                  &capability) != BM_STATUS_OK)
+        return NULL;
+    tolerance = capability->services;
+    return tolerance->report != NULL ? tolerance : NULL;
+}
+
+void
+bm_tolerance_report(const bm_host_tolerance_services_t *tolerance,
+                    const bm_tolerance_event_t *event)
+{
+    if ((tolerance != NULL) && (tolerance->report != NULL) && (event != NULL))
+        tolerance->report(tolerance->context, event);
+}
+
 static void *
 engine_allocate(const bm_host_services_t *host, size_t size)
 {
