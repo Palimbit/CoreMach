@@ -24,6 +24,10 @@ typedef struct bm_i8085_state {
     void *sod_context;
     bm_i8085_timing_fn timing;
     void *timing_context;
+    /* Non-NULL when the host accepts the extended instruction set. */
+    const bm_host_tolerance_services_t *tolerance;
+    /* Extended opcodes already reported, one bit per opcode index. */
+    uint16_t extended_reported;
 
     /* Register file indexed by the instruction encoding: B C D E H L - A. */
     uint8_t registers[8];
@@ -151,6 +155,36 @@ documented_timing(uint8_t op, int taken, uint8_t *t_states, uint8_t *cycles)
             default:
                 return 0;
         }
+    }
+    *t_states = t;
+    *cycles = m;
+    return 1;
+}
+
+/* Extended (undocumented) instructions, executed only for a tolerant host.
+ * Bytes, machine cycles and states from [DS79] p. 145, which agree with
+ * [TUN97] Table 2-10 p. 2-16. Conditional forms report the realised path
+ * as their documented counterparts do. */
+static int
+extended_timing(uint8_t op, int taken, uint8_t *t_states, uint8_t *cycles)
+{
+    uint8_t t;
+    uint8_t m;
+
+    switch (op) {
+        case 0x10U:                                     /* ARHL */
+            t = 7U; m = 2U; break;
+        case 0x08U:                                     /* DSUB */
+        case 0x18U:                                     /* RDEL */
+        case 0x28U: case 0x38U:                         /* LDHI, LDSI */
+        case 0xd9U: case 0xedU:                         /* SHLX, LHLX */
+            t = 10U; m = 3U; break;
+        case 0xcbU:                                     /* RSTV */
+            t = taken ? 12U : 6U; m = taken ? 3U : 1U; break;
+        case 0xddU: case 0xfdU:                         /* JNK, JK */
+            t = taken ? 10U : 7U; m = taken ? 3U : 2U; break;
+        default:
+            return 0;
     }
     *t_states = t;
     *cycles = m;
@@ -500,6 +534,155 @@ set_interrupt_masks(bm_i8085_state_t *state)
 /* ---------------------------------------------------------------------
  * Instruction execution.
  * --------------------------------------------------------------------- */
+static unsigned int
+extended_index(uint8_t op)
+{
+    static const uint8_t opcodes[10] = {
+        0x08U, 0x10U, 0x18U, 0x28U, 0x38U, 0xcbU, 0xd9U, 0xddU, 0xedU, 0xfdU
+    };
+    unsigned int index;
+
+    for (index = 0U; index < 10U; ++index)
+        if (opcodes[index] == op)
+            return index;
+    return 0U;
+}
+
+/* Reports each extended opcode once per CPU. Intel NMOS behaviour is
+ * described by [DS79]; for the OKI MSM80C85A it is assumed (see
+ * doc/architecture/intel-8085-cpu.md). */
+static void
+report_extended(bm_i8085_state_t *state, uint8_t op, uint16_t pc)
+{
+    const uint16_t bit = (uint16_t) (1U << extended_index(op));
+    const int assumed = state->model == BM_I8085_OKI_MSM80C85A;
+    bm_tolerance_event_t event;
+
+    if ((state->extended_reported & bit) != 0U)
+        return;
+    state->extended_reported = (uint16_t) (state->extended_reported | bit);
+    memset(&event, 0, sizeof(event));
+    event.size = sizeof(event);
+    event.kind = BM_TOLERANCE_UNDOCUMENTED_INSTRUCTION;
+    event.flags = BM_TOLERANCE_FLAG_HAS_PC |
+                  (assumed ? BM_TOLERANCE_FLAG_ASSUMED_BEHAVIOUR : 0U);
+    event.device = model_name(state->model);
+    event.note = assumed ?
+        "executed with Intel NMOS 8085 semantics, assumed for this CMOS part" :
+        "executed with Intel NMOS 8085 semantics";
+    event.pc = pc;
+    event.opcode = op;
+    bm_tolerance_report(state->tolerance, &event);
+}
+
+/* The ten extended instructions after the opcode fetch. Operations from
+ * [DS79] p. 145; names as in bm_i8085_classify_opcode(), with the [DS79]
+ * jumps JX5/JNX5 and the [TUN97] JUI/JNUI as aliases of JK/JNK. Flags follow
+ * [KS1302] where it covers the operation class; cases it does not cover are
+ * marked here and in doc/architecture/intel-8085-cpu.md as unconfirmed. */
+static bm_status_t
+execute_extended(bm_i8085_state_t *state, uint8_t op)
+{
+    bm_status_t status = BM_STATUS_OK;
+
+    switch (op) {
+        case 0x08U: {                                   /* DSUB: HL -= BC */
+            const uint16_t left = get_hl(state);
+            const uint16_t right = get_pair(state, 0U);
+            uint8_t low;
+            uint8_t high;
+            /* [DS79]: every flag is affected. Unconfirmed: S, P, AC, CY, V
+             * and K come from the high-order subtraction, as V does for DAD
+             * ([KS1302] note 4), and Z reports the 16-bit result. */
+            low = alu_subtract(state, (uint8_t) left, (uint8_t) right, 0U);
+            high = alu_subtract(state, (uint8_t) (left >> 8U),
+                                (uint8_t) (right >> 8U),
+                                (state->f & BM_I8085_FLAG_CY) != 0U);
+            set_pair(state, 2U, (uint16_t) (((unsigned int) high << 8U) | low));
+            set_flag(state, BM_I8085_FLAG_Z, (high | low) == 0U);
+            return BM_STATUS_OK;
+        }
+        case 0x10U: {                                   /* ARHL */
+            const uint16_t value = get_hl(state);
+            /* Only CY is affected ([DS79]). */
+            set_flag(state, BM_I8085_FLAG_CY, (value & 1U) != 0U);
+            set_pair(state, 2U, (uint16_t) ((value >> 1U) | (value & 0x8000U)));
+            return BM_STATUS_OK;
+        }
+        case 0x18U: {                                   /* RDEL */
+            const uint16_t value = get_pair(state, 1U);
+            const unsigned int carry = (state->f & BM_I8085_FLAG_CY) != 0U;
+            const uint16_t result = (uint16_t) ((value << 1U) | carry);
+            /* Only CY and V are affected ([DS79]). Unconfirmed: V is set as
+             * for RAL, a rotate treated as adding the value to itself
+             * ([KS1302]), that is when bit 15 changes. */
+            set_flag(state, BM_I8085_FLAG_CY, (value & 0x8000U) != 0U);
+            set_flag(state, BM_I8085_FLAG_V, ((value ^ result) & 0x8000U) != 0U);
+            set_pair(state, 1U, result);
+            return BM_STATUS_OK;
+        }
+        case 0x28U:                                     /* LDHI d8 */
+        case 0x38U: {                                   /* LDSI d8 */
+            uint8_t offset = 0U;
+            /* No flags are affected ([DS79]). */
+            status = fetch_byte(state, &offset);
+            if (status == BM_STATUS_OK)
+                set_pair(state, 1U,
+                         (uint16_t) ((op == 0x28U ? get_hl(state) : state->sp) +
+                                     offset));
+            return status;
+        }
+        case 0xcbU:                                     /* RSTV */
+            if ((state->f & BM_I8085_FLAG_V) == 0U)
+                return BM_STATUS_OK;
+            state->boundary_taken = 1U;
+            return call_address(state, 0x0040U);
+        case 0xd9U: {                                   /* SHLX */
+            const uint16_t address = get_pair(state, 1U);
+            status = memory_write(state, address, state->registers[5U]);
+            if (status == BM_STATUS_OK)
+                status = memory_write(state, (uint16_t) (address + 1U),
+                                      state->registers[4U]);
+            return status;
+        }
+        case 0xedU: {                                   /* LHLX */
+            const uint16_t address = get_pair(state, 1U);
+            uint8_t low = 0U;
+            uint8_t high = 0U;
+            status = memory_read(state, address, &low);
+            if (status == BM_STATUS_OK)
+                status = memory_read(state, (uint16_t) (address + 1U), &high);
+            if (status == BM_STATUS_OK) {
+                state->registers[5U] = low;
+                state->registers[4U] = high;
+            }
+            return status;
+        }
+        case 0xddU:                                     /* JNK a16 */
+        case 0xfdU: {                                   /* JK a16 */
+            const int k = (state->f & BM_I8085_FLAG_K) != 0U;
+            uint8_t low = 0U;
+            uint8_t high = 0U;
+            /* As Jcc, a false condition skips the third byte ([DS79]: 2 or
+             * 3 cycles, 7 or 10 states). */
+            status = fetch_byte(state, &low);
+            if (status != BM_STATUS_OK)
+                return status;
+            if ((op == 0xfdU) != k) {
+                state->pc = (uint16_t) (state->pc + 1U);
+                return BM_STATUS_OK;
+            }
+            state->boundary_taken = 1U;
+            status = fetch_byte(state, &high);
+            if (status == BM_STATUS_OK)
+                state->pc = (uint16_t) (((unsigned int) high << 8U) | low);
+            return status;
+        }
+        default:
+            return BM_STATUS_UNSUPPORTED;
+    }
+}
+
 static bm_status_t
 execute_instruction(bm_i8085_state_t *state)
 {
@@ -516,8 +699,13 @@ execute_instruction(bm_i8085_state_t *state)
     state->boundary_taken = 0U;
 
     if (bm_i8085_classify_opcode(op) == BM_I8085_OPCODE_UNDOCUMENTED) {
-        state->pc = start;
-        return BM_STATUS_UNSUPPORTED;
+        if (state->tolerance == NULL) {
+            /* Strict: no architectural change after the opcode fetch. */
+            state->pc = start;
+            return BM_STATUS_UNSUPPORTED;
+        }
+        report_extended(state, op, start);
+        return execute_extended(state, op);
     }
     if (op == 0x76U) {                                  /* HLT */
         state->halted = 1U;
@@ -861,7 +1049,10 @@ run_instruction_boundary(bm_i8085_state_t *state)
     if (delayed && (state->boundary_opcode != 0xfbU))
         state->interrupt_enable_delay = 0U;
     known = documented_timing(state->boundary_opcode, state->boundary_taken,
-                              &t_states, &machine_cycles);
+                              &t_states, &machine_cycles) ||
+            ((state->tolerance != NULL) &&
+             extended_timing(state->boundary_opcode, state->boundary_taken,
+                             &t_states, &machine_cycles));
     finish_boundary(state, BM_I8085_BOUNDARY_INSTRUCTION,
                     BM_I8085_INTERRUPT_NONE, t_states, machine_cycles, known);
     return BM_STATUS_OK;
@@ -1176,6 +1367,7 @@ bm_i8085_create(const bm_host_services_t *host,
     state->sod_context = config->sod_context;
     state->timing = config->timing;
     state->timing_context = config->timing_context;
+    state->tolerance = bm_host_tolerance(host);
     apply_reset_in(state);
     *out_cpu = (bm_cpu_t) {
         name,

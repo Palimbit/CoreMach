@@ -16,6 +16,9 @@ extern "C" {
  *  [OKI86]  OKI 1986 Microprocessor Data Book, MSM80C85A RS/GS.
  *  [KS1302] K. Shirriff, "Looking at silicon to understanding the 8085's
  *           undocumented flags", righto.com, February 2013.
+ *  [DS79]   W. Dehnhardt and V. M. Sorensen, "Unspecified 8085 op codes
+ *           enhance programming", Electronics, 18 January 1979, pp. 144-145.
+ *  [TUN97]  Tundra Semiconductor, CA80C85B data sheet, Table 2-10.
  *
  * The OKI MSM80C85A is selected separately so that a machine records the part
  * it carries. [OKI86] pp. 16-32 documents no difference from the Intel 8085A
@@ -51,9 +54,14 @@ typedef enum bm_i8085_signal {
 typedef enum bm_i8085_opcode_class {
     BM_I8085_OPCODE_DOCUMENTED = 0,
     /* Present on 8085 silicon but absent from Intel's published ISA: DSUB,
-     * ARHL, RDEL, LDHI, LDSI, RSTV, SHLX, JNK, LHLX and JK. The component
-     * does not execute them: after the opcode fetch it restores PC and
-     * returns BM_STATUS_UNSUPPORTED without other architectural change. */
+     * ARHL, RDEL, LDHI, LDSI, RSTV, SHLX, JNK, LHLX and JK ([DS79]; JNK and
+     * JK are JNX5/JX5 there and JNUI/JUI in [TUN97]). For a strict host the
+     * component does not execute them: after the opcode fetch it restores
+     * PC and returns BM_STATUS_UNSUPPORTED without other architectural
+     * change. For a host with BM_HOST_CAPABILITY_TOLERANCE it executes them
+     * as [DS79] describes, with [DS79]/[TUN97] timing, and reports each
+     * opcode once; the OKI MSM80C85A report is marked as assumed behaviour.
+     * Unconfirmed flag cases are listed in doc/architecture/intel-8085-cpu.md. */
     BM_I8085_OPCODE_UNDOCUMENTED = 1
 } bm_i8085_opcode_class_t;
 
