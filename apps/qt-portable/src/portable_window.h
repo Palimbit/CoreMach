@@ -71,6 +71,7 @@ private:
     void resetMachine();
     void stopMachine();
     void setPersistentStateRetention(bool enabled);
+    QString persistentStateFile(const QString &role) const;
     void insertFloppy();
     void ejectFloppy();
     void toggleFullscreen(bool enabled);
