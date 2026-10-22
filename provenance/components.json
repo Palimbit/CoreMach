@@ -623,7 +623,7 @@
       "method": "new",
       "license": "GPL-2.0-or-later",
       "copyright_holders": ["BluMach contributors"],
-      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, explicit generic persistent-state load/save or depleted-state selection, deterministic execution and engine-mode reporting including available RTC calendar state, and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies. Optional bounded failure diagnostics retain a configurable interleaved event tail plus a fixed interrupt-boundary history and full CPU register state"
+      "local_changes": "Registry-driven command-line frontend independent of Qt, with host-side firmware loading, read-only file-backed block media, explicit generic persistent-state load/save or depleted-state selection, deterministic execution and engine-mode reporting including available RTC calendar state, and framebuffer capture; consumes the shared frontend adapter contract without direct machine-system dependencies. Optional bounded failure diagnostics retain a configurable interleaved event tail plus a fixed interrupt-boundary history and full CPU register state The failure dump names 8085 registers, including PC, for 8085 machines, with a synthetic-image regression."
     },
     {
       "id": "portable-xta-controller",
