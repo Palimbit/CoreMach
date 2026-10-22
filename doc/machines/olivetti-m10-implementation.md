@@ -20,6 +20,9 @@ guest-visible path only.
   1983: memory map, I/O decoding, LCD selection (6.14), keyboard matrix (6.8),
   buzzer (6.12), clock (6.15), language jumpers (6.16.3), power and reset
   (6.20, 6.21).
+- Kyocera board schematic of the M10 (drawing M10M, sheet 2-3, from the
+  Olivetti schematic collection 4101790 F): 81C55 TIMER IN from the 80C85
+  CLK, TIMER OUT to the buzzer gate.
 - Olivetti, *M10 Portable Computer Operations Guide*, 1983: keyboard layout,
   first-switch-on clock, BASIC sign-on and bytes free.
 - Intel MCS-80/85 Family User's Manual and the OKI 1986 Microprocessor Data
@@ -42,7 +45,7 @@ the MSM81C55 ports and timer.
 | Area | Model |
 |---|---|
 | Memory | ROM 0000h-7FFFh; RAM from FFFFh downwards in 8 KB steps. Empty addresses read FFh (assumption). |
-| 81C55 | B0h-BFh, AD2-AD0 select the register. PA/PB drive the LCD chip selects, the key rows and the clock pins; PC reads the clock data and the language jumpers. Its TIMER IN is the CPU clock (2.4576 MHz, as in VirtualT and MAME). |
+| 81C55 | B0h-BFh, AD2-AD0 select the register. PA/PB drive the LCD chip selects, the key rows and the clock pins; PC reads the clock data and the language jumpers. Its TIMER IN (pin 3) is wired to the 80C85 CLK output (pin 37), 2.4576 MHz from the 4.9152 MHz crystal, on the board schematic. |
 | E0h-EFh | Reads return the key matrix; writes latch the clock STB (bit 2) and the printer strobe (bit 1). |
 | LCD | F0h-FFh, A0 selects data or instruction; chips 0-4 form the top half and 5-9 the bottom half, 50 columns each, of which the panel shows 240. |
 | Clock | TP on RST 7.5; the firmware selects 256 Hz. Time advances in exact 32.768 kHz periods scheduled from the TP deadline. |

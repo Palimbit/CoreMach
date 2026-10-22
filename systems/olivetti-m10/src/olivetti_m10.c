@@ -52,7 +52,9 @@ typedef struct bm_m10_machine {
     bm_m10_wall_clock_fn wall_clock;
     void *wall_clock_context;
     uint8_t ram[BM_M10_RAM_STATE_SIZE];
-    /* 81C55 at B0h-BFh (Y3), AD2-AD0 select the register. */
+    /* 81C55 at B0h-BFh (Y3), AD2-AD0 select the register. TIMER IN (pin 3)
+     * is the 80C85 CLK output (pin 37) on the board schematic, so the timer
+     * counts CPU clocks. */
     bm_msm81c55_t *pio;
     uint8_t port_a;
     uint8_t port_b;
