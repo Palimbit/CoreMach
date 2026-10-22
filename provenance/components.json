@@ -11,6 +11,18 @@
   ],
   "components": [
     {
+      "id": "olivetti-m10-portable-system",
+      "destination": [
+        "systems/olivetti-m10/**"
+      ],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": [
+        "BluMach contributors"
+      ],
+      "local_changes": "Instance-owned Olivetti M10 board written from the M10 service manual 4100230 N (0) and operations guide, moving the wiring of the CoreMach M10 firmware probe into a clocked runtime machine: ROM 0000h-7FFFh with 8/16/24/32 KiB RAM downwards from FFFFh, MSM81C55 at B0h-BFh with TIMER IN at the CPU clock, E0h-EFh key returns and STB/strobe latch, ten HD44102 drivers at F0h-FFh selected by PA0-PA7/PB0-PB1 (chip placement from MAME kc85 as a secondary source, no MAME code), uPD1990AC on PA0-PA4/PC0 with TP on RST 7.5 scheduled from the TP deadline, a 9x8 diode key matrix mapped from USA-ASCII physical positions with a latching CAPS LOCK, PC4/PC5 language jumpers, buzzer gate PB5 AND (PB2 OR TIMER OUT), P.C.S. power-off on PB4 until reset, and battery-backed RAM and clock persistent states with frontend-supplied wall-clock advance. Cassette, UART, printer, bar-code reader, modem, low-battery TRAP and host audio are not modelled."
+    },
+    {
       "id": "oki-msm81c55-io-timer",
       "destination": [
         "components/pc/include/blumach/components/msm81c55.h",
