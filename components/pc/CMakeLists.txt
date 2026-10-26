@@ -161,6 +161,20 @@ else()
     target_compile_options(blumach_upd1990ac PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
+# Intersil IM6402 UART (Olivetti M10).
+add_library(blumach_im6402 STATIC src/im6402.c)
+target_include_directories(blumach_im6402 PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    "$<INSTALL_INTERFACE:include>")
+target_link_libraries(blumach_im6402 PUBLIC blumach_engine)
+target_compile_features(blumach_im6402 PUBLIC c_std_11)
+set_target_properties(blumach_im6402 PROPERTIES C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(blumach_im6402 PRIVATE /W4 /WX)
+else()
+    target_compile_options(blumach_im6402 PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
 # OKI MSM81C55 I/O ports and timer (Olivetti M10).
 add_library(blumach_msm81c55 STATIC src/msm81c55.c)
 target_include_directories(blumach_msm81c55 PUBLIC

@@ -36,6 +36,19 @@
       "local_changes": "Instance-owned MSM81C55 I/O ports and timer written from the OKI 1986 Microprocessor Data Book, MSM81C55RS/GS, book pp102-114: command/status register with port A/B directions and the ALT1/ALT2/ALT3 port C directions, interrupt-enable status bits, timer flag set at TC and cleared by a status read, output latches read back on output bits and owner pin levels on input bits, 14-bit count length with the four output modes, STOP, STOP AFTER TC and START including a START while running that takes effect at TC, square wave high for the longer half, pulse low for the last cycle, and RESET clearing ports and stopping the timer without reinitialising the count. Time is owner-supplied TIMER IN cycles. The RAM, strobed ALT3/ALT4 handshakes and count-by-twos internals are not modelled; TIMER OUT idles high by assumption. No MAME code is used."
     },
     {
+      "id": "intersil-im6402-uart",
+      "destination": [
+        "components/pc/include/blumach/components/im6402.h",
+        "components/pc/src/im6402.c"
+      ],
+      "method": "new",
+      "license": "GPL-2.0-or-later",
+      "copyright_holders": [
+        "BluMach contributors"
+      ],
+      "local_changes": "Instance-owned character-level IM6402 UART written from the Intersil IM6402/IM6403 data sheet (functional pin definitions and transmitter/receiver operation notes): register clocks at 16 per bit, frames of start, 5-8 data bits, optional even/odd parity and 1, 1.5 (five-bit) or 2 stop bits, TBRL loading with end-to-end transmission through the buffer and transmitter registers, TBRE/TRE, received characters right-justified with unused high bits low, DR with DRR, OE, FE and PE with PE forced low by parity inhibit, and master reset clearing the flags without clearing the receiver buffer. Bit-level line sampling, the 0-1 clock TBRL transfer delay and the IM6403 divider and oscillator are not modelled. No MAME code is used."
+    },
+    {
       "id": "nec-upd1990ac-calendar-clock",
       "destination": ["components/pc/include/blumach/components/rtc_upd1990ac.h", "components/pc/src/rtc_upd1990ac.c"],
       "method": "new", "license": "GPL-2.0-or-later",
