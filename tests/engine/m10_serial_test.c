@@ -34,10 +34,12 @@ static const uint8_t program[] = {                               /* at 0040h */
     0x3eU, 0x1cU, 0xd3U, 0xd0U,   /* UART: 8 bits, no parity, 1 stop     */
     0x3eU, 0x41U, 0xd3U, 0xc0U,   /* send 'A'                            */
     0x3eU, 0x42U, 0xd3U, 0xc0U,   /* send 'B' (follows end to end)       */
+    0x3eU, 0x24U, 0xd3U, 0xb2U,   /* PB5 and PB2 high: buzzer level 1    */
+    0x3eU, 0x04U, 0xd3U, 0xb2U,   /* PB5 low: level 0, 17 clocks later   */
     0x3eU, 0x20U, 0xd3U, 0xb2U,   /* PB5 high, PB2 low: buzzer on timer  */
     0x3eU, 0x0dU, 0x30U,          /* SIM: unmask RST 6.5 only            */
     0xfbU,                        /* EI                                  */
-    0xc3U, 0x6aU, 0x00U           /* 006A JMP 006Ah                      */
+    0xc3U, 0x72U, 0x00U           /* 0072 JMP 0072h                      */
 };
 
 typedef struct host_log {
@@ -45,6 +47,7 @@ typedef struct host_log {
     uint8_t data[8];
     bm_tick_t time[8];
     unsigned int audio;
+    bm_audio_change_t changes[8];
     bm_audio_change_t last_audio;
 } host_log_t;
 
@@ -63,6 +66,8 @@ audio(void *context, const bm_audio_change_t *change)
 {
     host_log_t *log = context;
     assert(change->size == sizeof(bm_audio_change_t));
+    if (log->audio < 8U)
+        log->changes[log->audio] = *change;
     ++log->audio;
     log->last_audio = *change;
 }
@@ -108,8 +113,18 @@ main(void)
     assert((log.time[1] - log.time[0] >= frame_ns - 2U) &&
            (log.time[1] - log.time[0] <= frame_ns + 2U));
 
-    /* Buzzer: the timer's square wave, 2457600 / 16 Hz. */
-    assert(log.audio >= 1U);
+    /* Buzzer: high while port B floats after reset, low once it drives
+     * 00h, 1 and 0 again, then the timer's square wave, 2457600 / 16 Hz.
+     * Changes carry the CPU time of their OUT: the two level writes are
+     * 17 clocks (MVI + OUT) apart. */
+    assert(log.audio == 5U);
+    assert((log.changes[0].level == 1) && (log.changes[1].level == 0));
+    assert((log.changes[2].level == 1) && (log.changes[2].tone_denominator == 0U));
+    assert((log.changes[3].level == 0) && (log.changes[3].tone_denominator == 0U));
+    assert(log.changes[3].time - log.changes[2].time ==
+           (bm_tick_t) ((UINT64_C(17) * 1000000000U) / 2457600U) ||
+           log.changes[3].time - log.changes[2].time ==
+           (bm_tick_t) ((UINT64_C(17) * 1000000000U) / 2457600U) + 1U);
     assert(log.last_audio.tone_numerator == 2457600U);
     assert(log.last_audio.tone_denominator == 16U);
 

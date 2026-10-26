@@ -131,6 +131,16 @@ io_time(const bm_m10_machine_t *machine)
     return cpu_cycles(machine) + M10_IO_CYCLE_OFFSET;
 }
 
+/* Engine time of a CPU clock count. bm_engine_now() only moves between
+ * instructions' scheduling boundaries, so host reports use the clock. */
+static bm_tick_t
+cycle_time(uint64_t cycles)
+{
+    return (bm_tick_t) ((cycles / M10_CPU_HZ) * BM_MACHINE_CLOCKED_TICKS_PER_SECOND +
+                        ((cycles % M10_CPU_HZ) * BM_MACHINE_CLOCKED_TICKS_PER_SECOND) /
+                            M10_CPU_HZ);
+}
+
 /* TIMER OUT period in CPU clocks when the timer runs continuously, else 0:
  * the UART then has no clock. */
 static uint16_t
@@ -242,7 +252,7 @@ uart_transmitted(void *context, uint8_t data)
     bm_m10_machine_t *machine = context;
     if ((machine->serial != NULL) && (machine->serial->transmit != NULL))
         machine->serial->transmit(machine->serial->context, 0U, data,
-                                  bm_engine_now(machine->engine));
+                                  cycle_time(cpu_cycles(machine)));
 }
 
 static void
@@ -808,6 +818,8 @@ m10_reset(void *context)
     machine->rtc_accounted = 0U;
     machine->powered_off = 0;
     machine->control_latch = 0U;
+    /* The 81C55 reset reports the buzzer as its ports float. */
+    machine->audio_reported = 0;
     bm_msm81c55_reset(machine->pio, 0U);
     /* RESET also resets the UART (assumption: MR on the system RESET);
      * characters not yet delivered are dropped. */
@@ -817,7 +829,6 @@ m10_reset(void *context)
     machine->rx_count = 0U;
     machine->rx_line_busy = 0;
     machine->rx_clocks_left = 0U;
-    machine->audio_reported = 0;
     for (index = 0U; index < M10_LCD_CHIPS; ++index) {
         bm_hd44102_set_reset(machine->lcd[index], 1);
         bm_hd44102_set_reset(machine->lcd[index], 0);
@@ -865,7 +876,7 @@ audio_update(bm_m10_machine_t *machine)
     memset(&change, 0, sizeof(change));
     change.size = sizeof(change);
     change.channel = 0U;
-    change.time = bm_engine_now(machine->engine);
+    change.time = cycle_time(io_time(machine));
     change.level = level;
     change.tone_numerator = period != 0U ? M10_CPU_HZ : 0U;
     change.tone_denominator = period;
