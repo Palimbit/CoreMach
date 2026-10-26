@@ -29,8 +29,13 @@ guest-visible path only.
   Book: MSM80C85A and MSM81C55.
 - Hitachi 1983 LCD Driver LSI data book: HD44102CH.
 - NEC 1983 Integrated Circuits for Consumer Use: uPD1990AC.
+- Intersil IM6402/IM6403 CMOS Universal Asynchronous Receiver Transmitter
+  data sheet: frame format, TBRL, DR/DRR and the status flags.
+- Service manual 6.16.1 (serial interface): IM6402 decoding at C0h-DFh
+  (Y4, Y5, VS), DR on RST 6.5 and TRC/RRC from the 81C55 TIMER OUT.
 - MAME's kc85 driver was consulted only as a secondary source for the order of
-  the ten LCD drivers on the panel. No MAME code is used.
+  the ten LCD drivers on the panel and the bit layout of the UART control and
+  status ports. No MAME code is used.
 
 Firmware stays local. It is not part of the repository or its tests.
 
@@ -51,6 +56,7 @@ the MSM81C55 ports and timer.
 | Clock | TP on RST 7.5; the firmware selects 256 Hz. Time advances in exact 32.768 kHz periods scheduled from the TP deadline. |
 | Keyboard | Nine rows, one diode per key, so pressed keys never create phantom contacts. Host keys map by position to the USA-ASCII layout; CAPS LOCK latches mechanically. |
 | Buzzer | PB5 AND (PB2 OR TIMER OUT), from Fig. 6-13. |
+| UART | IM6402 at C0h-DFh: C0h-CFh read the receiver buffer and write TBRL, D0h-DFh read the status and write the control word. DR drives RST 6.5; the register clocks are TIMER OUT, 16 per bit. |
 | Power | P.C.S. on PB4 switches the machine off (after 10 idle minutes, or low battery); a reset stands for the power switch. RAM survives. |
 
 ## Persistence
@@ -68,6 +74,30 @@ start sets the clock to 01 Jan 00:00:00 from a ROM table, so the initial clock
 option matters only when RAM is warm but no clock was saved. The chip keeps no
 year: the firmware stores it in RAM and prints a fixed century of 19.
 
+## Serial port and sound
+
+The UART works per character: the line rate is the 81C55 TIMER OUT divided
+by 16, so the firmware's baud setting (STAT) decides how fast characters go
+out and come in. A loaded character reaches the host's serial service when its
+last stop bit would have left the TO pin, and the next one follows end to end.
+Characters from the host wait in a 4096-byte queue and enter the receiver
+buffer one frame apart, raising DR; reading C0h clears DR (assumption: the
+read strobe also drives DRR; no other DRR source appears in 6.16.1).
+The receiver uses the format of the control word, so framing and parity
+errors never occur on received data.
+
+The status port reads OE, FE, PE and TBRE in bits 1-4, in the layout used by
+the MAME kc85 driver, and fixed values elsewhere: RP (bit 5) and +5 V (bit 6)
+high, the low-power sensor (bit 7) high for a good battery, and carrier
+detect (bit 0) low, as DCD is taken to be unconnected on the European machine
+(assumption). The modem and its relay are not modelled.
+
+Hosts with `BM_HOST_CAPABILITY_AUDIO_OUTPUT` receive one change each time the
+buzzer's output changes: either a level (PB5 AND PB2) or, while PB5 is high,
+PB2 low and the timer runs as a continuous square wave, a tone of
+2457600 / count Hz. The host synthesises the square wave; the engine does not
+send samples.
+
 ## Validation
 
 - Menu and BASIC sign-on match the operations guide, with 29638 bytes free
@@ -81,20 +111,24 @@ year: the firmware stores it in RAM and prints a fixed century of 19.
 - `BEEP` toggles PB5 with PB2 high: 256 edges in about 60 ms.
 - ROM-free contract tests cover the key matrix and jumpers, TP interrupts,
   RAM and clock persistence, both buzzer modes and the power-off latch.
+- A ROM-free serial test sends two characters at 9600 bit/s one 8N1 frame
+  (1.042 ms) apart, receives three on RST 6.5 one frame apart and checks the
+  buzzer tone reported to the audio host; the IM6402 has its own contract
+  test for frame lengths, end-to-end transmission, flags and master reset.
 
 ## Limitations
 
 - Timing is per instruction; device accesses see the start of the I/O machine
   cycle. HD44102 BUSY is about 9.3 us (approximate).
-- The buzzer is observable through inspection only: the runtime has no audio
-  output yet.
-- Cassette, RS-232C UART, printer, bar-code reader, modem, the low-battery
-  TRAP and the 81C55 RAM are not modelled.
+- The serial line is per character: no bit-level sampling, break, or RTS,
+  DTR and CTS handshake. XON/XOFF is up to the firmware and the host.
+- Cassette, printer, bar-code reader, modem, the low-battery TRAP and the
+  81C55 RAM are not modelled.
 - Bits of port C without a modelled source read high.
 
 ## Tolerant hosts
 
-Every host gets the same fallbacks: unmodelled ports (C0h-DFh UART, A0h-AFh,
+Every host gets the same fallbacks: unmodelled ports (A0h-AFh,
 81C55 registers 6 and 7 and the rest) and addresses between the ROM and the
 installed RAM read FFh and ignore writes, and an undefined HD44102
 instruction leaves the chip unchanged. A host with

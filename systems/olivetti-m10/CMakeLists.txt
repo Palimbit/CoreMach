@@ -16,6 +16,7 @@ target_link_libraries(blumach_system_olivetti_m10
     PRIVATE
         blumach_bus
         blumach_cpu_i8085
+        blumach_im6402
         blumach_msm81c55
         blumach_video
 )

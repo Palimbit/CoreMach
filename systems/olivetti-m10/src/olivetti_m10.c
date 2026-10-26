@@ -11,6 +11,7 @@
 #include <blumach/components/bus.h>
 #include <blumach/components/cpu_i8085.h>
 #include <blumach/components/hd44102.h>
+#include <blumach/components/im6402.h>
 #include <blumach/components/msm81c55.h>
 
 #include "m10_keyboard.h"
@@ -33,6 +34,14 @@
 /* Unpopulated memory, unmapped I/O and floating inputs read FFh. The
  * floating value is not documented (assumption kept from the probe). */
 #define M10_OPEN_BUS 0xffU
+
+/* Characters received from the host and not yet on the line. */
+#define M10_SERIAL_QUEUE 4096U
+/* D0h status bits without a modelled source ([MAME kc85], secondary):
+ * bit 5 RP and bit 6 (+5 V) read high, bit 7 low power sensor reads high
+ * (battery good) and bit 0 carrier detect reads low (assumption: DCD is
+ * not connected on the European machine). */
+#define M10_UART_STATUS_FIXED 0xe0U
 
 #define RTC_STATE_VERSION 1U
 #define RTC_WALL_CLOCK_UNKNOWN INT64_MIN
@@ -79,11 +88,33 @@ typedef struct bm_m10_machine {
      * hosts (open-bus reads, ignored writes and LCD instructions); a
      * tolerant host also hears of each case once. */
     const bm_host_tolerance_services_t *tolerance;
+    /* IM6402 UART (6.16.1): the receiver buffer is read at C0h-CFh (Y4)
+     * and the transmitter loaded there, status is read at D0h-DFh (Y5)
+     * and the control word written there (VS; [MAME kc85] for the bits).
+     * DR interrupts on RST 6.5 and TRC/RRC run from the 81C55 TIMER OUT.
+     * Time is accounted in CPU clocks, one register clock per TIMER OUT
+     * period. */
+    bm_im6402_t *uart;
+    bm_timed_source_id_t uart_clock_id;
+    uint64_t uart_accounted;
+    uint8_t rx_queue[M10_SERIAL_QUEUE];
+    size_t rx_head;
+    size_t rx_count;
+    int rx_line_busy;
+    uint64_t rx_clocks_left;
+    const bm_host_serial_services_t *serial;
+    /* Buzzer changes for an audio host. */
+    const bm_host_audio_services_t *audio;
+    int audio_reported;
+    int audio_level;
+    uint16_t audio_period;
     uint8_t io_read_reported[32];
     uint8_t io_write_reported[32];
     uint8_t lcd_command_reported[32];
     uint8_t memory_reported; /* bit 0: read, bit 1: write */
 } bm_m10_machine_t;
+
+static void audio_update(bm_m10_machine_t *machine);
 
 static uint64_t
 cpu_cycles(const bm_m10_machine_t *machine)
@@ -98,6 +129,152 @@ static uint64_t
 io_time(const bm_m10_machine_t *machine)
 {
     return cpu_cycles(machine) + M10_IO_CYCLE_OFFSET;
+}
+
+/* TIMER OUT period in CPU clocks when the timer runs continuously, else 0:
+ * the UART then has no clock. */
+static uint16_t
+timer_out_period(bm_m10_machine_t *machine)
+{
+    bm_msm81c55_timer_mode_t mode;
+    const uint16_t period = bm_msm81c55_timer_period(machine->pio,
+                                                     io_time(machine), &mode);
+    if ((mode != BM_MSM81C55_CONTINUOUS_SQUARE) &&
+        (mode != BM_MSM81C55_CONTINUOUS_PULSE))
+        return 0U;
+    return period;
+}
+
+/* Brings the UART up to the current CPU clock: whole register clocks are
+ * applied to the transmitter and to the character on the receive line. */
+static void
+uart_sync(bm_m10_machine_t *machine)
+{
+    const uint64_t now = cpu_cycles(machine);
+    const uint16_t period = timer_out_period(machine);
+    uint64_t clocks;
+    uint64_t remaining;
+
+    if ((period == 0U) || (now <= machine->uart_accounted)) {
+        if (period == 0U)
+            machine->uart_accounted = now;
+        return;
+    }
+    clocks = (now - machine->uart_accounted) / period;
+    machine->uart_accounted += clocks * period;
+    remaining = clocks;
+    while (remaining > 0U) {
+        uint64_t step;
+        if (!machine->rx_line_busy) {
+            if (machine->rx_count == 0U)
+                break;
+            machine->rx_line_busy = 1;
+            machine->rx_clocks_left = bm_im6402_frame_clocks(machine->uart);
+        }
+        step = remaining < machine->rx_clocks_left ? remaining :
+                                                     machine->rx_clocks_left;
+        machine->rx_clocks_left -= step;
+        remaining -= step;
+        if (machine->rx_clocks_left == 0U) {
+            /* Host characters arrive well formed. */
+            bm_im6402_receive(machine->uart,
+                              machine->rx_queue[machine->rx_head], 0, 0);
+            machine->rx_head = (machine->rx_head + 1U) % M10_SERIAL_QUEUE;
+            --machine->rx_count;
+            machine->rx_line_busy = 0;
+        }
+    }
+    bm_im6402_advance(machine->uart, clocks);
+}
+
+/* CPU clocks until the next UART event, or 0 when there is none. */
+static uint64_t
+uart_next_event(bm_m10_machine_t *machine)
+{
+    const uint16_t period = timer_out_period(machine);
+    uint64_t clocks = bm_im6402_clocks_until_transmitted(machine->uart);
+    uint64_t receive = UINT64_MAX;
+    uint64_t elapsed;
+    uint64_t cycles;
+
+    if (period == 0U)
+        return 0U;
+    if (machine->rx_line_busy)
+        receive = machine->rx_clocks_left;
+    else if (machine->rx_count > 0U)
+        receive = bm_im6402_frame_clocks(machine->uart);
+    if (receive < clocks)
+        clocks = receive;
+    if (clocks == UINT64_MAX)
+        return 0U;
+    elapsed = cpu_cycles(machine) - machine->uart_accounted;
+    cycles = clocks * period;
+    return cycles > elapsed ? cycles - elapsed : 1U;
+}
+
+static void
+uart_rearm(bm_m10_machine_t *machine)
+{
+    const uint64_t cycles = uart_next_event(machine);
+    if (cycles == 0U)
+        (void) bm_engine_disarm_timed_source(machine->engine,
+                                             machine->uart_clock_id);
+    else
+        (void) bm_engine_arm_timed_source(machine->engine,
+                                          machine->uart_clock_id, cycles);
+}
+
+static bm_status_t
+uart_fire(bm_engine_t *engine, void *context, const bm_time_point_t *when,
+          uint64_t *cycles_until_next)
+{
+    bm_m10_machine_t *machine = context;
+    (void) engine;
+    (void) when;
+    uart_sync(machine);
+    *cycles_until_next = uart_next_event(machine);
+    return *cycles_until_next != 0U ? BM_STATUS_OK : BM_STATUS_IDLE;
+}
+
+static void
+uart_transmitted(void *context, uint8_t data)
+{
+    bm_m10_machine_t *machine = context;
+    if ((machine->serial != NULL) && (machine->serial->transmit != NULL))
+        machine->serial->transmit(machine->serial->context, 0U, data,
+                                  bm_engine_now(machine->engine));
+}
+
+static void
+uart_data_ready(void *context, int level)
+{
+    bm_m10_machine_t *machine = context;
+    if (machine->cpu_ready)
+        (void) bm_engine_signal_cpu(machine->engine, machine->cpu_id,
+                                    BM_I8085_SIGNAL_RST65, level);
+}
+
+static uint8_t
+uart_status(bm_m10_machine_t *machine)
+{
+    const bm_im6402_status_t status = bm_im6402_status(machine->uart);
+    return (uint8_t) (M10_UART_STATUS_FIXED | (status.oe << 1U) |
+                      (status.fe << 2U) | (status.pe << 3U) |
+                      (status.tbre << 4U));
+}
+
+/* Control word ([MAME kc85], secondary): bit 0 SBS, bit 1 EPE, bit 2 PI,
+ * bits 3-4 CLS1/CLS2 (5 + CLS1 + 2 x CLS2 data bits, [IM6402] pin 37). */
+static void
+uart_control(bm_m10_machine_t *machine, uint8_t value)
+{
+    bm_im6402_control_t control;
+    control.stop_select = (uint8_t) (value & 1U);
+    control.even_parity = (uint8_t) ((value >> 1U) & 1U);
+    control.parity_inhibit = (uint8_t) ((value >> 2U) & 1U);
+    control.character_bits = (uint8_t) (5U + ((value >> 3U) & 1U) +
+                                        2U * ((value >> 4U) & 1U));
+    bm_im6402_load_control(machine->uart, &control);
 }
 
 static void
@@ -189,6 +366,7 @@ pio_port_changed(void *context, unsigned int port)
             ++machine->buzzer_edges;
         if (driven && ((levels & 0x10U) != 0U))
             power_off(machine);
+        audio_update(machine);
     }
 }
 
@@ -310,9 +488,10 @@ m10_io(void *context, bm_bus_transaction_t *txn)
     const int write = txn->operation == BM_BUS_WRITE;
     const uint8_t value = (uint8_t) txn->value;
     uint8_t result = M10_OPEN_BUS;
-    /* 81C55 registers 6 and 7 do not exist; C0h-DFh (UART), A0h-AFh and
-     * the remaining ports are not modelled. */
+    /* 81C55 registers 6 and 7 do not exist; A0h-AFh and the remaining
+     * ports are not modelled. */
     const int modelled = (((port & 0xf0U) == 0xb0U) && ((port & 7U) < 6U)) ||
+                         ((port & 0xf0U) == 0xc0U) || ((port & 0xf0U) == 0xd0U) ||
                          ((port & 0xf0U) == 0xe0U) || ((port & 0xf0U) == 0xf0U);
 
     if (!modelled && (machine->tolerance != NULL) &&
@@ -326,12 +505,33 @@ m10_io(void *context, bm_bus_transaction_t *txn)
                                 "unmodelled port reads FFh (open bus)",
                         port, write ? value : M10_OPEN_BUS);
     if ((port & 0xf0U) == 0xb0U) {
-        if (write)
+        if (write) {
+            /* The timer is the UART clock and drives the buzzer. */
+            uart_sync(machine);
             bm_msm81c55_write(machine->pio, (uint8_t) (port & 7U), value,
                               io_time(machine));
-        else
+            uart_rearm(machine);
+            audio_update(machine);
+        } else
             result = bm_msm81c55_read(machine->pio, (uint8_t) (port & 7U),
                                       io_time(machine));
+    } else if ((port & 0xf0U) == 0xc0U) {
+        uart_sync(machine);
+        if (write)
+            bm_im6402_load_transmitter(machine->uart, value);
+        else {
+            result = bm_im6402_receiver_buffer(machine->uart);
+            /* Reading the buffer resets DR (inferred, [MAME kc85]). */
+            bm_im6402_reset_data_received(machine->uart);
+        }
+        uart_rearm(machine);
+    } else if ((port & 0xf0U) == 0xd0U) {
+        uart_sync(machine);
+        if (write)
+            uart_control(machine, value);
+        else
+            result = uart_status(machine);
+        uart_rearm(machine);
     } else if ((port & 0xf0U) == 0xe0U) {
         if (write) {
             machine->control_latch = (uint8_t) (value & 0x0fU);
@@ -345,7 +545,7 @@ m10_io(void *context, bm_bus_transaction_t *txn)
     } else if ((port & 0xf0U) == 0xf0U) {
         result = lcd_access(machine, port, write, value);
     }
-    /* C0h-DFh (UART), A0h-AFh and the rest are not modelled. */
+    /* A0h-AFh and the rest are not modelled. */
     if (!write)
         txn->value = result;
     return BM_STATUS_OK;
@@ -450,6 +650,7 @@ m10_destroy(void *context)
         bm_hd44102_destroy(machine->lcd[index]);
     bm_upd1990ac_destroy(machine->rtc);
     bm_msm81c55_destroy(machine->pio);
+    bm_im6402_destroy(machine->uart);
     bm_bus_destroy(machine->bus);
     machine->host.release(machine->host.context, machine);
 }
@@ -507,6 +708,8 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
     machine->wall_clock = config->wall_clock;
     machine->wall_clock_context = config->wall_clock_context;
     machine->tolerance = bm_host_tolerance(host);
+    machine->serial = bm_host_serial(host);
+    machine->audio = bm_host_audio(host);
     machine->port_a = machine->port_b = 0xffU;
     if (config->ram_state != NULL)
         memcpy(machine->ram + (machine->ram_base - M10_RAM_BASE),
@@ -546,6 +749,12 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
         };
         status = bm_msm81c55_create(host, &pio_config, &machine->pio);
     }
+    if (status == BM_STATUS_OK) {
+        const bm_im6402_config_t uart_config = {
+            uart_transmitted, uart_data_ready, machine
+        };
+        status = bm_im6402_create(host, &uart_config, &machine->uart);
+    }
     if (status == BM_STATUS_OK)
         status = bm_engine_add_timed_source(engine, rtc_fire, machine, &rtc_rate,
                                              bm_upd1990ac_cycles_until_tp_change(machine->rtc),
@@ -554,6 +763,10 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
         status = bm_engine_add_timed_source(engine, cpu_clock_fire, machine,
                                              &cpu_rate, 0U,
                                              &machine->cpu_clock_id);
+    if (status == BM_STATUS_OK)
+        status = bm_engine_add_timed_source(engine, uart_fire, machine,
+                                             &cpu_rate, 0U,
+                                             &machine->uart_clock_id);
     if (status == BM_STATUS_OK) {
         const bm_i8085_config_t cpu_config = {
             .model = BM_I8085_OKI_MSM80C85A,
@@ -596,6 +809,15 @@ m10_reset(void *context)
     machine->powered_off = 0;
     machine->control_latch = 0U;
     bm_msm81c55_reset(machine->pio, 0U);
+    /* RESET also resets the UART (assumption: MR on the system RESET);
+     * characters not yet delivered are dropped. */
+    bm_im6402_master_reset(machine->uart);
+    machine->uart_accounted = 0U;
+    machine->rx_head = 0U;
+    machine->rx_count = 0U;
+    machine->rx_line_busy = 0;
+    machine->rx_clocks_left = 0U;
+    machine->audio_reported = 0;
     for (index = 0U; index < M10_LCD_CHIPS; ++index) {
         bm_hd44102_set_reset(machine->lcd[index], 1);
         bm_hd44102_set_reset(machine->lcd[index], 0);
@@ -615,6 +837,64 @@ buzzer_level(bm_m10_machine_t *machine)
     const int timer_out = bm_msm81c55_timer_out(machine->pio, io_time(machine));
     return ((machine->port_b & 0x20U) != 0U) &&
            (((machine->port_b & 0x04U) != 0U) || timer_out);
+}
+
+/* Reports what the buzzer plays when it changes: the timer's square wave
+ * while PB5 is high and PB2 low (6.12), otherwise the drive level. */
+static void
+audio_update(bm_m10_machine_t *machine)
+{
+    bm_msm81c55_timer_mode_t mode;
+    uint16_t period;
+    int level;
+    bm_audio_change_t change;
+
+    if ((machine->audio == NULL) || (machine->pio == NULL))
+        return;
+    period = bm_msm81c55_timer_period(machine->pio, io_time(machine), &mode);
+    if (((machine->port_b & 0x24U) != 0x20U) ||
+        (mode != BM_MSM81C55_CONTINUOUS_SQUARE))
+        period = 0U;
+    level = period != 0U ? 0 : buzzer_level(machine);
+    if (machine->audio_reported && (machine->audio_level == level) &&
+        (machine->audio_period == period))
+        return;
+    machine->audio_reported = 1;
+    machine->audio_level = level;
+    machine->audio_period = period;
+    memset(&change, 0, sizeof(change));
+    change.size = sizeof(change);
+    change.channel = 0U;
+    change.time = bm_engine_now(machine->engine);
+    change.level = level;
+    change.tone_numerator = period != 0U ? M10_CPU_HZ : 0U;
+    change.tone_denominator = period;
+    machine->audio->change(machine->audio->context, &change);
+}
+
+static bm_status_t
+m10_serial_receive(void *context, uint32_t port, const uint8_t *data,
+                   size_t size, size_t *accepted)
+{
+    bm_m10_machine_t *machine = context;
+    size_t index;
+
+    if ((machine == NULL) || (accepted == NULL) ||
+        ((data == NULL) && (size != 0U)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *accepted = 0U;
+    if (port != 0U)
+        return BM_STATUS_INVALID_ARGUMENT;
+    uart_sync(machine);
+    for (index = 0U; (index < size) && (machine->rx_count < M10_SERIAL_QUEUE);
+         ++index) {
+        machine->rx_queue[(machine->rx_head + machine->rx_count) %
+                          M10_SERIAL_QUEUE] = data[index];
+        ++machine->rx_count;
+    }
+    *accepted = index;
+    uart_rearm(machine);
+    return BM_STATUS_OK;
 }
 
 static uint64_t
@@ -818,9 +1098,10 @@ static const bm_machine_definition_t m10_definition = {
         .video_geometry = m10_video_geometry,
         .video_render = m10_video_render,
         .persistent_state_size = m10_persistent_state_size,
-        .save_persistent_state = m10_save_persistent_state
+        .save_persistent_state = m10_save_persistent_state,
+        .serial_receive = m10_serial_receive
     },
-    .engine = { 1U, 4U, 2U }
+    .engine = { 1U, 4U, 3U }
 };
 
 const bm_machine_definition_t *
