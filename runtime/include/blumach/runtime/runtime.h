@@ -183,7 +183,9 @@ bm_status_t bm_session_persistent_state_size(const bm_session_t *session,
                                              const char *name,
                                              size_t *size);
 /* Characters for a machine's serial port; BM_STATUS_UNSUPPORTED when the
- * machine has none. */
+ * machine has none. A machine keeps only a few characters ahead of its line,
+ * so *accepted may be less than size: offer the rest again later. A host
+ * honouring XON/XOFF from the machine then stops within a few characters. */
 bm_status_t bm_session_serial_receive(bm_session_t *session, uint32_t port,
                                       const uint8_t *data, size_t size,
                                       size_t *accepted);

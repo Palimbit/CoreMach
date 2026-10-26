@@ -146,6 +146,22 @@ main(void)
     assert(memcmp(ram + 0x7000U, incoming, sizeof(incoming)) == 0);
     assert(log.sent == 2U);
 
+    /* Only 16 characters wait ahead of the line; the host offers the rest
+     * again once they have gone in. */
+    {
+        static const uint8_t many[20];
+        assert(bm_session_serial_receive(session, 0U, many, sizeof(many),
+                                         &accepted) == BM_STATUS_OK);
+        assert(accepted == 16U);
+        assert(bm_session_serial_receive(session, 0U, many, sizeof(many),
+                                         &accepted) == BM_STATUS_OK);
+        assert(accepted == 0U);
+        assert(bm_session_run_for(session, 2U * frame_ns) == BM_STATUS_OK);
+        assert(bm_session_serial_receive(session, 0U, many, sizeof(many),
+                                         &accepted) == BM_STATUS_OK);
+        assert((accepted >= 1U) && (accepted <= 3U));
+    }
+
     bm_session_destroy(session);
     return 0;
 }

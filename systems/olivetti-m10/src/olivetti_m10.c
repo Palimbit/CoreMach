@@ -35,8 +35,9 @@
  * floating value is not documented (assumption kept from the probe). */
 #define M10_OPEN_BUS 0xffU
 
-/* Characters received from the host and not yet on the line. */
-#define M10_SERIAL_QUEUE 4096U
+/* Characters received from the host and not yet on the line. Kept short so
+ * that the firmware's XOFF stops a host within a few characters. */
+#define M10_SERIAL_QUEUE 16U
 /* D0h status bits without a modelled source ([MAME kc85], secondary):
  * bit 5 RP and bit 6 (+5 V) read high, bit 7 low power sensor reads high
  * (battery good) and bit 0 carrier detect reads low (assumption: DCD is

@@ -80,8 +80,9 @@ The UART works per character: the line rate is the 81C55 TIMER OUT divided
 by 16, so the firmware's baud setting (STAT) decides how fast characters go
 out and come in. A loaded character reaches the host's serial service when its
 last stop bit would have left the TO pin, and the next one follows end to end.
-Characters from the host wait in a 4096-byte queue and enter the receiver
-buffer one frame apart, raising DR; reading C0h clears DR (assumption: the
+Characters from the host wait in a 16-character queue, so a host that
+honours the firmware's XOFF stops within a few characters, and enter the
+receiver buffer one frame apart, raising DR; reading C0h clears DR (assumption: the
 read strobe also drives DRR; no other DRR source appears in 6.16.1).
 The receiver uses the format of the control word, so framing and parity
 errors never occur on received data.
