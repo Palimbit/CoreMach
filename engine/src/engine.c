@@ -129,6 +129,36 @@ bm_host_tolerance(const bm_host_services_t *services)
     return tolerance->report != NULL ? tolerance : NULL;
 }
 
+const bm_host_serial_services_t *
+bm_host_serial(const bm_host_services_t *services)
+{
+    const bm_host_capability_t *capability = NULL;
+    const bm_host_serial_services_t *serial;
+
+    if (bm_host_capability_lookup(services, BM_HOST_CAPABILITY_SERIAL,
+                                  BM_HOST_SERIAL_VERSION,
+                                  sizeof(bm_host_serial_services_t),
+                                  &capability) != BM_STATUS_OK)
+        return NULL;
+    serial = capability->services;
+    return serial->transmit != NULL ? serial : NULL;
+}
+
+const bm_host_audio_services_t *
+bm_host_audio(const bm_host_services_t *services)
+{
+    const bm_host_capability_t *capability = NULL;
+    const bm_host_audio_services_t *audio;
+
+    if (bm_host_capability_lookup(services, BM_HOST_CAPABILITY_AUDIO_OUTPUT,
+                                  BM_HOST_AUDIO_VERSION,
+                                  sizeof(bm_host_audio_services_t),
+                                  &capability) != BM_STATUS_OK)
+        return NULL;
+    audio = capability->services;
+    return audio->change != NULL ? audio : NULL;
+}
+
 void
 bm_tolerance_report(const bm_host_tolerance_services_t *tolerance,
                     const bm_tolerance_event_t *event)

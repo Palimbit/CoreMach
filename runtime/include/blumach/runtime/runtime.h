@@ -80,6 +80,11 @@ typedef bm_status_t (*bm_machine_persistent_state_size_fn)(
     const void *machine, const char *name, size_t *size);
 typedef bm_status_t (*bm_machine_save_persistent_state_fn)(
     const void *machine, const char *name, uint8_t *data, size_t size);
+/* Queues characters received on a serial port; *accepted reports how many
+ * fitted. The machine delivers them at its line rate. */
+typedef bm_status_t (*bm_machine_serial_receive_fn)(
+    void *machine, uint32_t port, const uint8_t *data, size_t size,
+    size_t *accepted);
 
 typedef struct bm_machine_ops {
     bm_machine_validate_fn validate;
@@ -96,6 +101,7 @@ typedef struct bm_machine_ops {
     bm_machine_keyboard_leds_fn keyboard_leds;
     bm_machine_persistent_state_size_fn persistent_state_size;
     bm_machine_save_persistent_state_fn save_persistent_state;
+    bm_machine_serial_receive_fn serial_receive;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_definition {
@@ -176,6 +182,11 @@ bm_status_t bm_session_replace_storage_media(
 bm_status_t bm_session_persistent_state_size(const bm_session_t *session,
                                              const char *name,
                                              size_t *size);
+/* Characters for a machine's serial port; BM_STATUS_UNSUPPORTED when the
+ * machine has none. */
+bm_status_t bm_session_serial_receive(bm_session_t *session, uint32_t port,
+                                      const uint8_t *data, size_t size,
+                                      size_t *accepted);
 bm_status_t bm_session_save_persistent_state(const bm_session_t *session,
                                              const char *name,
                                              uint8_t *data,
