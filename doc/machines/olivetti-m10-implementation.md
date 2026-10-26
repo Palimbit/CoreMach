@@ -108,7 +108,10 @@ send samples.
   first, a warm second start still showing `10 Oct,1983` with the time
   running, and `LIST` returning the line in the third.
 - After eleven idle minutes in the menu the machine switches itself off.
-- `BEEP` toggles PB5 with PB2 high: 256 edges in about 60 ms.
+- `BEEP` toggles PB5 with PB2 high: 256 edges 1221 CPU clocks apart, a
+  1006 Hz tone for 127 ms, timed by the CPU clock as audio hosts receive
+  it (an earlier note gave about 60 ms). `SOUND 4697,20`
+  plays the timer's square wave, 2457600 / 4697 Hz (523 Hz), for 399 ms.
 - ROM-free contract tests cover the key matrix and jumpers, TP interrupts,
   RAM and clock persistence, both buzzer modes and the power-off latch.
 - A ROM-free serial test sends two characters at 9600 bit/s one 8N1 frame
