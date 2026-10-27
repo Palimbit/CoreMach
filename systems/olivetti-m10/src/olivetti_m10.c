@@ -119,6 +119,10 @@ typedef struct bm_m10_machine {
      * 6.9.3) runs the motor through RY1. The tape is at tape_origin at CPU
      * clock tape_cycles and advances only while the motor runs. */
     const bm_host_cassette_services_t *cassette;
+    /* Printer (6.11): data on PA0-PA7, STROBE on latch bit 1 (a 1 drives
+     * it low through T8), BUSY on PC2 and SLCT on PC1 ([MAME kc85] for
+     * SLCT). */
+    const bm_host_parallel_services_t *printer;
     bm_cassette_tape_t tape;
     int tape_loaded;
     int motor;
@@ -543,9 +547,10 @@ pio_port_changed(void *context, unsigned int port)
     }
 }
 
-/* Port C inputs (ALT1): PC0 uPD1990AC DATA OUT, PC4/PC5 language jumpers
- * (6.16.3). PC1-PC3 (printer and other lines) are not modelled and float
- * high; bits 6-7 do not exist and read high. */
+/* Port C inputs (ALT1): PC0 uPD1990AC DATA OUT, PC1 SLCT and PC2 BUSY from
+ * a host printer (6.11), PC4/PC5 language jumpers (6.16.3). Without a
+ * printer PC1-PC2 float high, as does PC3 (bar-code reader, not modelled);
+ * bits 6-7 do not exist and read high. */
 static uint8_t
 pio_read_pins(void *context, unsigned int port)
 {
@@ -557,6 +562,15 @@ pio_read_pins(void *context, unsigned int port)
         pins = (uint8_t) ((pins & 0xceU) |
                           (bm_upd1990ac_data_out(machine->rtc) & 1) |
                           ((unsigned int) machine->language << 4U));
+        if (machine->printer != NULL) {
+            /* Without a printer both lines stay high (BUSY). */
+            const uint32_t status = machine->printer->status != NULL ?
+                machine->printer->status(machine->printer->context, 0U) :
+                BM_PARALLEL_STATUS_SELECTED;
+            pins = (uint8_t) ((pins & ~0x06U) |
+                              ((status & BM_PARALLEL_STATUS_SELECTED) != 0U ? 0x02U : 0U) |
+                              ((status & BM_PARALLEL_STATUS_BUSY) != 0U ? 0x04U : 0U));
+        }
     }
     return pins;
 }
@@ -707,6 +721,12 @@ m10_io(void *context, bm_bus_transaction_t *txn)
         uart_rearm(machine);
     } else if ((port & 0xf0U) == 0xe0U) {
         if (write) {
+            /* The printer takes the data as STROBE goes active. */
+            if ((machine->printer != NULL) && ((value & 0x02U) != 0U) &&
+                ((machine->control_latch & 0x02U) == 0U))
+                machine->printer->write(machine->printer->context, 0U,
+                                        machine->port_a,
+                                        cycle_time(io_time(machine)));
             machine->control_latch = (uint8_t) (value & 0x0fU);
             rtc_catch_up(machine);
             bm_upd1990ac_set_stb(machine->rtc, (value >> 2U) & 1U);
@@ -885,6 +905,7 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
     machine->serial = bm_host_serial(host);
     machine->audio = bm_host_audio(host);
     machine->cassette = bm_host_cassette(host);
+    machine->printer = bm_host_parallel(host);
     machine->port_a = machine->port_b = 0xffU;
     if (config->ram_state != NULL)
         memcpy(machine->ram + (machine->ram_base - M10_RAM_BASE),

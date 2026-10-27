@@ -56,6 +56,7 @@ the MSM81C55 ports and timer.
 | Clock | TP on RST 7.5; the firmware selects 256 Hz. Time advances in exact 32.768 kHz periods scheduled from the TP deadline. |
 | Keyboard | Nine rows, one diode per key, so pressed keys never create phantom contacts. Host keys map by position to the USA-ASCII layout; CAPS LOCK latches mechanically. |
 | Buzzer | PB5 AND (PB2 OR TIMER OUT), from Fig. 6-13. |
+| Printer | PA0-PA7 data, strobe on E0h bit 1, BUSY on PC2 and SLCT on PC1 (6.11). |
 | Cassette | SOD, inverted, to MIC; EAR through a Schmitt trigger to SID; REMOTE on E0h bit 3 (6.9). |
 | UART | IM6402 at C0h-DFh: C0h-CFh read the receiver buffer and write TBRL, D0h-DFh read the status and write the control word. DR drives RST 6.5; the register clocks are TIMER OUT, 16 per bit. |
 | Power | P.C.S. on PB4 switches the machine off (after 10 idle minutes, or low battery); a reset stands for the power switch. RAM survives. |
@@ -119,6 +120,17 @@ polarity; inverted, `CLOAD` does not find it, so a host may need to invert
 recordings made with the opposite phase. The modulator's integrator (R51-C64)
 is not modelled: the MIC signal is reported as a square wave.
 
+## Printer
+
+The Centronics port (6.11) puts the byte on the 81C55 port A and pulses the
+strobe on bit 1 of the E0h-EFh latch. Hosts with `BM_HOST_CAPABILITY_PARALLEL`
+receive the byte on each rising edge of that latch bit, at the time of the
+OUT. BUSY comes back on PC2, as the manual says, and SLCT on PC1, which the
+manual does not place; PC1 follows the MAME kc85 driver (secondary source).
+A host without a status function counts as a printer that is never busy and
+always on line. Without a printer both lines read high, so BASIC waits on
+BUSY as it did before the port was modelled.
+
 ## Validation
 
 - Menu and BASIC sign-on match the operations guide, with 29638 bytes free
@@ -147,6 +159,11 @@ is not modelled: the MIC signal is reported as a square wave.
   machine, gives `Found:A` and the same line on `LIST`. The loader's
   half-period counts (12-15 for 2400 Hz, 31-34 for 1200 Hz against its
   threshold of 22) leave a wide margin.
+- With the real ROM, `LPRINT "HELLO"` and `LLIST` print `HELLO` and
+  `10 PRINT 1983`, each line ended by CR alone, one byte about 684 us
+  apart; with BUSY reported, `LPRINT` waits and prints nothing.
+- A ROM-free printer test checks PC1 and PC2 with no printer, a printer
+  without status, BUSY and SLCT, and one byte per strobe edge.
 - A ROM-free cassette test checks REMOTE, the MIC signal 11 clocks apart for
   two SIMs, two SID edges per millisecond from a 1 kHz tape, the tape
   position, silence after the tape and the motor stopping on reset.
@@ -157,7 +174,7 @@ is not modelled: the MIC signal is reported as a square wave.
   cycle. HD44102 BUSY is about 9.3 us (approximate).
 - The serial line is per character: no bit-level sampling, break, or RTS,
   DTR and CTS handshake. XON/XOFF is up to the firmware and the host.
-- Printer, bar-code reader, modem, the low-battery TRAP and the 81C55 RAM
+- Bar-code reader, modem, the low-battery TRAP and the 81C55 RAM
   are not modelled.
 - Bits of port C without a modelled source read high.
 
