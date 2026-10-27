@@ -159,6 +159,22 @@ bm_host_audio(const bm_host_services_t *services)
     return audio->change != NULL ? audio : NULL;
 }
 
+const bm_host_cassette_services_t *
+bm_host_cassette(const bm_host_services_t *services)
+{
+    const bm_host_capability_t *capability = NULL;
+    const bm_host_cassette_services_t *cassette;
+
+    if (bm_host_capability_lookup(services, BM_HOST_CAPABILITY_CASSETTE,
+                                  BM_HOST_CASSETTE_VERSION,
+                                  sizeof(bm_host_cassette_services_t),
+                                  &capability) != BM_STATUS_OK)
+        return NULL;
+    cassette = capability->services;
+    return ((cassette->motor != NULL) && (cassette->record != NULL)) ?
+               cassette : NULL;
+}
+
 void
 bm_tolerance_report(const bm_host_tolerance_services_t *tolerance,
                     const bm_tolerance_event_t *event)

@@ -37,6 +37,9 @@ typedef enum bm_host_capability_id {
     /* bm_host_serial_services_t: characters a machine transmits on its
      * serial ports. */
     BM_HOST_CAPABILITY_SERIAL,
+    /* bm_host_cassette_services_t: a machine's cassette recorder motor and
+     * recording signal. */
+    BM_HOST_CAPABILITY_CASSETTE,
     BM_HOST_CAPABILITY_COUNT
 } bm_host_capability_id_t;
 
@@ -155,16 +158,36 @@ typedef struct bm_host_audio_services {
     void *context;
 } bm_host_audio_services_t;
 
+/* Cassette recorder. motor reports the remote relay turning the recorder's
+ * motor on or off; record reports each change of the one-bit signal sent to
+ * the recorder's MIC input, whether or not the motor runs. Both carry the
+ * emulated time of the change. Playback goes the other way, through the
+ * runtime's bm_session_cassette_load(). */
+#define BM_HOST_CASSETTE_VERSION 1U
+
+typedef void (*bm_host_cassette_motor_fn)(void *context, uint32_t port,
+                                          int on, bm_tick_t time);
+typedef void (*bm_host_cassette_record_fn)(void *context, uint32_t port,
+                                           int level, bm_tick_t time);
+
+typedef struct bm_host_cassette_services {
+    bm_host_cassette_motor_fn motor;
+    bm_host_cassette_record_fn record;
+    void *context;
+} bm_host_cassette_services_t;
+
 bm_status_t bm_host_services_validate(const bm_host_services_t *services);
 bm_status_t bm_host_capability_lookup(const bm_host_services_t *services,
                                       bm_host_capability_id_t id,
                                       uint32_t minimum_version,
                                       size_t minimum_services_size,
                                       const bm_host_capability_t **out_capability);
-/* The serial or audio services of a host, or NULL without them. */
+/* The serial, audio or cassette services of a host, or NULL without them. */
 const bm_host_serial_services_t *bm_host_serial(
     const bm_host_services_t *services);
 const bm_host_audio_services_t *bm_host_audio(
+    const bm_host_services_t *services);
+const bm_host_cassette_services_t *bm_host_cassette(
     const bm_host_services_t *services);
 /* The tolerance services of a host, or NULL when the host is strict. */
 const bm_host_tolerance_services_t *bm_host_tolerance(
