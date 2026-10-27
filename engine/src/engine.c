@@ -175,6 +175,21 @@ bm_host_cassette(const bm_host_services_t *services)
                cassette : NULL;
 }
 
+const bm_host_parallel_services_t *
+bm_host_parallel(const bm_host_services_t *services)
+{
+    const bm_host_capability_t *capability = NULL;
+    const bm_host_parallel_services_t *parallel;
+
+    if (bm_host_capability_lookup(services, BM_HOST_CAPABILITY_PARALLEL,
+                                  BM_HOST_PARALLEL_VERSION,
+                                  sizeof(bm_host_parallel_services_t),
+                                  &capability) != BM_STATUS_OK)
+        return NULL;
+    parallel = capability->services;
+    return parallel->write != NULL ? parallel : NULL;
+}
+
 void
 bm_tolerance_report(const bm_host_tolerance_services_t *tolerance,
                     const bm_tolerance_event_t *event)
