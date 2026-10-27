@@ -56,6 +56,7 @@ the MSM81C55 ports and timer.
 | Clock | TP on RST 7.5; the firmware selects 256 Hz. Time advances in exact 32.768 kHz periods scheduled from the TP deadline. |
 | Keyboard | Nine rows, one diode per key, so pressed keys never create phantom contacts. Host keys map by position to the USA-ASCII layout; CAPS LOCK latches mechanically. |
 | Buzzer | PB5 AND (PB2 OR TIMER OUT), from Fig. 6-13. |
+| Cassette | SOD, inverted, to MIC; EAR through a Schmitt trigger to SID; REMOTE on E0h bit 3 (6.9). |
 | UART | IM6402 at C0h-DFh: C0h-CFh read the receiver buffer and write TBRL, D0h-DFh read the status and write the control word. DR drives RST 6.5; the register clocks are TIMER OUT, 16 per bit. |
 | Power | P.C.S. on PB4 switches the machine off (after 10 idle minutes, or low battery); a reset stands for the power switch. RAM survives. |
 
@@ -99,6 +100,25 @@ PB2 low and the timer runs as a continuous square wave, a tone of
 2457600 / count Hz. The host synthesises the square wave; the engine does not
 send samples.
 
+## Cassette
+
+The firmware modulates and demodulates the tape itself through SOD and SID
+(6.9). Hosts with `BM_HOST_CAPABILITY_CASSETTE` hear of each REMOTE change
+(E0h-EFh bit 3, which energises RY1 and runs the recorder's motor, 6.9.3) and
+of each change of the MIC signal, which is SOD inverted by M34 (6.9.1), timed
+to the half CLK period at which the pin changes after SIM. A host records the
+signal while the motor runs.
+
+For playback, `bm_session_cassette_load()` lends the machine mono 16-bit
+PCM. The tape advances only while the motor runs and SID follows it through a
+Schmitt trigger with thresholds of +/-1024 (6.9.2). The manual gives neither
+the thresholds nor the polarity (assumption): SID is high for positive
+samples, which makes SID the inverse of SOD across the whole chain, as in
+the MAME kc85 driver. A tape recorded by the machine loads back with this
+polarity; inverted, `CLOAD` does not find it, so a host may need to invert
+recordings made with the opposite phase. The modulator's integrator (R51-C64)
+is not modelled: the MIC signal is reported as a square wave.
+
 ## Validation
 
 - Menu and BASIC sign-on match the operations guide, with 29638 bytes free
@@ -119,6 +139,17 @@ send samples.
   (1.042 ms) apart, receives three on RST 6.5 one frame apart and checks the
   buzzer tone reported to the audio host; the IM6402 has its own contract
   test for frame lengths, end-to-end transmission, flags and master reset.
+- With the real ROM, `SAVE "COM:88N1E"` sends `10 PRINT 1983`, CR LF and
+  Ctrl+Z one character every 1041.7 us (9600 bit/s 8N1), and
+  `LOAD "COM:88N1E"` receives two lines that `LIST` then shows.
+- With the real ROM, `CSAVE "A"` runs the motor twice (header, then data) and
+  sends 1200 and 2400 Hz cycles to MIC; the recording, played back in a fresh
+  machine, gives `Found:A` and the same line on `LIST`. The loader's
+  half-period counts (12-15 for 2400 Hz, 31-34 for 1200 Hz against its
+  threshold of 22) leave a wide margin.
+- A ROM-free cassette test checks REMOTE, the MIC signal 11 clocks apart for
+  two SIMs, two SID edges per millisecond from a 1 kHz tape, the tape
+  position, silence after the tape and the motor stopping on reset.
 
 ## Limitations
 
@@ -126,8 +157,8 @@ send samples.
   cycle. HD44102 BUSY is about 9.3 us (approximate).
 - The serial line is per character: no bit-level sampling, break, or RTS,
   DTR and CTS handshake. XON/XOFF is up to the firmware and the host.
-- Cassette, printer, bar-code reader, modem, the low-battery TRAP and the
-  81C55 RAM are not modelled.
+- Printer, bar-code reader, modem, the low-battery TRAP and the 81C55 RAM
+  are not modelled.
 - Bits of port C without a modelled source read high.
 
 ## Tolerant hosts

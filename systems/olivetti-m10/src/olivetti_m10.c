@@ -35,6 +35,10 @@
  * floating value is not documented (assumption kept from the probe). */
 #define M10_OPEN_BUS 0xffU
 
+/* Schmitt trigger thresholds of the playback path (6.9.2), in 16-bit sample
+ * units: SID goes high above +threshold and low below -threshold
+ * (assumption: the manual gives neither the levels nor the polarity). */
+#define M10_TAPE_THRESHOLD 1024
 /* Characters received from the host and not yet on the line. Kept short so
  * that the firmware's XOFF stops a host within a few characters. */
 #define M10_SERIAL_QUEUE 16U
@@ -68,8 +72,9 @@ typedef struct bm_m10_machine {
     bm_msm81c55_t *pio;
     uint8_t port_a;
     uint8_t port_b;
-    /* E0h-EFh writes latch AD0-AD3 in M14 (40H175): bit 2 is the uPD1990AC
-     * STB (6.15) and bit 1 the printer STROBE (6.11). */
+    /* E0h-EFh writes latch AD0-AD3 in M14 (40H175): bit 3 is the cassette
+     * REMOTE (6.9.3), bit 2 the uPD1990AC STB (6.15) and bit 1 the printer
+     * STROBE (6.11). */
     uint8_t control_latch;
     /* uPD1990AC (6.15, pp. 6-18..6-20): C0-C2 on PA0-PA2, CLK on PA3,
      * DATA IN on PA4, DATA OUT on PC0 with a pull-up, CS and OUT ENBL on
@@ -109,6 +114,19 @@ typedef struct bm_m10_machine {
     int audio_reported;
     int audio_level;
     uint16_t audio_period;
+    /* Cassette (6.9): SOD, inverted by M34, drives MIC; EAR reaches SID
+     * through a comparator and Schmitt trigger; REMOTE (latch bit 3,
+     * 6.9.3) runs the motor through RY1. The tape is at tape_origin at CPU
+     * clock tape_cycles and advances only while the motor runs. */
+    const bm_host_cassette_services_t *cassette;
+    bm_cassette_tape_t tape;
+    int tape_loaded;
+    int motor;
+    uint64_t tape_cycles;
+    size_t tape_origin;
+    size_t tape_crossing; /* the sample that changes SID next */
+    int sid_level;
+    bm_timed_source_id_t tape_clock_id;
     uint8_t io_read_reported[32];
     uint8_t io_write_reported[32];
     uint8_t lcd_command_reported[32];
@@ -140,6 +158,150 @@ cycle_time(uint64_t cycles)
     return (bm_tick_t) ((cycles / M10_CPU_HZ) * BM_MACHINE_CLOCKED_TICKS_PER_SECOND +
                         ((cycles % M10_CPU_HZ) * BM_MACHINE_CLOCKED_TICKS_PER_SECOND) /
                             M10_CPU_HZ);
+}
+
+/* value * multiplier / divisor, rounded down or up, without overflow for
+ * the clock and sample rates used here. */
+static uint64_t
+scale_down(uint64_t value, uint64_t multiplier, uint64_t divisor)
+{
+    return (value / divisor) * multiplier + ((value % divisor) * multiplier) / divisor;
+}
+
+static uint64_t
+scale_up(uint64_t value, uint64_t multiplier, uint64_t divisor)
+{
+    const uint64_t rest = (value % divisor) * multiplier;
+    return (value / divisor) * multiplier + rest / divisor +
+           ((rest % divisor) != 0U ? 1U : 0U);
+}
+
+/* The sample the tape has reached. */
+static size_t
+tape_position(const bm_m10_machine_t *machine)
+{
+    uint64_t position;
+    const uint64_t now = cpu_cycles(machine);
+    if (!machine->tape_loaded)
+        return 0U;
+    /* The motor starts at the I/O cycle of its OUT, after the boundary. */
+    if (!machine->motor || (now <= machine->tape_cycles))
+        return machine->tape_origin;
+    position = machine->tape_origin +
+               scale_down(now - machine->tape_cycles,
+                          machine->tape.sample_rate, M10_CPU_HZ);
+    return position < machine->tape.sample_count ?
+               (size_t) position : machine->tape.sample_count;
+}
+
+/* CPU clocks from now until the next sample that changes SID, or 0 when
+ * the tape stands still or no later sample changes it. */
+static uint64_t
+tape_next_event(bm_m10_machine_t *machine)
+{
+    size_t index;
+    uint64_t target;
+    const uint64_t now = cpu_cycles(machine);
+
+    if (!machine->tape_loaded || !machine->motor)
+        return 0U;
+    for (index = tape_position(machine); index < machine->tape.sample_count; ++index) {
+        const int16_t sample = machine->tape.samples[index];
+        if (machine->sid_level ? (sample < -M10_TAPE_THRESHOLD) :
+                                 (sample > M10_TAPE_THRESHOLD))
+            break;
+    }
+    if (index >= machine->tape.sample_count)
+        return 0U;
+    machine->tape_crossing = index;
+    target = machine->tape_cycles +
+             scale_up(index - machine->tape_origin, M10_CPU_HZ,
+                      machine->tape.sample_rate);
+    return target > now ? target - now : 1U;
+}
+
+static void
+tape_rearm(bm_m10_machine_t *machine)
+{
+    const uint64_t cycles = tape_next_event(machine);
+    if (cycles == 0U)
+        (void) bm_engine_disarm_timed_source(machine->engine,
+                                             machine->tape_clock_id);
+    else
+        (void) bm_engine_arm_timed_source(machine->engine,
+                                          machine->tape_clock_id, cycles);
+}
+
+static bm_status_t
+tape_fire(bm_engine_t *engine, void *context, const bm_time_point_t *when,
+          uint64_t *cycles_until_next)
+{
+    bm_m10_machine_t *machine = context;
+    (void) engine;
+    (void) when;
+    machine->sid_level = !machine->sid_level;
+    if (machine->cpu_ready)
+        (void) bm_engine_signal_cpu(machine->engine, machine->cpu_id,
+                                    BM_I8085_SIGNAL_SID, machine->sid_level);
+    *cycles_until_next = tape_next_event(machine);
+    return *cycles_until_next != 0U ? BM_STATUS_OK : BM_STATUS_IDLE;
+}
+
+/* REMOTE: the tape stops or starts where it is. */
+static void
+tape_set_motor(bm_m10_machine_t *machine, int on)
+{
+    if (machine->motor == on)
+        return;
+    machine->tape_origin = tape_position(machine);
+    machine->tape_cycles = io_time(machine);
+    machine->motor = on;
+    if (machine->cassette != NULL)
+        machine->cassette->motor(machine->cassette->context, 0U, on,
+                                 cycle_time(io_time(machine)));
+    tape_rearm(machine);
+}
+
+/* SOD changes in half CLK periods after the end of SIM (4 clocks); M34
+ * inverts it on its way to MIC. */
+static void
+m10_sod(void *context, int level, uint32_t half_clocks_after_boundary)
+{
+    bm_m10_machine_t *machine = context;
+    const uint64_t half_clocks = 2U * (cpu_cycles(machine) + 4U) +
+                                 half_clocks_after_boundary;
+    if (machine->cassette != NULL)
+        machine->cassette->record(machine->cassette->context, 0U, !level,
+                                  (bm_tick_t) scale_down(half_clocks,
+                                                         BM_MACHINE_CLOCKED_TICKS_PER_SECOND,
+                                                         2U * M10_CPU_HZ));
+}
+
+static bm_status_t
+m10_cassette_load(void *context, uint32_t port, const bm_cassette_tape_t *tape)
+{
+    bm_m10_machine_t *machine = context;
+    if ((machine == NULL) || (port != 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    machine->tape_loaded = tape != NULL;
+    if (tape != NULL) {
+        machine->tape = *tape;
+        machine->tape_origin = tape->position;
+        machine->tape_cycles = cpu_cycles(machine);
+    } else
+        memset(&machine->tape, 0, sizeof(machine->tape));
+    tape_rearm(machine);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+m10_cassette_position(const void *context, uint32_t port, size_t *position)
+{
+    const bm_m10_machine_t *machine = context;
+    if ((machine == NULL) || (port != 0U) || (position == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *position = tape_position(machine);
+    return BM_STATUS_OK;
 }
 
 /* TIMER OUT period in CPU clocks when the timer runs continuously, else 0:
@@ -549,6 +711,7 @@ m10_io(void *context, bm_bus_transaction_t *txn)
             rtc_catch_up(machine);
             bm_upd1990ac_set_stb(machine->rtc, (value >> 2U) & 1U);
             rtc_rearm(machine);
+            tape_set_motor(machine, (value >> 3U) & 1U);
         } else {
             result = m10_keyboard_scan(&machine->keyboard, machine->port_a,
                                        machine->port_b);
@@ -721,6 +884,7 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
     machine->tolerance = bm_host_tolerance(host);
     machine->serial = bm_host_serial(host);
     machine->audio = bm_host_audio(host);
+    machine->cassette = bm_host_cassette(host);
     machine->port_a = machine->port_b = 0xffU;
     if (config->ram_state != NULL)
         memcpy(machine->ram + (machine->ram_base - M10_RAM_BASE),
@@ -778,11 +942,17 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
         status = bm_engine_add_timed_source(engine, uart_fire, machine,
                                              &cpu_rate, 0U,
                                              &machine->uart_clock_id);
+    if (status == BM_STATUS_OK)
+        status = bm_engine_add_timed_source(engine, tape_fire, machine,
+                                             &cpu_rate, 0U,
+                                             &machine->tape_clock_id);
     if (status == BM_STATUS_OK) {
         const bm_i8085_config_t cpu_config = {
             .model = BM_I8085_OKI_MSM80C85A,
             .frequency_hz = M10_CPU_HZ,
-            .bus = machine->bus
+            .bus = machine->bus,
+            .sod = m10_sod,
+            .sod_context = machine
         };
         status = bm_i8085_create(host, &cpu_config, &cpu);
     }
@@ -819,6 +989,7 @@ m10_reset(void *context)
     machine->rtc_accounted = 0U;
     machine->powered_off = 0;
     machine->control_latch = 0U;
+    tape_set_motor(machine, 0);
     /* The 81C55 reset reports the buzzer as its ports float. */
     machine->audio_reported = 0;
     bm_msm81c55_reset(machine->pio, 0U);
@@ -942,6 +1113,10 @@ m10_inspect(const void *context, const char *name, uint64_t *value)
         *value = machine->port_b;
     else if (strcmp(name, "control_latch") == 0)
         *value = machine->control_latch;
+    else if (strcmp(name, "cassette_motor") == 0)
+        *value = (uint64_t) machine->motor;
+    else if (strcmp(name, "sid") == 0)
+        *value = (uint64_t) machine->sid_level;
     else if (strcmp(name, "powered_off") == 0)
         *value = (uint64_t) machine->powered_off;
     else if (strcmp(name, "caps_lock") == 0)
@@ -1111,9 +1286,11 @@ static const bm_machine_definition_t m10_definition = {
         .video_render = m10_video_render,
         .persistent_state_size = m10_persistent_state_size,
         .save_persistent_state = m10_save_persistent_state,
-        .serial_receive = m10_serial_receive
+        .serial_receive = m10_serial_receive,
+        .cassette_load = m10_cassette_load,
+        .cassette_position = m10_cassette_position
     },
-    .engine = { 1U, 4U, 3U }
+    .engine = { 1U, 4U, 4U }
 };
 
 const bm_machine_definition_t *
