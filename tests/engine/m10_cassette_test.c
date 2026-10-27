@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* M10 cassette interface without firmware. A synthetic program starts the
  * recorder motor (E0h bit 3), toggles SOD twice and counts SID edges into
- * RAM at F000h while a 1 kHz tape plays for 100 ms. */
+ * RAM at F000h while a 1 kHz tape plays for 100 ms. After a reset, a
+ * 2400 Hz tape at 11025 Hz checks that SID edges fall between samples. */
 #include <blumach/platforms/null_host.h>
 #include <blumach/runtime/runtime.h>
 #include <blumach/systems/olivetti_m10.h>
@@ -16,6 +17,7 @@
 static uint8_t firmware[BM_M10_FIRMWARE_SIZE];
 static uint8_t ram[BM_M10_RAM_STATE_SIZE];
 static int16_t tape[RATE / 5U]; /* 200 ms */
+static int16_t slow_tape[11025U / 10U]; /* 100 ms at 11025 Hz */
 
 static const uint8_t reset_vector[] = { 0xc3U, 0x40U, 0x00U };   /* JMP 0040h */
 static const uint8_t program[] = {                               /* at 0040h */
@@ -155,6 +157,42 @@ main(void)
     /* A reset stops the motor. */
     assert(bm_session_reset(session) == BM_STATUS_OK);
     assert((log.motor_changes >= 2U) && (log.motor == 0));
+
+    /* A 2400 Hz triangle at 11025 Hz: each half cycle (208.3 us) spans two
+     * or three samples, 181 or 272 us at the sample times. Between samples
+     * the edges keep every half within 10 us of the tone. */
+    for (index = 0U; index < sizeof(slow_tape) / sizeof(slow_tape[0]); ++index) {
+        const uint32_t phase = (uint32_t) ((UINT64_C(2400) * 65536U * index / 11025U) % 65536U);
+        slow_tape[index] = (int16_t) (phase < 32768U ? (int32_t) phase - 16384 : 49152 - (int32_t) phase);
+    }
+    medium.samples = slow_tape;
+    medium.sample_count = sizeof(slow_tape) / sizeof(slow_tape[0]);
+    medium.sample_rate = 11025U;
+    medium.position = 0U;
+    assert(bm_session_cassette_load(session, 0U, &medium) == BM_STATUS_OK);
+    assert(bm_session_run_for(session, 10U * MS) == BM_STATUS_OK);
+    assert(log.motor == 1);
+    {
+        const bm_tick_t step = 2000U; /* 2 us */
+        bm_tick_t time = 0U;
+        bm_tick_t last_edge = 0U;
+        uint64_t last = 2U;
+        unsigned int halves = 0U;
+        for (; time < 40U * MS; time += step) {
+            assert(bm_session_run_for(session, step) == BM_STATUS_OK);
+            assert(bm_session_inspect_machine(session, "sid", &value) == BM_STATUS_OK);
+            if ((last != 2U) && (value != last)) {
+                if (last_edge != 0U) {
+                    const bm_tick_t half = time - last_edge;
+                    assert((half >= 198000U) && (half <= 219000U));
+                    ++halves;
+                }
+                last_edge = time;
+            }
+            last = value;
+        }
+        assert(halves >= 180U);
+    }
     bm_session_destroy(session);
     return 0;
 }

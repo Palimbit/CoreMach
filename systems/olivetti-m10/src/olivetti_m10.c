@@ -128,7 +128,9 @@ typedef struct bm_m10_machine {
     int motor;
     uint64_t tape_cycles;
     size_t tape_origin;
-    size_t tape_crossing; /* the sample that changes SID next */
+    /* The sample that changes SID next; the search for the following
+     * crossing starts there, since an edge may come before its sample. */
+    size_t tape_crossing;
     int sid_level;
     bm_timed_source_id_t tape_clock_id;
     uint8_t io_read_reported[32];
@@ -198,29 +200,52 @@ tape_position(const bm_m10_machine_t *machine)
                (size_t) position : machine->tape.sample_count;
 }
 
-/* CPU clocks from now until the next sample that changes SID, or 0 when
- * the tape stands still or no later sample changes it. */
+/* CPU clocks from now until the tape crosses the Schmitt trigger's next
+ * threshold, or 0 when the tape stands still or never crosses it. The
+ * signal is taken as a straight line between samples (assumption), so the
+ * crossing falls between them: at 11025 Hz a 2400 Hz half cycle spans two
+ * or three samples, and the sample times alone would stretch some halves
+ * past the loader's limit. */
 static uint64_t
 tape_next_event(bm_m10_machine_t *machine)
 {
     size_t index;
+    size_t start;
     uint64_t target;
     const uint64_t now = cpu_cycles(machine);
+    const int threshold = machine->sid_level ? -M10_TAPE_THRESHOLD : M10_TAPE_THRESHOLD;
 
     if (!machine->tape_loaded || !machine->motor)
         return 0U;
-    for (index = tape_position(machine); index < machine->tape.sample_count; ++index) {
+    start = tape_position(machine);
+    if (machine->tape_crossing > start)
+        start = machine->tape_crossing;
+    for (index = start; index < machine->tape.sample_count; ++index) {
         const int16_t sample = machine->tape.samples[index];
-        if (machine->sid_level ? (sample < -M10_TAPE_THRESHOLD) :
-                                 (sample > M10_TAPE_THRESHOLD))
+        if (machine->sid_level ? (sample < threshold) : (sample > threshold))
             break;
     }
     if (index >= machine->tape.sample_count)
         return 0U;
     machine->tape_crossing = index;
-    target = machine->tape_cycles +
-             scale_up(index - machine->tape_origin, M10_CPU_HZ,
-                      machine->tape.sample_rate);
+    if (index == start) {
+        /* Already past the threshold where the tape stands. */
+        target = machine->tape_cycles +
+                 scale_up(index - machine->tape_origin, M10_CPU_HZ,
+                          machine->tape.sample_rate);
+    } else {
+        /* Between index - 1 (not past the threshold) and index. */
+        const int previous = machine->tape.samples[index - 1U];
+        const int sample = machine->tape.samples[index];
+        const uint64_t part = (uint64_t) (machine->sid_level ? previous - threshold :
+                                                               threshold - previous);
+        const uint64_t whole = (uint64_t) (machine->sid_level ? previous - sample :
+                                                                sample - previous);
+        target = machine->tape_cycles +
+                 scale_up(index - 1U - machine->tape_origin, M10_CPU_HZ,
+                          machine->tape.sample_rate) +
+                 scale_up(part * M10_CPU_HZ, 1U, whole * machine->tape.sample_rate);
+    }
     return target > now ? target - now : 1U;
 }
 
@@ -291,9 +316,12 @@ m10_cassette_load(void *context, uint32_t port, const bm_cassette_tape_t *tape)
     if (tape != NULL) {
         machine->tape = *tape;
         machine->tape_origin = tape->position;
+        machine->tape_crossing = tape->position;
         machine->tape_cycles = cpu_cycles(machine);
-    } else
+    } else {
         memset(&machine->tape, 0, sizeof(machine->tape));
+        machine->tape_crossing = 0U;
+    }
     tape_rearm(machine);
     return BM_STATUS_OK;
 }

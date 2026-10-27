@@ -112,7 +112,11 @@ signal while the motor runs.
 
 For playback, `bm_session_cassette_load()` lends the machine mono 16-bit
 PCM. The tape advances only while the motor runs and SID follows it through a
-Schmitt trigger with thresholds of +/-1024 (6.9.2). The manual gives neither
+Schmitt trigger with thresholds of +/-1024 (6.9.2). Each edge falls where
+the signal, taken as a straight line between samples (assumption), crosses
+the threshold: at 11025 Hz a 2400 Hz half cycle spans two or three samples,
+and edges at sample times would stretch some halves to 272 us, which the
+loader reads as 1200 Hz. The manual gives neither
 the thresholds nor the polarity (assumption): SID is high for positive
 samples, which makes SID the inverse of SOD across the whole chain, as in
 the MAME kc85 driver. A tape recorded by the machine loads back with this
@@ -159,6 +163,9 @@ BUSY as it did before the port was modelled.
   machine, gives `Found:A` and the same line on `LIST`. The loader's
   half-period counts (12-15 for 2400 Hz, 31-34 for 1200 Hz against its
   threshold of 22) leave a wide margin.
+- With the real ROM, `CLOAD` finds `BOMBER` on an 8-bit 11025 Hz WAV file,
+  with counts of 12-15 and 31-35; with edges at sample times the
+  short halves reached 23-24 and nothing was found.
 - With the real ROM, `LPRINT "HELLO"` and `LLIST` print `HELLO` and
   `10 PRINT 1983`, each line ended by CR alone, one byte about 684 us
   apart; with BUSY reported, `LPRINT` waits and prints nothing.
@@ -166,7 +173,8 @@ BUSY as it did before the port was modelled.
   without status, BUSY and SLCT, and one byte per strobe edge.
 - A ROM-free cassette test checks REMOTE, the MIC signal 11 clocks apart for
   two SIMs, two SID edges per millisecond from a 1 kHz tape, the tape
-  position, silence after the tape and the motor stopping on reset.
+  position, silence after the tape and the motor stopping on reset, and
+  that a 2400 Hz tape at 11025 Hz gives 208 us half cycles.
 
 ## Limitations
 
