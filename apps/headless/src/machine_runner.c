@@ -764,13 +764,25 @@ headless_run_machine(const bm_frontend_adapter_t *adapter,
                     bytes, length, dx);
         }
         {
-            static const char *const names[] = {
+            static const char *const x86_names[] = {
                 "ax", "bx", "cx", "dx", "sp", "bp", "si", "di",
                 "cs", "ds", "es", "ss", "ip", "flags"
             };
+            /* 8085 machines answer to their own register names. */
+            static const char *const i8085_names[] = {
+                "a", "f", "b", "c", "d", "e", "h", "l", "sp", "pc",
+                "ie", "halted", "interrupt_mask"
+            };
+            const char *const *names = x86_names;
+            size_t count = sizeof(x86_names) / sizeof(x86_names[0]);
             size_t index;
+            uint64_t probe;
+            if (bm_session_inspect_cpu(session, 0, "ax", &probe) != BM_STATUS_OK) {
+                names = i8085_names;
+                count = sizeof(i8085_names) / sizeof(i8085_names[0]);
+            }
             fputs(status != BM_STATUS_OK ? "failure_cpu" : "debug_cpu", stderr);
-            for (index = 0U; index < sizeof(names) / sizeof(names[0]); ++index) {
+            for (index = 0U; index < count; ++index) {
                 uint64_t value;
                 if (bm_session_inspect_cpu(session, 0, names[index], &value) ==
                     BM_STATUS_OK)

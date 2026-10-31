@@ -18,6 +18,8 @@ typedef struct i8085_test_config {
     void *sod_context;
     bm_i8085_timing_fn timing;
     void *timing_context;
+    /* Optional: makes the host tolerant (BM_HOST_CAPABILITY_TOLERANCE). */
+    const bm_host_tolerance_services_t *tolerance;
 } i8085_test_config_t;
 
 typedef struct i8085_test_access {
@@ -31,6 +33,7 @@ typedef struct i8085_test_access {
  * order and reports the configured wait states in CLK periods. */
 typedef struct i8085_test_machine {
     bm_host_services_t host;
+    bm_host_capability_t tolerance_capability;
     bm_bus_t *bus;
     bm_cpu_t cpu;
     uint8_t *memory;

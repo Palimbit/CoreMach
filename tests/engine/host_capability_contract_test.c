@@ -134,10 +134,60 @@ test_registry_validation(void)
     assert(bm_host_services_validate(&host) == BM_STATUS_INVALID_ARGUMENT);
 }
 
+static unsigned int tolerance_reports;
+static bm_tolerance_event_kind_t tolerance_last_kind;
+
+static void
+count_tolerance_report(void *context, const bm_tolerance_event_t *event)
+{
+    assert(context == &tolerance_reports);
+    ++tolerance_reports;
+    tolerance_last_kind = event->kind;
+}
+
+static void
+test_tolerance_is_opt_in(void)
+{
+    const bm_host_tolerance_services_t tolerance = {
+        count_tolerance_report, &tolerance_reports
+    };
+    const bm_host_tolerance_services_t silent = { NULL, NULL };
+    bm_host_capability_t entry = {
+        BM_HOST_CAPABILITY_TOLERANCE, BM_HOST_TOLERANCE_VERSION,
+        sizeof(tolerance), &tolerance
+    };
+    bm_host_services_t host = bm_null_host_services();
+    const bm_tolerance_event_t event = {
+        sizeof(bm_tolerance_event_t), BM_TOLERANCE_UNKNOWN_DEVICE_COMMAND,
+        0U, "test", "ignored", 0U, 0U, 0U, 0U
+    };
+
+    /* A host without the capability is strict, and reports go nowhere. */
+    assert(bm_host_tolerance(&host) == NULL);
+    assert(bm_host_tolerance(NULL) == NULL);
+    bm_tolerance_report(NULL, &event);
+
+    host.capabilities = &entry;
+    host.capability_count = 1U;
+    assert(bm_host_tolerance(&host) == &tolerance);
+    bm_tolerance_report(bm_host_tolerance(&host), &event);
+    bm_tolerance_report(bm_host_tolerance(&host), NULL);
+    assert(tolerance_reports == 1U);
+    assert(tolerance_last_kind == BM_TOLERANCE_UNKNOWN_DEVICE_COMMAND);
+
+    /* A table without a report function, or one too small, stays strict. */
+    entry.services = &silent;
+    assert(bm_host_tolerance(&host) == NULL);
+    entry.services = &tolerance;
+    entry.services_size = sizeof(tolerance) - 1U;
+    assert(bm_host_tolerance(&host) == NULL);
+}
+
 int
 main(void)
 {
     test_empty_host_reports_unsupported();
+    test_tolerance_is_opt_in();
     test_capability_lookup_and_requirements();
     test_lookup_argument_validation();
     test_registry_validation();

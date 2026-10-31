@@ -75,6 +75,14 @@ typedef struct bm_m10_machine {
     /* Buzzer (6.12, Fig. 6-13): the transistor follows
      * PB5 AND (PB2 OR TIMER OUT). */
     uint64_t buzzer_edges;
+    /* Tolerant hosts only: every fallback below already applies to all
+     * hosts (open-bus reads, ignored writes and LCD instructions); a
+     * tolerant host also hears of each case once. */
+    const bm_host_tolerance_services_t *tolerance;
+    uint8_t io_read_reported[32];
+    uint8_t io_write_reported[32];
+    uint8_t lcd_command_reported[32];
+    uint8_t memory_reported; /* bit 0: read, bit 1: write */
 } bm_m10_machine_t;
 
 static uint64_t
@@ -202,6 +210,48 @@ pio_read_pins(void *context, unsigned int port)
     return pins;
 }
 
+/* Returns 1 the first time bit index of the set is seen. */
+static int
+first_report(uint8_t *bits, unsigned int index)
+{
+    const uint8_t mask = (uint8_t) (1U << (index & 7U));
+
+    if ((bits[index >> 3U] & mask) != 0U)
+        return 0;
+    bits[index >> 3U] = (uint8_t) (bits[index >> 3U] | mask);
+    return 1;
+}
+
+static void
+report_fallback(bm_m10_machine_t *machine, bm_tolerance_event_kind_t kind,
+                const char *device, const char *note, uint64_t address,
+                uint64_t value)
+{
+    bm_tolerance_event_t event;
+    uint64_t pc = 0U;
+    uint64_t opcode = 0U;
+
+    if (machine->tolerance == NULL)
+        return;
+    memset(&event, 0, sizeof(event));
+    event.size = sizeof(event);
+    event.kind = kind;
+    event.device = device;
+    event.note = note;
+    event.address = address;
+    event.value = value;
+    if (machine->cpu_ready &&
+        (bm_engine_inspect_cpu(machine->engine, machine->cpu_id,
+                               "instruction_pc", &pc) == BM_STATUS_OK) &&
+        (bm_engine_inspect_cpu(machine->engine, machine->cpu_id,
+                               "instruction_opcode", &opcode) == BM_STATUS_OK)) {
+        event.flags = BM_TOLERANCE_FLAG_HAS_PC;
+        event.pc = pc;
+        event.opcode = (uint32_t) opcode;
+    }
+    bm_tolerance_report(machine->tolerance, &event);
+}
+
 static int
 lcd_selected(const bm_m10_machine_t *machine, unsigned int chip)
 {
@@ -228,9 +278,18 @@ lcd_access(bm_m10_machine_t *machine, uint8_t port, int write, uint8_t value)
             continue;
         ++selected;
         if ((port & 1U) == 0U) {
-            if (write)
-                (void) bm_hd44102_write_instruction(chip, value, now);
-            else
+            if (write) {
+                /* An undefined instruction leaves the chip unchanged. */
+                if ((bm_hd44102_write_instruction(chip, value, now) ==
+                     BM_HD44102_REJECTED_UNDEFINED) &&
+                    (machine->tolerance != NULL) &&
+                    first_report(machine->lcd_command_reported, value))
+                    report_fallback(machine,
+                                    BM_TOLERANCE_UNKNOWN_DEVICE_COMMAND,
+                                    "HD44102",
+                                    "undefined instruction ignored",
+                                    port, value);
+            } else
                 data = bm_hd44102_read_status(chip, now);
         } else {
             if (write)
@@ -251,7 +310,21 @@ m10_io(void *context, bm_bus_transaction_t *txn)
     const int write = txn->operation == BM_BUS_WRITE;
     const uint8_t value = (uint8_t) txn->value;
     uint8_t result = M10_OPEN_BUS;
+    /* 81C55 registers 6 and 7 do not exist; C0h-DFh (UART), A0h-AFh and
+     * the remaining ports are not modelled. */
+    const int modelled = (((port & 0xf0U) == 0xb0U) && ((port & 7U) < 6U)) ||
+                         ((port & 0xf0U) == 0xe0U) || ((port & 0xf0U) == 0xf0U);
 
+    if (!modelled && (machine->tolerance != NULL) &&
+        first_report(write ? machine->io_write_reported :
+                             machine->io_read_reported, port))
+        report_fallback(machine,
+                        write ? BM_TOLERANCE_UNMODELLED_IO_WRITE :
+                                BM_TOLERANCE_UNMODELLED_IO_READ,
+                        "Olivetti M10 I/O",
+                        write ? "write to an unmodelled port ignored" :
+                                "unmodelled port reads FFh (open bus)",
+                        port, write ? value : M10_OPEN_BUS);
     if ((port & 0xf0U) == 0xb0U) {
         if (write)
             bm_msm81c55_write(machine->pio, (uint8_t) (port & 7U), value,
@@ -292,8 +365,23 @@ m10_memory(void *context, bm_bus_transaction_t *txn)
             machine->ram[address - M10_RAM_BASE] = (uint8_t) txn->value;
         else
             txn->value = machine->ram[address - M10_RAM_BASE];
-    } else if (txn->operation != BM_BUS_WRITE) {
-        txn->value = M10_OPEN_BUS;
+    } else {
+        /* Between the ROM and installed RAM: no device answers. */
+        const int write = txn->operation == BM_BUS_WRITE;
+        const uint8_t bit = write ? 2U : 1U;
+        if (!write)
+            txn->value = M10_OPEN_BUS;
+        if ((machine->tolerance != NULL) &&
+            ((machine->memory_reported & bit) == 0U)) {
+            machine->memory_reported = (uint8_t) (machine->memory_reported | bit);
+            report_fallback(machine,
+                            write ? BM_TOLERANCE_UNMODELLED_MEMORY_WRITE :
+                                    BM_TOLERANCE_UNMODELLED_MEMORY_READ,
+                            "Olivetti M10 memory",
+                            write ? "no RAM installed here; write ignored" :
+                                    "no RAM installed here; reads FFh",
+                            address, write ? (uint8_t) txn->value : M10_OPEN_BUS);
+        }
     }
     return BM_STATUS_OK;
 }
@@ -418,6 +506,7 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
     machine->language = config->language;
     machine->wall_clock = config->wall_clock;
     machine->wall_clock_context = config->wall_clock_context;
+    machine->tolerance = bm_host_tolerance(host);
     machine->port_a = machine->port_b = 0xffU;
     if (config->ram_state != NULL)
         memcpy(machine->ram + (machine->ram_base - M10_RAM_BASE),

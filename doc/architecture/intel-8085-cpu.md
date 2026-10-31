@@ -31,6 +31,8 @@ Downloaded documents are preserved outside Git in the local research library
 | ASM85 | Intel 8080/8085 Assembly Language Programming Manual 9800301D | Priorities (p. 1-24), conditional instructions skip byte 3 (p. 1-25) |
 | OKI86 | OKI 1986 Microprocessor Data Book, MSM80C85A RS/GS | Table 1 interrupt sensitivity; Table 8 clock cycles, pp. 30-32 |
 | KS1302 | K. Shirriff, silicon analysis of the 8085 undocumented flags, Feb. 2013 | V, K and bit 3 |
+| DS79 | W. Dehnhardt and V. M. Sorensen, "Unspecified 8085 op codes enhance programming", Electronics, 18 January 1979, pp. 144-145 | Extended instructions: operations, flags affected, bytes, cycles and states |
+| TUN97 | Tundra Semiconductor, CA80C85B data sheet (8000 Series Components Manual, 1997), Fig. 2-9 p. 2-15 and Table 2-10 p. 2-16 | Another CMOS 80C85 that documents the extended instruction set and the two extra flags; the best lead for CMOS behaviour |
 
 MAME's i8085 source was consulted only as a cross-check. Its own TODO list
 flags its V/K behaviour as inaccurate, so it is not a source for those flags.
@@ -81,13 +83,71 @@ The source does not establish these cases, which keep the previous value:
 | STC, CMC, CMA | V and K |
 
 The analysis is of Intel NMOS silicon; nothing confirms that the OKI CMOS
-part behaves the same.
+part behaves the same. Both models compute V and K this way in every mode:
+for the OKI MSM80C85A this is an **assumption without an OKI-specific
+source**: the [OKI86] pages cited here document no difference from the
+Intel part, and no OKI document checked so far describes bits 1 and 5. The
+best lead is [TUN97]: a CMOS 80C85 from another second source whose data
+sheet documents the ten extended instructions and both flags (K as "UI"). It is not the OKI part, and KS1302 notes that its
+text reproduces Dehnhardt's 1979 description with errors.
 
 ## Undocumented instructions
 
-DSUB, ARHL, RDEL, LDHI, LDSI, RSTV, SHLX, JNK, LHLX and JK are classified but
-not executed. After the opcode fetch the component restores PC and returns
-`BM_STATUS_UNSUPPORTED` with no other architectural change. A static scan of
+DSUB, ARHL, RDEL, LDHI, LDSI, RSTV, SHLX, JNK, LHLX and JK are classified as
+undocumented. These names are used throughout; [DS79] calls the jumps JNX5
+and JX5, and [TUN97] calls them JNUI and JUI.
+
+With a strict host (no `BM_HOST_CAPABILITY_TOLERANCE`) the component does not
+execute them: after the opcode fetch it restores PC and returns
+`BM_STATUS_UNSUPPORTED` with no other architectural change. With a tolerant
+host it executes them and reports each opcode once per CPU as
+`BM_TOLERANCE_UNDOCUMENTED_INSTRUCTION`, with PC and opcode. For the OKI
+MSM80C85A the report also carries `BM_TOLERANCE_FLAG_ASSUMED_BEHAVIOUR`,
+because the Intel NMOS behaviour is assumed for that part.
+
+Sources and their order: flags follow [KS1302] first, then [DS79]; when they
+disagree, [KS1302] decides. Operations come from [DS79]. Timing comes from
+[TUN97] and agrees with [DS79], the NMOS description. Forum and mailing-list
+posts were used only as leads.
+
+| Opcode | Name | Operation | Bytes | Cycles / states | Flags |
+|---|---|---|---|---|---|
+| 08h | DSUB | HL = HL - BC | 1 | 3 / 10 | All ([DS79]); see below |
+| 10h | ARHL | HL shifted right, bit 15 kept, bit 0 to CY | 1 | 2 / 7 | CY only |
+| 18h | RDEL | DE rotated left through CY | 1 | 3 / 10 | CY and V; see below |
+| 28h | LDHI d8 | DE = HL + d8 | 2 | 3 / 10 | None |
+| 38h | LDSI d8 | DE = SP + d8 | 2 | 3 / 10 | None |
+| CBh | RSTV | If V: push PC, PC = 0040h | 1 | 1 or 3 / 6 or 12 | None |
+| D9h | SHLX | (DE) = L, (DE + 1) = H | 1 | 3 / 10 | None |
+| DDh | JNK a16 | Jump if K = 0 | 3 | 2 or 3 / 7 or 10 | None |
+| EDh | LHLX | L = (DE), H = (DE + 1) | 1 | 3 / 10 | None |
+| FDh | JK a16 | Jump if K = 1 | 3 | 2 or 3 / 7 or 10 | None |
+
+As with the documented conditional instructions, a false JK or JNK does not
+read the third byte, and the timing observation reports the realised path
+as `EXACT`.
+
+Not established by the sources, implemented as follows and **unconfirmed**:
+
+- DSUB: [DS79] says only that all flags are affected. S, P, AC, CY, V and K
+  are taken from the high-order byte subtraction (with the borrow of the low
+  byte), by analogy with [KS1302] note 4, where V for DAD comes from the
+  high-order addition; Z reports the 16-bit result.
+- RDEL: [DS79] says CY and V are affected without defining V. V is set as for
+  RAL, the rotate treated as adding the value to itself ([KS1302]): it is set
+  when bit 15 changes.
+
+Evident errors in the sources, not copied:
+
+- [DS79] p. 145 describes JX5 as transferring control "if the X5 flag is
+  reset"; its own condition line, "If (X5)", and the mnemonic say set.
+- [TUN97] Table 2-10 repeats the DSUB formula "(H)(L)=(H)(L)-(B)(C)" under
+  JNUI and JUI, and draws LHLX with an immediate data byte although it is a
+  one-byte register-indirect instruction (3 cycles, 10 states, as in [DS79]).
+- [TUN97] Fig. 2-9 gives the published UI (K) formula, which [KS1302] shows
+  does not always match the silicon; the component follows [KS1302].
+
+A static scan of
 the Olivetti M10 system ROM found none of them in the 69.2 % reachable from
 the vectors and three confirmed dispatch tables. The remaining 30.8 % is not
 covered, so this is not proof of absence. The scan and its limits are recorded
