@@ -802,6 +802,8 @@ foreach(target IN LISTS BLUMACH_I8085_TARGETS)
     set_target_properties(${target} PROPERTIES C_EXTENSIONS OFF)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /UNDEBUG)
+        # The CP/M runner and M10 probe read host files with fopen/sscanf.
+        target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
     endif()
