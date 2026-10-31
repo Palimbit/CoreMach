@@ -735,7 +735,7 @@ execute_instruction(bm_i8085_state_t *state)
             return status;
         value = (op & 1U) == 0U ? alu_add(state, value, 1U, 0U) :
                                   alu_subtract(state, value, 1U, 0U);
-        state->f = (uint8_t) ((state->f & (uint8_t) ~BM_I8085_FLAG_CY) | carry);
+        state->f = (uint8_t) ((state->f & ~BM_I8085_FLAG_CY) | carry);
         return write_operand(state, code, value);
     }
     if ((op & 0xc7U) == 0x06U) {                        /* MVI */
