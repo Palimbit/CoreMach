@@ -86,7 +86,7 @@ test_signed_compare_table(void)
         assert(!!(compared.f & S) == rows[index].s);
         assert(!!(compared.f & V) == rows[index].v);
         assert(!!(compared.f & K) == rows[index].k);
-        assert((compared.f & (uint8_t) ~0x08U) == compared.f);
+        assert((compared.f & ~0x08U) == compared.f);
         assert(subtracted.f == compared.f);
     }
 }

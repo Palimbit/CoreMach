@@ -149,7 +149,7 @@ main(void)
     /* Only 16 characters wait ahead of the line; the host offers the rest
      * again once they have gone in. */
     {
-        static const uint8_t many[20];
+        static const uint8_t many[20] = { 0 };
         assert(bm_session_serial_receive(session, 0U, many, sizeof(many),
                                          &accepted) == BM_STATUS_OK);
         assert(accepted == 16U);
