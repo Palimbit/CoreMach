@@ -34,6 +34,14 @@ typedef enum bm_host_capability_id {
     /* bm_host_tolerance_services_t: the host accepts documented fallbacks
      * instead of failures and wants each one reported. */
     BM_HOST_CAPABILITY_TOLERANCE,
+    /* bm_host_serial_services_t: characters a machine transmits on its
+     * serial ports. */
+    BM_HOST_CAPABILITY_SERIAL,
+    /* bm_host_cassette_services_t: a machine's cassette recorder motor and
+     * recording signal. */
+    BM_HOST_CAPABILITY_CASSETTE,
+    /* bm_host_parallel_services_t: a printer on a machine's parallel port. */
+    BM_HOST_CAPABILITY_PARALLEL,
     BM_HOST_CAPABILITY_COUNT
 } bm_host_capability_id_t;
 
@@ -114,12 +122,95 @@ typedef struct bm_host_tolerance_services {
     void *context;
 } bm_host_tolerance_services_t;
 
+/* Serial output. A machine calls transmit when a character has left its
+ * serial port, at the emulated time the last stop bit ended. data holds the
+ * character bits only. Input goes the other way, through the runtime's
+ * bm_session_serial_receive(). */
+#define BM_HOST_SERIAL_VERSION 1U
+
+typedef void (*bm_host_serial_transmit_fn)(void *context, uint32_t port,
+                                           uint8_t data, bm_tick_t time);
+
+typedef struct bm_host_serial_services {
+    bm_host_serial_transmit_fn transmit;
+    void *context;
+} bm_host_serial_services_t;
+
+/* Audio output (BM_HOST_CAPABILITY_AUDIO_OUTPUT). A one-bit sound source,
+ * such as a buzzer, reports each change of what it plays at the emulated
+ * time it happens: either a steady drive level (tone 0/0) or a square wave
+ * of tone_numerator / tone_denominator hertz. Hosts synthesise the sound
+ * from these changes. */
+#define BM_HOST_AUDIO_VERSION 1U
+
+typedef struct bm_audio_change {
+    uint32_t size;
+    uint32_t channel;
+    bm_tick_t time;
+    int level;                 /* 0 or 1 when there is no tone */
+    uint64_t tone_numerator;   /* 0 when there is no tone */
+    uint64_t tone_denominator;
+} bm_audio_change_t;
+
+typedef void (*bm_host_audio_change_fn)(void *context,
+                                        const bm_audio_change_t *change);
+
+typedef struct bm_host_audio_services {
+    bm_host_audio_change_fn change;
+    void *context;
+} bm_host_audio_services_t;
+
+/* Cassette recorder. motor reports the remote relay turning the recorder's
+ * motor on or off; record reports each change of the one-bit signal sent to
+ * the recorder's MIC input, whether or not the motor runs. Both carry the
+ * emulated time of the change. Playback goes the other way, through the
+ * runtime's bm_session_cassette_load(). */
+#define BM_HOST_CASSETTE_VERSION 1U
+
+typedef void (*bm_host_cassette_motor_fn)(void *context, uint32_t port,
+                                          int on, bm_tick_t time);
+typedef void (*bm_host_cassette_record_fn)(void *context, uint32_t port,
+                                           int level, bm_tick_t time);
+
+typedef struct bm_host_cassette_services {
+    bm_host_cassette_motor_fn motor;
+    bm_host_cassette_record_fn record;
+    void *context;
+} bm_host_cassette_services_t;
+
+/* Parallel (Centronics) printer. write receives each byte the machine
+ * strobes, at the emulated time of the strobe. status, when not NULL,
+ * returns the printer's BM_PARALLEL_STATUS_* lines; without it the printer
+ * is never busy and always on line. */
+#define BM_HOST_PARALLEL_VERSION 1U
+#define BM_PARALLEL_STATUS_BUSY 0x1U
+#define BM_PARALLEL_STATUS_SELECTED 0x2U
+
+typedef void (*bm_host_parallel_write_fn)(void *context, uint32_t port,
+                                          uint8_t data, bm_tick_t time);
+typedef uint32_t (*bm_host_parallel_status_fn)(void *context, uint32_t port);
+
+typedef struct bm_host_parallel_services {
+    bm_host_parallel_write_fn write;
+    bm_host_parallel_status_fn status;
+    void *context;
+} bm_host_parallel_services_t;
+
 bm_status_t bm_host_services_validate(const bm_host_services_t *services);
 bm_status_t bm_host_capability_lookup(const bm_host_services_t *services,
                                       bm_host_capability_id_t id,
                                       uint32_t minimum_version,
                                       size_t minimum_services_size,
                                       const bm_host_capability_t **out_capability);
+/* The serial, audio, cassette or parallel services of a host, or NULL without them. */
+const bm_host_serial_services_t *bm_host_serial(
+    const bm_host_services_t *services);
+const bm_host_audio_services_t *bm_host_audio(
+    const bm_host_services_t *services);
+const bm_host_cassette_services_t *bm_host_cassette(
+    const bm_host_services_t *services);
+const bm_host_parallel_services_t *bm_host_parallel(
+    const bm_host_services_t *services);
 /* The tolerance services of a host, or NULL when the host is strict. */
 const bm_host_tolerance_services_t *bm_host_tolerance(
     const bm_host_services_t *services);

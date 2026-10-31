@@ -29,8 +29,13 @@ guest-visible path only.
   Book: MSM80C85A and MSM81C55.
 - Hitachi 1983 LCD Driver LSI data book: HD44102CH.
 - NEC 1983 Integrated Circuits for Consumer Use: uPD1990AC.
+- Intersil IM6402/IM6403 CMOS Universal Asynchronous Receiver Transmitter
+  data sheet: frame format, TBRL, DR/DRR and the status flags.
+- Service manual 6.16.1 (serial interface): IM6402 decoding at C0h-DFh
+  (Y4, Y5, VS), DR on RST 6.5 and TRC/RRC from the 81C55 TIMER OUT.
 - MAME's kc85 driver was consulted only as a secondary source for the order of
-  the ten LCD drivers on the panel. No MAME code is used.
+  the ten LCD drivers on the panel and the bit layout of the UART control and
+  status ports. No MAME code is used.
 
 Firmware stays local. It is not part of the repository or its tests.
 
@@ -51,6 +56,9 @@ the MSM81C55 ports and timer.
 | Clock | TP on RST 7.5; the firmware selects 256 Hz. Time advances in exact 32.768 kHz periods scheduled from the TP deadline. |
 | Keyboard | Nine rows, one diode per key, so pressed keys never create phantom contacts. Host keys map by position to the USA-ASCII layout; CAPS LOCK latches mechanically. |
 | Buzzer | PB5 AND (PB2 OR TIMER OUT), from Fig. 6-13. |
+| Printer | PA0-PA7 data, strobe on E0h bit 1, BUSY on PC2 and SLCT on PC1 (6.11). |
+| Cassette | SOD, inverted, to MIC; EAR through a Schmitt trigger to SID; REMOTE on E0h bit 3 (6.9). |
+| UART | IM6402 at C0h-DFh: C0h-CFh read the receiver buffer and write TBRL, D0h-DFh read the status and write the control word. DR drives RST 6.5; the register clocks are TIMER OUT, 16 per bit. |
 | Power | P.C.S. on PB4 switches the machine off (after 10 idle minutes, or low battery); a reset stands for the power switch. RAM survives. |
 
 ## Persistence
@@ -68,6 +76,65 @@ start sets the clock to 01 Jan 00:00:00 from a ROM table, so the initial clock
 option matters only when RAM is warm but no clock was saved. The chip keeps no
 year: the firmware stores it in RAM and prints a fixed century of 19.
 
+## Serial port and sound
+
+The UART works per character: the line rate is the 81C55 TIMER OUT divided
+by 16, so the firmware's baud setting (STAT) decides how fast characters go
+out and come in. A loaded character reaches the host's serial service when its
+last stop bit would have left the TO pin, and the next one follows end to end.
+Characters from the host wait in a 16-character queue, so a host that
+honours the firmware's XOFF stops within a few characters, and enter the
+receiver buffer one frame apart, raising DR; reading C0h clears DR (assumption: the
+read strobe also drives DRR; no other DRR source appears in 6.16.1).
+The receiver uses the format of the control word, so framing and parity
+errors never occur on received data.
+
+The status port reads OE, FE, PE and TBRE in bits 1-4, in the layout used by
+the MAME kc85 driver, and fixed values elsewhere: RP (bit 5) and +5 V (bit 6)
+high, the low-power sensor (bit 7) high for a good battery, and carrier
+detect (bit 0) low, as DCD is taken to be unconnected on the European machine
+(assumption). The modem and its relay are not modelled.
+
+Hosts with `BM_HOST_CAPABILITY_AUDIO_OUTPUT` receive one change each time the
+buzzer's output changes: either a level (PB5 AND PB2) or, while PB5 is high,
+PB2 low and the timer runs as a continuous square wave, a tone of
+2457600 / count Hz. The host synthesises the square wave; the engine does not
+send samples.
+
+## Cassette
+
+The firmware modulates and demodulates the tape itself through SOD and SID
+(6.9). Hosts with `BM_HOST_CAPABILITY_CASSETTE` hear of each REMOTE change
+(E0h-EFh bit 3, which energises RY1 and runs the recorder's motor, 6.9.3) and
+of each change of the MIC signal, which is SOD inverted by M34 (6.9.1), timed
+to the half CLK period at which the pin changes after SIM. A host records the
+signal while the motor runs.
+
+For playback, `bm_session_cassette_load()` lends the machine mono 16-bit
+PCM. The tape advances only while the motor runs and SID follows it through a
+Schmitt trigger with thresholds of +/-1024 (6.9.2). Each edge falls where
+the signal, taken as a straight line between samples (assumption), crosses
+the threshold: at 11025 Hz a 2400 Hz half cycle spans two or three samples,
+and edges at sample times would stretch some halves to 272 us, which the
+loader reads as 1200 Hz. The manual gives neither
+the thresholds nor the polarity (assumption): SID is high for positive
+samples, which makes SID the inverse of SOD across the whole chain, as in
+the MAME kc85 driver. A tape recorded by the machine loads back with this
+polarity; inverted, `CLOAD` does not find it, so a host may need to invert
+recordings made with the opposite phase. The modulator's integrator (R51-C64)
+is not modelled: the MIC signal is reported as a square wave.
+
+## Printer
+
+The Centronics port (6.11) puts the byte on the 81C55 port A and pulses the
+strobe on bit 1 of the E0h-EFh latch. Hosts with `BM_HOST_CAPABILITY_PARALLEL`
+receive the byte on each rising edge of that latch bit, at the time of the
+OUT. BUSY comes back on PC2, as the manual says, and SLCT on PC1, which the
+manual does not place; PC1 follows the MAME kc85 driver (secondary source).
+A host without a status function counts as a printer that is never busy and
+always on line. Without a printer both lines read high, so BASIC waits on
+BUSY as it did before the port was modelled.
+
 ## Validation
 
 - Menu and BASIC sign-on match the operations guide, with 29638 bytes free
@@ -78,23 +145,50 @@ year: the firmware stores it in RAM and prints a fixed century of 19.
   first, a warm second start still showing `10 Oct,1983` with the time
   running, and `LIST` returning the line in the third.
 - After eleven idle minutes in the menu the machine switches itself off.
-- `BEEP` toggles PB5 with PB2 high: 256 edges in about 60 ms.
+- `BEEP` toggles PB5 with PB2 high: 256 edges 1221 CPU clocks apart, a
+  1006 Hz tone for 127 ms, timed by the CPU clock as audio hosts receive
+  it (an earlier note gave about 60 ms). `SOUND 4697,20`
+  plays the timer's square wave, 2457600 / 4697 Hz (523 Hz), for 399 ms.
 - ROM-free contract tests cover the key matrix and jumpers, TP interrupts,
   RAM and clock persistence, both buzzer modes and the power-off latch.
+- A ROM-free serial test sends two characters at 9600 bit/s one 8N1 frame
+  (1.042 ms) apart, receives three on RST 6.5 one frame apart and checks the
+  buzzer tone reported to the audio host; the IM6402 has its own contract
+  test for frame lengths, end-to-end transmission, flags and master reset.
+- With the real ROM, `SAVE "COM:88N1E"` sends `10 PRINT 1983`, CR LF and
+  Ctrl+Z one character every 1041.7 us (9600 bit/s 8N1), and
+  `LOAD "COM:88N1E"` receives two lines that `LIST` then shows.
+- With the real ROM, `CSAVE "A"` runs the motor twice (header, then data) and
+  sends 1200 and 2400 Hz cycles to MIC; the recording, played back in a fresh
+  machine, gives `Found:A` and the same line on `LIST`. The loader's
+  half-period counts (12-15 for 2400 Hz, 31-34 for 1200 Hz against its
+  threshold of 22) leave a wide margin.
+- With the real ROM, `CLOAD` finds `BOMBER` on an 8-bit 11025 Hz WAV file,
+  with counts of 12-15 and 31-35; with edges at sample times the
+  short halves reached 23-24 and nothing was found.
+- With the real ROM, `LPRINT "HELLO"` and `LLIST` print `HELLO` and
+  `10 PRINT 1983`, each line ended by CR alone, one byte about 684 us
+  apart; with BUSY reported, `LPRINT` waits and prints nothing.
+- A ROM-free printer test checks PC1 and PC2 with no printer, a printer
+  without status, BUSY and SLCT, and one byte per strobe edge.
+- A ROM-free cassette test checks REMOTE, the MIC signal 11 clocks apart for
+  two SIMs, two SID edges per millisecond from a 1 kHz tape, the tape
+  position, silence after the tape and the motor stopping on reset, and
+  that a 2400 Hz tape at 11025 Hz gives 208 us half cycles.
 
 ## Limitations
 
 - Timing is per instruction; device accesses see the start of the I/O machine
   cycle. HD44102 BUSY is about 9.3 us (approximate).
-- The buzzer is observable through inspection only: the runtime has no audio
-  output yet.
-- Cassette, RS-232C UART, printer, bar-code reader, modem, the low-battery
-  TRAP and the 81C55 RAM are not modelled.
+- The serial line is per character: no bit-level sampling, break, or RTS,
+  DTR and CTS handshake. XON/XOFF is up to the firmware and the host.
+- Bar-code reader, modem, the low-battery TRAP and the 81C55 RAM
+  are not modelled.
 - Bits of port C without a modelled source read high.
 
 ## Tolerant hosts
 
-Every host gets the same fallbacks: unmodelled ports (C0h-DFh UART, A0h-AFh,
+Every host gets the same fallbacks: unmodelled ports (A0h-AFh,
 81C55 registers 6 and 7 and the rest) and addresses between the ROM and the
 installed RAM read FFh and ignore writes, and an undefined HD44102
 instruction leaves the chip unchanged. A host with

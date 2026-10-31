@@ -299,6 +299,59 @@ bm_session_send_input(bm_session_t *session, const bm_input_event_t *event)
 }
 
 bm_status_t
+bm_session_serial_receive(bm_session_t *session, uint32_t port,
+                          const uint8_t *data, size_t size, size_t *accepted)
+{
+    if ((session == NULL) || (accepted == NULL) ||
+        ((data == NULL) && (size != 0U)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *accepted = 0U;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.serial_receive == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.definition->ops.serial_receive(
+        session->machine, port, data, size, accepted);
+}
+
+bm_status_t
+bm_session_cassette_load(bm_session_t *session, uint32_t port,
+                         const bm_cassette_tape_t *tape)
+{
+    if ((session == NULL) ||
+        ((tape != NULL) && ((tape->sample_rate == 0U) ||
+                            ((tape->samples == NULL) && (tape->sample_count != 0U)) ||
+                            (tape->position > tape->sample_count))))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.cassette_load == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.definition->ops.cassette_load(
+        session->machine, port, tape);
+}
+
+bm_status_t
+bm_session_cassette_position(const bm_session_t *session, uint32_t port,
+                             size_t *position)
+{
+    if ((session == NULL) || (position == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    if ((session->state != BM_SESSION_RUNNING) &&
+        (session->state != BM_SESSION_PAUSED))
+        return BM_STATUS_INVALID_STATE;
+    if ((session->machine == NULL) ||
+        (session->configuration.definition->ops.cassette_position == NULL))
+        return BM_STATUS_UNSUPPORTED;
+    return session->configuration.definition->ops.cassette_position(
+        session->machine, port, position);
+}
+
+bm_status_t
 bm_session_keyboard_leds(const bm_session_t *session,
                          bm_keyboard_led_state_t *state)
 {

@@ -11,6 +11,7 @@
 #include <blumach/components/bus.h>
 #include <blumach/components/cpu_i8085.h>
 #include <blumach/components/hd44102.h>
+#include <blumach/components/im6402.h>
 #include <blumach/components/msm81c55.h>
 
 #include "m10_keyboard.h"
@@ -33,6 +34,19 @@
 /* Unpopulated memory, unmapped I/O and floating inputs read FFh. The
  * floating value is not documented (assumption kept from the probe). */
 #define M10_OPEN_BUS 0xffU
+
+/* Schmitt trigger thresholds of the playback path (6.9.2), in 16-bit sample
+ * units: SID goes high above +threshold and low below -threshold
+ * (assumption: the manual gives neither the levels nor the polarity). */
+#define M10_TAPE_THRESHOLD 1024
+/* Characters received from the host and not yet on the line. Kept short so
+ * that the firmware's XOFF stops a host within a few characters. */
+#define M10_SERIAL_QUEUE 16U
+/* D0h status bits without a modelled source ([MAME kc85], secondary):
+ * bit 5 RP and bit 6 (+5 V) read high, bit 7 low power sensor reads high
+ * (battery good) and bit 0 carrier detect reads low (assumption: DCD is
+ * not connected on the European machine). */
+#define M10_UART_STATUS_FIXED 0xe0U
 
 #define RTC_STATE_VERSION 1U
 #define RTC_WALL_CLOCK_UNKNOWN INT64_MIN
@@ -58,8 +72,9 @@ typedef struct bm_m10_machine {
     bm_msm81c55_t *pio;
     uint8_t port_a;
     uint8_t port_b;
-    /* E0h-EFh writes latch AD0-AD3 in M14 (40H175): bit 2 is the uPD1990AC
-     * STB (6.15) and bit 1 the printer STROBE (6.11). */
+    /* E0h-EFh writes latch AD0-AD3 in M14 (40H175): bit 3 is the cassette
+     * REMOTE (6.9.3), bit 2 the uPD1990AC STB (6.15) and bit 1 the printer
+     * STROBE (6.11). */
     uint8_t control_latch;
     /* uPD1990AC (6.15, pp. 6-18..6-20): C0-C2 on PA0-PA2, CLK on PA3,
      * DATA IN on PA4, DATA OUT on PC0 with a pull-up, CS and OUT ENBL on
@@ -79,11 +94,52 @@ typedef struct bm_m10_machine {
      * hosts (open-bus reads, ignored writes and LCD instructions); a
      * tolerant host also hears of each case once. */
     const bm_host_tolerance_services_t *tolerance;
+    /* IM6402 UART (6.16.1): the receiver buffer is read at C0h-CFh (Y4)
+     * and the transmitter loaded there, status is read at D0h-DFh (Y5)
+     * and the control word written there (VS; [MAME kc85] for the bits).
+     * DR interrupts on RST 6.5 and TRC/RRC run from the 81C55 TIMER OUT.
+     * Time is accounted in CPU clocks, one register clock per TIMER OUT
+     * period. */
+    bm_im6402_t *uart;
+    bm_timed_source_id_t uart_clock_id;
+    uint64_t uart_accounted;
+    uint8_t rx_queue[M10_SERIAL_QUEUE];
+    size_t rx_head;
+    size_t rx_count;
+    int rx_line_busy;
+    uint64_t rx_clocks_left;
+    const bm_host_serial_services_t *serial;
+    /* Buzzer changes for an audio host. */
+    const bm_host_audio_services_t *audio;
+    int audio_reported;
+    int audio_level;
+    uint16_t audio_period;
+    /* Cassette (6.9): SOD, inverted by M34, drives MIC; EAR reaches SID
+     * through a comparator and Schmitt trigger; REMOTE (latch bit 3,
+     * 6.9.3) runs the motor through RY1. The tape is at tape_origin at CPU
+     * clock tape_cycles and advances only while the motor runs. */
+    const bm_host_cassette_services_t *cassette;
+    /* Printer (6.11): data on PA0-PA7, STROBE on latch bit 1 (a 1 drives
+     * it low through T8), BUSY on PC2 and SLCT on PC1 ([MAME kc85] for
+     * SLCT). */
+    const bm_host_parallel_services_t *printer;
+    bm_cassette_tape_t tape;
+    int tape_loaded;
+    int motor;
+    uint64_t tape_cycles;
+    size_t tape_origin;
+    /* The sample that changes SID next; the search for the following
+     * crossing starts there, since an edge may come before its sample. */
+    size_t tape_crossing;
+    int sid_level;
+    bm_timed_source_id_t tape_clock_id;
     uint8_t io_read_reported[32];
     uint8_t io_write_reported[32];
     uint8_t lcd_command_reported[32];
     uint8_t memory_reported; /* bit 0: read, bit 1: write */
 } bm_m10_machine_t;
+
+static void audio_update(bm_m10_machine_t *machine);
 
 static uint64_t
 cpu_cycles(const bm_m10_machine_t *machine)
@@ -98,6 +154,332 @@ static uint64_t
 io_time(const bm_m10_machine_t *machine)
 {
     return cpu_cycles(machine) + M10_IO_CYCLE_OFFSET;
+}
+
+/* Engine time of a CPU clock count. bm_engine_now() only moves between
+ * instructions' scheduling boundaries, so host reports use the clock. */
+static bm_tick_t
+cycle_time(uint64_t cycles)
+{
+    return (bm_tick_t) ((cycles / M10_CPU_HZ) * BM_MACHINE_CLOCKED_TICKS_PER_SECOND +
+                        ((cycles % M10_CPU_HZ) * BM_MACHINE_CLOCKED_TICKS_PER_SECOND) /
+                            M10_CPU_HZ);
+}
+
+/* value * multiplier / divisor, rounded down or up, without overflow for
+ * the clock and sample rates used here. */
+static uint64_t
+scale_down(uint64_t value, uint64_t multiplier, uint64_t divisor)
+{
+    return (value / divisor) * multiplier + ((value % divisor) * multiplier) / divisor;
+}
+
+static uint64_t
+scale_up(uint64_t value, uint64_t multiplier, uint64_t divisor)
+{
+    const uint64_t rest = (value % divisor) * multiplier;
+    return (value / divisor) * multiplier + rest / divisor +
+           ((rest % divisor) != 0U ? 1U : 0U);
+}
+
+/* The sample the tape has reached. */
+static size_t
+tape_position(const bm_m10_machine_t *machine)
+{
+    uint64_t position;
+    const uint64_t now = cpu_cycles(machine);
+    if (!machine->tape_loaded)
+        return 0U;
+    /* The motor starts at the I/O cycle of its OUT, after the boundary. */
+    if (!machine->motor || (now <= machine->tape_cycles))
+        return machine->tape_origin;
+    position = machine->tape_origin +
+               scale_down(now - machine->tape_cycles,
+                          machine->tape.sample_rate, M10_CPU_HZ);
+    return position < machine->tape.sample_count ?
+               (size_t) position : machine->tape.sample_count;
+}
+
+/* CPU clocks from now until the tape crosses the Schmitt trigger's next
+ * threshold, or 0 when the tape stands still or never crosses it. The
+ * signal is taken as a straight line between samples (assumption), so the
+ * crossing falls between them: at 11025 Hz a 2400 Hz half cycle spans two
+ * or three samples, and the sample times alone would stretch some halves
+ * past the loader's limit. */
+static uint64_t
+tape_next_event(bm_m10_machine_t *machine)
+{
+    size_t index;
+    size_t start;
+    uint64_t target;
+    const uint64_t now = cpu_cycles(machine);
+    const int threshold = machine->sid_level ? -M10_TAPE_THRESHOLD : M10_TAPE_THRESHOLD;
+
+    if (!machine->tape_loaded || !machine->motor)
+        return 0U;
+    start = tape_position(machine);
+    if (machine->tape_crossing > start)
+        start = machine->tape_crossing;
+    for (index = start; index < machine->tape.sample_count; ++index) {
+        const int16_t sample = machine->tape.samples[index];
+        if (machine->sid_level ? (sample < threshold) : (sample > threshold))
+            break;
+    }
+    if (index >= machine->tape.sample_count)
+        return 0U;
+    machine->tape_crossing = index;
+    if (index == start) {
+        /* Already past the threshold where the tape stands. */
+        target = machine->tape_cycles +
+                 scale_up(index - machine->tape_origin, M10_CPU_HZ,
+                          machine->tape.sample_rate);
+    } else {
+        /* Between index - 1 (not past the threshold) and index. */
+        const int previous = machine->tape.samples[index - 1U];
+        const int sample = machine->tape.samples[index];
+        const uint64_t part = (uint64_t) (machine->sid_level ? previous - threshold :
+                                                               threshold - previous);
+        const uint64_t whole = (uint64_t) (machine->sid_level ? previous - sample :
+                                                                sample - previous);
+        target = machine->tape_cycles +
+                 scale_up(index - 1U - machine->tape_origin, M10_CPU_HZ,
+                          machine->tape.sample_rate) +
+                 scale_up(part * M10_CPU_HZ, 1U, whole * machine->tape.sample_rate);
+    }
+    return target > now ? target - now : 1U;
+}
+
+static void
+tape_rearm(bm_m10_machine_t *machine)
+{
+    const uint64_t cycles = tape_next_event(machine);
+    if (cycles == 0U)
+        (void) bm_engine_disarm_timed_source(machine->engine,
+                                             machine->tape_clock_id);
+    else
+        (void) bm_engine_arm_timed_source(machine->engine,
+                                          machine->tape_clock_id, cycles);
+}
+
+static bm_status_t
+tape_fire(bm_engine_t *engine, void *context, const bm_time_point_t *when,
+          uint64_t *cycles_until_next)
+{
+    bm_m10_machine_t *machine = context;
+    (void) engine;
+    (void) when;
+    machine->sid_level = !machine->sid_level;
+    if (machine->cpu_ready)
+        (void) bm_engine_signal_cpu(machine->engine, machine->cpu_id,
+                                    BM_I8085_SIGNAL_SID, machine->sid_level);
+    *cycles_until_next = tape_next_event(machine);
+    return *cycles_until_next != 0U ? BM_STATUS_OK : BM_STATUS_IDLE;
+}
+
+/* REMOTE: the tape stops or starts where it is. */
+static void
+tape_set_motor(bm_m10_machine_t *machine, int on)
+{
+    if (machine->motor == on)
+        return;
+    machine->tape_origin = tape_position(machine);
+    machine->tape_cycles = io_time(machine);
+    machine->motor = on;
+    if (machine->cassette != NULL)
+        machine->cassette->motor(machine->cassette->context, 0U, on,
+                                 cycle_time(io_time(machine)));
+    tape_rearm(machine);
+}
+
+/* SOD changes in half CLK periods after the end of SIM (4 clocks); M34
+ * inverts it on its way to MIC. */
+static void
+m10_sod(void *context, int level, uint32_t half_clocks_after_boundary)
+{
+    bm_m10_machine_t *machine = context;
+    const uint64_t half_clocks = 2U * (cpu_cycles(machine) + 4U) +
+                                 half_clocks_after_boundary;
+    if (machine->cassette != NULL)
+        machine->cassette->record(machine->cassette->context, 0U, !level,
+                                  (bm_tick_t) scale_down(half_clocks,
+                                                         BM_MACHINE_CLOCKED_TICKS_PER_SECOND,
+                                                         2U * M10_CPU_HZ));
+}
+
+static bm_status_t
+m10_cassette_load(void *context, uint32_t port, const bm_cassette_tape_t *tape)
+{
+    bm_m10_machine_t *machine = context;
+    if ((machine == NULL) || (port != 0U))
+        return BM_STATUS_INVALID_ARGUMENT;
+    machine->tape_loaded = tape != NULL;
+    if (tape != NULL) {
+        machine->tape = *tape;
+        machine->tape_origin = tape->position;
+        machine->tape_crossing = tape->position;
+        machine->tape_cycles = cpu_cycles(machine);
+    } else {
+        memset(&machine->tape, 0, sizeof(machine->tape));
+        machine->tape_crossing = 0U;
+    }
+    tape_rearm(machine);
+    return BM_STATUS_OK;
+}
+
+static bm_status_t
+m10_cassette_position(const void *context, uint32_t port, size_t *position)
+{
+    const bm_m10_machine_t *machine = context;
+    if ((machine == NULL) || (port != 0U) || (position == NULL))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *position = tape_position(machine);
+    return BM_STATUS_OK;
+}
+
+/* TIMER OUT period in CPU clocks when the timer runs continuously, else 0:
+ * the UART then has no clock. */
+static uint16_t
+timer_out_period(bm_m10_machine_t *machine)
+{
+    bm_msm81c55_timer_mode_t mode;
+    const uint16_t period = bm_msm81c55_timer_period(machine->pio,
+                                                     io_time(machine), &mode);
+    if ((mode != BM_MSM81C55_CONTINUOUS_SQUARE) &&
+        (mode != BM_MSM81C55_CONTINUOUS_PULSE))
+        return 0U;
+    return period;
+}
+
+/* Brings the UART up to the current CPU clock: whole register clocks are
+ * applied to the transmitter and to the character on the receive line. */
+static void
+uart_sync(bm_m10_machine_t *machine)
+{
+    const uint64_t now = cpu_cycles(machine);
+    const uint16_t period = timer_out_period(machine);
+    uint64_t clocks;
+    uint64_t remaining;
+
+    if ((period == 0U) || (now <= machine->uart_accounted)) {
+        if (period == 0U)
+            machine->uart_accounted = now;
+        return;
+    }
+    clocks = (now - machine->uart_accounted) / period;
+    machine->uart_accounted += clocks * period;
+    remaining = clocks;
+    while (remaining > 0U) {
+        uint64_t step;
+        if (!machine->rx_line_busy) {
+            if (machine->rx_count == 0U)
+                break;
+            machine->rx_line_busy = 1;
+            machine->rx_clocks_left = bm_im6402_frame_clocks(machine->uart);
+        }
+        step = remaining < machine->rx_clocks_left ? remaining :
+                                                     machine->rx_clocks_left;
+        machine->rx_clocks_left -= step;
+        remaining -= step;
+        if (machine->rx_clocks_left == 0U) {
+            /* Host characters arrive well formed. */
+            bm_im6402_receive(machine->uart,
+                              machine->rx_queue[machine->rx_head], 0, 0);
+            machine->rx_head = (machine->rx_head + 1U) % M10_SERIAL_QUEUE;
+            --machine->rx_count;
+            machine->rx_line_busy = 0;
+        }
+    }
+    bm_im6402_advance(machine->uart, clocks);
+}
+
+/* CPU clocks until the next UART event, or 0 when there is none. */
+static uint64_t
+uart_next_event(bm_m10_machine_t *machine)
+{
+    const uint16_t period = timer_out_period(machine);
+    uint64_t clocks = bm_im6402_clocks_until_transmitted(machine->uart);
+    uint64_t receive = UINT64_MAX;
+    uint64_t elapsed;
+    uint64_t cycles;
+
+    if (period == 0U)
+        return 0U;
+    if (machine->rx_line_busy)
+        receive = machine->rx_clocks_left;
+    else if (machine->rx_count > 0U)
+        receive = bm_im6402_frame_clocks(machine->uart);
+    if (receive < clocks)
+        clocks = receive;
+    if (clocks == UINT64_MAX)
+        return 0U;
+    elapsed = cpu_cycles(machine) - machine->uart_accounted;
+    cycles = clocks * period;
+    return cycles > elapsed ? cycles - elapsed : 1U;
+}
+
+static void
+uart_rearm(bm_m10_machine_t *machine)
+{
+    const uint64_t cycles = uart_next_event(machine);
+    if (cycles == 0U)
+        (void) bm_engine_disarm_timed_source(machine->engine,
+                                             machine->uart_clock_id);
+    else
+        (void) bm_engine_arm_timed_source(machine->engine,
+                                          machine->uart_clock_id, cycles);
+}
+
+static bm_status_t
+uart_fire(bm_engine_t *engine, void *context, const bm_time_point_t *when,
+          uint64_t *cycles_until_next)
+{
+    bm_m10_machine_t *machine = context;
+    (void) engine;
+    (void) when;
+    uart_sync(machine);
+    *cycles_until_next = uart_next_event(machine);
+    return *cycles_until_next != 0U ? BM_STATUS_OK : BM_STATUS_IDLE;
+}
+
+static void
+uart_transmitted(void *context, uint8_t data)
+{
+    bm_m10_machine_t *machine = context;
+    if ((machine->serial != NULL) && (machine->serial->transmit != NULL))
+        machine->serial->transmit(machine->serial->context, 0U, data,
+                                  cycle_time(cpu_cycles(machine)));
+}
+
+static void
+uart_data_ready(void *context, int level)
+{
+    bm_m10_machine_t *machine = context;
+    if (machine->cpu_ready)
+        (void) bm_engine_signal_cpu(machine->engine, machine->cpu_id,
+                                    BM_I8085_SIGNAL_RST65, level);
+}
+
+static uint8_t
+uart_status(bm_m10_machine_t *machine)
+{
+    const bm_im6402_status_t status = bm_im6402_status(machine->uart);
+    return (uint8_t) (M10_UART_STATUS_FIXED | (status.oe << 1U) |
+                      (status.fe << 2U) | (status.pe << 3U) |
+                      (status.tbre << 4U));
+}
+
+/* Control word ([MAME kc85], secondary): bit 0 SBS, bit 1 EPE, bit 2 PI,
+ * bits 3-4 CLS1/CLS2 (5 + CLS1 + 2 x CLS2 data bits, [IM6402] pin 37). */
+static void
+uart_control(bm_m10_machine_t *machine, uint8_t value)
+{
+    bm_im6402_control_t control;
+    control.stop_select = (uint8_t) (value & 1U);
+    control.even_parity = (uint8_t) ((value >> 1U) & 1U);
+    control.parity_inhibit = (uint8_t) ((value >> 2U) & 1U);
+    control.character_bits = (uint8_t) (5U + ((value >> 3U) & 1U) +
+                                        2U * ((value >> 4U) & 1U));
+    bm_im6402_load_control(machine->uart, &control);
 }
 
 static void
@@ -189,12 +571,14 @@ pio_port_changed(void *context, unsigned int port)
             ++machine->buzzer_edges;
         if (driven && ((levels & 0x10U) != 0U))
             power_off(machine);
+        audio_update(machine);
     }
 }
 
-/* Port C inputs (ALT1): PC0 uPD1990AC DATA OUT, PC4/PC5 language jumpers
- * (6.16.3). PC1-PC3 (printer and other lines) are not modelled and float
- * high; bits 6-7 do not exist and read high. */
+/* Port C inputs (ALT1): PC0 uPD1990AC DATA OUT, PC1 SLCT and PC2 BUSY from
+ * a host printer (6.11), PC4/PC5 language jumpers (6.16.3). Without a
+ * printer PC1-PC2 float high, as does PC3 (bar-code reader, not modelled);
+ * bits 6-7 do not exist and read high. */
 static uint8_t
 pio_read_pins(void *context, unsigned int port)
 {
@@ -206,6 +590,15 @@ pio_read_pins(void *context, unsigned int port)
         pins = (uint8_t) ((pins & 0xceU) |
                           (bm_upd1990ac_data_out(machine->rtc) & 1) |
                           ((unsigned int) machine->language << 4U));
+        if (machine->printer != NULL) {
+            /* Without a printer both lines stay high (BUSY). */
+            const uint32_t status = machine->printer->status != NULL ?
+                machine->printer->status(machine->printer->context, 0U) :
+                BM_PARALLEL_STATUS_SELECTED;
+            pins = (uint8_t) ((pins & ~0x06U) |
+                              ((status & BM_PARALLEL_STATUS_SELECTED) != 0U ? 0x02U : 0U) |
+                              ((status & BM_PARALLEL_STATUS_BUSY) != 0U ? 0x04U : 0U));
+        }
     }
     return pins;
 }
@@ -310,9 +703,10 @@ m10_io(void *context, bm_bus_transaction_t *txn)
     const int write = txn->operation == BM_BUS_WRITE;
     const uint8_t value = (uint8_t) txn->value;
     uint8_t result = M10_OPEN_BUS;
-    /* 81C55 registers 6 and 7 do not exist; C0h-DFh (UART), A0h-AFh and
-     * the remaining ports are not modelled. */
+    /* 81C55 registers 6 and 7 do not exist; A0h-AFh and the remaining
+     * ports are not modelled. */
     const int modelled = (((port & 0xf0U) == 0xb0U) && ((port & 7U) < 6U)) ||
+                         ((port & 0xf0U) == 0xc0U) || ((port & 0xf0U) == 0xd0U) ||
                          ((port & 0xf0U) == 0xe0U) || ((port & 0xf0U) == 0xf0U);
 
     if (!modelled && (machine->tolerance != NULL) &&
@@ -326,18 +720,46 @@ m10_io(void *context, bm_bus_transaction_t *txn)
                                 "unmodelled port reads FFh (open bus)",
                         port, write ? value : M10_OPEN_BUS);
     if ((port & 0xf0U) == 0xb0U) {
-        if (write)
+        if (write) {
+            /* The timer is the UART clock and drives the buzzer. */
+            uart_sync(machine);
             bm_msm81c55_write(machine->pio, (uint8_t) (port & 7U), value,
                               io_time(machine));
-        else
+            uart_rearm(machine);
+            audio_update(machine);
+        } else
             result = bm_msm81c55_read(machine->pio, (uint8_t) (port & 7U),
                                       io_time(machine));
+    } else if ((port & 0xf0U) == 0xc0U) {
+        uart_sync(machine);
+        if (write)
+            bm_im6402_load_transmitter(machine->uart, value);
+        else {
+            result = bm_im6402_receiver_buffer(machine->uart);
+            /* Reading the buffer resets DR (inferred, [MAME kc85]). */
+            bm_im6402_reset_data_received(machine->uart);
+        }
+        uart_rearm(machine);
+    } else if ((port & 0xf0U) == 0xd0U) {
+        uart_sync(machine);
+        if (write)
+            uart_control(machine, value);
+        else
+            result = uart_status(machine);
+        uart_rearm(machine);
     } else if ((port & 0xf0U) == 0xe0U) {
         if (write) {
+            /* The printer takes the data as STROBE goes active. */
+            if ((machine->printer != NULL) && ((value & 0x02U) != 0U) &&
+                ((machine->control_latch & 0x02U) == 0U))
+                machine->printer->write(machine->printer->context, 0U,
+                                        machine->port_a,
+                                        cycle_time(io_time(machine)));
             machine->control_latch = (uint8_t) (value & 0x0fU);
             rtc_catch_up(machine);
             bm_upd1990ac_set_stb(machine->rtc, (value >> 2U) & 1U);
             rtc_rearm(machine);
+            tape_set_motor(machine, (value >> 3U) & 1U);
         } else {
             result = m10_keyboard_scan(&machine->keyboard, machine->port_a,
                                        machine->port_b);
@@ -345,7 +767,7 @@ m10_io(void *context, bm_bus_transaction_t *txn)
     } else if ((port & 0xf0U) == 0xf0U) {
         result = lcd_access(machine, port, write, value);
     }
-    /* C0h-DFh (UART), A0h-AFh and the rest are not modelled. */
+    /* A0h-AFh and the rest are not modelled. */
     if (!write)
         txn->value = result;
     return BM_STATUS_OK;
@@ -450,6 +872,7 @@ m10_destroy(void *context)
         bm_hd44102_destroy(machine->lcd[index]);
     bm_upd1990ac_destroy(machine->rtc);
     bm_msm81c55_destroy(machine->pio);
+    bm_im6402_destroy(machine->uart);
     bm_bus_destroy(machine->bus);
     machine->host.release(machine->host.context, machine);
 }
@@ -507,6 +930,10 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
     machine->wall_clock = config->wall_clock;
     machine->wall_clock_context = config->wall_clock_context;
     machine->tolerance = bm_host_tolerance(host);
+    machine->serial = bm_host_serial(host);
+    machine->audio = bm_host_audio(host);
+    machine->cassette = bm_host_cassette(host);
+    machine->printer = bm_host_parallel(host);
     machine->port_a = machine->port_b = 0xffU;
     if (config->ram_state != NULL)
         memcpy(machine->ram + (machine->ram_base - M10_RAM_BASE),
@@ -546,6 +973,12 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
         };
         status = bm_msm81c55_create(host, &pio_config, &machine->pio);
     }
+    if (status == BM_STATUS_OK) {
+        const bm_im6402_config_t uart_config = {
+            uart_transmitted, uart_data_ready, machine
+        };
+        status = bm_im6402_create(host, &uart_config, &machine->uart);
+    }
     if (status == BM_STATUS_OK)
         status = bm_engine_add_timed_source(engine, rtc_fire, machine, &rtc_rate,
                                              bm_upd1990ac_cycles_until_tp_change(machine->rtc),
@@ -554,11 +987,21 @@ m10_create(bm_engine_t *engine, const bm_host_services_t *host,
         status = bm_engine_add_timed_source(engine, cpu_clock_fire, machine,
                                              &cpu_rate, 0U,
                                              &machine->cpu_clock_id);
+    if (status == BM_STATUS_OK)
+        status = bm_engine_add_timed_source(engine, uart_fire, machine,
+                                             &cpu_rate, 0U,
+                                             &machine->uart_clock_id);
+    if (status == BM_STATUS_OK)
+        status = bm_engine_add_timed_source(engine, tape_fire, machine,
+                                             &cpu_rate, 0U,
+                                             &machine->tape_clock_id);
     if (status == BM_STATUS_OK) {
         const bm_i8085_config_t cpu_config = {
             .model = BM_I8085_OKI_MSM80C85A,
             .frequency_hz = M10_CPU_HZ,
-            .bus = machine->bus
+            .bus = machine->bus,
+            .sod = m10_sod,
+            .sod_context = machine
         };
         status = bm_i8085_create(host, &cpu_config, &cpu);
     }
@@ -595,7 +1038,18 @@ m10_reset(void *context)
     machine->rtc_accounted = 0U;
     machine->powered_off = 0;
     machine->control_latch = 0U;
+    tape_set_motor(machine, 0);
+    /* The 81C55 reset reports the buzzer as its ports float. */
+    machine->audio_reported = 0;
     bm_msm81c55_reset(machine->pio, 0U);
+    /* RESET also resets the UART (assumption: MR on the system RESET);
+     * characters not yet delivered are dropped. */
+    bm_im6402_master_reset(machine->uart);
+    machine->uart_accounted = 0U;
+    machine->rx_head = 0U;
+    machine->rx_count = 0U;
+    machine->rx_line_busy = 0;
+    machine->rx_clocks_left = 0U;
     for (index = 0U; index < M10_LCD_CHIPS; ++index) {
         bm_hd44102_set_reset(machine->lcd[index], 1);
         bm_hd44102_set_reset(machine->lcd[index], 0);
@@ -615,6 +1069,64 @@ buzzer_level(bm_m10_machine_t *machine)
     const int timer_out = bm_msm81c55_timer_out(machine->pio, io_time(machine));
     return ((machine->port_b & 0x20U) != 0U) &&
            (((machine->port_b & 0x04U) != 0U) || timer_out);
+}
+
+/* Reports what the buzzer plays when it changes: the timer's square wave
+ * while PB5 is high and PB2 low (6.12), otherwise the drive level. */
+static void
+audio_update(bm_m10_machine_t *machine)
+{
+    bm_msm81c55_timer_mode_t mode;
+    uint16_t period;
+    int level;
+    bm_audio_change_t change;
+
+    if ((machine->audio == NULL) || (machine->pio == NULL))
+        return;
+    period = bm_msm81c55_timer_period(machine->pio, io_time(machine), &mode);
+    if (((machine->port_b & 0x24U) != 0x20U) ||
+        (mode != BM_MSM81C55_CONTINUOUS_SQUARE))
+        period = 0U;
+    level = period != 0U ? 0 : buzzer_level(machine);
+    if (machine->audio_reported && (machine->audio_level == level) &&
+        (machine->audio_period == period))
+        return;
+    machine->audio_reported = 1;
+    machine->audio_level = level;
+    machine->audio_period = period;
+    memset(&change, 0, sizeof(change));
+    change.size = sizeof(change);
+    change.channel = 0U;
+    change.time = cycle_time(io_time(machine));
+    change.level = level;
+    change.tone_numerator = period != 0U ? M10_CPU_HZ : 0U;
+    change.tone_denominator = period;
+    machine->audio->change(machine->audio->context, &change);
+}
+
+static bm_status_t
+m10_serial_receive(void *context, uint32_t port, const uint8_t *data,
+                   size_t size, size_t *accepted)
+{
+    bm_m10_machine_t *machine = context;
+    size_t index;
+
+    if ((machine == NULL) || (accepted == NULL) ||
+        ((data == NULL) && (size != 0U)))
+        return BM_STATUS_INVALID_ARGUMENT;
+    *accepted = 0U;
+    if (port != 0U)
+        return BM_STATUS_INVALID_ARGUMENT;
+    uart_sync(machine);
+    for (index = 0U; (index < size) && (machine->rx_count < M10_SERIAL_QUEUE);
+         ++index) {
+        machine->rx_queue[(machine->rx_head + machine->rx_count) %
+                          M10_SERIAL_QUEUE] = data[index];
+        ++machine->rx_count;
+    }
+    *accepted = index;
+    uart_rearm(machine);
+    return BM_STATUS_OK;
 }
 
 static uint64_t
@@ -650,6 +1162,10 @@ m10_inspect(const void *context, const char *name, uint64_t *value)
         *value = machine->port_b;
     else if (strcmp(name, "control_latch") == 0)
         *value = machine->control_latch;
+    else if (strcmp(name, "cassette_motor") == 0)
+        *value = (uint64_t) machine->motor;
+    else if (strcmp(name, "sid") == 0)
+        *value = (uint64_t) machine->sid_level;
     else if (strcmp(name, "powered_off") == 0)
         *value = (uint64_t) machine->powered_off;
     else if (strcmp(name, "caps_lock") == 0)
@@ -818,9 +1334,12 @@ static const bm_machine_definition_t m10_definition = {
         .video_geometry = m10_video_geometry,
         .video_render = m10_video_render,
         .persistent_state_size = m10_persistent_state_size,
-        .save_persistent_state = m10_save_persistent_state
+        .save_persistent_state = m10_save_persistent_state,
+        .serial_receive = m10_serial_receive,
+        .cassette_load = m10_cassette_load,
+        .cassette_position = m10_cassette_position
     },
-    .engine = { 1U, 4U, 2U }
+    .engine = { 1U, 4U, 4U }
 };
 
 const bm_machine_definition_t *

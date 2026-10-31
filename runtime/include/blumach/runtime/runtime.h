@@ -80,6 +80,28 @@ typedef bm_status_t (*bm_machine_persistent_state_size_fn)(
     const void *machine, const char *name, size_t *size);
 typedef bm_status_t (*bm_machine_save_persistent_state_fn)(
     const void *machine, const char *name, uint8_t *data, size_t size);
+/* Queues characters received on a serial port; *accepted reports how many
+ * fitted. The machine delivers them at its line rate. */
+typedef bm_status_t (*bm_machine_serial_receive_fn)(
+    void *machine, uint32_t port, const uint8_t *data, size_t size,
+    size_t *accepted);
+
+/* A cassette for playback: caller-owned mono 16-bit PCM that stays valid
+ * until it is replaced or the session is destroyed. The tape advances one
+ * sample per 1 / sample_rate s while the machine's recorder motor runs,
+ * starting at position. */
+typedef struct bm_cassette_tape {
+    const int16_t *samples;
+    size_t sample_count;
+    uint32_t sample_rate;
+    size_t position;
+} bm_cassette_tape_t;
+/* Loads a tape, or ejects it when tape is NULL. */
+typedef bm_status_t (*bm_machine_cassette_load_fn)(
+    void *machine, uint32_t port, const bm_cassette_tape_t *tape);
+/* The sample the tape has reached; sample_count at its end. */
+typedef bm_status_t (*bm_machine_cassette_position_fn)(
+    const void *machine, uint32_t port, size_t *position);
 
 typedef struct bm_machine_ops {
     bm_machine_validate_fn validate;
@@ -96,6 +118,9 @@ typedef struct bm_machine_ops {
     bm_machine_keyboard_leds_fn keyboard_leds;
     bm_machine_persistent_state_size_fn persistent_state_size;
     bm_machine_save_persistent_state_fn save_persistent_state;
+    bm_machine_serial_receive_fn serial_receive;
+    bm_machine_cassette_load_fn cassette_load;
+    bm_machine_cassette_position_fn cassette_position;
 } bm_machine_ops_t;
 
 typedef struct bm_machine_definition {
@@ -176,6 +201,19 @@ bm_status_t bm_session_replace_storage_media(
 bm_status_t bm_session_persistent_state_size(const bm_session_t *session,
                                              const char *name,
                                              size_t *size);
+/* Characters for a machine's serial port; BM_STATUS_UNSUPPORTED when the
+ * machine has none. A machine keeps only a few characters ahead of its line,
+ * so *accepted may be less than size: offer the rest again later. A host
+ * honouring XON/XOFF from the machine then stops within a few characters. */
+bm_status_t bm_session_serial_receive(bm_session_t *session, uint32_t port,
+                                      const uint8_t *data, size_t size,
+                                      size_t *accepted);
+/* Cassette playback; BM_STATUS_UNSUPPORTED when the machine has no
+ * cassette interface. A NULL tape ejects. */
+bm_status_t bm_session_cassette_load(bm_session_t *session, uint32_t port,
+                                     const bm_cassette_tape_t *tape);
+bm_status_t bm_session_cassette_position(const bm_session_t *session,
+                                         uint32_t port, size_t *position);
 bm_status_t bm_session_save_persistent_state(const bm_session_t *session,
                                              const char *name,
                                              uint8_t *data,

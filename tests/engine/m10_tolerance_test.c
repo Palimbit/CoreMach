@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* M10 fallbacks without firmware: a synthetic program reads and writes the
- * unmodelled UART, touches memory between the ROM and 8 KiB of RAM and
+/* M10 fallbacks without firmware: a synthetic program reads and writes an
+ * unmodelled port (A8h), touches memory between the ROM and 8 KiB of RAM and
  * sends an undefined instruction to an HD44102. Every host gets the same
  * fallbacks; a tolerant host also receives one report per case, with the
  * PC and opcode of the instruction. */
@@ -20,9 +20,9 @@ static uint8_t firmware[BM_M10_FIRMWARE_SIZE];
 /* At 0000h. The ROM ends at 7FFFh and 8 KiB of RAM starts at E000h, so
  * 9000h has no RAM. */
 static const uint8_t program[] = {
-    0xdbU, 0xc8U,                 /* 0000 IN C8h      UART: open bus     */
-    0xd3U, 0xc8U,                 /* 0002 OUT C8h     UART: ignored      */
-    0xdbU, 0xc8U,                 /* 0004 IN C8h      same port again    */
+    0xdbU, 0xa8U,                 /* 0000 IN A8h      open bus           */
+    0xd3U, 0xa8U,                 /* 0002 OUT A8h     ignored            */
+    0xdbU, 0xa8U,                 /* 0004 IN A8h      same port again    */
     0x3aU, 0x00U, 0x90U,          /* 0006 LDA 9000h   no RAM: FFh        */
     0x32U, 0x00U, 0x90U,          /* 0009 STA 9000h   no RAM: ignored    */
     0x3eU, 0x03U,                 /* 000C MVI A,03h                      */
@@ -120,10 +120,10 @@ main(void)
     assert(reports.count == 5U);
     event = find(&reports, BM_TOLERANCE_UNMODELLED_IO_READ);
     assert((event->pc == 0x0000U) && (event->opcode == 0xdbU));
-    assert((event->address == 0xc8U) && (event->value == 0xffU));
+    assert((event->address == 0xa8U) && (event->value == 0xffU));
     event = find(&reports, BM_TOLERANCE_UNMODELLED_IO_WRITE);
     assert((event->pc == 0x0002U) && (event->opcode == 0xd3U));
-    assert(event->address == 0xc8U);
+    assert(event->address == 0xa8U);
     event = find(&reports, BM_TOLERANCE_UNMODELLED_MEMORY_READ);
     assert((event->pc == 0x0006U) && (event->address == 0x9000U));
     assert(event->value == 0xffU);
