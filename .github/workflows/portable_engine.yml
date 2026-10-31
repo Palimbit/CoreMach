@@ -95,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.full_matrix && '["ubuntu-26.04","windows-2022","macos-14"]' || '["ubuntu-26.04"]') }}
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.full_matrix && '["ubuntu-26.04","windows-2022","macos-15"]' || '["ubuntu-26.04"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
