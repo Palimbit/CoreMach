@@ -1232,7 +1232,7 @@ main(int argc, char **argv)
     probe->lang = 3U;
     for (index = 0; index < 256; ++index)
         probe->io_value[index] = -1;
-    for (index = 2; index < argc; ++index) {
+    for (index = 2; index < argc; index += 2) {
         unsigned long value = 0U;
         const char *arg = argv[index];
         const char *next = index + 1 < argc ? argv[index + 1] : NULL;
@@ -1324,7 +1324,6 @@ main(int argc, char **argv)
             usage(argv[0]);
             return 2;
         }
-        ++index;
     }
 
     file = fopen(argv[1], "rb");

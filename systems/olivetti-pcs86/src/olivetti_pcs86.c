@@ -1725,7 +1725,10 @@ static const bm_machine_definition_t pcs86_definition = {
         pcs86_storage_media,
         pcs86_keyboard_leds,
         pcs86_persistent_state_size,
-        pcs86_save_persistent_state
+        pcs86_save_persistent_state,
+        NULL, /* serial_receive */
+        NULL, /* cassette_load */
+        NULL  /* cassette_position */
     },
     .engine = { 1U, 10U, 3U }
 };
