@@ -288,7 +288,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
             test_storage_media,
             test_keyboard_leds,
             test_persistent_state_size,
-            test_save_persistent_state
+            test_save_persistent_state, NULL, NULL, NULL
         },
         .engine = { 1U, 2U, 0U }
     };
@@ -299,7 +299,7 @@ make_configuration(test_machine_t *machine, int optional_operations)
                            sizeof(test_machine_t) },
         .ops = { test_validate, test_create, test_destroy,
                  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                 NULL },
+                 NULL, NULL, NULL, NULL },
         .engine = { 1U, 2U, 0U }
     };
     bm_machine_config_t configuration = {
