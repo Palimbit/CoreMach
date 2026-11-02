@@ -11,6 +11,10 @@ on:
         description: "Store the Windows package for one day (uses artifact quota)"
         type: boolean
         default: false
+  # The full matrix (Windows/MSVC, macOS, Qt6 and the Windows package) runs
+  # weekly, so compiler-specific failures on main surface within days.
+  schedule:
+    - cron: "23 5 * * 1"
   push:
     branches: ["main"]
     paths:
@@ -81,7 +85,7 @@ on:
       - .github/workflows/portable_engine.yml
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -95,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.full_matrix && '["ubuntu-26.04","windows-2022","macos-15"]' || '["ubuntu-26.04"]') }}
+        os: ${{ fromJSON((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_matrix)) && '["ubuntu-26.04","windows-2022","macos-15"]' || '["ubuntu-26.04"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -122,7 +126,7 @@ jobs:
 
   qt-frontend:
     name: Portable Qt6 frontend (ubuntu-26.04)
-    if: github.event_name == 'workflow_dispatch' && inputs.full_matrix
+    if: (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_matrix))
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
@@ -149,7 +153,7 @@ jobs:
 
   windows-package:
     name: Portable package (Windows x86-64)
-    if: github.event_name == 'workflow_dispatch' && inputs.full_matrix
+    if: (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_matrix))
     runs-on: windows-2022
     timeout-minutes: 30
     defaults:
